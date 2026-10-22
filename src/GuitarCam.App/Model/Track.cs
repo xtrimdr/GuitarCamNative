@@ -1,5 +1,8 @@
-﻿using System.Diagnostics;
+﻿using System.Runtime.InteropServices;
+using Avalonia;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
+using GuitarCam.App.Video;
 using GuitarCam.Audio.Dsp;
 using NAudio.Wave;
 
@@ -27,11 +30,11 @@ public sealed class Track
     public double GrDb;
     public float ShowL, ShowR; // UI side, with fall-off
 
-    // video: one frame per second, extracted with FFmpeg into a cache folder
-    public string? FramesDir { get; private set; }
-    public int FrameCount { get; private set; }
-    Bitmap? frame;
-    int frameIndex = -1;
+    // video: decoded by FFmpeg, the current frame copied into Frame on the UI thread
+    public VideoDecoder? Video { get; private set; }
+    public WriteableBitmap? Frame { get; private set; }
+    public bool InClip { get; private set; }
+    long frameVersion;
 
     public double LengthSec => L.Length / (double)SampleRate;
     public double OffsetSec => Take.AudioOffsetMs / 1000;
@@ -94,48 +97,33 @@ public sealed class Track
         Comp.Bypass = !Take.CompOn;
     }
 
-    /// <summary>Extracts 1 frame per second (FFmpeg) into a cache folder, once per video file.</summary>
-    public async Task ExtractFramesAsync(string sessionDir)
+    public void OpenVideo(string sessionDir) => Video = VideoDecoder.Open(Path.Combine(sessionDir, Take.VideoFile));
+
+    /// <summary>
+    /// Asks the decoder for the frame at a timeline time and copies a new one into <see cref="Frame"/>.
+    /// Returns true when the picture changed. Outside the clip the panel is empty.
+    /// </summary>
+    public bool UpdateVideo(double timelineSec)
     {
-        string video = Path.Combine(sessionDir, Take.VideoFile);
-        if (!File.Exists(video)) return;
-        var info = new FileInfo(video);
-        string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "GuitarCamNative", "frames", $"{Path.GetFileNameWithoutExtension(video)}_{info.Length}");
-        string done = Path.Combine(dir, "done");
-        if (!File.Exists(done))
+        if (Video == null) return false;
+        bool inside = timelineSec >= ClipStartSec && timelineSec < ClipEndSec;
+        bool changed = inside != InClip;
+        InClip = inside;
+        if (!inside) return changed;
+        Video.Want(timelineSec - OffsetSec + Take.VideoOffsetMs / 1000);
+        Frame ??= new WriteableBitmap(new PixelSize(Video.Width, Video.Height), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Opaque);
+        var wb = Frame;
+        return Video.TryCopyLatest(ref frameVersion, buf =>
         {
-            Directory.CreateDirectory(dir);
-            var psi = new ProcessStartInfo("ffmpeg",
-                ["-v", "error", "-y", "-i", video, "-vf", "fps=1,scale=360:-2", Path.Combine(dir, "%05d.png")])
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            using var p = Process.Start(psi);
-            if (p == null) return;
-            await p.WaitForExitAsync();
-            if (p.ExitCode != 0) return;
-            await File.WriteAllTextAsync(done, "");
-        }
-        FrameCount = Directory.GetFiles(dir, "*.png").Length;
-        FramesDir = dir;
+            using var fb = wb.Lock();
+            int row = Video.Width * 4;
+            for (int y = 0; y < Video.Height; y++) Marshal.Copy(buf, y * row, fb.Address + y * fb.RowBytes, row);
+        }) || changed;
     }
 
-    /// <summary>The video frame at a timeline time, or null outside the clip.</summary>
-    public Bitmap? FrameAt(double timelineSec)
+    public void CloseVideo()
     {
-        if (FramesDir == null || FrameCount == 0) return null;
-        if (timelineSec < ClipStartSec || timelineSec >= ClipEndSec) return null;
-        double videoSec = timelineSec - OffsetSec + Take.VideoOffsetMs / 1000;
-        int idx = Math.Clamp((int)videoSec, 0, FrameCount - 1);
-        if (idx != frameIndex)
-        {
-            frameIndex = idx;
-            // no Dispose: the compositor may still be drawing the old one (that showed as garbage); the GC frees it
-            string path = Path.Combine(FramesDir, $"{idx + 1:00000}.png");
-            frame = File.Exists(path) ? new Bitmap(path) : null;
-        }
-        return frame;
+        Video?.Dispose();
+        Video = null;
     }
 }

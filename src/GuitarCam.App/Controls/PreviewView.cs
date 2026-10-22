@@ -7,14 +7,13 @@ namespace GuitarCam.App.Controls;
 
 /// <summary>
 /// The composition: each take's video in its panel (shared layout math with the export), cover-fit with
-/// the take's zoom/pan. Frames are 1 per second for now (decoded video comes later).
+/// the take's zoom/pan. Each track's decoder fills its Frame; the window redraws this when one changes.
 /// </summary>
 public sealed class PreviewView : Control
 {
     IReadOnlyList<Track> tracks = [];
     string layout = "side-by-side";
     double aspectW = 16, aspectH = 9;
-    double time;
 
     public PreviewView()
     {
@@ -29,12 +28,6 @@ public sealed class PreviewView : Control
         layout = s.Layout;
         aspectW = s.AspectW;
         aspectH = s.AspectH;
-        InvalidateVisual();
-    }
-
-    public void SetTime(double sec)
-    {
-        time = sec;
         InvalidateVisual();
     }
 
@@ -60,7 +53,7 @@ public sealed class PreviewView : Control
             var (x, y, w, h) = rects[i];
             var dest = new Rect(frame.X + x * k, frame.Y + y * k, w * k, h * k);
             var t = tracks[i];
-            var bmp = t.FrameAt(time);
+            var bmp = t.InClip ? t.Frame : null;
             if (bmp != null)
             {
                 // cover-fit, then zoom around the pan point (panX/panY in -1..1)
@@ -79,7 +72,7 @@ public sealed class PreviewView : Control
                     else ctx.DrawImage(bmp, src, dest);
                 }
             }
-            else if (t.FramesDir == null)
+            else if (t.InClip)
             {
                 var msg = Palette.Text("Cargando video…", 11, Palette.Faint);
                 ctx.DrawText(msg, new Point(dest.Center.X - msg.Width / 2, dest.Center.Y - msg.Height / 2));

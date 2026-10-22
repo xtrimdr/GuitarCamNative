@@ -75,18 +75,22 @@ análisis de nivel, sonidos de click, ASIO dúplex._
 - [ ] Captura de cámara y grabación de video
 - [ ] Interfaz: mover/recortar clips, mixer, configuración, color; grabar desde la ventana
 - [ ] Sesiones: guardar (hoy solo abre `session.json`, no escribe)
-- [ ] Video real en la preview (hoy 1 cuadro por segundo, extraído con FFmpeg)
 - [ ] Exportación a MP4 (FFmpeg, paneles, color, efectos de video)
 
-## Problemas conocidos
+## Notas
 
-- [ ] Preview: algunos píxeles oscuros del video salen con alfa 0 en la superficie de la ventana. Con la
-  ventana opaca (`TransparencyLevelHint="None"`) se ven como puntitos negros casi invisibles; antes se
-  veía la ventana de atrás a través. El render fuera de pantalla (`RenderTargetBitmap`) sale limpio, y
-  no cambia escalando en CPU, forzando alfa 255 ni subiendo los negros: pasa entre el compositor de
-  Avalonia y la pantalla. Probar con video decodificado de verdad (otra ruta de dibujo) antes de seguir.
+- Puntitos en la preview (resuelto): con la ventana permitiendo transparencia, algunos píxeles oscuros
+  del video dejaban ver la ventana de atrás. `TransparencyLevelHint="None"` lo corta, y con el video
+  decodificado quedan solo unos pocos píxeles negros sobre casi negro, invisibles. Ojo al revisar
+  capturas: las de GDI (CopyFromScreen/PrintWindow) dan alfa 0 en los píxeles negros y los visores los
+  pintan blancos, aunque en pantalla se vean bien. Mirar el RGB, no el alfa.
+- Sin probar todavía: saltos para atrás en el video mientras reproduce (reinicia FFmpeg en ese punto)
+  y cuántos cuadros por segundo llegan de verdad con muchas tomas.
 
 ## Hecho
+
+- 2026-10-22: video decodificado de verdad en la preview (`Video/VideoDecoder.cs`): FFmpeg por pipe,
+  BGRA a 30 fps y hasta 640 px de ancho, un hilo por toma que lee un poco por delante del playhead
 
 - 2026-10-22: primera ventana (`src/GuitarCam.App`, Avalonia 11.3): abre el proyecto más reciente de
   la web, timeline con ondas, preview con la grilla de paneles portada, inspector de toma (volumen,

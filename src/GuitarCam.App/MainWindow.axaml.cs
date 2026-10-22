@@ -61,7 +61,7 @@ public partial class MainWindow : Window
 
         AddHandler(KeyDownEvent, OnKey, RoutingStrategies.Tunnel);
 
-        timer = new DispatcherTimer(TimeSpan.FromMilliseconds(33), DispatcherPriority.Render, (_, _) => Tick());
+        timer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) => Tick());
         ShowTake(null);
 
         Opened += async (_, _) =>
@@ -79,6 +79,7 @@ public partial class MainWindow : Window
         {
             timer.Stop();
             engine.Dispose();
+            foreach (var t in tracks) t.CloseVideo();
         };
     }
 
@@ -122,6 +123,7 @@ public partial class MainWindow : Window
                 return l;
             });
             session = s;
+            foreach (var old in tracks) old.CloseVideo();
             tracks = list;
             engine.Bpm = s.Bpm;
             engine.SetTracks(list);
@@ -137,8 +139,9 @@ public partial class MainWindow : Window
                 ? $"{list.Count} tomas · no pude cargar: {string.Join(", ", skipped)}"
                 : $"{list.Count} tomas · {engine.LengthSec / 60:0}:{engine.LengthSec % 60:00} · {s.AspectW}:{s.AspectH}");
 
-            await Task.WhenAll(list.Select(t => Task.Run(() => t.ExtractFramesAsync(dir))));
-            Preview.SetTime(engine.PositionSec);
+            await Task.WhenAll(list.Select(t => Task.Run(() => t.OpenVideo(dir))));
+            var noVideo = list.Where(t => t.Video == null).Select(t => t.Take.Name).ToList();
+            if (noVideo.Count > 0) Status($"Sin video (¿falta ffmpeg/ffprobe?): {string.Join(", ", noVideo)}");
         }
         catch (Exception e)
         {
@@ -196,7 +199,9 @@ public partial class MainWindow : Window
             t.MeterL = t.MeterR = 0;
         }
         Timeline.SetPlayhead(pos, engine.Playing);
-        Preview.SetTime(pos);
+        bool newFrame = false;
+        foreach (var t in tracks) newFrame |= t.UpdateVideo(pos);
+        if (newFrame) Preview.InvalidateVisual();
         TimeText.Text = $"{(int)(pos / 60):00}:{pos % 60:00.000}";
         double beats = pos * engine.Bpm / 60;
         BarText.Text = $"{(int)(beats / 4) + 1}.{(int)(beats % 4) + 1}";
