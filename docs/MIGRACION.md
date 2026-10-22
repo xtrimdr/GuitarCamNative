@@ -64,7 +64,7 @@ lo que es del proyecto, a la derecha.
   (Reels / Shorts / TikTok) 9:16, Cuadrado 1:1. Elegir 9:16 pasa a apilado y 16:9 a lado a lado ✗
   (hoy se respeta lo que trae el proyecto, pero no se puede cambiar).
 - **Composición**: un panel por toma con la grilla compartida con la exportación ✅; encuadre por toma
-  (cover + zoom + paneo + espejo) ✅; color, viñeta, grano y barras de cine (§6) ✗; fades de video a
+  (cover + zoom + paneo + espejo) ✅; color, viñeta, grano y barras de cine (§6) ✅; fades de video a
   negro ✗; panel vacío fuera del clip ✅.
 - **Arrastrar un panel** mueve el encuadre (panX/panY), **rueda** = zoom, **clic** selecciona la toma ✗.
 - Textos de estado: "La composición aparece cuando termines la primera toma", "Mientras grabás, la cámara
@@ -78,7 +78,8 @@ Configuración"; botón "Configurar entradas".
 
 ### 1.6 Barra de transporte ◐
 - **Grabar** (R): botón con destino "→ Nombre de la pista" o "→ pista nueva". Durante la cuenta:
-  "Cancelar n/4" (Esc). Grabando: "Detener y guardar la toma" (Espacio / R) y "Parar sin guardar esta toma" ✗.
+  "Cancelar n/4" (Esc). Grabando: "Detener y guardar la toma" (Espacio / R) y "Parar sin guardar esta toma" ✅
+  (`MainWindow.Recording.cs`; el reloj y el cabezal se ponen rojos, el timeline muestra "Grabando…").
 - **Al inicio** (Inicio) ✅. **Detener**: vuelve a donde arrancó; si ya estaba detenido, al inicio ✗.
   **Play / Pausa** (Espacio) desde el cabezal ◐ (hoy play/stop). **Loop** ("Repetir en loop", prendido
   por defecto) ✗.
@@ -87,8 +88,8 @@ Configuración"; botón "Configurar entradas".
 - **Tempo** (§4.5) ◐ (solo se muestra).
 - **Cuenta** (Shift+C, cuenta de 4 antes de grabar, prendida por defecto) ✗.
 - **Click** (C) ✅ y su menú: sonido (Bip, Madera, Clave, Aguja, Cencerro, Batería: clic para elegirlo y
-  escucharlo) y **volumen** (-24 a +9 dB). Se recuerda entre sesiones ◐ (sonido sí, con un combo; falta
-  el volumen, la escucha y que se recuerde).
+  escucharlo) y **volumen** (-24 a +9 dB). Se recuerda entre sesiones ◐ (todo implementado, también la
+  escucha con `PlaybackEngine.PreviewClick`; falta probarlo a mano).
 - **Timeline / Mixer** (X) ✗.
 
 ### 1.7 Panel inferior ◐
@@ -257,7 +258,7 @@ directa) → retorno → master.
   en la captura ✅ (motor, verificado); medidor de entrada con pico retenido y luz de clip ◐ (medidor sí).
 - **Monitoreo por software** opcional (para interfaces sin monitoreo directo) ◐ (motor sí; falta la opción en Configuración).
 
-### 5.8 Grabación ◐ (motor ✅; falta el flujo en la ventana)
+### 5.8 Grabación ✅ (solo audio: falta la cámara, §11)
 Todo programado sobre un mismo reloj de audio: pistas de fondo, click, cuenta de 4 y el comienzo de la
 grabación caen en el mismo cuadro. La toma nueva:
 - Llena la pista vacía seleccionada; si no, la siguiente vacía después de la seleccionada; si no hay,
@@ -269,7 +270,11 @@ grabación caen en el mismo cuadro. La toma nueva:
 - Se descarta si dura menos de 0,3 s. "Parar sin guardar" la tira.
 - Nativa: motor de grabación ✅ (`RecordingSession.cs`: cuenta, mismo reloj, `syncMs`, descarte ≤ 0,3 s;
   cerrar la app grabando conserva la toma; errores de disco y muestras perdidas a la vista), con
-  `RecordingWriter` y el diario `*.grabando.json` ✅. Falta el flujo en la ventana (R, destino, nombre) ✗.
+  `RecordingWriter` y el diario `*.grabando.json` ✅. Flujo en la ventana ✅ (`MainWindow.Recording.cs`,
+  `TakeRecording.cs`, `gclab proyecto toma` / `verificar-tomas`): R, cuenta, destino, nombre, canal,
+  descarte, deshacer, cerrar la ventana grabando guarda la toma. Diferencia: sin cámara la toma es solo
+  audio y una pista nueva no ocupa panel (la web no deja grabar sin cámara). Sin Configuración todavía,
+  el ajuste fino de sincronía vale 0 (el valor por defecto de la web).
 - **Sincronía por toma**: en la nativa, cada clip puede tener su propio ajuste de sincronía y de latencia de
   cámara (`Clip.SyncMs` / `VideoOffsetMs`, si faltan valen los de la grabación); entra en deshacer, como en la web ✅.
 
@@ -284,7 +289,7 @@ informa el navegador" (en nativo: lo que informa el driver ASIO).
 
 ---
 
-## 6. Color y efectos de video ✗
+## 6. Color y efectos de video ◐ (preview y exportación ✅, con la misma LUT; falta la pestaña Color, A6)
 
 Pestaña **Color** de la barra derecha, secciones Plantillas / Filtro / Ajustes / Efectos, todo deshacible.
 - **Filtro (look)**: Ninguno, Brujo, Sepia, B/N, Noir, Cálido, Frío, Cine, Vintage, Película,
@@ -353,8 +358,8 @@ paso. Se vacía al cambiar de proyecto y después de borrar no usadas.
 | Tecla | Acción | Nativa |
 |---|---|---|
 | Espacio | play / pausa (grabando: detener y guardar) | ◐ |
-| R | grabar / detener; durante la cuenta, cancela | ✗ |
-| Esc | cancelar la cuenta | ✗ |
+| R | grabar / detener; durante la cuenta, cancela | ✅ |
+| Esc | cancelar la cuenta | ✅ |
 | T | tap tempo | ✗ |
 | C / Shift+C | click / cuenta | ◐ (C sí) |
 | M / S | mute / solo de la pista seleccionada | ✅ |

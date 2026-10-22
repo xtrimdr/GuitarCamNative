@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using GuitarCam.App.Model;
+using GuitarCam.App.Video;
 using GuitarCam.Audio;
 using GuitarCam.Projects;
 using GuitarCam.Audio.Dsp;
@@ -14,11 +15,14 @@ namespace GuitarCam.App.Controls;
 /// under the playhead, cover-fit with its framing. Each clip's decoder fills its Frame; the window
 /// redraws this when one changes. Audio-only and empty tracks get no panel.
 /// Selection, pan and wheel zoom are ports of SplitScreenCanvas.tsx; the window owns the clip edits.
+/// The color grade and grain come already applied in each clip's Frame; vignette and letterbox are
+/// drawn here per panel (<see cref="PreviewVideoFx"/>).
 /// </summary>
 public sealed class PreviewView : Control
 {
     IReadOnlyList<LiveTrack> tracks = [];
     string layout = "side-by-side";
+    ProjectSettings? settings;
     double aspectW = 16, aspectH = 9;
     LiveClip? dragged;
     Point down;
@@ -40,6 +44,7 @@ public sealed class PreviewView : Control
     {
         CancelGesture();
         tracks = list.Where(t => t.HasPanel).ToList();
+        settings = s;
         layout = s.Layout;
         (aspectW, aspectH) = s.AspectWH();
         InvalidateVisual();
@@ -164,6 +169,8 @@ public sealed class PreviewView : Control
                             ctx.DrawImage(bmp, src, dest);
                     }
                     else ctx.DrawImage(bmp, src, dest);
+                    // vignette and letterbox sit on the picture, under the fade (same order as the export)
+                    PreviewVideoFx.DrawPanelOverlays(ctx, dest, settings?.VideoFx);
                 }
             }
             else if (clip is { Video: not null })

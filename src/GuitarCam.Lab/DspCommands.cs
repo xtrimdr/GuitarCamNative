@@ -1028,7 +1028,15 @@ static class DspCommands
                     for (int it = 0; it < iters; it++)
                         VideoColorProcessor.GradeAndGrainBgra(srcBuf, dstBuf, bw, bh, benchLut, benchGrain, it);
                     swLutGrain.Stop();
-                    Console.WriteLine($"Costo B7 ({bw}×{bh}): LUT 3D trilineal = {swLutOnly.Elapsed.TotalMilliseconds / iters:0.00} ms/cuadro · LUT + grano = {swLutGrain.Elapsed.TotalMilliseconds / iters:0.00} ms/cuadro");
+                    byte[] parBuf = new byte[dstBuf.Length];
+                    VideoColorProcessor.GradeAndGrainBgraParallel(srcBuf, parBuf, bw, bh, benchLut, benchGrain, iters - 1);
+                    if (!parBuf.AsSpan().SequenceEqual(dstBuf))
+                        throw new InvalidOperationException("El color en paralelo no da igual que en un solo hilo");
+                    var swPar = System.Diagnostics.Stopwatch.StartNew();
+                    for (int it = 0; it < iters; it++)
+                        VideoColorProcessor.GradeAndGrainBgraParallel(srcBuf, parBuf, bw, bh, benchLut, benchGrain, it);
+                    swPar.Stop();
+                    Console.WriteLine($"Costo B7 ({bw}×{bh}): LUT 3D trilineal = {swLutOnly.Elapsed.TotalMilliseconds / iters:0.00} ms/cuadro · LUT + grano = {swLutGrain.Elapsed.TotalMilliseconds / iters:0.00} ms/cuadro · en paralelo = {swPar.Elapsed.TotalMilliseconds / iters:0.00} ms/cuadro (igual)");
                 }
             }
             return 0;

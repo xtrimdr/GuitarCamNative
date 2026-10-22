@@ -74,11 +74,10 @@ Lo hicieron los agentes y compila con 0/0 y pasa sus pruebas de `gclab`, pero el
 lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](docs/COORDINACION.md)
 ("Para retomar"). Al aprobarlo, pasa a **Hecho** y se marca en MIGRACION.
 
-- A5 · transporte y tempo (`MainWindow.Transport.cs`, `Controls/TempoControl.cs`): implementado, falta
-  la prueba a mano en la ventana (se cortó) y escuchar el click desde su menú (falta `PreviewClick` del motor)
+- A5 · transporte y tempo (`MainWindow.Transport.cs`, `Controls/TempoControl.cs`): implementado, con la
+  escucha del click (`PreviewClick`); falta la prueba a mano en la ventana: Detener, play/pausa, loop,
+  reloj, tempo (arrastre, rueda, doble clic, TAP), Cuenta y el menú del click (que se escuche)
 - B6 · el diálogo de exportación ya se abre con "Exportar MP4"; falta la captura lado a lado con la web
-- B7 · color y efectos de video en la preview (`VideoColorProcessor`, `PreviewVideoFx`): a medias,
-  Antigravity se quedó sin tokens; sin revisar
 
 ## Notas
 
@@ -90,8 +89,6 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
 - "Volver a una versión guardada" no tiene dónde tocarse en la ventana: el menú provisorio del chip se
   fue con el gestor y su lugar es la pestaña Historial (§2.3 de MIGRACION). Mientras tanto,
   `gclab proyecto versiones` / `volver`.
-  La grabación todavía no usa `RecordingWriter` desde la ventana:
-  hay que alimentarlo desde un hilo aparte, nunca desde el callback de ASIO.
 - `gclab verificar` corre los `.ts` reales de la web, pero los nodos nativos de Web Audio (Biquad,
   Delay, Convolver) y el ruteo de los buses son una emulación en JS (`tools/worklet-ref.mjs`). Falta
   una pasada contra un `OfflineAudioContext` de verdad en Chromium para confirmarlos.
@@ -99,6 +96,21 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
   y cuántos cuadros por segundo llegan de verdad con muchas tomas.
 
 ## Hecho
+
+- 2026-10-22: grabar desde la ventana (§5.8 de MIGRACION): R / botón Grabar, cuenta con "Cancelar n/4"
+  (Esc), Detener (Espacio / R) y Descartar, reloj y cabezal rojos, "Grabando…" en la pista destino o en
+  una fila nueva. La toma va a la pista vacía como en la web (`GuitarCam.Projects/TakeRecording.cs`), es
+  un paso de deshacer, recalcula el compresor con su nivel y se guarda antes de borrar el diario; cerrar
+  la ventana grabando la guarda (`MainWindow.Recording.cs`). `gclab proyecto toma` y
+  `proyecto verificar-tomas`. Probado con la Focusrite: dos tomas guardadas y la recuperación de un corte.
+  Solo audio hasta que esté la cámara.
+
+- 2026-10-22: color y efectos de video en la preview (B7): LUT 3D trilineal, grano, viñeta y barras de
+  cine, los mismos de la exportación (`VideoColorProcessor`, `Video/PreviewVideoFx.cs`). El color de cada
+  cuadro corre en paralelo (1,2 ms por cuadro de 640 px en vez de 5,3). Falta la pestaña Color para
+  editarlo (A6); hoy se ve el que trae el proyecto.
+
+- 2026-10-22: escucha del click desde su menú y al mover el volumen (`PlaybackEngine.PreviewClick`).
 
 - 2026-10-22: inspector completo (§1.2; tarea A4, ChatGPT): mezcla, saturación, compresor con estilos,
   cantidad, ajuste fino y EQ del preset, EQ de 6 bandas con editor gráfico y plantillas, envíos de reverb

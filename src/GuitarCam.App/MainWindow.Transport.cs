@@ -11,8 +11,8 @@ using GuitarCam.Projects;
 
 namespace GuitarCam.App;
 
-/// <summary>Port of TransportBar.tsx and App.tsx transport actions. Native differences: recording and
-/// Mixer remain pending; click audition needs the playback engine's preview API. View preferences and
+/// <summary>Port of TransportBar.tsx and App.tsx transport actions. Native difference: Mixer remains
+/// pending. The click menu auditions through <see cref="PlaybackEngine.PreviewClick"/>. View preferences and
 /// click settings belong to the app, while tempo belongs to the project and its undo snapshots.</summary>
 public partial class MainWindow
 {
@@ -20,6 +20,8 @@ public partial class MainWindow
     Flyout? clickMenu;
     readonly List<Button> clickChoices = [];
     InspectorSlider? clickVolume;
+    // like ClickSoundMenu's volTimer: one audition 150 ms after the volume stops moving
+    readonly Avalonia.Threading.DispatcherTimer clickVolumeTimer = new() { Interval = TimeSpan.FromMilliseconds(150) };
     Task clickPrefsSaving = Task.CompletedTask;
     bool? transportPlaying;
     string? clockTip;
@@ -81,7 +83,10 @@ public partial class MainWindow
         {
             engine.SetClickSound(engine.ClickSound, v);
             RefreshClickMenu(); SaveClickPreferences();
+            clickVolumeTimer.Stop();
+            clickVolumeTimer.Start();
         });
+        clickVolumeTimer.Tick += (_, _) => { clickVolumeTimer.Stop(); PreviewClick(); };
         body.Children.Add(new Border { Child = clickVolume, BorderBrush = Palette.Line, BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(4, 8, 4, 0) });
         var panel = new Border { Width = 240, Padding = new Thickness(8), Background = Palette.Raised, BorderBrush = Palette.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Child = body };
         clickMenu = new Flyout { Content = panel, Placement = PlacementMode.TopEdgeAlignedRight };
@@ -109,7 +114,11 @@ public partial class MainWindow
         }, TaskScheduler.Default);
     }
 
-    void PreviewClick() => Status("Elegí el sonido del click. La escucha desde el menú todavía no está en la versión nativa.");
+    void PreviewClick()
+    {
+        if (engine.IsOpen) engine.PreviewClick();
+        else Status(engine.Status);
+    }
 
     static string TransportBars(double sec, double bpm)
     {
@@ -122,7 +131,9 @@ public partial class MainWindow
     {
         bool bars = Timeline.RulerInBars;
         TimeText.Text = bars ? TransportBars(pos, engine.Bpm) : TransportTime(pos);
-        BarText.Text = "/ " + (bars ? TransportBars(engine.LengthSec, engine.Bpm) : TransportTime(engine.LengthSec));
+        // while recording the total is the take so far, like the web
+        double total = RecordingBusy ? pos : engine.LengthSec;
+        BarText.Text = "/ " + (bars ? TransportBars(total, engine.Bpm) : TransportTime(total));
         string tip = bars ? $"Compás.tiempo.semicorchea · {TransportTime(pos)} · click: ver minutos y segundos"
             : $"{TransportBars(pos, engine.Bpm)} · click: ver compases y tiempos";
         if (tip != clockTip) { clockTip = tip; ToolTip.SetTip(ClockButton, tip); }
@@ -137,7 +148,7 @@ public partial class MainWindow
         StopButton.IsEnabled = !engine.Recording && (engine.Playing || pos > 0);
         PlayButton.IsEnabled = ToStartButton.IsEnabled = !engine.Recording;
         Tempo.Set(engine.Bpm);
-        Tempo.IsEnabled = store != null && !store.ReadOnly && !restoring;
+        Tempo.IsEnabled = store != null && !store.ReadOnly && !restoring && !RecordingBusy;
         string? target = sel != null && sel.Clips.Count == 0 ? sel.Track.Name : null;
         RecordTargetText.Text = target == null ? "→ pista nueva" : $"→ {target}";
         ToolTip.SetTip(RecButton, target == null ? "Grabar en una pista nueva al final (R)" : $"Grabar en \"{target}\" (R)");

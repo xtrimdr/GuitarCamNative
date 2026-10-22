@@ -12,6 +12,7 @@ static class ProjectCommands
         string sub = a.Positional.FirstOrDefault()?.ToLowerInvariant() ?? "";
         if (sub == "verificar-deshacer") return UndoChecks.Run();
         if (sub == "verificar-clips") return ClipChecks.Run();
+        if (sub == "verificar-tomas") return TakeChecks.Run();
         string? dir = a.Positional.Skip(1).FirstOrDefault();
         if (dir == null) throw new ArgumentException("Falta la carpeta del proyecto.");
         dir = Path.GetFullPath(dir);
@@ -26,6 +27,7 @@ static class ProjectCommands
             "encuadre" => Frame(dir, a),
             "sincronia" => Sync(dir, a),
             "cortar" => Crash(dir, a.Double("segundos", 3)),
+            "toma" => RecordTake(dir, a.Double("segundos", 3), a.Get("pista")),
             _ => throw new ArgumentException("proyecto importar|abrir|versiones|volver|cortar <carpeta>"),
         };
     }
@@ -187,6 +189,52 @@ static class ProjectCommands
         foreach (var n in store.Notices) Console.WriteLine($"Aviso: {n}");
         var snaps = ProjectStore.Snapshots(store.Dir);
         Console.WriteLine($"Historial: {snaps.Count} copias{(snaps.Count > 0 ? $", la última {snaps[0].Time:g}" : "")}");
+    }
+
+    /// <summary>
+    /// Records a test tone the way the window does (journal, WAV, take into the project, save, journal off),
+    /// to try where a take lands without the window. --pista plays the selected track.
+    /// </summary>
+    static int RecordTake(string dir, double seconds, string? selected)
+    {
+        using var store = ProjectStore.Open(dir);
+        if (store.ReadOnly) throw new InvalidOperationException(store.ReadOnlyReason);
+        const int sr = 48000;
+        var p = store.Project;
+        var target = TakeRecording.PickTarget(p, selected);
+        int number = TakeRecording.NextTakeNumber(p);
+        var id = Ids.New("med");
+        var j = new ProjectStore.RecordingJournal
+        {
+            MediaId = id,
+            Name = TakeRecording.TakeName(p, target),
+            Audio = $"{ProjectStore.MediaDir}/{id}.wav",
+            TrackId = target?.Id,
+        };
+        store.BeginRecording(j);
+        long frames = (long)(seconds * sr);
+        using (var w = new RecordingWriter(store.Resolve(j.Audio)!, sr))
+        {
+            var l = new float[480];
+            var r = new float[480];
+            for (long f = 0; f < frames;)
+            {
+                for (int i = 0; i < l.Length; i++, f++) l[i] = r[i] = 0.25f * MathF.Sin(2 * MathF.PI * 220 * f / sr);
+                w.Append(l, r);
+            }
+        }
+        if (seconds <= TakeRecording.MinTakeSec)
+        {
+            File.Delete(store.Resolve(j.Audio)!);
+            store.EndRecording(id);
+            Console.WriteLine($"Toma de {seconds:0.0} s: muy corta, la descarté como la app.");
+            return 0;
+        }
+        var track = TakeRecording.AddTake(p, j, frames / (double)sr, sr, 2, number);
+        store.Save();
+        store.EndRecording(id);
+        Console.WriteLine($"\"{j.Name}\" ({seconds:0.0} s) en la pista {p.Tracks.IndexOf(track) + 1}{(target == null ? " (nueva)" : "")} · compresor {(track.Channel.Comp.On ? track.Channel.Comp.Preset : "apagado")}");
+        return 0;
     }
 
     /// <summary>Records a test tone like the app will and dies before finishing, to try the recovery.</summary>

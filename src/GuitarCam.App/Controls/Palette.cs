@@ -18,7 +18,9 @@ static class Palette
     public static readonly IBrush Dim = Brush("#a1a1aa");
     public static readonly IBrush Faint = Brush("#6b6b74");
     public static readonly IBrush Accent = new ImmutableSolidColorBrush(AccentColor);
-    public static readonly IBrush Rec = Brush("#ef4444");
+    public static readonly Color RecColor = Color.Parse("#ef4444");
+    public static readonly IBrush Rec = new ImmutableSolidColorBrush(RecColor);
+    public static readonly IBrush RecSoft = Brush("#24ef4444");
     public static readonly IBrush Composition = Brush("#09090b");
 
     public static readonly Typeface Ui = new("Segoe UI Variable Text, Segoe UI");

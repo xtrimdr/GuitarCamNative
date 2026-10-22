@@ -14,7 +14,7 @@ namespace GuitarCam.App.Video;
 /// <c>GuitarCam/src/components/SplitScreenCanvas.tsx</c> and <c>src/video/colorGL.ts</c>,
 /// backed by <see cref="VideoColorProcessor"/> so the preview matches the FFmpeg MP4 export:
 /// <list type="bullet">
-/// <item><description>Per-frame 3D LUT trilinear grading and monochrome grain run on the decoded frame buffer via <see cref="FrameGrader"/> (used by <c>LiveClip.UpdateVideo</c>).</description></item>
+/// <item><description>Per-frame 3D LUT trilinear grading and monochrome grain run on the decoded frame buffer in <c>LiveClip.UpdateVideo</c>, with the LUT table cached here (<see cref="GetLutTable"/>).</description></item>
 /// <item><description>Panel-space elliptical vignette mask (cached per panel size and vignette settings) and cinema letterbox bars are drawn over each panel via <see cref="DrawPanelOverlays"/>.</description></item>
 /// </list>
 /// </summary>

@@ -306,8 +306,8 @@ Mismo comportamiento que el `StereoMeter` de la web: ataque instantáneo, caída
 | Ctrl+S | guardar ya |
 | Ctrl+Z / Ctrl+Y o Ctrl+Shift+Z | deshacer / rehacer |
 | Supr | quitar el clip (la pista queda vacía); en una pista vacía, quitar la pista |
-| Esc | cancelar el gesto en curso en el timeline; en el gestor, cerrar el formulario y después el gestor |
-| R | grabar (el motor ya está, falta el flujo en la ventana) |
+| Esc | cancelar la cuenta antes de grabar; cancelar el gesto en curso en el timeline; en el gestor, cerrar el formulario y después el gestor |
+| R | grabar; grabando, detener y guardar la toma; durante la cuenta, cancelarla (Espacio hace lo mismo mientras graba) |
 | rueda / Shift o Ctrl+rueda / Alt+rueda | desplazar / zoom en el puntero / alto de pista |
 | clic en la regla, doble clic en un carril | mover el playhead |
 

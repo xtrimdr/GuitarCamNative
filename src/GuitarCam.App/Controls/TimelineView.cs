@@ -52,6 +52,17 @@ public sealed class TimelineView : Control
     public string SnapMode { get => snapMode; set { snapMode = value; InvalidateVisual(); } }
     public bool RulerInBars { get => bars; set { bars = value; InvalidateVisual(); } }
     public double TrackHeight => laneH;
+    int? recordingLane;
+    /// <summary>
+    /// The track a take is going into while recording (tracks.Count = an extra row for a new track at the
+    /// end); null when not recording. Like the web, the timeline only scrolls and zooms meanwhile.
+    /// </summary>
+    public int? RecordingLane
+    {
+        get => recordingLane;
+        set { recordingLane = value; CancelGesture(); ClampScroll(); InvalidateVisual(); }
+    }
+    int ExtraRows => recordingLane == tracks.Count ? 1 : 0;
     public event Action? EditGestureStarted;
     public event Action<Clip, string?, string?>? ClipEditCommitted;
     public event Action<int, int>? ReorderRequested;
@@ -144,7 +155,7 @@ public sealed class TimelineView : Control
     double Grid => ClipEditing.GridSeconds(snapMode, Bpm);
     double ViewSec => Math.Max(8, Math.Max(LengthSec, Playhead + 2));
     double MinPps => Math.Max(0.01, (Bounds.Width - HeaderW) / Math.Max(600, ViewSec * 8));
-    void ClampScroll() => scrollY = Math.Clamp(scrollY, 0, Math.Max(0, tracks.Count * laneH + 44 - (Bounds.Height - RulerH)));
+    void ClampScroll() => scrollY = Math.Clamp(scrollY, 0, Math.Max(0, (tracks.Count + ExtraRows) * laneH + 44 - (Bounds.Height - RulerH)));
     public void SetTrackHeight(double height)
     {
         double next = Math.Clamp(height, 40, 160);
@@ -176,12 +187,14 @@ public sealed class TimelineView : Control
         using (ctx.PushClip(new Rect(HeaderW, RulerH, W - HeaderW, Math.Max(0, H - RulerH))))
         {
             for (int i = 0; i < tracks.Count; i++) DrawLane(ctx, i, W);
+            if (recordingLane is { } r) DrawRecordingBar(ctx, r, W);
         }
         DrawRuler(ctx, W);
         using (ctx.PushClip(new Rect(HeaderW, 0, W - HeaderW, H)))
         {
             double px = X(Playhead);
-            ctx.DrawLine(Palette.Pen(Palette.Accent, 1.5), new Point(px, 0), new Point(px, H));
+            var playColor = recordingLane != null ? Palette.Rec : Palette.Accent;
+            ctx.DrawLine(Palette.Pen(playColor, 1.5), new Point(px, 0), new Point(px, H));
             var head = new StreamGeometry();
             using (var g = head.Open())
             {
@@ -190,7 +203,7 @@ public sealed class TimelineView : Control
                 g.LineTo(new Point(px, 8));
                 g.EndFigure(true);
             }
-            ctx.DrawGeometry(Palette.Accent, null, head);
+            ctx.DrawGeometry(playColor, null, head);
         }
 
         // sticky headers
@@ -199,7 +212,8 @@ public sealed class TimelineView : Control
         ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, RulerH - 0.5), new Point(W, RulerH - 0.5));
         using (ctx.PushClip(new Rect(0, RulerH, HeaderW, Math.Max(0, H - RulerH))))
             for (int i = 0; i < tracks.Count; i++) DrawHeader(ctx, i);
-        double addY = LaneY(tracks.Count);
+        if (ExtraRows > 0) DrawRecordingHeader(ctx, LaneY(tracks.Count), W);
+        double addY = LaneY(tracks.Count + ExtraRows);
         if (addY >= RulerH && addY < H)
         {
             ctx.FillRectangle(Palette.App, new Rect(0, addY, W, 44));
@@ -207,7 +221,7 @@ public sealed class TimelineView : Control
             ctx.DrawText("Nueva pista", 12, Palette.Dim, new Point(32, addY + 13));
             ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, addY + 43.5), new Point(W, addY + 43.5));
         }
-        if (tracks.Count == 0)
+        if (tracks.Count == 0 && recordingLane == null)
         {
             ctx.DrawText("Todavía no hay pistas", 12.5, Palette.Dim, new Point(HeaderW + 24, RulerH + 66), Palette.UiBold);
             ctx.DrawText("Grabá la base con R, o creá pistas vacías desde «Nueva pista» y grabá en cada una.", 12,
@@ -223,6 +237,28 @@ public sealed class TimelineView : Control
             ctx.DrawText(text, 11, Palette.Accent, new Point(Math.Max(HeaderW + 10, W - 280), r.Y + 8), Palette.UiBold);
         }
         ctx.DrawLine(Palette.Pen(Palette.Line), new Point(HeaderW - 0.5, 0), new Point(HeaderW - 0.5, H));
+    }
+
+    /// <summary>The take being recorded: a red bar from 0 to the playhead (Timeline.tsx recBar).</summary>
+    void DrawRecordingBar(DrawingContext ctx, int lane, double W)
+    {
+        double y = LaneY(lane);
+        if (lane == tracks.Count) ctx.FillRectangle(Palette.Alpha(Palette.RecColor, 0.14 * 0.4), new Rect(HeaderW, y, W - HeaderW, laneH));
+        double x0 = X(0), x1 = X(Playhead);
+        if (x1 > x0) ctx.DrawRectangle(Palette.Alpha(Palette.RecColor, 0.2), Palette.Pen(Palette.Alpha(Palette.RecColor, 0.5)), new Rect(x0, y + 6, x1 - x0, laneH - 12), 4, 4);
+        if (lane == tracks.Count) ctx.DrawLine(Palette.Pen(Palette.Line), new Point(HeaderW, y + laneH - 0.5), new Point(W, y + laneH - 0.5));
+    }
+
+    /// <summary>The extra row of a take going to a new track (Timeline.tsx extraRecRow).</summary>
+    void DrawRecordingHeader(DrawingContext ctx, double y, double W)
+    {
+        ctx.FillRectangle(Palette.Brush("#1d1214"), new Rect(0, y, HeaderW, laneH));
+        var badge = new Rect(12, y + (laneH - 20) / 2, 20, 20);
+        ctx.DrawRectangle(Palette.RecSoft, null, badge, 4, 4);
+        ctx.DrawEllipse(Palette.Rec, null, badge.Center, 4, 4);
+        var text = Palette.Text("Grabando…", 13, Palette.Rec);
+        ctx.DrawText(text, new Point(42, y + (laneH - text.Height) / 2));
+        ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, y + laneH - 0.5), new Point(W, y + laneH - 0.5));
     }
 
     void DrawRuler(DrawingContext ctx, double W)
@@ -407,9 +443,14 @@ public sealed class TimelineView : Control
         ctx.DrawRectangle(Palette.Hover, null, badge, 5, 5);
         var num = Palette.Text((i + 1).ToString(), 11, Palette.Dim, Palette.Mono);
         ctx.DrawText(num, new Point(badge.Center.X - num.Width / 2, badge.Center.Y - num.Height / 2));
-        ctx.DrawText(t.Track.Name, 12.5, Palette.Fg, new Point(52, y + 11), Palette.UiBold, HeaderW - 152);
+        if (recordingLane == i)
+        {
+            ctx.DrawText("Grabando…", 13, Palette.Rec, new Point(52, y + 11), Palette.Ui, HeaderW - 152);
+            ctx.DrawEllipse(Palette.Rec, null, new Point(RemoveRect(i).Center.X, y + 20), 4, 4);
+        }
+        else ctx.DrawText(t.Track.Name, 12.5, Palette.Fg, new Point(52, y + 11), Palette.UiBold, HeaderW - 152);
 
-        if (lastPointer.Y >= y && lastPointer.Y < y + laneH)
+        if (recordingLane != i && lastPointer.Y >= y && lastPointer.Y < y + laneH)
             ctx.DrawText("×", 16, Palette.Faint, new Point(RemoveRect(i).X + 6, y + 7));
         ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, y + laneH - 0.5), new Point(HeaderW, y + laneH - 0.5));
         if (t.Clips.Count == 0) return;
@@ -465,6 +506,7 @@ public sealed class TimelineView : Control
         var p = e.GetPosition(this);
         lastPointer = p;
         modifiers = e.KeyModifiers;
+        if (recordingLane != null) { e.Handled = true; return; }
         var buttons = e.GetCurrentPoint(this).Properties;
         if (buttons.IsMiddleButtonPressed)
         {

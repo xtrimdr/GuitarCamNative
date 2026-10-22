@@ -149,7 +149,7 @@ public sealed class LiveClip
             if (gradedFrame == null || gradedFrame.Length != rawFrame.Length)
                 gradedFrame = new byte[rawFrame.Length];
             var lutTable = PreviewVideoFx.GetLutTable(colSpec);
-            VideoColorProcessor.GradeAndGrainBgra(
+            VideoColorProcessor.GradeAndGrainBgraParallel(
                 rawFrame,
                 gradedFrame,
                 Video.Width,

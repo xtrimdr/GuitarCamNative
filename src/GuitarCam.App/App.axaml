@@ -92,6 +92,28 @@
       <Setter Property="BorderBrush" Value="{StaticResource Line}" />
       <Setter Property="Foreground" Value="{StaticResource Fg}" />
     </Style>
+    <!-- recording buttons (TransportBar.tsx): hover keeps their own color -->
+    <Style Selector="Button.chip.rec:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#40ef4444" />
+      <Setter Property="BorderBrush" Value="#80ef4444" />
+    </Style>
+    <Style Selector="Button.chip.rec-stop:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#f25a5a" />
+      <Setter Property="BorderBrush" Value="#f25a5a" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.chip.discard">
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+    </Style>
+    <Style Selector="Button.chip.discard:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource RecSoft}" />
+      <Setter Property="BorderBrush" Value="#66ef4444" />
+      <Setter Property="Foreground" Value="{StaticResource Rec}" />
+    </Style>
+    <Style Selector="Button.chip.count:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#4022d3ee" />
+      <Setter Property="BorderBrush" Value="#8022d3ee" />
+    </Style>
     <Style Selector="ToggleButton.chip:checked /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource AccentSoft}" />
       <Setter Property="BorderBrush" Value="{StaticResource Accent}" />

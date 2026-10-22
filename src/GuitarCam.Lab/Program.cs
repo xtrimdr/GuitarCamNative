@@ -79,6 +79,9 @@ static class Program
               proyecto editar carpeta a-pista clip pista [--intercambiar clip] | reordenar desde hasta
               proyecto editar carpeta inicio|fijar-corte|restaurar|quitar-clip clip | quitar-pista pista
               proyecto editar carpeta nueva-pista | agregar-toma medio [--pista pista]
+              proyecto verificar-tomas     verifica a qué pista va una toma nueva, su nombre y su canal
+              proyecto toma     carpeta [--segundos 3] [--pista id]
+                                           graba un tono como la ventana (--pista: la pista seleccionada)
               proyecto cortar   carpeta [--segundos 3]
                                            graba un tono y corta sin cerrar, para probar la recuperación
               proyectos lista|plantillas [--raiz X]

@@ -36,6 +36,8 @@ public sealed class PlaybackEngine : IDisposable
     volatile float[] clickLo = ClickSynth.Render(ClickSound.Madera, false, SampleRate);
     float[]? click;
     int clickPos;
+    // a single click asked for by the sound menu; the callback takes it, so it also sounds while stopped
+    float[]? previewClick;
 
     DelayParams lastDelay = DelayParams.Defaults;
     double bpm = 120;
@@ -498,6 +500,13 @@ public sealed class PlaybackEngine : IDisposable
         var dl = buses.PrepareDelayL(n);
         var dr = buses.PrepareDelayR(n);
 
+        var preview = Interlocked.Exchange(ref previewClick, null);
+        if (preview != null)
+        {
+            click = preview;
+            clickPos = 0;
+        }
+
         if (playing)
         {
             long pos = Interlocked.Read(ref position);
@@ -607,8 +616,14 @@ public sealed class PlaybackEngine : IDisposable
             float ol = outL, or = outR;
             for (int i = 0; i < n; i++)
             {
-                float l = ml[i];
-                float r = mr[i];
+                float c = 0;
+                if (click != null)
+                {
+                    c = click[clickPos];
+                    if (++clickPos >= click.Length) click = null;
+                }
+                float l = ml[i] + c;
+                float r = mr[i] + c;
                 output[0][i] = l;
                 output[1][i] = r;
                 if (Math.Abs(l) > ol) ol = Math.Abs(l);
@@ -643,6 +658,9 @@ public sealed class PlaybackEngine : IDisposable
         double budget = n / (double)SampleRate;
         LoadPercent = LoadPercent * 0.9 + 0.1 * (100 * used / budget);
     }
+
+    /// <summary>Plays one click of the current sound and volume, playing or not (the web's playClick from the sound menu).</summary>
+    public void PreviewClick(bool accent = true) => Volatile.Write(ref previewClick, accent ? clickHi : clickLo);
 
     public void SetClickSound(ClickSound s, double volumeDb = 0)
     {

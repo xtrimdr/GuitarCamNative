@@ -100,7 +100,7 @@ public partial class MainWindow
     }
 
     /// <summary>One checkpoint per committed gesture; audio stays cached and disk work runs in the background.</summary>
-    async Task EditTimeline(Func<Project, string?> edit, string activity, string? clipId = null)
+    async Task EditTimeline(Func<Project, string?> edit, string? activity, string? clipId = null)
     {
         if (restoring || store == null || store.ReadOnly || Projects.IsVisible) return;
         var st = store;
@@ -115,7 +115,7 @@ public partial class MainWindow
         try
         {
             string? selected = edit(st.Project);
-            st.Project.AddLog(activity);
+            if (activity != null) st.Project.AddLog(activity);
             MarkDirty();
             saveTimer.Stop();
             await ShowProject(st, audio, true);

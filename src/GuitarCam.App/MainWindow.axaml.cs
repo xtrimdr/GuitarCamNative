@@ -50,13 +50,13 @@ public partial class MainWindow : Window
         SessionChip.Click += async (_, _) => await ShowProjects();
         ExportButton.Click += (_, _) =>
         {
-            if (store == null || restoring || Projects.IsVisible) return;
+            if (store == null || restoring || Projects.IsVisible || RecordingBusy) return;
             if (Export.TryOpen(store, tracks, out var error)) { engine.Pause(); engine.Seek(0); }
             else if (error != null) Status(error);
         };
         Export.ExportCompleted += _ => { MarkDirty(); SaveSoon(); };
         Export.Dismissed += () => Timeline.Focus();
-        RecButton.Click += (_, _) => Status("Grabar todavía no está en la ventana (probalo con gclab grabar)");
+        InitRecording();
         PlayButton.Click += (_, _) => TogglePlay();
         ToStartButton.Click += (_, _) => engine.Seek(0);
         FitButton.Click += (_, _) => Timeline.FitAll();
@@ -132,8 +132,17 @@ public partial class MainWindow : Window
             if (dir != null && ProjectStore.IsProject(dir)) await LoadProject(dir);
             else await ShowProjects();
         };
-        Closing += (_, e) =>
+        Closing += async (_, e) =>
         {
+            if (RecordingBusy)
+            {
+                // keep the take: stop, put it in the project and save, then close
+                e.Cancel = true;
+                if (recStopping) return;
+                await StopRecording(engine.IsCountingIn);
+                Close();
+                return;
+            }
             if (Export.IsRunning)
             {
                 e.Cancel = true;
@@ -386,6 +395,7 @@ public partial class MainWindow : Window
         }
         if (e.Source is Control source && source.FindAncestorOfType<TextBox>(true) != null) return;
         if (restoring) { e.Handled = true; return; }
+        if (RecordingBusy && await RecordingKey(e)) return;
         if ((e.KeyModifiers & KeyModifiers.Control) != 0)
         {
             if (e.Key is Key.Z or Key.Y)
@@ -401,7 +411,7 @@ public partial class MainWindow : Window
             return;
         }
         if ((e.KeyModifiers & KeyModifiers.Alt) != 0) return;
-        if (e.Key is Key.Space or Key.Home or Key.C or Key.T && !transportKeys.Add(e.Key)) { e.Handled = true; return; }
+        if (e.Key is Key.Space or Key.Home or Key.C or Key.T or Key.R && !transportKeys.Add(e.Key)) { e.Handled = true; return; }
         switch (e.Key)
         {
             case Key.Escape:
@@ -413,6 +423,9 @@ public partial class MainWindow : Window
                 break;
             case Key.Space:
                 TogglePlay();
+                break;
+            case Key.R:
+                StartRecording();
                 break;
             case Key.Home:
                 engine.Seek(0);
@@ -453,11 +466,13 @@ public partial class MainWindow : Window
         }
         Timeline.SetPlayhead(pos, engine.Playing);
         bool newFrame = false;
+        var look = store?.Project.Settings;
         foreach (var t in tracks)
             foreach (var c in t.Clips)
-                newFrame |= c.UpdateVideo(pos);
+                newFrame |= c.UpdateVideo(pos, look?.Color, look?.VideoFx);
         if (newFrame || videoFade) Preview.InvalidateVisual();
         RefreshTransport(pos);
+        if (RecordingBusy) RefreshRecording();
         var m = engine.TakeMeters();
         InputMeter.Push(m.InL, m.InR);
         if (engine.IsOpen) DspText.Text = $"DSP {engine.LoadPercent:0.0}%";
@@ -491,14 +506,14 @@ public partial class MainWindow : Window
 
     void UpdateUndoButtons()
     {
-        UndoButton.IsEnabled = !restoring && store?.ReadOnly == false && undo.CanUndo;
-        RedoButton.IsEnabled = !restoring && store?.ReadOnly == false && undo.CanRedo;
+        UndoButton.IsEnabled = !restoring && !RecordingBusy && store?.ReadOnly == false && undo.CanUndo;
+        RedoButton.IsEnabled = !restoring && !RecordingBusy && store?.ReadOnly == false && undo.CanRedo;
     }
 
     /// <summary>Restores editable data with cached audio; recordings and project history never roll back.</summary>
     async Task RestoreEdit(bool redo)
     {
-        if (restoring || store == null || store.ReadOnly || Projects.IsVisible) return;
+        if (restoring || RecordingBusy || store == null || store.ReadOnly || Projects.IsVisible) return;
         var st = store;
         string? selected = sel?.Track.Id;
         double position = engine.PositionSec;

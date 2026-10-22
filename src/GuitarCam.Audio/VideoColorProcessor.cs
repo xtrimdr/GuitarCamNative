@@ -522,8 +522,21 @@ public static class VideoColorProcessor
     }
 
     /// <summary>
+    /// <see cref="GradeAndGrainBgra"/> split in bands of rows over the thread pool, so a 640-wide preview
+    /// frame costs well under a millisecond of the UI tick instead of several. Same result byte for byte.
+    /// </summary>
+    public static void GradeAndGrainBgraParallel(byte[] srcBgra, byte[] dstBgra, int width, int height, Lut3DTable table, int grainLevels = 0, int frameSeed = 0)
+    {
+        const int Band = 45;
+        int bands = (height + Band - 1) / Band;
+        Parallel.For(0, bands, i => GradeAndGrainBgra(srcBgra, dstBgra, width, height, table, grainLevels, frameSeed, i * Band, Math.Min(height, (i + 1) * Band)));
+    }
+
+    /// <summary>
     /// Applies the 3D LUT (trilinear interpolation) and monochrome film grain (<c>colorGL.ts</c>) to a
     /// <c>Bgra8888</c> frame buffer of <paramref name="width"/> × <paramref name="height"/>.
+    /// <paramref name="firstRow"/>..<paramref name="endRow"/> limits it to a band of rows (the grain depends on
+    /// the absolute row, so bands processed apart give the same picture as the whole frame).
     /// </summary>
     public static void GradeAndGrainBgra(
         ReadOnlySpan<byte> srcBgra,
@@ -532,8 +545,11 @@ public static class VideoColorProcessor
         int height,
         Lut3DTable table,
         int grainLevels = 0,
-        int frameSeed = 0)
+        int frameSeed = 0,
+        int firstRow = 0,
+        int endRow = -1)
     {
+        if (endRow < 0 || endRow > height) endRow = height;
         int totalBytes = width * height * 4;
         if (srcBgra.Length < totalBytes || dstBgra.Length < totalBytes)
             throw new ArgumentException("Frame buffer too small for width × height × 4.");
@@ -541,7 +557,7 @@ public static class VideoColorProcessor
         if (table.IsNeutral && grainLevels <= 0)
         {
             if (!srcBgra.Overlaps(dstBgra))
-                srcBgra[..totalBytes].CopyTo(dstBgra);
+                srcBgra[(firstRow * width * 4)..(endRow * width * 4)].CopyTo(dstBgra[(firstRow * width * 4)..]);
             return;
         }
 
@@ -567,7 +583,7 @@ public static class VideoColorProcessor
         float seedOffset = (frameSeed % 1000) * 113.7f + 0.5f;
         bool neutralLut = table.IsNeutral;
 
-        for (int y = 0; y < height; y++)
+        for (int y = firstRow; y < endRow; y++)
         {
             int rowBase = y * width * 4;
             float py = y + seedOffset;

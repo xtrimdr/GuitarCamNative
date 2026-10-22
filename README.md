@@ -30,7 +30,9 @@ Laboratorio para ver si GuitarCam Studio se puede pasar a .NET nativo. Corre al 
   de la web: lista, buscador, nuevo con plantilla, renombrar, duplicar, Papelera, abrir carpeta,
   importar de la web), salvo que reciba una carpeta por línea de comandos; el chip del proyecto lo
   vuelve a abrir. Timeline, preview e inspector, reproducción por ASIO, autoguardado.
-  Espacio = play/stop, Inicio = al principio, C = click, M/S = mute/solo, F = ver todo,
+  R = grabar (grabando: detener y guardar; en la cuenta: cancelar), Esc = cancelar la cuenta,
+  Espacio = play/pausa (grabando: detener y guardar), Inicio = al principio, C = click,
+  Shift+C = cuenta, T = tap tempo, M/S = mute/solo, F = ver todo,
   Shift+rueda = zoom, Alt+rueda = alto de pista, Ctrl+Z = deshacer, Ctrl+Y o Ctrl+Shift+Z = rehacer,
   Supr = quitar clip (otra vez: quitar la pista vacía), Esc = cancelar el arrastre.
   En el gestor: F2 = renombrar la fila, Esc = cierra el formulario y después el gestor (si hay un
@@ -59,9 +61,10 @@ src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe
 | `click` | escribe todos los clicks a un WAV |
 | `proyecto importar carpeta-web` | pasa un proyecto de la web al formato nativo, en una carpeta nueva |
 | `proyecto abrir carpeta` | abre un proyecto nativo y muestra pistas, avisos e historial |
+| `proyecto toma carpeta [--segundos 3] [--pista id]` | graba un tono como la ventana: a qué pista va, nombre, canal, guardado y diario |
 | `proyecto cortar carpeta` | graba un tono y corta sin cerrar, para probar la recuperación |
 | `proyecto versiones carpeta` / `proyecto volver carpeta n` | las versiones guardadas en `historial/` (1 = la más nueva) / vuelve a una (lo de antes queda en el historial) |
-| `proyecto verificar-deshacer` / `proyecto verificar-clips` | pruebas de deshacer/rehacer y de edición de clips, sin tocar archivos |
+| `proyecto verificar-deshacer` / `proyecto verificar-clips` / `proyecto verificar-tomas` | pruebas de deshacer/rehacer, de edición de clips y de dónde cae una toma nueva, sin tocar archivos |
 | `proyecto clips carpeta` | lista pistas y clips |
 | `proyecto editar carpeta mover\|recortar-inicio\|recortar-final\|fade-in\|fade-out clip delta [--iman 1/4] [--libre]` | edita un clip como en el timeline (imán, anclaje de sincronía) |
 | `proyecto editar carpeta a-pista clip pista [--intercambiar clip]`, `reordenar desde hasta`, `inicio\|fijar-corte\|restaurar\|quitar-clip clip`, `quitar-pista pista`, `nueva-pista`, `agregar-toma medio [--pista p]` | el resto de las operaciones del timeline |
