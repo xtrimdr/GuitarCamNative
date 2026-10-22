@@ -1,0 +1,400 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GuitarCam.App.Dialogs.ExportDialog"
+             AutomationProperties.Name="Exportar video"
+             Background="#B3000000" KeyboardNavigation.TabNavigation="Cycle" Focusable="True">
+
+  <!-- Port of ExportSetupDialog, ExportProgressDialog, ExportErrorDialog and ExportDialog
+       from GuitarCam/src/components/ExportDialog.tsx -->
+  <UserControl.Styles>
+    <Style Selector="TextBox.field">
+      <Setter Property="Height" Value="36" />
+      <Setter Property="MinHeight" Value="36" />
+      <Setter Property="Background" Value="{StaticResource Raised}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox.field:pointerover /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="{StaticResource Raised}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+    </Style>
+    <Style Selector="TextBox.field:focus /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="{StaticResource Raised}" />
+      <Setter Property="BorderBrush" Value="#B322d3ee" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="TextBox.field /template/ TextBlock#PART_Watermark">
+      <Setter Property="Foreground" Value="{StaticResource Faint}" />
+    </Style>
+
+    <Style Selector="Button.btn">
+      <Setter Property="Height" Value="36" />
+      <Setter Property="Padding" Value="16,0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.btn:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+    <Style Selector="Button.btn.outline">
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button.btn.outline /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+    </Style>
+    <Style Selector="Button.btn.outline:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+    <Style Selector="Button.btn.primary">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="#0b0b0d" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.btn.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#4fdcf1" />
+      <Setter Property="Foreground" Value="#0b0b0d" />
+    </Style>
+    <Style Selector="Button.btn.danger">
+      <Setter Property="Background" Value="{StaticResource Rec}" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.btn.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#f26464" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.btn:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Opacity" Value="0.4" />
+    </Style>
+    <Style Selector="Button.btn.primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="#0b0b0d" />
+    </Style>
+
+    <Style Selector="Button.seg">
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.seg:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+    <Style Selector="Button.seg.active">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="#0b0b0d" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.seg.active:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="#0b0b0d" />
+    </Style>
+
+    <Style Selector="Button.link">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Foreground" Value="{StaticResource Faint}" />
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+    <Style Selector="Button.link:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+    <Style Selector="Button.link.accent">
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="Button.link.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="#4fdcf1" />
+    </Style>
+
+    <Style Selector="Button.act">
+      <Setter Property="Width" Value="32" />
+      <Setter Property="Height" Value="32" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Faint}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.act:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+
+    <Style Selector="Arc.spin">
+      <Setter Property="StartAngle" Value="0" />
+      <Setter Property="SweepAngle" Value="270" />
+      <Setter Property="StrokeThickness" Value="2" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="RenderTransform" Value="rotate(0deg)" />
+      <Style.Animations>
+        <Animation Duration="0:0:0.8" IterationCount="Infinite">
+          <KeyFrame Cue="0%">
+            <Setter Property="RotateTransform.Angle" Value="0" />
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="RotateTransform.Angle" Value="360" />
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+  </UserControl.Styles>
+
+  <Border x:Name="Card" HorizontalAlignment="Center" VerticalAlignment="Center" Width="512" Margin="16"
+          AutomationProperties.Name="Exportar video"
+          Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12"
+          BoxShadow="0 25 50 -12 #80000000" ClipToBounds="True">
+    <StackPanel>
+
+      <!-- Header -->
+      <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="20,14">
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Spacing="2" VerticalAlignment="Center">
+            <TextBlock x:Name="HeaderTitle" Text="Exportar MP4" FontSize="14" FontWeight="SemiBold" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock x:Name="HeaderSubtitle" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}" TextWrapping="Wrap" />
+              <Button x:Name="CopyPathButton" Classes="link" ToolTip.Tip="Copiar la ruta" IsVisible="False" VerticalAlignment="Center">
+                <TextBlock x:Name="CopyPathIcon" Classes="icon" Text="&#xE8C8;" FontSize="12" />
+              </Button>
+            </StackPanel>
+          </StackPanel>
+          <Button Grid.Column="1" x:Name="CloseButton" Classes="act" Margin="8,-2,-6,0" VerticalAlignment="Top"
+                  ToolTip.Tip="Cerrar" AutomationProperties.Name="Cerrar">
+            <TextBlock Classes="icon" Text="&#xE711;" FontSize="13" />
+          </Button>
+        </Grid>
+      </Border>
+
+      <!-- Phase 1: Setup -->
+      <StackPanel x:Name="SetupPanel" Spacing="0">
+        <StackPanel Margin="20,16" Spacing="16">
+
+          <!-- Nombre del archivo -->
+          <StackPanel Spacing="6">
+            <TextBlock Text="Nombre del archivo" FontSize="11" FontWeight="Medium" Foreground="{StaticResource Dim}" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox x:Name="FileNameBox" Classes="field" Watermark="Mi video" MaxLength="180" />
+              <TextBlock Grid.Column="1" Classes="mono" Text=".mp4" FontSize="14" Foreground="{StaticResource Faint}"
+                         VerticalAlignment="Center" Margin="8,0,0,0" />
+            </Grid>
+          </StackPanel>
+
+          <!-- Carpeta -->
+          <StackPanel Spacing="6">
+            <TextBlock Text="Carpeta" FontSize="11" FontWeight="Medium" Foreground="{StaticResource Dim}" />
+            <Grid ColumnDefinitions="*,Auto">
+              <Border Height="36" Padding="12,0" CornerRadius="6" Background="{StaticResource Raised}"
+                      BorderBrush="{StaticResource Line}" BorderThickness="1">
+                <Grid ColumnDefinitions="Auto,*">
+                  <TextBlock Classes="icon" Text="&#xE8DA;" FontSize="14" Foreground="{StaticResource Faint}" Margin="0,0,8,0" />
+                  <TextBlock Grid.Column="1" x:Name="FolderText" Classes="mono" FontSize="12" Foreground="{StaticResource Fg}"
+                             VerticalAlignment="Center" TextTrimming="PrefixCharacterEllipsis" />
+                </Grid>
+              </Border>
+              <Button Grid.Column="1" x:Name="PickFolderButton" Classes="btn outline" Margin="8,0,0,0">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Arc x:Name="PickFolderSpin" Classes="spin" Width="14" Height="14" Stroke="{StaticResource Dim}" IsVisible="False" />
+                  <TextBlock Text="Cambiar…" />
+                </StackPanel>
+              </Button>
+            </Grid>
+            <Panel MinHeight="16">
+              <TextBlock x:Name="DefaultFolderHint" Text="Carpeta exports del proyecto." FontSize="11" Foreground="{StaticResource Faint}" />
+              <Button x:Name="ResetFolderButton" Classes="link" ToolTip.Tip="Volver a la carpeta exports del proyecto" IsVisible="False">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                  <TextBlock Classes="icon" Text="&#xE777;" FontSize="11" />
+                  <TextBlock Text="Usar la carpeta del proyecto" />
+                </StackPanel>
+              </Button>
+            </Panel>
+          </StackPanel>
+
+          <!-- Calidad -->
+          <StackPanel Spacing="6">
+            <TextBlock Text="Calidad" FontSize="11" FontWeight="Medium" Foreground="{StaticResource Dim}" />
+            <Grid ColumnDefinitions="Auto,*">
+              <Border Background="{StaticResource Raised}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                      CornerRadius="6" Padding="2">
+                <StackPanel Orientation="Horizontal" Spacing="2">
+                  <Button x:Name="QualityAltaBtn" Classes="seg active" Content="Alta"
+                          ToolTip.Tip="Máxima calidad (CRF 18). Para publicar." />
+                  <Button x:Name="QualityEstandarBtn" Classes="seg" Content="Estándar"
+                          ToolTip.Tip="Muy buena calidad y archivo más liviano (CRF 22)." />
+                  <Button x:Name="QualityBorradorBtn" Classes="seg" Content="Borrador"
+                          ToolTip.Tip="Rápido y liviano, para revisar (CRF 28)." />
+                </StackPanel>
+              </Border>
+              <TextBlock Grid.Column="1" x:Name="EstBytesText" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}"
+                         HorizontalAlignment="Right" VerticalAlignment="Center" />
+            </Grid>
+            <TextBlock x:Name="QualityDescText" FontSize="11" Foreground="{StaticResource Faint}" />
+          </StackPanel>
+
+          <!-- Warning / Collision banner -->
+          <Border x:Name="WarningBanner" CornerRadius="6" BorderThickness="1" Padding="12,10" IsVisible="False">
+            <Grid ColumnDefinitions="Auto,*">
+              <TextBlock x:Name="WarningIcon" Classes="icon" Text="&#xE7BA;" FontSize="14" VerticalAlignment="Top" Margin="0,1,8,0" />
+              <WrapPanel Grid.Column="1" Orientation="Horizontal">
+                <TextBlock x:Name="WarningText" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" />
+                <Button x:Name="UseSuggestedButton" Classes="link accent" Margin="6,0,0,0" IsVisible="False" VerticalAlignment="Center">
+                  <TextBlock x:Name="UseSuggestedText" TextDecorations="Underline" />
+                </Button>
+              </WrapPanel>
+            </Grid>
+          </Border>
+
+          <!-- Full destination path -->
+          <TextBlock x:Name="FullPathPreview" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}"
+                     TextWrapping="Wrap" Margin="0,-4,0,0" />
+        </StackPanel>
+
+        <!-- Setup Footer -->
+        <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="20,14">
+          <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button x:Name="SetupCancelButton" Classes="btn" Content="Cancelar" />
+            <Button x:Name="SetupStartButton" Classes="btn primary">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Classes="icon" Text="&#xE896;" FontSize="13" Foreground="#0b0b0d" />
+                <TextBlock x:Name="SetupStartText" Text="Exportar" />
+              </StackPanel>
+            </Button>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <!-- Phase 2: Running -->
+      <StackPanel x:Name="RunningPanel" IsVisible="False" Spacing="0">
+        <StackPanel Margin="20,20" Spacing="20">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock x:Name="ProgressPctText" Classes="mono" FontSize="30" FontWeight="SemiBold" Text="0%" />
+              <TextBlock Grid.Column="1" x:Name="ProgressTimeText" Classes="mono" FontSize="11"
+                         Foreground="{StaticResource Faint}" VerticalAlignment="Bottom" Margin="0,0,0,4" />
+            </Grid>
+            <Border x:Name="ProgressBarTrack" Height="8" CornerRadius="4" Background="{StaticResource Raised}" ClipToBounds="True">
+              <Border x:Name="ProgressBarFill" Height="8" CornerRadius="4" Background="{StaticResource Accent}"
+                      HorizontalAlignment="Left" Width="0" />
+            </Border>
+          </StackPanel>
+
+          <StackPanel x:Name="StepsList" Spacing="10" />
+        </StackPanel>
+
+        <!-- Running Footer -->
+        <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="20,14">
+          <Panel>
+            <Button x:Name="RunningCancelButton" Classes="btn" Content="Cancelar" HorizontalAlignment="Right" />
+            <Grid x:Name="ConfirmCancelRow" ColumnDefinitions="*,Auto,Auto" IsVisible="False">
+              <TextBlock Text="¿Cancelar la exportación?" FontSize="12" Foreground="{StaticResource Dim}" VerticalAlignment="Center" />
+              <Button Grid.Column="1" x:Name="KeepRunningButton" Classes="btn" Content="Seguir" />
+              <Button Grid.Column="2" x:Name="AbortExportButton" Classes="btn danger" Content="Cancelar exportación" Margin="8,0,0,0" />
+            </Grid>
+          </Panel>
+        </Border>
+      </StackPanel>
+
+      <!-- Phase 3: Error -->
+      <StackPanel x:Name="ErrorPanel" IsVisible="False" Spacing="0">
+        <StackPanel Margin="20,16" Spacing="12">
+          <Border CornerRadius="6" BorderBrush="#66ef4444" BorderThickness="1" Background="{StaticResource RecSoft}" Padding="12,10">
+            <Grid ColumnDefinitions="Auto,*">
+              <TextBlock Classes="icon" Text="&#xE7BA;" FontSize="14" Foreground="{StaticResource Rec}" VerticalAlignment="Top" Margin="0,2,8,0" />
+              <TextBlock Grid.Column="1" x:Name="ErrorMessageText" FontSize="14" TextWrapping="Wrap" />
+            </Grid>
+          </Border>
+
+          <StackPanel x:Name="ErrorDetailsSection" Spacing="8" IsVisible="False">
+            <Button x:Name="ToggleDetailsButton" Classes="link">
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock x:Name="DetailsChevron" Classes="icon" Text="&#xE76C;" FontSize="10" />
+                <TextBlock Text="Detalles de FFmpeg" />
+              </StackPanel>
+            </Button>
+            <Border x:Name="ErrorDetailsBox" Background="{StaticResource App}" BorderBrush="{StaticResource Line}"
+                    BorderThickness="1" CornerRadius="6" Padding="12" MaxHeight="224" IsVisible="False">
+              <ScrollViewer>
+                <SelectableTextBlock x:Name="ErrorDetailsText" Classes="mono" FontSize="10" Foreground="{StaticResource Dim}" TextWrapping="Wrap" />
+              </ScrollViewer>
+            </Border>
+          </StackPanel>
+        </StackPanel>
+
+        <!-- Error Footer -->
+        <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="20,14">
+          <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button x:Name="ErrorCloseButton" Classes="btn" Content="Cerrar" />
+            <Button x:Name="ErrorRetryButton" Classes="btn primary" Content="Volver a intentar" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <!-- Phase 4: Done -->
+      <StackPanel x:Name="DonePanel" IsVisible="False" Spacing="0">
+        <Border Background="Black" MinHeight="220">
+          <Panel>
+            <TextBlock x:Name="MissingVideoText"
+                       Text="El archivo ya no está en esa ubicación (lo movieron o lo borraron)."
+                       FontSize="14" Foreground="{StaticResource Dim}" Margin="24,64"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                       TextWrapping="Wrap" IsVisible="False" />
+            <Grid x:Name="VideoPreviewContainer" RowDefinitions="*,Auto">
+              <Image x:Name="DoneVideoImage" MaxHeight="440" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+              <Border Grid.Row="1" Background="#CC09090b" Padding="12,6">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                  <Button x:Name="DonePlayPauseButton" Classes="act" Width="28" Height="28" ToolTip.Tip="Reproducir / pausar vista previa">
+                    <TextBlock x:Name="DonePlayPauseIcon" Classes="icon" Text="&#xE768;" FontSize="12" />
+                  </Button>
+                  <Slider Grid.Column="1" x:Name="DoneVideoSlider" Minimum="0" Maximum="1" Value="0" Margin="10,0" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="2" x:Name="DoneVideoTimeText" Classes="mono" FontSize="11" Foreground="{StaticResource Dim}" VerticalAlignment="Center" />
+                </Grid>
+              </Border>
+            </Grid>
+          </Panel>
+        </Border>
+
+        <!-- Done Footer -->
+        <Border Padding="20,14">
+          <Grid ColumnDefinitions="*,Auto,Auto">
+            <TextBlock x:Name="DoneMetaText" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
+            <Button Grid.Column="1" x:Name="DoneCloseButton" Classes="btn" Content="Cerrar" />
+            <Button Grid.Column="2" x:Name="DoneRevealButton" Classes="btn primary" Margin="8,0,0,0">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Classes="icon" Text="&#xE8DA;" FontSize="14" Foreground="#0b0b0d" />
+                <TextBlock Text="Mostrar en la carpeta" />
+              </StackPanel>
+            </Button>
+          </Grid>
+        </Border>
+      </StackPanel>
+
+    </StackPanel>
+  </Border>
+</UserControl>

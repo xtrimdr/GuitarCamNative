@@ -42,6 +42,16 @@ public sealed class Saturator
         Bump = p.Bump;
     }
 
+    public void Reset()
+    {
+        u1[0] = u1[1] = 0;
+        lp[0] = lp[1] = 0;
+        dcx[0] = dcx[1] = 0;
+        dcy[0] = dcy[1] = 0;
+        Array.Clear(bq[0]);
+        Array.Clear(bq[1]);
+    }
+
     static double LogCosh(double u)
     {
         double a = Math.Abs(u);

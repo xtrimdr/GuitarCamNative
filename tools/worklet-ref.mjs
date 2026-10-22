@@ -59,6 +59,8 @@ const typesMod = loadTsModule(join(srcDir, 'types.ts'));
 const compPresetsMod = loadTsModule(join(audioDir, 'compPresets.ts'), typesMod);
 const eqMod = loadTsModule(join(audioDir, 'eq.ts'), typesMod);
 const latencyMod = loadTsModule(join(audioDir, 'latencyCalibration.ts'));
+const colorGradeMod = loadTsModule(join(srcDir, 'shared', 'colorGrade.js'));
+const videoFxMod = loadTsModule(join(srcDir, 'shared', 'videoFx.js'));
 
 // Load StereoCaptureProcessor from audioEngine.ts
 const audioEngineTs = readFileSync(join(audioDir, 'audioEngine.ts'), 'utf8');
@@ -504,6 +506,76 @@ for (const stage of job.chain) {
       outR[4] = tapRes.spreadMs;
       outR[5] = tapRes.matched;
     }
+    L = outL;
+    R = outR;
+  } else if (stage.name === 'gc-video-color') {
+    const outL = new Float32Array(length);
+    const outR = new Float32Array(length);
+    const grade = stage.params?.grade ?? {
+      on: true,
+      look: 'cine',
+      amount: 85,
+      exposure: 15,
+      contrast: 20,
+      highlights: -15,
+      shadows: 25,
+      saturation: 12,
+      vibrance: 18,
+      temperature: 10,
+      tint: -8,
+      fade: 10,
+    };
+    const fx = stage.params?.fx ?? {
+      on: true,
+      vignette: 40,
+      vignetteSize: 45,
+      grain: 25,
+      letterbox: '2.39',
+    };
+    const lut = colorGradeMod.buildLut(grade, 33);
+    outL.set(lut.subarray(0, Math.min(length, lut.length)));
+
+    // Trilinear sample + vignetteMask + letterboxBar
+    const size = 33;
+    function sampleTrilinear(r, g, b) {
+      const rx = Math.max(0, Math.min(1, r)) * (size - 1);
+      const gx = Math.max(0, Math.min(1, g)) * (size - 1);
+      const bx = Math.max(0, Math.min(1, b)) * (size - 1);
+      const r0 = Math.min(size - 2, Math.floor(rx));
+      const g0 = Math.min(size - 2, Math.floor(gx));
+      const b0 = Math.min(size - 2, Math.floor(bx));
+      const rf = rx - r0, gf = gx - g0, bf = bx - b0;
+      const rf0 = 1 - rf;
+      const w00 = (1 - gf) * (1 - bf), w10 = gf * (1 - bf), w01 = (1 - gf) * bf, w11 = gf * bf;
+      const w = [rf0 * w00, rf * w00, rf0 * w10, rf * w10, rf0 * w01, rf * w01, rf0 * w11, rf * w11];
+      const sG = size * 3, sB = size * sG;
+      const base = b0 * sB + g0 * sG + r0 * 3;
+      const offs = [0, 3, sG, sG + 3, sB, sB + 3, sB + sG, sB + sG + 3];
+      let or = 0, og = 0, ob = 0;
+      for (let k = 0; k < 8; k++) {
+        const idx = base + offs[k];
+        or += lut[idx] * w[k];
+        og += lut[idx + 1] * w[k];
+        ob += lut[idx + 2] * w[k];
+      }
+      return [Math.max(0, Math.min(1, or)), Math.max(0, Math.min(1, og)), Math.max(0, Math.min(1, ob))];
+    }
+    let pos = 0;
+    for (let i = 0; i < 512 && pos + 3 <= length; i++) {
+      const r = ((i * 73) % 256) / 255;
+      const g = ((i * 151) % 256) / 255;
+      const b = ((i * 211) % 256) / 255;
+      const [or, og, ob] = sampleTrilinear(r, g, b);
+      outR[pos++] = or;
+      outR[pos++] = og;
+      outR[pos++] = ob;
+    }
+    const mask = videoFxMod.vignetteMask(fx, 64, 36);
+    for (let i = 0; i < mask.length && pos < length; i++) {
+      outR[pos++] = mask[i] / 255;
+    }
+    outR[pos++] = videoFxMod.letterboxBar(fx, 640, 360);
+    outR[pos++] = videoFxMod.grainLevels(fx);
     L = outL;
     R = outR;
   } else {

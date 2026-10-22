@@ -44,6 +44,9 @@
   </Application.Resources>
 
   <Application.Styles>
+    <Style Selector="MenuItem.danger:pointerover /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="{StaticResource RecSoft}" />
+    </Style>
     <FluentTheme />
 
     <Style Selector="Window">
@@ -93,6 +96,11 @@
       <Setter Property="Background" Value="{StaticResource AccentSoft}" />
       <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
       <Setter Property="Foreground" Value="{StaticResource Accent}" />
+    </Style>
+    <Style Selector="ToggleButton.chip.inspector-power:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="{StaticResource App}" />
     </Style>
     <Style Selector="Button.chip:disabled /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource Raised}" />

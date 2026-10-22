@@ -22,6 +22,7 @@ static class Program
                 "grabar" => AudioCommands.Record(a),
                 "procesar" => DspCommands.Process(a),
                 "mezclar" => DspCommands.Mix(a),
+                "exportar" => DspCommands.Export(a),
                 "verificar" => DspCommands.Verify(a),
                 "click" => DspCommands.Click(a),
                 "proyecto" => ProjectCommands.Run(a),
@@ -57,6 +58,9 @@ static class Program
                                            aplica efectos de pista y buses a un WAV
               mezclar   carpeta-proyecto|entrada.wav [--salida mezcla.wav] [--segundos N]
                                            renderiza la mezcla completa offline (sin la demora del limitador)
+              exportar  [carpeta-proyecto] [--salida nombre] [--carpeta destino] [--calidad alta|estandar|borrador]
+                        [--reemplazar] [--prueba]
+                                           exporta el proyecto a MP4 con mezcla offline y FFmpeg
               verificar [entrada.wav]      compara el DSP portado con los worklets de la app web (necesita Node)
               click     [--salida clicks.wav] [--bpm 100]
                                            escribe todos los sonidos de click a un WAV para escucharlos
@@ -69,6 +73,7 @@ static class Program
               proyecto verificar-clips     verifica anclaje, imanes, recortes, fades y operaciones de pistas
               proyecto clips carpeta       lista los IDs de pistas y clips para editar desde la consola
               proyecto encuadre carpeta clip [--zoom 1.5] [--panx 0.2] [--pany -0.3] [--espejar] [--restaurar]
+              proyecto sincronia carpeta clip [--audio-ms -30] [--camara-ms 80] [--heredar]
               proyecto editar carpeta mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos
                         [--libre] [--iman 1/4] [--pps 100] [--cabezal 0]
               proyecto editar carpeta a-pista clip pista [--intercambiar clip] | reordenar desde hasta

@@ -3,7 +3,9 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using GuitarCam.App.Model;
+using GuitarCam.Audio;
 using GuitarCam.Projects;
+using GuitarCam.Audio.Dsp;
 
 namespace GuitarCam.App.Controls;
 
@@ -22,6 +24,7 @@ public sealed class PreviewView : Control
     Point down;
     double panX, panY;
     IPointer? pointer;
+    public double Playhead { get; set; }
     public event Action<LiveTrack, LiveClip>? ClipSelected;
     public event Action<LiveClip, double?, double?, double?>? FramingRequested;
 
@@ -149,6 +152,10 @@ public sealed class PreviewView : Control
                 double cw = Math.Min(sw, dest.Width / cover), ch = Math.Min(sh, dest.Height / cover);
                 double cx = (sw - cw) / 2 * (1 + fr.PanX), cy = (sh - ch) / 2 * (1 + fr.PanY);
                 var src = new Rect(Math.Clamp(cx, 0, Math.Max(0, sw - cw)), Math.Clamp(cy, 0, Math.Max(0, sh - ch)), cw, ch);
+                var c = clip.Clip;
+                var window = ClipEditing.Window(c, clip.Media, clip.LengthSec);
+                var fades = ClipEnvelope.Fades(window, c.FadeInSec, c.FadeOutSec, c.LinkVideoFades, c.VideoFadeInSec, c.VideoFadeOutSec).Video;
+                using var opacity = ctx.PushOpacity(ClipEnvelope.GainAt(Playhead, window.Start, window.End, fades.FadeIn, fades.FadeOut));
                 using (ctx.PushClip(dest))
                 {
                     if (fr.Mirror)

@@ -18,6 +18,14 @@ public partial class MainWindow
     ContextMenu? timelineMenu;
     static readonly string[] SnapIds = ["off", "bar", "1/2", "1/4", "1/8", "1/8T", "1/16"];
 
+    void SetRulerMode(bool bars)
+    {
+        Timeline.RulerInBars = bars;
+        BarsRulerButton.Foreground = bars ? Palette.Accent : Palette.Faint;
+        TimeRulerButton.Foreground = bars ? Palette.Faint : Palette.Accent;
+        timelinePrefs?.Stop(); timelinePrefs?.Start();
+    }
+
     void InitTimelineEditing()
     {
         SnapBox.ItemsSource = new[] { "No", "Compás", "1/2", "1/4", "1/8", "1/8T", "1/16" };
@@ -50,15 +58,8 @@ public partial class MainWindow
         };
         Closed += (_, _) => timelinePrefs.Stop();
         void Prefs() { timelinePrefs.Stop(); timelinePrefs.Start(); }
-        void Ruler(bool bars)
-        {
-            Timeline.RulerInBars = bars;
-            BarsRulerButton.Foreground = bars ? Palette.Accent : Palette.Faint;
-            TimeRulerButton.Foreground = bars ? Palette.Faint : Palette.Accent;
-            Prefs();
-        }
-        BarsRulerButton.Click += (_, _) => Ruler(true);
-        TimeRulerButton.Click += (_, _) => Ruler(false);
+        BarsRulerButton.Click += (_, _) => SetRulerMode(true);
+        TimeRulerButton.Click += (_, _) => SetRulerMode(false);
         BarsRulerButton.Foreground = Timeline.RulerInBars ? Palette.Accent : Palette.Faint;
         TimeRulerButton.Foreground = Timeline.RulerInBars ? Palette.Faint : Palette.Accent;
         SnapBox.SelectionChanged += (_, _) =>
@@ -149,10 +150,18 @@ public partial class MainWindow
         }, clipId != null ? "clip-removed" : "track-removed");
     }
 
-    static MenuItem MenuAction(string label, Func<Task> action, string? hint = null, bool enabled = true)
+    static MenuItem MenuAction(string label, Func<Task> action, string? hint = null, bool enabled = true, bool danger = false, string? icon = null)
     {
         var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-        header.Children.Add(new TextBlock { Text = label, FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
+        var text = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        if (icon == "empty") text.Children.Add(new Avalonia.Controls.Shapes.Rectangle
+        {
+            Width = 12, Height = 12, Stroke = Palette.Dim, StrokeThickness = 1,
+            StrokeDashArray = new Avalonia.Collections.AvaloniaList<double> { 2, 2 }, VerticalAlignment = VerticalAlignment.Center,
+        });
+        else if (icon != null) text.Children.Add(new TextBlock { Text = icon, Classes = { "icon" }, FontSize = 12 });
+        text.Children.Add(new TextBlock { Text = label, FontSize = 12, Foreground = danger ? Palette.Rec : Palette.Fg, VerticalAlignment = VerticalAlignment.Center });
+        header.Children.Add(text);
         if (hint != null)
         {
             var value = new TextBlock { Text = hint, Classes = { "mono" }, FontSize = 10.5, Foreground = Palette.Faint, Margin = new Thickness(12, 0, 0, 0) };
@@ -160,6 +169,7 @@ public partial class MainWindow
             header.Children.Add(value);
         }
         var item = new MenuItem { Header = header, IsEnabled = enabled };
+        if (danger) item.Classes.Add("danger");
         item.Click += async (_, _) => await action();
         return item;
     }
@@ -195,7 +205,7 @@ public partial class MainWindow
         var p = store.Project;
         var list = new List<object>
         {
-            MenuAction("Pista vacía", () => EditTimeline(ClipEditing.AddEmpty, "track-added"), "grabás después con R", !store.ReadOnly),
+            MenuAction("Pista vacía", () => EditTimeline(ClipEditing.AddEmpty, "track-added"), "grabás después con R", !store.ReadOnly, icon: "empty"),
             new Separator(), new MenuItem { Header = "DESDE EL HISTORIAL", IsEnabled = false, FontSize = 10.5 },
         };
         var used = p.Tracks.SelectMany(t => t.Clips).Select(c => c.MediaId).ToHashSet();
@@ -231,18 +241,18 @@ public partial class MainWindow
                 return Task.CompletedTask;
             }, "S", enabled));
             list.Add(new Separator());
-            list.Add(MenuAction("Llevar al inicio", () => Command(p => ClipEditing.ToStart(p, id), "clip-moved"), enabled: enabled));
-            var w = ClipEditing.Window(clip.Clip, clip.Media);
-            list.Add(MenuAction("Fijar el corte en 0", () => Command(p => ClipEditing.FixCut(p, id), "clip-trimmed"),
+            list.Add(MenuAction("Llevar al inicio", () => Command(p => ClipEditing.ToStart(p, id, clip.LengthSec), "clip-moved"), enabled: enabled));
+            var w = ClipEditing.Window(clip.Clip, clip.Media, clip.LengthSec);
+            list.Add(MenuAction("Fijar el corte en 0", () => Command(p => ClipEditing.FixCut(p, id, clip.LengthSec), "clip-trimmed"),
                 w.AnchorCut > 0.0005 ? $"{w.AnchorCut:0.00} s" : null, enabled && w.AnchorCut > 0.0005));
             var c = clip.Clip;
             list.Add(MenuAction("Restaurar recortes y fades", () => Command(p => ClipEditing.Reset(p, id), "clip-reset"),
                 enabled: enabled && (c.TrimStartSec != 0 || c.TrimEndSec != 0 || c.FadeInSec != 0 || c.FadeOutSec != 0 || c.VideoFadeInSec != 0 || c.VideoFadeOutSec != 0)));
             list.Add(new Separator());
-            list.Add(MenuAction("Quitar clip", () => Command(p => ClipEditing.RemoveClip(p, id), "clip-removed"), "Supr", enabled));
+            list.Add(MenuAction("Quitar clip", () => Command(p => ClipEditing.RemoveClip(p, id), "clip-removed"), "Supr", enabled, danger: true));
         }
         list.Add(MenuAction("Quitar pista", () => EditTimeline(p => { ClipEditing.RemoveTrack(p, track.Track.Id); return null; }, "track-removed"),
-            clip == null ? "Supr" : null, enabled));
+            clip == null ? "Supr" : null, enabled, danger: true));
         if (clip != null) list.Add(new MenuItem { IsEnabled = false, Header = new TextBlock
         {
             Text = "Quitar clip deja la pista vacía. El archivo queda en Historial.", FontSize = 10.5,

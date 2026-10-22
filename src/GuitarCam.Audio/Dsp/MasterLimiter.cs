@@ -34,6 +34,17 @@ public sealed class MasterLimiter
         aR = Math.Exp(-1 / (0.08 * sampleRate));
     }
 
+    public void Reset()
+    {
+        Array.Clear(bufL);
+        Array.Clear(bufR);
+        Array.Fill(req, 1f);
+        idx = 0;
+        minReq = 1;
+        minAge = 0;
+        g = 1;
+    }
+
     public void Process(Span<float> left, Span<float> right)
     {
         double c = ceiling;

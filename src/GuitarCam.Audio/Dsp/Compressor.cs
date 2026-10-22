@@ -25,6 +25,13 @@ public sealed class Compressor
 
     public Compressor(double sampleRate) => fs = sampleRate;
 
+    public void Reset()
+    {
+        gr = 0;
+        lg = 1;
+        MinGr = 0;
+    }
+
     static double DbToLin(double db) => Math.Pow(10, db / 20);
 
     public double TakeMeter()

@@ -187,7 +187,7 @@ public sealed class Track
         Channel.Normalize();
         Clips ??= [];
         Clips.RemoveAll(c => c == null);
-        foreach (var c in Clips) c.Framing ??= new();
+        foreach (var c in Clips) c.Normalize();
     }
 }
 
@@ -301,6 +301,20 @@ public sealed class Clip
     public string MediaId { get; set; } = "";
     /// <summary>Timeline time of the media's sample 0 (includes the sync correction).</summary>
     public double AtSec { get; set; }
+    /// <summary>Optional per-clip correction; null inherits the immutable recording correction.</summary>
+    public double? SyncMs { get; set; }
+    /// <summary>Optional camera latency; null inherits the recording's camera latency.</summary>
+    public double? VideoOffsetMs { get; set; }
+
+    public double EffectiveSyncMs(Media? media) => SyncMs ?? media?.SyncMs ?? 0;
+    public double EffectiveVideoOffsetMs(Media? media) => VideoOffsetMs ?? media?.VideoOffsetMs ?? 80;
+
+    internal void Normalize()
+    {
+        Framing ??= new();
+        if (SyncMs is { } sync && !double.IsFinite(sync)) SyncMs = null;
+        if (VideoOffsetMs is { } video && !double.IsFinite(video)) VideoOffsetMs = null;
+    }
     /// <summary>Hidden from the start / end of the media, without moving the rest.</summary>
     public double TrimStartSec { get; set; }
     public double TrimEndSec { get; set; }

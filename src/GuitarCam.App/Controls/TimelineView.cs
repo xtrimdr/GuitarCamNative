@@ -159,7 +159,7 @@ public sealed class TimelineView : Control
     ClipEnvelope.ClipWindow Window(LiveClip clip, Clip? value = null)
     {
         var c = value ?? DisplayClip(clip);
-        return ClipEnvelope.Window(clip.LengthSec, c.AtSec, c.TrimStartSec, c.TrimEndSec, clip.Media?.SyncMs ?? 0);
+        return ClipEditing.Window(c, clip.Media, clip.LengthSec);
     }
     LiveClip? ClipAt(int i, double x) => i >= 0 && i < tracks.Count
         ? tracks[i].Clips.LastOrDefault(c => { var w = Window(c); return x >= X(w.Start) && x <= X(w.End); }) : null;
@@ -203,7 +203,8 @@ public sealed class TimelineView : Control
         if (addY >= RulerH && addY < H)
         {
             ctx.FillRectangle(Palette.App, new Rect(0, addY, W, 44));
-            ctx.DrawText("+  Nueva pista", 12, Palette.Dim, new Point(12, addY + 13));
+            ctx.DrawText("\uE710", 12, Palette.Dim, new Point(12, addY + 13), new Typeface("Segoe Fluent Icons, Segoe MDL2 Assets"));
+            ctx.DrawText("Nueva pista", 12, Palette.Dim, new Point(32, addY + 13));
             ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, addY + 43.5), new Point(W, addY + 43.5));
         }
         if (tracks.Count == 0)
@@ -289,20 +290,22 @@ public sealed class TimelineView : Control
         var clip = new Rect(x0, y + 5, Math.Max(2, x1 - x0), laneH - 10);
         var color = c.Offline ? Color.Parse("#71717a") : Palette.AccentColor;
         bool silent = t.Channel.Muted || tracks.Any(o => o.Channel.Solo) && !t.Channel.Solo;
-        var fill = Palette.Alpha(color, silent ? 0.05 : sel ? 0.16 : 0.10);
-        var border = Palette.Pen(Palette.Alpha(color, sel ? 0.9 : 0.45), sel ? 1.5 : 1);
+        using var opacity = ctx.PushOpacity(!c.Offline && silent ? 0.5 : 1);
+        var fill = c.Offline ? Palette.Alpha(color, silent ? 0.05 : sel ? 0.16 : 0.10) : Palette.Alpha(Color.Parse("#26262b"), 0.4);
+        var border = Palette.Pen(c.Offline ? Palette.Alpha(color, sel ? 0.9 : 0.45)
+            : sel ? Palette.Alpha(Palette.AccentColor, 0.6) : Palette.Line, c.Offline && sel ? 1.5 : 1);
         ctx.DrawRectangle(fill, border, clip, 5, 5);
         using (ctx.PushClip(clip))
         {
-            ctx.DrawText(c.Name, 11, sel ? Palette.Fg : Palette.Dim, new Point(Math.Max(x0, HeaderW) + 8, y + 7), Palette.UiBold);
             if (c.Offline)
             {
+                ctx.DrawText(c.Name, 11, sel ? Palette.Fg : Palette.Dim, new Point(Math.Max(x0, HeaderW) + 8, y + 7), Palette.UiBold);
                 ctx.DrawText("Sin conexión: falta el archivo de audio", 11, Palette.Faint, new Point(Math.Max(x0, HeaderW) + 8, y + 26), Palette.Ui);
             }
             else
             {
                 var geo = Waveform(c, model, w, y, W);
-                var wave = Palette.Alpha(color, silent ? 0.3 : 0.85);
+                var wave = silent ? Palette.Faint : sel ? Palette.Accent : Palette.Alpha(Color.Parse("#a1a1aa"), 0.8);
                 ctx.DrawGeometry(null, Palette.Pen(wave, 1), geo);
             }
             var f = ClipEnvelope.FitFades(model.FadeInSec, model.FadeOutSec, w.End - w.Start);
@@ -330,7 +333,14 @@ public sealed class TimelineView : Control
             {
                 for (double sy = clip.Top - 6; sy < clip.Bottom; sy += 6)
                     ctx.DrawLine(Palette.Pen(Palette.Accent, 2), new Point(x0, sy + 6), new Point(x0 + 6, sy));
-                if (clip.Width > 60) ctx.DrawText($"✂ {w.AnchorCut:0.00} s", 10.5, Palette.Accent, new Point(x0 + 10, clip.Bottom - 17), Palette.Mono);
+                if (clip.Width > 60)
+                {
+                    var label = Palette.Text($"{w.AnchorCut:0.00} s", 10.5, Palette.Accent, Palette.Mono);
+                    ctx.DrawRectangle(Palette.Alpha(Color.Parse("#000000"), 0.7), null,
+                        new Rect(x0 + 10, clip.Bottom - 19, label.Width + 22, 16), 2, 2);
+                    ctx.DrawText("\uE8C6", 10, Palette.Accent, new Point(x0 + 14, clip.Bottom - 17), new Typeface("Segoe Fluent Icons, Segoe MDL2 Assets"));
+                    ctx.DrawText(label, new Point(x0 + 28, clip.Bottom - 18));
+                }
             }
         }
     }
@@ -343,7 +353,7 @@ public sealed class TimelineView : Control
             + model.AtSec * 1.7e-3 + model.TrimStartSec * 3.1e-3 + model.TrimEndSec * 5.3e-3;
         if (waveCache.TryGetValue(c, out var hit) && hit.Key == key) return hit.Geo;
         var geo = new StreamGeometry();
-        double top = y + Math.Min(24, laneH / 3), bottom = y + laneH - 9;
+        double top = y + 6, bottom = y + laneH - 6;
         double mid = (top + bottom) / 2, half = (bottom - top) / 2;
         double binsPerSec = a.SampleRate / (double)MediaAudio.PeakBin;
         int xa = (int)Math.Max(HeaderW, X(w.Start));
@@ -623,7 +633,7 @@ public sealed class TimelineView : Control
                 swapId = overIndex != fromIndex ? ClipAt(overIndex, lastPointer.X)?.Clip.Id : null;
                 if (overIndex != fromIndex) preview = ClipEditing.Copy(original);
                 else preview = ClipEditing.Drag(original, dragged.Media, dragMode, dxPx / pps, pps, Playhead, Grid,
-                    (modifiers & KeyModifiers.Alt) != 0, tracks.SelectMany(t => t.Clips).Where(c => c != dragged).Select(c => Window(c)));
+                    (modifiers & KeyModifiers.Alt) != 0, tracks.SelectMany(t => t.Clips).Where(c => c != dragged).Select(c => Window(c)), dragged.LengthSec);
             }
         }
         InvalidateVisual();
@@ -686,7 +696,12 @@ public sealed class TimelineView : Control
             else if (MuteRect(i).Contains(lastPointer)) tip = tracks[i].Channel.Muted ? "Activar sonido" : "Silenciar (Mute)";
             else if (SoloRect(i).Contains(lastPointer)) tip = tracks[i].Channel.Solo ? "Quitar solo" : "Solo (escuchar solo esta pista)";
             else if (laneH >= 62 && VolumeRect(i).Contains(lastPointer)) tip = $"Volumen {tracks[i].Channel.Volume * 100:0}% (doble click: 100%)";
-            else if (laneH >= 62 && PanRect(i).Contains(lastPointer)) tip = "Paneo (doble click: centro)";
+            else if (laneH >= 62 && PanRect(i).Contains(lastPointer))
+            {
+                double pan = tracks[i].Channel.Pan;
+                string value = Math.Abs(pan) < 0.01 ? "C" : $"{(pan < 0 ? "L" : "R")}{Math.Abs(pan) * 100:0}";
+                tip = $"Paneo {value} (doble click: centro)";
+            }
             else if (lastPointer.X >= HeaderW && ClipAt(i, lastPointer.X) is { } clip)
             {
                 var mode = HitHandle(clip, lastPointer);
@@ -698,6 +713,10 @@ public sealed class TimelineView : Control
                     ClipEditMode.FadeIn => $"Fade in {f.FadeIn:0.00} s", ClipEditMode.FadeOut => $"Fade out {f.FadeOut:0.00} s",
                     _ => "Arrastrá para mover (Alt: sin imán; arriba/abajo: a otra pista) · bordes: recortar · esquinas de arriba: fades · Supr: quitar clip · click derecho: opciones",
                 };
+                if (w.AnchorCut > 0.0005 && X(w.End) - X(w.Start) > 60
+                    && new Rect(X(w.Start) + 10, LaneY(i) + laneH - 24,
+                        Palette.Text($"{w.AnchorCut:0.00} s", 10.5, Palette.Accent, Palette.Mono).Width + 22, 16).Contains(lastPointer))
+                    tip = "Esta parte quedó antes del 0 y no suena ni se ve";
                 cursor = mode == ClipEditMode.Move ? StandardCursorType.Hand : StandardCursorType.SizeWestEast;
             }
         }

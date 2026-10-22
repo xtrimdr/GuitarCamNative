@@ -86,6 +86,43 @@ static class ClipChecks
         InspectorEditing.ResetFrame(clip);
         Check(clip.Framing.Zoom == 1 && clip.Framing.PanX == 0 && clip.Framing.PanY == 0 && clip.Framing.Mirror,
             "resetear encuadre conserva el espejo como en la web");
+        var overrideClip = new Clip { MediaId = media.Id, AtSec = .92 };
+        Check(overrideClip.EffectiveSyncMs(media) == -80 && overrideClip.EffectiveVideoOffsetMs(media) == 80,
+            "clips anteriores heredan ambas correcciones del medio");
+        double anchor = ClipEditing.Window(overrideClip, media).Anchor;
+        InspectorEditing.SetSync(overrideClip, media, -30);
+        Check(Near(overrideClip.AtSec, .97) && Near(ClipEditing.Window(overrideClip, media).Anchor, anchor),
+            "cambiar sincronía por clip mueve el audio y conserva el anclaje");
+        overrideClip.VideoOffsetMs = -25;
+        Check(overrideClip.EffectiveSyncMs(media) == -30 && overrideClip.EffectiveVideoOffsetMs(media) == -25
+            && media.SyncMs == -80 && media.VideoOffsetMs == 80 && original.SyncMs == null,
+            "los overrides no cambian el medio ni sus otros clips");
+        var snapped = ClipEditing.Drag(overrideClip, media, ClipEditMode.Move, .41, 100, 0, .5, false, []);
+        Check(Near(ClipEditing.Window(snapped, media).Anchor, 1.5), "el imán usa el override del clip");
+        var zero = new Clip { SyncMs = 0, VideoOffsetMs = 0 };
+        Check(zero.EffectiveSyncMs(media) == 0 && zero.EffectiveVideoOffsetMs(media) == 0,
+            "cero es override explícito, distinto de null");
+        var incomplete = new Media { DurationSec = 0 };
+        var loaded = new Clip();
+        var loadedWindow = ClipEditing.Window(loaded, incomplete, 10.000020833333);
+        Check(Near(loadedWindow.End, 10.000020833333), "la edición usa el largo decodificado aun con metadatos sin duración");
+        var trimmed = ClipEditing.Drag(loaded, incomplete, ClipEditMode.TrimEnd, -100, 100, 0, 0, true, [], 10);
+        Check(Near(trimmed.TrimEndSec, 9.9) && Near(ClipEditing.Window(trimmed, incomplete, 10).End, .1),
+            "el recorte usa la misma duración cargada que reproducción");
+        var roundTrip = System.Text.Json.JsonSerializer.Deserialize<Clip>(System.Text.Json.JsonSerializer.Serialize(overrideClip, ProjectStore.Json), ProjectStore.Json)!;
+        Check(roundTrip.SyncMs == -30 && roundTrip.VideoOffsetMs == -25 && roundTrip.AtSec == overrideClip.AtSec,
+            "los overrides y el anclaje persisten en JSON sin cambiar la versión");
+        var inheritedJson = System.Text.Json.JsonSerializer.Serialize(new Clip(), ProjectStore.Json);
+        using var inheritedDoc = System.Text.Json.JsonDocument.Parse(inheritedJson);
+        Check(!inheritedDoc.RootElement.TryGetProperty("syncMs", out _) && !inheritedDoc.RootElement.TryGetProperty("videoOffsetMs", out _),
+            "sin override se conserva el JSON anterior, sin campos de sincronía nuevos");
+        InspectorEditing.SetSync(overrideClip, media, -25);
+        Check(Near(overrideClip.AtSec, .975), "nudge de cinco ms conserva la compensación anterior");
+        InspectorEditing.SetSync(overrideClip, media, 0);
+        Check(overrideClip.SyncMs == 0 && Near(overrideClip.AtSec, 1), "reset de sincronía conserva la colocación de la toma");
+        var roleClip = new Clip { Extra = new() { ["role"] = System.Text.Json.JsonSerializer.SerializeToElement("solo") } };
+        Check(InspectorEditing.DefaultCompPreset(roleClip) == "lead" && InspectorEditing.DefaultCompPreset(new Clip(), "rhythm") == "rhythm",
+            "el reset del compresor usa el rol original y admite proyectos nativos anteriores");
         Console.WriteLine($"Edición de clips: {n} comprobaciones correctas (sin modificar archivos).");
         return 0;
     }

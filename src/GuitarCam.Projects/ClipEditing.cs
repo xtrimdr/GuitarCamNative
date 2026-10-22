@@ -18,8 +18,8 @@ public static class ClipEditing
 {
     public static Clip Copy(Clip clip) => ProjectLibrary.Clone(clip);
 
-    public static ClipEnvelope.ClipWindow Window(Clip c, Media? m) =>
-        ClipEnvelope.Window(m?.DurationSec ?? 0, c.AtSec, c.TrimStartSec, c.TrimEndSec, m?.SyncMs ?? 0);
+    public static ClipEnvelope.ClipWindow Window(Clip c, Media? m, double? durationSec = null) =>
+        ClipEnvelope.Window(durationSec ?? m?.DurationSec ?? 0, c.AtSec, c.TrimStartSec, c.TrimEndSec, c.EffectiveSyncMs(m));
 
     public static double GridSeconds(string mode, double bpm) => (mode switch
     {
@@ -36,10 +36,10 @@ public static class ClipEditing
 
     /// <summary>Calculates a gesture from its original clip, never incrementally from the previous pointer move.</summary>
     public static Clip Drag(Clip original, Media? media, ClipEditMode mode, double dx, double pps,
-        double playhead, double grid, bool free, IEnumerable<ClipEnvelope.ClipWindow> others)
+        double playhead, double grid, bool free, IEnumerable<ClipEnvelope.ClipWindow> others, double? durationSec = null)
     {
         var c = Copy(original);
-        var w = Window(original, media);
+        var w = Window(original, media, durationSec);
         var fades = ClipEnvelope.FitFades(c.FadeInSec, c.FadeOutSec, w.End - w.Start);
         double len = w.End - w.Start;
         switch (mode)
@@ -189,16 +189,16 @@ public static class ClipEditing
         p.Tracks.Insert(to, track);
     }
 
-    public static void ToStart(Project p, string id)
+    public static void ToStart(Project p, string id, double? durationSec = null)
     {
         var (_, clip) = Find(p, id);
-        clip.AtSec = Milliseconds(clip.AtSec - Window(clip, p.FindMedia(clip.MediaId)).Anchor);
+        clip.AtSec = Milliseconds(clip.AtSec - Window(clip, p.FindMedia(clip.MediaId), durationSec).Anchor);
     }
 
-    public static void FixCut(Project p, string id)
+    public static void FixCut(Project p, string id, double? durationSec = null)
     {
         var (_, clip) = Find(p, id);
-        var w = Window(clip, p.FindMedia(clip.MediaId));
+        var w = Window(clip, p.FindMedia(clip.MediaId), durationSec);
         clip.TrimStartSec = Fixed3(w.TrimStart + w.Cut);
     }
 

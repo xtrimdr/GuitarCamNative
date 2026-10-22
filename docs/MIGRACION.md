@@ -33,7 +33,7 @@ están decididas son las del formato de proyecto propio (ver §2).
 - **Engranaje** → Configuración (§7) ✗.
 - **Exportar MP4** (botón de acento) → diálogo de exportación (§8) ✗.
 
-### 1.2 Barra lateral izquierda: "Toma" (inspector de la pista seleccionada) ◐
+### 1.2 Barra lateral izquierda: "Toma" (inspector de la pista seleccionada) ◐ (secciones ✅; faltan plegar el panel y las plantillas de paneo)
 Se puede plegar a una tira de íconos (se recuerda). Las secciones se pliegan por título y eso también se
 recuerda. Arriba, "Mostrar / Colapsar todos los efectos".
 - **Sin selección**: "Seleccioná una toma" + "Hacé click en una pista o en su panel del video", o
@@ -45,13 +45,14 @@ recuerda. Arriba, "Mostrar / Colapsar todos los efectos".
 - **Compresor** (§5.3): switch, "¿Qué estás tocando?" (Rasgueo / Arpegio / Punteo), Cantidad, medidor
   "Comprime"; "Ajuste fino a mano" con Umbral, Ratio, Ataque, Release, Knee, Ganancia; EQ del preset
   (Corte de graves, Barro 280 Hz, Presencia, Brillo 9 kHz); "Limitar picos"; "Volver al estilo por
-  defecto" ◐ (switch, limitador y medidor sí; faltan los presets, la cantidad y el ajuste fino).
-- **EQ** (§5.4): switch + editor gráfico ✗.
-- **Reverb**: switch + "Envío a reverb" ✗. **Delay**: switch + "Envío a delay" ✗.
-- **Sincronización**: "Offset de audio" (mueve la toma con su anclaje) y "Latencia de cámara" ✗.
-- **Encuadre**: Zoom, espejar, "Resetear encuadre" ✗ (el arrastre en la preview, §1.4).
+  defecto" ✅.
+- **EQ** (§5.4): switch + editor gráfico ✅ (falta el espectro en vivo).
+- **Reverb**: switch + "Envío a reverb" ✅. **Delay**: switch + "Envío a delay" ✅.
+- **Sincronización**: "Offset de audio" (mueve la toma con su anclaje) y "Latencia de cámara" ✅ (en la
+  nativa, por clip).
+- **Encuadre**: Zoom, espejar, "Resetear encuadre" ✅ (y el arrastre y la rueda en la preview, §1.4).
 - **Clip**: Recorte inicio/final, Fade in/out de audio, "El video sigue los fades del audio" o fades de
-  video propios, "Restaurar clip" ✗.
+  video propios, "Restaurar clip" ✅.
 
 ### 1.3 Barra lateral derecha: proyecto (pestañas Color / Historial) ✗
 Se pliega igual que la izquierda; la pestaña elegida se recuerda. Lo que es por pista va a la izquierda y
@@ -148,25 +149,25 @@ proyecto); guardar con el mismo nombre reemplaza; se borran desde el formulario 
 
 ---
 
-## 3. Timeline ◐
+## 3. Timeline ◐ (edición de clips ✅; faltan miniaturas, regla en minutos y botón del medio)
 
 - **Regla** en compases y tiempos (4/4 al tempo) o en minutos y segundos ◐ (solo compases). Clic o
   arrastre mueve el cabezal con imán; Alt sin imán ◐ (clic sí).
 - **Barra de herramientas**: modo de regla, **imán a la grilla** (cabezal, mover clips, recortes y
   fades), **Ver todo**, **altura de pistas** ◐ (Ver todo sí).
 - **Encabezado de pista**: agarre para reordenar, número, nombre, M, S, quitar, volumen, perilla de
-  paneo, medidor ◐ (número, nombre, M, S, medidor y texto de volumen/paneo; faltan el agarre, quitar,
-  el slider y la perilla). Las pistas vacías dicen "Pista vacía · seleccionala para grabar acá" /
+  paneo, medidor ✅. Las pistas vacías dicen "Pista vacía · seleccionala para grabar acá" /
   "Apretá R para grabar en esta pista"; mientras graba, "Grabando…".
-- **Carriles**: tira de miniaturas del video debajo de la onda ✗; onda ✅; parte cortada antes del 0
-  rayada con "✂ N s" ✗.
+- **Carriles**: tira de miniaturas del video debajo de la onda ✗; onda ✅ (gris, acento si está
+  seleccionado, como la web); parte cortada antes del 0 rayada con la tijera y "N s" ✅.
 - **Clips**: arrastrar el cuerpo para moverlo (imán a 0, cabezal, bordes de otros clips y grilla, sobre
   el anclaje para no romper la sincronía; Alt libre); arrastrar arriba/abajo a otra pista (mueve o
-  intercambia: "Mover a «…»" / "Intercambiar con «…»"); bordes para recortar; esquinas para fades ✗.
+  intercambia: "Mover a «…»" / "Intercambiar con «…»"); bordes para recortar; esquinas para fades ✅
+  (en pistas con varios clips solo se intercambia el que está bajo el puntero: diferencia nativa).
 - **Menú contextual** de carril o clip: Activar sonido / Silenciar, Solo, Llevar al inicio, Fijar el
-  corte en 0, Restaurar recortes y fades, Quitar clip (Supr; la pista queda vacía), Quitar pista ✗.
-- **"+ Nueva pista"**: pista vacía o una toma sin usar del historial ✗.
-- **Reordenar pistas** arrastrando el agarre (las otras se corren; el orden define los paneles) ✗.
+  corte en 0, Restaurar recortes y fades, Quitar clip (Supr; la pista queda vacía), Quitar pista ✅.
+- **"+ Nueva pista"**: pista vacía o una toma sin usar del historial ✅.
+- **Reordenar pistas** arrastrando el agarre (las otras se corren; el orden define los paneles) ✅.
 - **Selección**: clic en un encabezado o carril vacío lo selecciona; clic en un lugar en blanco
   deselecciona ◐.
 - **Zoom y desplazamiento**: rueda = horizontal; Shift = zoom anclado al cabezal; Alt = alto de pista;
@@ -215,9 +216,10 @@ Por toma: fuente → fade del clip → saturación → compresor (con su EQ de p
 paneo → fader (volumen/mute) → master; y del fader salen los envíos post-fader a reverb y delay.
 Master → limitador (-0,3 dB, con anticipación) → salida. El click y la cuenta no pasan por el limitador
 pero suenan con su misma demora.
-- Fades de clip ◐ · saturación ✅ · compresor ✅ (su EQ ◐) · EQ de pista ◐ · paneo ✅ · fader y
-  mute/solo ✅ · envíos ◐ · limitador master ✅ · click ✅. (◐ = portado y verificado en
-  `GuitarCam.Audio`, con el render offline `MixRenderer`; falta enchufarlo a la reproducción, tarea B3.)
+- Fades de clip ✅ · saturación ✅ · compresor y su EQ ✅ · EQ de pista ✅ · paneo ✅ · fader y
+  mute/solo ✅ · envíos y buses de reverb/delay ✅ · limitador master ✅ · click ✅. La reproducción y el
+  render offline usan la misma cadena (`TrackDspChain`, `MixGraphBus`) y dan lo mismo (−141 dB). Con el
+  transporte parado los buses siguen sonando hasta que se apaga la cola, como en la web.
 - **Solo**: las pistas sin solo se silencian para escuchar y exportar; mute/solo afectan solo el audio
   (el video de todas las tomas sale igual) ✅.
 
@@ -252,10 +254,10 @@ directa) → retorno → master.
 
 ### 5.7 Entrada y monitoreo ◐
 - Ganancia de entrada (+12 dB por defecto), modo de canales Estéreo / Mono 1 / Mono 2, limitador suave
-  en la captura; medidor de entrada con pico retenido y luz de clip ◐ (medidor sí).
-- **Monitoreo por software** opcional (para interfaces sin monitoreo directo) ✗.
+  en la captura ✅ (motor, verificado); medidor de entrada con pico retenido y luz de clip ◐ (medidor sí).
+- **Monitoreo por software** opcional (para interfaces sin monitoreo directo) ◐ (motor sí; falta la opción en Configuración).
 
-### 5.8 Grabación ✗
+### 5.8 Grabación ◐ (motor ✅; falta el flujo en la ventana)
 Todo programado sobre un mismo reloj de audio: pistas de fondo, click, cuenta de 4 y el comienzo de la
 grabación caen en el mismo cuadro. La toma nueva:
 - Llena la pista vacía seleccionada; si no, la siguiente vacía después de la seleccionada; si no hay,
@@ -265,14 +267,20 @@ grabación caen en el mismo cuadro. La toma nueva:
   toma sin click ni cuenta.
 - Hereda el canal de la pista vacía; compresor prendido con preset según el lugar; espejo según la cámara.
 - Se descarta si dura menos de 0,3 s. "Parar sin guardar" la tira.
-- En nativo ya existen el `RecordingWriter` y el diario de grabación ✅; falta todo el flujo.
+- Nativa: motor de grabación ✅ (`RecordingSession.cs`: cuenta, mismo reloj, `syncMs`, descarte ≤ 0,3 s;
+  cerrar la app grabando conserva la toma; errores de disco y muestras perdidas a la vista), con
+  `RecordingWriter` y el diario `*.grabando.json` ✅. Falta el flujo en la ventana (R, destino, nombre) ✗.
+- **Sincronía por toma**: en la nativa, cada clip puede tener su propio ajuste de sincronía y de latencia de
+  cámara (`Clip.SyncMs` / `VideoOffsetMs`, si faltan valen los de la grabación); entra en deshacer, como en la web ✅.
 
-### 5.9 Calibración de latencia ✗
+### 5.9 Calibración de latencia ◐ (motor ✅; falta la UI)
 En Configuración → Sincronización. **Con cable** (pulsos de ruido con semilla y correlación cruzada;
 cable de salida a entrada o micrófono frente a los parlantes) o **Tocando** (4 de cuenta + 12 clicks;
 detecta tus ataques). Guarda mediana y dispersión por par entrada + salida, con la latencia estimada y
 el sample rate de ese momento, para avisar si el equipo cambió. "Descartar la medición y usar lo que
-informa el navegador" (en nativo: lo que informa el driver ASIO). En gclab ya existe `latencia` ◐.
+informa el navegador" (en nativo: lo que informa el driver ASIO).
+- Nativa: la medición (con cable y tocando), el guardado y el aviso de equipo cambiado ✅
+  (`LatencyCalibration.cs`, `gclab latencia`); falta la pantalla de Configuración ✗.
 
 ---
 
@@ -307,7 +315,7 @@ Diálogo de ajustes del programa (no del proyecto), con los atajos apagados mien
 
 ---
 
-## 8. Exportación ✗
+## 8. Exportación ◐ (motor, diálogo y `gclab exportar` ✅; falta compararlo con la web lado a lado)
 
 - **Diálogo de configuración**: nombre del archivo (arranca en uno libre, "nombre (2)"), carpeta (la
   `exports` del proyecto o otra elegida; "Esa carpeta ya no existe. Elegí otra."), calidad **Alta** (CRF
@@ -324,6 +332,11 @@ Diálogo de ajustes del programa (no del proyecto), con los atajos apagados mien
   libx264 + AAC 320k, hasta el final del último clip. Escribe un `.part` oculto que se renombra al
   terminar; cancelar mata FFmpeg y lo borra. Queda registrada en el proyecto.
 - En nativo el render offline y FFmpeg corren en el mismo proceso, sin servidor ni subida.
+- Nativa: render offline de la mezcla con el mismo grafo que la reproducción ✅ (`MixRenderer`,
+  `gclab mezclar`; los medios se remuestrean a 48 kHz con `AudioLoader`) ✅. `Mp4Exporter`: el mismo
+  `filter_complex` que `server/index.js` (LUT de color y viñeta idénticas byte a byte a las de la web),
+  progreso, cancelación y `.part` ✅; `gclab exportar` ✅. El diálogo (`Dialogs/ExportDialog`) está hecho
+  y se abre desde "Exportar MP4" ✅; falta la captura lado a lado con la web ◐.
 
 ---
 

@@ -19,6 +19,8 @@ Laboratorio para ver si GuitarCam Studio se puede pasar a .NET nativo. Corre al 
   - `RecordingSession.cs`: `InputProcessor` (ganancia, modos estéreo/mono y limitador suave de la
     captura, de `audioEngine.ts`) y `TakeRecorder` (graba desde el callback sin bloquear, sobre `RecordingWriter`)
   - `LatencyCalibration.cs`: calibración de latencia con cable o tocando, de `latencyCalibration.ts`
+  - `Mp4Exporter.cs`: la exportación a MP4 (el `filter_complex` de FFmpeg de `server/index.js`, con el
+    color de `colorGrade.js` y los efectos de `videoFx.js`, progreso, cancelación y `.part`)
   - `ClickSynth.cs`: los 6 sonidos de click de `clickSounds.ts`
   - `AsioDuplex.cs`: entrada y salida ASIO en un mismo callback (NAudio)
 - `src/GuitarCam.Projects`: el proyecto nativo (`guitarcam.json`: medios, pistas, clips), guardado atómico,
@@ -49,7 +51,7 @@ src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe
 |---|---|
 | `dispositivos` | drivers ASIO y dispositivos WASAPI |
 | `panel` | panel del driver ASIO (tamaño de buffer) |
-| `latencia [--modo cable\|tocando] [--ver] [--borrar] [--simular ms]` | mide la latencia ida y vuelta (con cable o tocando 4 + 12 clicks) o muestra / borra la guardada |
+| `latencia [--modo cable\|tocando] [--ver] [--borrar] [--simular ms] [--datos X]` | mide la latencia ida y vuelta (con cable o tocando 4 + 12 clicks) o muestra / borra la guardada |
 | `grabar --monitor --sat valvula` | graba sobre el click; con `--monitor` te escuchás con el efecto, vía ASIO (también `--ganancia`, `--descartar`, `--latencia-ms`, `--ajuste-sincro`, `--simular`) |
 | `mezclar proyecto\|toma.wav [--salida mezcla.wav] [--segundos N]` | renderiza la mezcla offline, con el mismo grafo que la reproducción |
 | `procesar toma.wav --sat cinta --comp-estilo punteo --eq ritmica --reverb cuarto --delay punteada` | aplica efectos a un WAV (también `--comp-cant`, `--reverb-envio`, `--delay-envio`) |
@@ -64,6 +66,8 @@ src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe
 | `proyecto editar carpeta mover\|recortar-inicio\|recortar-final\|fade-in\|fade-out clip delta [--iman 1/4] [--libre]` | edita un clip como en el timeline (imán, anclaje de sincronía) |
 | `proyecto editar carpeta a-pista clip pista [--intercambiar clip]`, `reordenar desde hasta`, `inicio\|fijar-corte\|restaurar\|quitar-clip clip`, `quitar-pista pista`, `nueva-pista`, `agregar-toma medio [--pista p]` | el resto de las operaciones del timeline |
 | `proyecto encuadre carpeta clip [--zoom 1.5] [--panx 0.2] [--pany -0.3] [--espejar] [--restaurar]` | encuadre del clip en su panel |
+| `proyecto sincronia carpeta clip [--audio-ms -30] [--camara-ms 80] [--heredar]` | ajuste de sincronía y de latencia de cámara de un clip (`--heredar` vuelve a los de la grabación) |
+| `exportar [proyecto] [--salida nombre] [--carpeta destino] [--calidad alta\|estandar\|borrador] [--reemplazar] [--prueba]` | exporta el MP4 (mezcla offline + FFmpeg); `--prueba` arma un proyecto de prueba y prueba colisión y cancelación |
 | `proyectos lista` / `proyectos plantillas` | la lista del gestor (carpeta de proyectos + recientes) / las plantillas |
 | `proyectos nuevo "Nombre" [--plantilla id] [--carpeta vacía]` | crea un proyecto (nombre limpio para Windows y "(2)" si ya existe) |
 | `proyectos previsualizar "Nombre"` | el nombre y la carpeta que tendría un proyecto nuevo |

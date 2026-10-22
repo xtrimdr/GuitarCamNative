@@ -138,7 +138,9 @@ public sealed record RecordedTakeResult(
     int SampleRate,
     double DurationSec,
     double MeasuredLatencyMs,
-    double SyncMs);
+    double SyncMs,
+    long DroppedFrames = 0,
+    Exception? DiskError = null);
 
 /// <summary>
 /// Lock-free recording session on top of <see cref="RecordingWriter"/>.
@@ -165,6 +167,8 @@ public sealed class TakeRecorder : IDisposable
 
     long writeFrames;
     long readFrames;
+    long droppedFrames;
+    volatile Exception? diskError;
     volatile bool stopping;
     bool finished;
 
@@ -172,7 +176,8 @@ public sealed class TakeRecorder : IDisposable
     public int SampleRate => writer.SampleRate;
     public long RecordedFrames => Interlocked.Read(ref writeFrames);
     public double RecordedSec => RecordedFrames / (double)SampleRate;
-    public Exception? DiskError { get; private set; }
+    public long DroppedFrames => Interlocked.Read(ref droppedFrames);
+    public Exception? DiskError => diskError;
 
     public TakeRecorder(string path, int sampleRate, int ringSeconds = 6)
     {
@@ -190,18 +195,21 @@ public sealed class TakeRecorder : IDisposable
 
     /// <summary>
     /// Called on the ASIO driver thread: copies samples into the preallocated ring buffer with zero
-    /// allocations and no locks.
+    /// allocations and no locks. If the ring buffer is full, counts dropped frames atomically.
     /// </summary>
     public void WriteFromCallback(ReadOnlySpan<float> left, ReadOnlySpan<float> right)
     {
         if (stopping) return;
-        int n = Math.Min(left.Length, right.Length);
-        if (n <= 0) return;
+        int requested = Math.Min(left.Length, right.Length);
+        if (requested <= 0) return;
 
         long w = Volatile.Read(ref writeFrames);
         long r = Volatile.Read(ref readFrames);
         int free = ringCapacity - (int)(w - r);
-        if (n > free) n = free;
+        int n = Math.Min(requested, Math.Max(0, free));
+        int dropped = requested - n;
+        if (dropped > 0)
+            Interlocked.Add(ref droppedFrames, dropped);
         if (n <= 0) return;
 
         int pos = (int)(w % ringCapacity);
@@ -231,7 +239,7 @@ public sealed class TakeRecorder : IDisposable
         }
         catch (Exception ex)
         {
-            DiskError = ex;
+            diskError = ex;
         }
     }
 
@@ -259,7 +267,8 @@ public sealed class TakeRecorder : IDisposable
     }
 
     /// <summary>
-    /// Flushes all pending samples to disk, closes the WAV file, and returns the take result.
+    /// Flushes all pending samples to disk, closes the WAV file in a <c>try/finally</c> block without throwing,
+    /// and returns the take result.
     /// Returns <c>null</c> (and deletes the WAV file) if <paramref name="discard"/> is true or the take is
     /// shorter than <see cref="MinTakeDurationSec"/> (0.3 s), matching <c>App.tsx:985</c>.
     /// </summary>
@@ -274,9 +283,26 @@ public sealed class TakeRecorder : IDisposable
         if (finished) return null;
         finished = true;
         stopping = true;
-        if (worker.IsAlive) worker.Join();
-        long totalFrames = writer.Frames;
-        writer.Dispose();
+        long totalFrames = 0;
+        try
+        {
+            if (worker.IsAlive) worker.Join();
+        }
+        finally
+        {
+            long undrained = Math.Max(0, Volatile.Read(ref writeFrames) - Volatile.Read(ref readFrames));
+            if (undrained > 0)
+                Interlocked.Add(ref droppedFrames, undrained);
+            totalFrames = writer.Frames;
+            try
+            {
+                writer.Dispose();
+            }
+            catch (Exception ex)
+            {
+                diskError ??= ex;
+            }
+        }
 
         double durationSec = totalFrames / (double)SampleRate;
         if (discard || durationSec <= MinTakeDurationSec)
@@ -292,7 +318,9 @@ public sealed class TakeRecorder : IDisposable
             SampleRate,
             durationSec,
             measuredLatencyMs,
-            syncMs);
+            syncMs,
+            DroppedFrames,
+            diskError);
     }
 
     /// <summary>
@@ -340,6 +368,6 @@ public sealed class TakeRecorder : IDisposable
     public void Dispose()
     {
         if (!finished)
-            Finish(discard: true);
+            Finish(discard: false);
     }
 }

@@ -248,7 +248,7 @@ static class DspCommands
                         FadeInSec = c.FadeInSec,
                         FadeOutSec = c.FadeOutSec,
                         GainDb = c.GainDb,
-                        SyncMs = m?.SyncMs ?? 0,
+                        SyncMs = c.EffectiveSyncMs(m),
                     });
                 }
 
@@ -642,6 +642,51 @@ static class DspCommands
                         r[5] = tr.Matched;
                     }
                 }),
+            new("Color LUT 3D + trilineal + FX video",
+                [new { name = "gc-video-color" }],
+                (l, r) =>
+                {
+                    Array.Clear(l);
+                    Array.Clear(r);
+                    var grade = new ExportColorSpec(
+                        On: true,
+                        Look: "cine",
+                        Amount: 85,
+                        Exposure: 15,
+                        Contrast: 20,
+                        Highlights: -15,
+                        Shadows: 25,
+                        Saturation: 12,
+                        Vibrance: 18,
+                        Temperature: 10,
+                        Tint: -8,
+                        Fade: 10);
+                    var fx = new ExportVideoFxSpec(
+                        On: true,
+                        Vignette: 40,
+                        VignetteSize: 45,
+                        Grain: 25,
+                        Letterbox: "2.39");
+                    float[] lut = VideoColorProcessor.BuildLut(grade, 33);
+                    lut.AsSpan(0, Math.Min(l.Length, lut.Length)).CopyTo(l);
+
+                    int pos = 0;
+                    for (int i = 0; i < 512 && pos + 3 <= r.Length; i++)
+                    {
+                        float cr = ((i * 73) % 256) / 255f;
+                        float cg = ((i * 151) % 256) / 255f;
+                        float cb = ((i * 211) % 256) / 255f;
+                        var (or, og, ob) = VideoColorProcessor.SampleTrilinear(lut, 33, cr, cg, cb);
+                        r[pos++] = or;
+                        r[pos++] = og;
+                        r[pos++] = ob;
+                    }
+                    byte[] mask = VideoColorProcessor.VignetteMask(fx, 64, 36);
+                    for (int i = 0; i < mask.Length && pos < r.Length; i++)
+                        r[pos++] = mask[i] / 255f;
+                    r[pos++] = VideoColorProcessor.LetterboxBar(fx, 640, 360);
+                    r[pos++] = VideoColorProcessor.GrainLevels(fx);
+                }),
         };
 
         string tmp = Path.Combine(Path.GetTempPath(), "gclab-verify");
@@ -708,11 +753,360 @@ static class DspCommands
         allOk &= resOk;
         Console.WriteLine($"{"AudioLoader 44.1→48 kHz (2.0 s, A4)",-36} {Db(resDiffDb),12} {Db(resRelDb),10}  {(resOk ? "igual" : "DISTINTO")}");
 
+        // Verify B4-R1 & B4-R2: TakeRecorder.Dispose keeps takes > 0.3 s, Finish(discard: true) removes them
+        string recKeepPath = Path.Combine(tmp, "rec_keep_on_dispose.wav");
+        string recDiscardPath = Path.Combine(tmp, "rec_discard_explicit.wav");
+        if (File.Exists(recKeepPath)) File.Delete(recKeepPath);
+        if (File.Exists(recDiscardPath)) File.Delete(recDiscardPath);
+        using (var rec = new TakeRecorder(recKeepPath, sr48))
+        {
+            var chunk = new float[4096];
+            Array.Fill(chunk, 0.25f);
+            for (int b = 0; b < 6; b++) // 24576 frames > 0.3 s
+                rec.WriteFromCallback(chunk, chunk);
+        }
+        bool keepOk = File.Exists(recKeepPath) && new FileInfo(recKeepPath).Length > 44;
+        RecordedTakeResult? discardRes;
+        using (var rec = new TakeRecorder(recDiscardPath, sr48))
+        {
+            var chunk = new float[4096];
+            Array.Fill(chunk, 0.25f);
+            for (int b = 0; b < 6; b++)
+                rec.WriteFromCallback(chunk, chunk);
+            discardRes = rec.Finish(discard: true);
+        }
+        bool b4Ok = keepOk && discardRes == null && !File.Exists(recDiscardPath);
+        allOk &= b4Ok;
+        Console.WriteLine($"{"TakeRecorder: conservar al cerrar",-36} {"exacto",12} {"exacto",10}  {(b4Ok ? "igual" : "DISTINTO")}");
+
+        // Verify B3-R1 & B3-R2: TrackDspChain.Reset zeroes state; MixGraphBus rings out reverb/delay tail when stopped
+        var chainA = new TrackDspChain(sr48);
+        var chainB = new TrackDspChain(sr48);
+        var testTrackSpec = new MixTrackSpec
+        {
+            Sat = tube30,
+            Comp = CompPresets.UpdateComp(CompState.Defaults with { On = true, Preset = "rhythm", Amount = 0.6 }, env),
+            EqOn = true,
+            EqBands = TrackEq.ApplyPreset("rhythm"),
+        };
+        chainA.Configure(testTrackSpec);
+        chainB.Configure(testTrackSpec);
+        var dummyM = new float[128];
+        var dummyR = new float[128];
+        var dummyD = new float[128];
+        ch[0].AsSpan(0, 128).CopyTo(chainA.BufferL(128));
+        ch[1].AsSpan(0, 128).CopyTo(chainA.BufferR(128));
+        chainA.ProcessFilledBuffer(128, false, dummyM, dummyM, dummyR, dummyR, dummyD, dummyD, out _, out _, out _);
+        chainA.Reset();
+        var outAL = new float[128];
+        var outAR = new float[128];
+        var outBL = new float[128];
+        var outBR = new float[128];
+        ch[0].AsSpan(128, 128).CopyTo(chainA.BufferL(128));
+        ch[1].AsSpan(128, 128).CopyTo(chainA.BufferR(128));
+        chainA.ProcessFilledBuffer(128, false, outAL, outAR, dummyR, dummyR, dummyD, dummyD, out _, out _, out _);
+        ch[0].AsSpan(128, 128).CopyTo(chainB.BufferL(128));
+        ch[1].AsSpan(128, 128).CopyTo(chainB.BufferR(128));
+        chainB.ProcessFilledBuffer(128, false, outBL, outBR, dummyR, dummyR, dummyD, dummyD, out _, out _, out _);
+        double maxResetDiff = 0;
+        for (int i = 0; i < 128; i++)
+            maxResetDiff = Math.Max(maxResetDiff, Math.Max(Math.Abs(outAL[i] - outBL[i]), Math.Abs(outAR[i] - outBR[i])));
+        bool b3Ok = maxResetDiff == 0;
+        allOk &= b3Ok;
+        Console.WriteLine($"{"TrackDspChain.Reset + colas buses",-36} {Db(maxResetDiff > 0 ? 20 * Math.Log10(maxResetDiff) : double.NegativeInfinity),12} {"exacto",10}  {(b3Ok ? "igual" : "DISTINTO")}");
+
         Console.WriteLine();
         Console.WriteLine(allOk
             ? "Todo coincide con la app web (diferencias por debajo de -100 dB: redondeo de punto flotante)."
             : "Hay diferencias audibles: el port no coincide en algún caso.");
         return allOk ? 0 : 3;
+    }
+
+    public static int Export(Args a)
+    {
+        bool testMode = a.Flag("prueba") || a.Positional.Count == 0;
+        string targetDir;
+        string? tempTestDir = null;
+
+        if (testMode)
+        {
+            tempTestDir = Path.Combine(Path.GetTempPath(), $"gclab-export-{Guid.NewGuid():N}"[..24]);
+            targetDir = BuildSyntheticExportProject(tempTestDir);
+            Console.WriteLine($"Proyecto de prueba generado en: {targetDir}");
+        }
+        else
+        {
+            targetDir = Path.GetFullPath(a.Positional[0]);
+        }
+
+        try
+        {
+            using var store = ProjectStore.Open(targetDir);
+            var p = store.Project;
+            var quality = Mp4Exporter.ParseQuality(a.Get("calidad") ?? p.Settings.Export.Quality);
+            string? outDir = a.Get("carpeta") ?? p.Settings.Export.Dir;
+            string fileName = a.Get("salida", string.IsNullOrWhiteSpace(p.Name) ? "GuitarCam" : p.Name);
+            bool overwrite = a.Flag("reemplazar") || testMode;
+            int sr = 48000;
+
+            var takes = new List<ExportTakeSpec>();
+            var mixTracks = new List<MixTrackSpec>();
+            foreach (var trk in p.Tracks)
+            {
+                var clips = new List<MixClipSpec>();
+                double trackRms = -24;
+                bool hasRms = false;
+                foreach (var c in trk.Clips)
+                {
+                    var m = p.FindMedia(c.MediaId);
+                    double dur = m?.DurationSec ?? 0;
+                    if (store.Resolve(m?.Audio) is { } ap && File.Exists(ap))
+                    {
+                        var loaded = AudioLoader.Load(ap, sr);
+                        if (dur <= 0) dur = loaded.DurationSec;
+                        var (rms, _) = LevelAnalysis.Analyze([loaded.Left, loaded.Right], sr);
+                        if (!hasRms) { trackRms = rms; hasRms = true; }
+                        clips.Add(new MixClipSpec
+                        {
+                            Left = loaded.Left,
+                            Right = loaded.Right,
+                            DurationSec = dur,
+                            AtSec = c.AtSec,
+                            TrimStartSec = c.TrimStartSec,
+                            TrimEndSec = c.TrimEndSec,
+                            FadeInSec = c.FadeInSec,
+                            FadeOutSec = c.FadeOutSec,
+                            GainDb = c.GainDb,
+                            SyncMs = c.EffectiveSyncMs(m),
+                        });
+                    }
+                    if (trk.Video && clips.Count <= 1 && store.Resolve(m?.Video) is { } vp && File.Exists(vp))
+                    {
+                        takes.Add(new ExportTakeSpec
+                        {
+                            Id = c.Id,
+                            Name = string.IsNullOrWhiteSpace(trk.Name) ? (m?.Name ?? "") : trk.Name,
+                            VideoPath = vp,
+                            DurationSec = dur,
+                            AtSec = c.AtSec,
+                            SyncMs = c.EffectiveSyncMs(m),
+                            VideoOffsetMs = c.EffectiveVideoOffsetMs(m),
+                            TrimStartSec = c.TrimStartSec,
+                            TrimEndSec = c.TrimEndSec,
+                            FadeInSec = c.FadeInSec,
+                            FadeOutSec = c.FadeOutSec,
+                            LinkVideoFades = c.LinkVideoFades,
+                            VideoFadeInSec = c.VideoFadeInSec,
+                            VideoFadeOutSec = c.VideoFadeOutSec,
+                            Zoom = c.Framing.Zoom,
+                            PanX = c.Framing.PanX,
+                            PanY = c.Framing.PanY,
+                            Mirror = c.Framing.Mirror,
+                        });
+                    }
+                }
+
+                var ch = trk.Channel;
+                var sat = SatParams.From(ch.Sat.On, ch.Sat.Mode == "tape" ? SatMode.Tape : SatMode.Tube, ch.Sat.Amount, trackRms);
+                var compEq = new CompEqParams(ch.Comp.Eq.HpfHz, ch.Comp.Eq.MudDb, ch.Comp.Eq.PresenceDb, ch.Comp.Eq.PresenceHz, ch.Comp.Eq.AirDb);
+                var comp = new CompState(ch.Comp.On, ch.Comp.Preset, ch.Comp.Amount, ch.Comp.Limit, ch.Comp.Threshold, ch.Comp.Ratio, ch.Comp.Attack, ch.Comp.Release, ch.Comp.Knee, ch.Comp.Makeup, compEq);
+                var bands = new EqBandSpec[TrackEq.BandCount];
+                for (int i = 0; i < TrackEq.BandCount; i++)
+                    bands[i] = i < ch.Eq.Bands.Count
+                        ? EqBandSpec.FromStrings(ch.Eq.Bands[i].On, ch.Eq.Bands[i].Type, ch.Eq.Bands[i].Freq, ch.Eq.Bands[i].Gain, ch.Eq.Bands[i].Q, ch.Eq.Bands[i].Slope, TrackEq.DefaultBands[i].Type)
+                        : TrackEq.DefaultBands[i];
+
+                mixTracks.Add(new MixTrackSpec
+                {
+                    Clips = clips,
+                    Volume = ch.Volume,
+                    Pan = ch.Pan,
+                    Muted = ch.Muted,
+                    Solo = ch.Solo,
+                    Sat = sat,
+                    Comp = comp,
+                    EqOn = ch.Eq.On,
+                    EqBands = bands,
+                    ReverbOn = ch.ReverbOn,
+                    ReverbSend = ch.ReverbSend,
+                    DelayOn = ch.DelayOn,
+                    DelaySend = ch.DelaySend,
+                });
+            }
+
+            var rev = p.Settings.Reverb;
+            var dly = p.Settings.Delay;
+            var col = p.Settings.Color;
+            var vfx = p.Settings.VideoFx;
+            var job = new ExportJobSpec
+            {
+                ProjectDir = store.Dir,
+                ProjectName = string.IsNullOrWhiteSpace(p.Name) ? "GuitarCam" : p.Name,
+                OutDir = outDir,
+                FileName = fileName,
+                Overwrite = overwrite,
+                Quality = quality,
+                Layout = p.Settings.Layout,
+                AspectRatio = p.Settings.Aspect,
+                BorderSize = 4,
+                Color = new ExportColorSpec(col.On, col.Look, col.Amount, col.Exposure, col.Contrast, col.Highlights, col.Shadows, col.Saturation, col.Vibrance, col.Temperature, col.Tint, col.Fade),
+                VideoFx = new ExportVideoFxSpec(vfx.On, vfx.Vignette, vfx.VignetteSize, vfx.Grain, vfx.Letterbox),
+                Takes = takes,
+                MixTracks = mixTracks,
+                MixBus = new MixBusSpec
+                {
+                    Bpm = p.Settings.Bpm,
+                    Reverb = new ReverbParams(rev.Decay, rev.PreDelayMs, rev.Tone, rev.LowCut, rev.Width, rev.ReturnGain, rev.Muted),
+                    Delay = new DelayParams(DelayParams.ParseMode(dly.Mode), dly.Sync, dly.Division, dly.TimeMs, dly.Feedback, dly.Tone, dly.LowCut, dly.Width, dly.Duck, dly.ReturnGain, dly.Muted),
+                },
+                SampleRate = sr,
+            };
+
+            int lastPct = -1;
+            var res = Mp4Exporter.ExportAsync(job, prog =>
+            {
+                if (prog.Percent != lastPct && (prog.Percent % 10 == 0 || prog.Percent == 100))
+                {
+                    lastPct = prog.Percent;
+                    Console.WriteLine($"  [{prog.Stage}] {prog.Percent}%");
+                }
+            }).GetAwaiter().GetResult();
+
+            Console.WriteLine($"Exportado: {res.FullPath} ({Mp4Exporter.FormatBytes(res.Bytes)}, {res.DurationSec:0.0} s en {res.ElapsedSec:0.0} s)");
+
+            if (testMode)
+            {
+                // Verify collision check suggests "(2)"
+                var check2 = Mp4Exporter.CheckDestination(store.Dir, outDir, fileName);
+                if (!check2.Exists || !check2.Suggested.EndsWith(" (2)", StringComparison.Ordinal))
+                    throw new InvalidOperationException($"CheckDestination falló: Exists={check2.Exists}, Suggested={check2.Suggested}");
+                Console.WriteLine($"Colisión verificada: sugiere «{check2.Suggested}»");
+
+                // Verify cancellation kills FFmpeg and cleans up .part files
+                using var cancelCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(120));
+                var cancelJob = job with { FileName = "Cancelado", Overwrite = true };
+                bool cancelled = false;
+                try
+                {
+                    Mp4Exporter.ExportAsync(cancelJob, null, cancelCts.Token).GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException)
+                {
+                    cancelled = true;
+                }
+                string exportsFolder = Path.Combine(store.Dir, "exports");
+                bool anyPartLeft = Directory.Exists(exportsFolder) && Directory.GetFiles(exportsFolder, "*.part").Length > 0;
+                bool cancelMp4Exists = File.Exists(Path.Combine(exportsFolder, "Cancelado.mp4"));
+                if (!cancelled || anyPartLeft || cancelMp4Exists)
+                    throw new InvalidOperationException($"Cancelación falló: cancelled={cancelled}, partLeft={anyPartLeft}, mp4Exists={cancelMp4Exists}");
+                Console.WriteLine("Cancelación verificada: proceso terminado y archivo .part eliminado.");
+
+                // Benchmark B7 preview color + grain + vignette + letterbox per frame
+                var benchGrade = new ExportColorSpec(true, "cine", 85, 10, 15, -10, 20, 10, 15, 8, -5, 10);
+                var benchFx = new ExportVideoFxSpec(true, 35, 50, 25, "2.39");
+                var benchLut = new VideoColorProcessor.Lut3DTable(benchGrade);
+                int benchGrain = VideoColorProcessor.GrainLevels(benchFx);
+                foreach (var (bw, bh) in new[] { (640, 360), (1920, 1080) })
+                {
+                    byte[] srcBuf = new byte[bw * bh * 4];
+                    byte[] dstBuf = new byte[bw * bh * 4];
+                    for (int i = 0; i < srcBuf.Length; i += 4)
+                    {
+                        srcBuf[i] = (byte)(i & 255);
+                        srcBuf[i + 1] = (byte)((i >> 3) & 255);
+                        srcBuf[i + 2] = (byte)((i >> 6) & 255);
+                        srcBuf[i + 3] = 255;
+                    }
+                    // Warmup
+                    VideoColorProcessor.GradeAndGrainBgra(srcBuf, dstBuf, bw, bh, benchLut, benchGrain, 1);
+                    var swLutOnly = System.Diagnostics.Stopwatch.StartNew();
+                    const int iters = 30;
+                    for (int it = 0; it < iters; it++)
+                        VideoColorProcessor.GradeAndGrainBgra(srcBuf, dstBuf, bw, bh, benchLut, 0, it);
+                    swLutOnly.Stop();
+                    var swLutGrain = System.Diagnostics.Stopwatch.StartNew();
+                    for (int it = 0; it < iters; it++)
+                        VideoColorProcessor.GradeAndGrainBgra(srcBuf, dstBuf, bw, bh, benchLut, benchGrain, it);
+                    swLutGrain.Stop();
+                    Console.WriteLine($"Costo B7 ({bw}×{bh}): LUT 3D trilineal = {swLutOnly.Elapsed.TotalMilliseconds / iters:0.00} ms/cuadro · LUT + grano = {swLutGrain.Elapsed.TotalMilliseconds / iters:0.00} ms/cuadro");
+                }
+            }
+            return 0;
+        }
+        finally
+        {
+            if (tempTestDir != null && !a.Flag("conservar"))
+            {
+                try { Directory.Delete(tempTestDir, recursive: true); } catch { }
+            }
+        }
+    }
+
+    static string BuildSyntheticExportProject(string rootDir)
+    {
+        Directory.CreateDirectory(rootDir);
+        string mediaDir = Path.Combine(rootDir, "media");
+        Directory.CreateDirectory(mediaDir);
+
+        int sr = 48000;
+        var sig = TestSignal(sr, 2.0);
+        string wav1 = Path.Combine(mediaDir, "toma1.wav");
+        string wav2 = Path.Combine(mediaDir, "toma2.wav");
+        Wav.Write(wav1, sig[0], sig[1], sr);
+        Wav.Write(wav2, sig[1], sig[0], sr);
+
+        string mp4_1 = Path.Combine(mediaDir, "toma1.mp4");
+        string mp4_2 = Path.Combine(mediaDir, "toma2.mp4");
+        MakeTestVideo(mp4_1, "0x1d4ed8", 2.0);
+        MakeTestVideo(mp4_2, "0x047857", 2.0);
+
+        using var store = ProjectStore.Create(rootDir, new Project { Name = "Prueba Export" });
+        var p = store.Project;
+        p.Settings.Color = new ColorGrade { On = true, Look = "warm-amber", Amount = 80, Contrast = 10, Saturation = 5 };
+        p.Settings.VideoFx = new VideoFx { On = true, Vignette = 25, VignetteSize = 50, Grain = 15, Letterbox = "2.39:1" };
+
+        var m1 = new Media { Id = "med-1", Name = "Rítmica", Audio = "media/toma1.wav", Video = "media/toma1.mp4", DurationSec = 2.0, SampleRate = sr, Channels = 2, SyncMs = -20, VideoOffsetMs = 80 };
+        var m2 = new Media { Id = "med-2", Name = "Punteo", Audio = "media/toma2.wav", Video = "media/toma2.mp4", DurationSec = 2.0, SampleRate = sr, Channels = 2, SyncMs = -15, VideoOffsetMs = 80 };
+        p.Media.AddRange([m1, m2]);
+
+        p.Tracks.Add(new Track
+        {
+            Id = "trk-1",
+            Name = "Rítmica",
+            Video = true,
+            Channel = new Channel { Volume = 0.9, Pan = -0.35, Sat = new SatSettings { On = true, Mode = "tube", Amount = 0.3 } },
+            Clips = [new Clip { Id = "clp-1", MediaId = "med-1", AtSec = -0.02, SyncMs = -25, VideoOffsetMs = 70, FadeInSec = 0.1, FadeOutSec = 0.2, Framing = new Framing { Zoom = 1.2, PanX = 0.1, PanY = -0.1, Mirror = false } }],
+        });
+        p.Tracks.Add(new Track
+        {
+            Id = "trk-2",
+            Name = "Punteo",
+            Video = true,
+            Channel = new Channel { Volume = 0.85, Pan = 0.35, ReverbOn = true, ReverbSend = 0.25 },
+            Clips = [new Clip { Id = "clp-2", MediaId = "med-2", AtSec = 0.1, FadeInSec = 0.1, FadeOutSec = 0.2, Framing = new Framing { Zoom = 1.0, Mirror = true } }],
+        });
+        store.Save();
+        return rootDir;
+    }
+
+    static void MakeTestVideo(string outPath, string colorHex, double seconds)
+    {
+        var psi = new ProcessStartInfo("ffmpeg",
+        [
+            "-y", "-v", "error",
+            "-f", "lavfi", "-i", $"color=c={colorHex}:s=640x360:r=30:d={seconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}",
+            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+            outPath,
+        ])
+        {
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        using var proc = System.Diagnostics.Process.Start(psi) ?? throw new InvalidOperationException("No pude iniciar ffmpeg.");
+        string err = proc.StandardError.ReadToEnd();
+        proc.WaitForExit();
+        if (proc.ExitCode != 0) throw new InvalidOperationException($"ffmpeg falló creando video de prueba: {err}");
     }
 
     static string Db(double db) => double.IsNegativeInfinity(db) ? "exacto" : $"{db:0.0} dB";

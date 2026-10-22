@@ -129,7 +129,9 @@ public sealed class TrackDspChain
 
     public void Reset()
     {
+        Sat.Reset();
         CompEq.Reset();
+        Comp.Reset();
         Eq.Reset();
     }
 
@@ -282,6 +284,7 @@ public sealed class MixGraphBus
     {
         Reverb.Reset();
         Delay.Reset();
+        Limiter.Reset();
     }
 
     public (float RevL, float RevR, float DlyL, float DlyR) TakeReturnMeters()

@@ -259,7 +259,9 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 - **Preview**: los paneles se calculan con `PanelLayout.Compute` sobre un lienzo de 1080 px de alto,
   **la misma cuenta que usa la exportación** (port de `panelLayout.js`). Lo que se ve tiene que ser lo que
   se exporta. Encuadre: cover-fit + zoom/paneo/espejo del clip. Etiqueta con el nombre de la pista abajo a la izquierda.
-- **Timeline**: clips en acento translúcido con la onda; seleccionado con borde más marcado; pista
+- **Timeline**: clips como en la web: fondo `Hover` al 40 %, borde `Line` (acento al 60 % si está
+  seleccionado), onda `Dim` (acento si está seleccionado, `Faint` si la pista no suena), sin el nombre
+  adentro; un clip sin archivo, gris con "Sin conexión…". Pista
   seleccionada con barra de acento de 2 px a la izquierda del encabezado; playhead de acento con triángulo.
 
 ### Componentes (clases de estilo en `App.axaml`)

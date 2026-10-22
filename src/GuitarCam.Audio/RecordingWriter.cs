@@ -64,8 +64,14 @@ public sealed class RecordingWriter : IDisposable
 
     public void Dispose()
     {
-        Checkpoint();
-        fs.Dispose();
+        try
+        {
+            Checkpoint();
+        }
+        finally
+        {
+            fs.Dispose();
+        }
     }
 }
 

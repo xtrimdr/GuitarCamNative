@@ -6,6 +6,19 @@ namespace GuitarCam.Projects;
 /// </summary>
 public static class InspectorEditing
 {
+    public static string DefaultCompPreset(Clip? clip, string fallback = "rhythm") =>
+        clip?.Extra?.TryGetValue("role", out var role) == true && role.ValueKind == System.Text.Json.JsonValueKind.String
+            ? role.GetString() == "solo" ? "lead" : "rhythm"
+            : fallback;
+
+    /// <summary>TakeInspector.tsx setSync: moves the audio while keeping the timeline anchor fixed.</summary>
+    public static void SetSync(Clip clip, Media? media, double value)
+    {
+        if (!double.IsFinite(value)) throw new ArgumentException("El ajuste de sincronía tiene que ser un número válido.");
+        clip.AtSec += (value - clip.EffectiveSyncMs(media)) / 1000;
+        clip.SyncMs = value;
+    }
+
     public static (double X, double Y) Pan(double x, double y, double dx, double dy) =>
         (Fixed2(Math.Clamp(x - dx / 160, -1, 1)), Fixed2(Math.Clamp(y - dy / 160, -1, 1)));
 

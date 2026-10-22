@@ -48,7 +48,14 @@ public partial class MainWindow : Window
         };
 
         SessionChip.Click += async (_, _) => await ShowProjects();
-        ExportButton.Click += (_, _) => Status("Exportar todavía no está en la versión nativa");
+        ExportButton.Click += (_, _) =>
+        {
+            if (store == null || restoring || Projects.IsVisible) return;
+            if (Export.TryOpen(store, tracks, out var error)) { engine.Pause(); engine.Seek(0); }
+            else if (error != null) Status(error);
+        };
+        Export.ExportCompleted += _ => { MarkDirty(); SaveSoon(); };
+        Export.Dismissed += () => Timeline.Focus();
         RecButton.Click += (_, _) => Status("Grabar todavía no está en la ventana (probalo con gclab grabar)");
         PlayButton.Click += (_, _) => TogglePlay();
         ToStartButton.Click += (_, _) => engine.Seek(0);
@@ -56,9 +63,6 @@ public partial class MainWindow : Window
         UndoButton.Click += async (_, _) => await RestoreEdit(false);
         RedoButton.Click += async (_, _) => await RestoreEdit(true);
         ClickToggle.IsCheckedChanged += (_, _) => engine.ClickOn = ClickToggle.IsChecked == true;
-        ClickSoundBox.ItemsSource = Enum.GetNames<ClickSound>().Select(n => n == "Bateria" ? "Batería" : n).ToList();
-        ClickSoundBox.SelectedIndex = (int)ClickSound.Madera;
-        ClickSoundBox.SelectionChanged += (_, _) => engine.SetClickSound((ClickSound)Math.Max(0, ClickSoundBox.SelectedIndex));
 
         Timeline.SeekRequested += engine.Seek;
         Timeline.SelectionChanged += i => ShowTrack(i >= 0 && i < tracks.Count ? tracks[i] : null);
@@ -73,6 +77,7 @@ public partial class MainWindow : Window
             MarkDirty();
             UpdateUndoButtons();
             Preview.InvalidateVisual();
+            RefreshInspectorText();
         };
         Timeline.TrackToggleRequested += (t, solo) => EditTrack(t, x =>
         {
@@ -80,15 +85,9 @@ public partial class MainWindow : Window
             else x.Channel.Muted = !x.Channel.Muted;
         }, solo ? "solo" : "mute");
         InitTimelineEditing();
+        InitTransport();
 
-        VolSlider.ValueChanged += (_, e) => Edit(t => t.Channel.Volume = e.NewValue, "volume");
-        PanSlider.ValueChanged += (_, e) => Edit(t => t.Channel.Pan = Math.Abs(e.NewValue) < 0.04 ? 0 : e.NewValue, "pan");
-        SatSwitch.IsCheckedChanged += (_, _) => Edit(t => { t.Channel.Sat.On = SatSwitch.IsChecked == true; t.ApplySat(); }, "sat.on");
-        TubeButton.Click += (_, _) => Edit(t => { t.Channel.Sat.Mode = "tube"; t.ApplySat(); }, "sat.mode");
-        TapeButton.Click += (_, _) => Edit(t => { t.Channel.Sat.Mode = "tape"; t.ApplySat(); }, "sat.mode");
-        VidaSlider.ValueChanged += (_, e) => Edit(t => { t.Channel.Sat.Amount = e.NewValue; t.ApplySat(); }, "sat.amount");
-        CompSwitch.IsCheckedChanged += (_, _) => Edit(t => { t.Channel.Comp.On = CompSwitch.IsChecked == true; t.ApplyComp(); }, "comp.on");
-        LimitCheck.IsCheckedChanged += (_, _) => Edit(t => { t.Channel.Comp.Limit = LimitCheck.IsChecked == true; t.ApplyComp(); }, "comp.limit");
+        InitInspector();
 
         AddHandler(KeyDownEvent, OnKey, RoutingStrategies.Tunnel);
 
@@ -133,7 +132,16 @@ public partial class MainWindow : Window
             if (dir != null && ProjectStore.IsProject(dir)) await LoadProject(dir);
             else await ShowProjects();
         };
-        Closing += (_, _) => CloseProject();
+        Closing += (_, e) =>
+        {
+            if (Export.IsRunning)
+            {
+                e.Cancel = true;
+                Status("Estoy exportando: esperá a que termine o cancelá la exportación antes de cerrar.");
+                return;
+            }
+            CloseProject();
+        };
         Closed += (_, _) =>
         {
             timer.Stop();
@@ -329,7 +337,7 @@ public partial class MainWindow : Window
         engine.SetTracks(list, p.Settings);
         SessionName.Text = p.Name;
         Title = $"{p.Name} — GuitarCam Studio";
-        BpmText.Text = p.Settings.Bpm.ToString("0.00");
+        Tempo.Set(p.Settings.Bpm);
         Timeline.Bpm = p.Settings.Bpm;
         Timeline.LengthSec = engine.LengthSec;
         Timeline.SetTracks(list, preserveView);
@@ -359,12 +367,17 @@ public partial class MainWindow : Window
             Status(engine.Status);
             return;
         }
-        if (engine.Playing) engine.Stop();
+        if (engine.Playing) engine.Pause();
         else engine.Play();
     }
 
     async void OnKey(object? sender, KeyEventArgs e)
     {
+        if (Export.IsVisible)
+        {
+            Export.HandleKey(e);
+            return;
+        }
         // shortcuts are off while the manager is open; Esc goes to it
         if (Projects.IsVisible)
         {
@@ -388,6 +401,7 @@ public partial class MainWindow : Window
             return;
         }
         if ((e.KeyModifiers & KeyModifiers.Alt) != 0) return;
+        if (e.Key is Key.Space or Key.Home or Key.C or Key.T && !transportKeys.Add(e.Key)) { e.Handled = true; return; }
         switch (e.Key)
         {
             case Key.Escape:
@@ -407,7 +421,11 @@ public partial class MainWindow : Window
                 Timeline.FitAll();
                 break;
             case Key.C:
-                ClickToggle.IsChecked = ClickToggle.IsChecked != true;
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift)) CountInToggle.IsChecked = CountInToggle.IsChecked != true;
+                else ClickToggle.IsChecked = ClickToggle.IsChecked != true;
+                break;
+            case Key.T:
+                Tempo.Tap();
                 break;
             case Key.M when sel != null:
                 Edit(t => t.Channel.Muted = !t.Channel.Muted, "mute");
@@ -425,6 +443,8 @@ public partial class MainWindow : Window
     void Tick()
     {
         double pos = engine.PositionSec;
+        bool videoFade = Preview.Playhead != pos && tracks.Any(t => t.Clips.Any(c => c.Clip.FadeInSec > 0 || c.Clip.FadeOutSec > 0 || c.Clip.VideoFadeInSec > 0 || c.Clip.VideoFadeOutSec > 0));
+        Preview.Playhead = pos;
         foreach (var t in tracks)
         {
             t.ShowL = Math.Max(t.MeterL, t.ShowL * 0.82f);
@@ -436,11 +456,8 @@ public partial class MainWindow : Window
         foreach (var t in tracks)
             foreach (var c in t.Clips)
                 newFrame |= c.UpdateVideo(pos);
-        if (newFrame) Preview.InvalidateVisual();
-        TimeText.Text = $"{(int)(pos / 60):00}:{pos % 60:00.000}";
-        double beats = pos * engine.Bpm / 60;
-        BarText.Text = $"{(int)(beats / 4) + 1}.{(int)(beats % 4) + 1}";
-        PlayIcon.Text = engine.Playing ? "" : "";
+        if (newFrame || videoFade) Preview.InvalidateVisual();
+        RefreshTransport(pos);
         var m = engine.TakeMeters();
         InputMeter.Push(m.InL, m.InR);
         if (engine.IsOpen) DspText.Text = $"DSP {engine.LoadPercent:0.0}%";
@@ -514,6 +531,8 @@ public partial class MainWindow : Window
                 }
                 st.Project.Tracks = tracks.Select(t => t.Track).ToList();
                 engine.SetSettings(st.Project.Settings, glideDelay: true);
+                Timeline.Bpm = st.Project.Settings.Bpm;
+                Timeline.InvalidateVisual();
                 Preview.SetProject(tracks, st.Project.Settings);
             }
             else await ShowProject(st, audio, true);
@@ -536,62 +555,4 @@ public partial class MainWindow : Window
         }
     }
 
-    void ShowTrack(LiveTrack? t)
-    {
-        sel = t;
-        syncing = true;
-        Inspector.IsEnabled = t != null && !restoring;
-        if (t == null)
-        {
-            TakeTitle.Text = "Ninguna seleccionada";
-            TakeInfo.Text = "Elegí una pista en la línea de tiempo";
-        }
-        else
-        {
-            var ch = t.Channel;
-            TakeTitle.Text = t.Track.Name;
-            var first = t.Clips.FirstOrDefault();
-            TakeInfo.Text = first == null
-                ? "Pista vacía"
-                : first.Offline
-                    ? $"{first.Name}: sin conexión (falta el archivo)"
-                    : $"{first.LengthSec / 60:0}:{first.LengthSec % 60:00.0} · offset de audio {first.Media?.SyncMs ?? 0:0.0} ms · nivel {t.RmsDb:0.0} dB RMS"
-                      + (t.Clips.Count > 1 ? $" · {t.Clips.Count} clips" : "");
-            VolSlider.Value = ch.Volume;
-            PanSlider.Value = ch.Pan;
-            SatSwitch.IsChecked = ch.Sat.On;
-            VidaSlider.Value = ch.Sat.Amount;
-            CompSwitch.IsChecked = ch.Comp.On;
-            LimitCheck.IsChecked = ch.Comp.Limit;
-            grShown = 0;
-        }
-        syncing = false;
-        RefreshInspectorText();
-    }
-
-    void RefreshInspectorText()
-    {
-        if (sel == null) return;
-        var ch = sel.Channel;
-        double db = 20 * Math.Log10(Math.Max(1e-4, ch.Volume));
-        VolText.Text = ch.Volume < 1e-3 ? "-∞ dB" : $"{db:+0.0;-0.0;0.0} dB";
-        PanText.Text = Math.Abs(ch.Pan) < 0.01 ? "Centro" : ch.Pan < 0 ? $"{-ch.Pan * 100:0} L" : $"{ch.Pan * 100:0} R";
-        TubeButton.IsChecked = ch.Sat.Mode != "tape";
-        TapeButton.IsChecked = ch.Sat.Mode == "tape";
-        double a = ch.Sat.Amount;
-        string label = a < 0.2 ? "Apenas" : a < 0.45 ? "Sutil" : a < 0.7 ? "Con vida" : a < 0.9 ? "Caliente" : "Al palo";
-        VidaText.Text = $"{a * 100:0}% · {label}";
-        SatSection.Classes.Set("off", !ch.Sat.On);
-        CompSection.Classes.Set("off", !ch.Comp.On);
-        var c = ch.Comp;
-        string preset = c.Preset switch
-        {
-            "rhythm" => "Rasgueo",
-            "arpeggio" => "Arpegio",
-            "lead" => "Punteo",
-            _ => "Manual",
-        };
-        CompPreset.Text = c.Preset == "custom" ? "Manual" : $"{preset} · {c.Amount * 100:0}%";
-        CompRaw.Text = $"{c.Threshold:0.0} dB · {c.Ratio:0.#}:1 · {c.Attack * 1000:0}/{c.Release * 1000:0} ms · +{c.Makeup:0.0} dB";
-    }
 }

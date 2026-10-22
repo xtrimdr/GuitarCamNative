@@ -1,4 +1,4 @@
-namespace GuitarCam.App.Model;
+namespace GuitarCam.Audio;
 
 /// <summary>Port of computePanelRects (GuitarCam/src/shared/panelLayout.js).</summary>
 public static class PanelLayout

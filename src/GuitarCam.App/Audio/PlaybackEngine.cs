@@ -51,6 +51,10 @@ public sealed class PlaybackEngine : IDisposable
     bool recUsedCountIn;
     bool recUsedClick;
     double? calibratedLatencyMs;
+    int pendingTrackReset;
+    int pendingBusReset;
+    volatile Exception? lastRecordingError;
+    long lastRecordingDroppedFrames;
 
     long endFrame;
     long nextBeat;
@@ -64,6 +68,15 @@ public sealed class PlaybackEngine : IDisposable
     public bool Recording => recording;
     public bool Calibrating => activeCalibration != null;
     public bool ClickOn { get; set; }
+
+    /// <summary>Disk error encountered by the active or last recording session, if any.</summary>
+    public Exception? RecordingDiskError => activeRecorder?.DiskError ?? lastRecordingError;
+
+    /// <summary>Human-readable message for <see cref="RecordingDiskError"/>, or <c>null</c> if none.</summary>
+    public string? RecordingError => RecordingDiskError?.Message;
+
+    /// <summary>Samples dropped because the recording ring buffer overflowed (or could not be flushed on disk error).</summary>
+    public long RecordingDroppedFrames => activeRecorder is { } rec ? rec.DroppedFrames : Interlocked.Read(ref lastRecordingDroppedFrames);
 
     public bool Loop
     {
@@ -168,19 +181,33 @@ public sealed class PlaybackEngine : IDisposable
     public void SetTracks(IEnumerable<LiveTrack> list, ProjectSettings? settings = null)
     {
         playing = false;
-        if (settings != null) SetSettings(settings, glideDelay: false);
-        buses.Reset();
         var arr = list.ToArray();
-        for (int i = 0; i < arr.Length; i++) arr[i].Chain.Reset();
         tracks = arr;
+        if (settings != null) SetSettings(settings, glideDelay: false);
+        Interlocked.Exchange(ref pendingTrackReset, 1);
         double maxEnd = 0;
         for (int i = 0; i < arr.Length; i++)
         {
             if (arr[i].EndSec > maxEnd) maxEnd = arr[i].EndSec;
         }
-        endFrame = (long)(maxEnd * SampleRate);
+        Interlocked.Exchange(ref endFrame, (long)(maxEnd * SampleRate));
         Interlocked.Exchange(ref position, 0);
         playStartSec = 0;
+    }
+
+    /// <summary>
+    /// Recomputes <see cref="LengthSec"/> (<c>endFrame</c>) from the current <see cref="LiveTrack"/> list
+    /// without stopping playback, moving the playhead or resetting DSP chains/buses.
+    /// </summary>
+    public void RefreshClipTiming()
+    {
+        var arr = tracks;
+        double maxEnd = 0;
+        for (int i = 0; i < arr.Length; i++)
+        {
+            if (arr[i].EndSec > maxEnd) maxEnd = arr[i].EndSec;
+        }
+        Interlocked.Exchange(ref endFrame, (long)(maxEnd * SampleRate));
     }
 
     public void SetSettings(ProjectSettings s, bool glideDelay = false)
@@ -188,6 +215,9 @@ public sealed class PlaybackEngine : IDisposable
         bpm = Math.Clamp(s.Bpm, 20, 300);
         ApplyReverb(s.Reverb);
         ApplyDelay(s.Delay, glideDelay);
+        var arr = tracks;
+        for (int i = 0; i < arr.Length; i++)
+            arr[i].SetProjectSettings(s);
     }
 
     public void ApplyReverb(ReverbSettings r)
@@ -230,6 +260,7 @@ public sealed class PlaybackEngine : IDisposable
         playStartSec = Math.Max(0.0, pos / (double)SampleRate);
         double beatLen = SampleRate * 60.0 / bpm;
         nextBeat = (long)Math.Ceiling(pos / beatLen - 1e-6);
+        Interlocked.Exchange(ref pendingTrackReset, 1);
         playing = true;
     }
 
@@ -260,6 +291,7 @@ public sealed class PlaybackEngine : IDisposable
         playStartSec = frame / (double)SampleRate;
         double beatLen = SampleRate * 60.0 / bpm;
         nextBeat = (long)Math.Ceiling(frame / beatLen - 1e-6);
+        Interlocked.Exchange(ref pendingTrackReset, 1);
     }
 
     // --- Recording (§5.8) ------------------------------------------------------------------------
@@ -275,9 +307,10 @@ public sealed class PlaybackEngine : IDisposable
         if (recording || activeCalibration != null) return;
 
         playing = false;
-        buses.Reset();
-        var list = tracks;
-        for (int i = 0; i < list.Length; i++) list[i].Chain.Reset();
+        lastRecordingError = null;
+        Interlocked.Exchange(ref lastRecordingDroppedFrames, 0);
+        Interlocked.Exchange(ref pendingBusReset, 1);
+        Interlocked.Exchange(ref pendingTrackReset, 1);
 
         int beats = useCountIn ? Math.Max(0, countInBeats) : 0;
         recCountInBeats = beats;
@@ -324,13 +357,16 @@ public sealed class PlaybackEngine : IDisposable
         if (rec == null) return null;
 
         double latencyMs = GetLatencyInfo().AppliedMs;
-        return rec.Finish(
+        var res = rec.Finish(
             discard,
             latencyMs,
             defaultOverdubOffsetMs,
             isFirstTake,
             recUsedCountIn,
             recUsedClick || ClickOn);
+        lastRecordingError = rec.DiskError;
+        Interlocked.Exchange(ref lastRecordingDroppedFrames, rec.DroppedFrames);
+        return res;
     }
 
     // --- Latency & Calibration (§5.9) ------------------------------------------------------------
@@ -444,14 +480,28 @@ public sealed class PlaybackEngine : IDisposable
             return;
         }
 
+        if (Interlocked.Exchange(ref pendingBusReset, 0) != 0)
+            buses.Reset();
+
+        if (Interlocked.Exchange(ref pendingTrackReset, 0) != 0)
+        {
+            var curTracks = tracks;
+            for (int i = 0; i < curTracks.Length; i++) curTracks[i].Chain.Reset();
+        }
+
+        var ml = mixL.AsSpan(0, n);
+        var mr = mixR.AsSpan(0, n);
+        ml.Clear();
+        mr.Clear();
+        var rl = buses.PrepareReverbL(n);
+        var rr = buses.PrepareReverbR(n);
+        var dl = buses.PrepareDelayL(n);
+        var dr = buses.PrepareDelayR(n);
+
         if (playing)
         {
             long pos = Interlocked.Read(ref position);
             bool isRec = recording;
-            var ml = mixL.AsSpan(0, n);
-            var mr = mixR.AsSpan(0, n);
-            ml.Clear();
-            mr.Clear();
 
             // During recording count-in (pos < 0), backing tracks and disk recording start only once f >= 0.
             int playOffset = pos < 0 ? (int)Math.Min(n, -pos) : 0;
@@ -462,10 +512,10 @@ public sealed class PlaybackEngine : IDisposable
                 long trackPos = Math.Max(0, pos + playOffset);
                 var subMl = ml.Slice(playOffset, playCount);
                 var subMr = mr.Slice(playOffset, playCount);
-                var rl = buses.PrepareReverbL(playCount);
-                var rr = buses.PrepareReverbR(playCount);
-                var dl = buses.PrepareDelayL(playCount);
-                var dr = buses.PrepareDelayR(playCount);
+                var subRl = rl.Slice(playOffset, playCount);
+                var subRr = rr.Slice(playOffset, playCount);
+                var subDl = dl.Slice(playOffset, playCount);
+                var subDr = dr.Slice(playOffset, playCount);
 
                 var list = tracks;
                 bool anySolo = false;
@@ -475,9 +525,7 @@ public sealed class PlaybackEngine : IDisposable
                 }
 
                 for (int i = 0; i < list.Length; i++)
-                    list[i].MixInto(trackPos, playCount, anySolo, subMl, subMr, rl, rr, dl, dr);
-
-                buses.ProcessReturnsAndLimiter(subMl, subMr, rl, rr, dl, dr);
+                    list[i].MixInto(trackPos, playCount, anySolo, subMl, subMr, subRl, subRr, subDl, subDr);
 
                 if (isRec)
                 {
@@ -487,6 +535,8 @@ public sealed class PlaybackEngine : IDisposable
                         procR.Slice(playOffset, playCount));
                 }
             }
+
+            buses.ProcessReturnsAndLimiter(ml, mr, rl, rr, dl, dr);
 
             double beatLen = SampleRate * 60.0 / bpm;
             int limLatency = buses.Limiter.Latency;
@@ -501,7 +551,7 @@ public sealed class PlaybackEngine : IDisposable
                 bool wantClick = inCountIn ? recUsedCountIn : ClickOn;
                 long beatFrame = (long)Math.Round(nextBeat * beatLen) + limLatency;
 
-                if ( f >= beatFrame)
+                if (f >= beatFrame)
                 {
                     if (wantClick)
                     {
@@ -535,6 +585,8 @@ public sealed class PlaybackEngine : IDisposable
                     pos = 0;
                     nextBeat = 0;
                     Interlocked.Exchange(ref position, 0);
+                    var curTracks = tracks;
+                    for (int i = 0; i < curTracks.Length; i++) curTracks[i].Chain.Reset();
                 }
                 else
                 {
@@ -546,6 +598,24 @@ public sealed class PlaybackEngine : IDisposable
             {
                 Interlocked.Exchange(ref position, pos);
             }
+        }
+        else
+        {
+            // Transport stopped: keep processing the shared return buses with silent input so reverb
+            // and delay tails decay naturally in real time (matching MixBus in the web app).
+            buses.ProcessReturnsAndLimiter(ml, mr, rl, rr, dl, dr);
+            float ol = outL, or = outR;
+            for (int i = 0; i < n; i++)
+            {
+                float l = ml[i];
+                float r = mr[i];
+                output[0][i] = l;
+                output[1][i] = r;
+                if (Math.Abs(l) > ol) ol = Math.Abs(l);
+                if (Math.Abs(r) > or) or = Math.Abs(r);
+            }
+            outL = ol;
+            outR = or;
         }
 
         if (softwareMonitor)
@@ -584,7 +654,7 @@ public sealed class PlaybackEngine : IDisposable
 
     public void Dispose()
     {
-        StopRecording(discard: true);
+        StopRecording(discard: false);
         io?.Dispose();
         io = null;
     }

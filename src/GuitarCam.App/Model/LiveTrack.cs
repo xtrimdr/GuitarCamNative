@@ -67,7 +67,13 @@ public sealed class LiveClip
     public VideoDecoder? Video { get; private set; }
     public WriteableBitmap? Frame { get; private set; }
     public bool InClip { get; private set; }
+    public ProjectSettings? Settings { get; set; }
     long frameVersion;
+    byte[]? rawFrame;
+    byte[]? gradedFrame;
+    ExportColorSpec? lastColorSpec;
+    int lastGrainLevels = -1;
+    int lastFrameSeed = int.MinValue;
 
     public LiveClip(Clip clip, Media? media, MediaAudio? audio)
     {
@@ -78,7 +84,7 @@ public sealed class LiveClip
 
     public string Name => Media?.Name ?? "Sin medio";
     public double LengthSec => Audio?.LengthSec ?? Media?.DurationSec ?? 0;
-    public ClipEnvelope.ClipWindow Window => ClipEnvelope.Window(LengthSec, Clip.AtSec, Clip.TrimStartSec, Clip.TrimEndSec, Media?.SyncMs ?? 0);
+    public ClipEnvelope.ClipWindow Window => ClipEnvelope.Window(LengthSec, Clip.AtSec, Clip.TrimStartSec, Clip.TrimEndSec, Clip.EffectiveSyncMs(Media));
     public double OffsetSec => Window.Origin;
     public double ClipStartSec => Window.Start;
     public double ClipEndSec => Window.End;
@@ -91,31 +97,84 @@ public sealed class LiveClip
     }
 
     /// <summary>
-    /// Asks the decoder for the frame at a timeline time and copies a new one into <see cref="Frame"/>.
-    /// Returns true when the picture changed. Outside the clip the panel is empty.
+    /// Asks the decoder for the frame at a timeline time, applies the 3D LUT trilinear color grade and
+    /// monochrome film grain (<see cref="VideoColorProcessor"/>), and copies the result into <see cref="Frame"/>.
+    /// Returns true when the picture changed (new decoded frame, color/grain edit while paused, or animated grain).
+    /// Outside the clip the panel is empty.
     /// </summary>
-    public bool UpdateVideo(double timelineSec)
+    public bool UpdateVideo(double timelineSec, ColorGrade? color = null, VideoFx? videoFx = null)
     {
         if (Video == null) return false;
         bool inside = timelineSec >= ClipStartSec && timelineSec < ClipEndSec;
         bool changed = inside != InClip;
         InClip = inside;
         if (!inside) return changed;
-        Video.Want(timelineSec - OffsetSec + (Media?.VideoOffsetMs ?? 0) / 1000);
+
+        double videoSec = timelineSec - OffsetSec + Clip.EffectiveVideoOffsetMs(Media) / 1000;
+        Video.Want(videoSec);
         Frame ??= new WriteableBitmap(new PixelSize(Video.Width, Video.Height), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Opaque);
-        var wb = Frame;
-        return Video.TryCopyLatest(ref frameVersion, buf =>
+
+        bool newRaw = Video.TryCopyLatest(ref frameVersion, buf =>
         {
-            using var fb = wb.Lock();
+            if (rawFrame == null || rawFrame.Length != buf.Length)
+                rawFrame = new byte[buf.Length];
+            Buffer.BlockCopy(buf, 0, rawFrame, 0, buf.Length);
+        });
+
+        if (rawFrame == null) return changed;
+
+        var colSpec = PreviewVideoFx.ToSpec(color ?? Settings?.Color);
+        var fxSpec = PreviewVideoFx.ToSpec(videoFx ?? Settings?.VideoFx);
+        int grainLevels = VideoColorProcessor.GrainLevels(fxSpec);
+        int frameSeed = (int)Math.Floor(Math.Max(0, timelineSec) * VideoDecoder.Fps);
+
+        bool needWrite = newRaw
+            || lastColorSpec != colSpec
+            || lastGrainLevels != grainLevels
+            || (grainLevels > 0 && frameSeed != lastFrameSeed);
+
+        if (!needWrite) return changed;
+
+        lastColorSpec = colSpec;
+        lastGrainLevels = grainLevels;
+        lastFrameSeed = frameSeed;
+
+        byte[] srcToCopy;
+        if (VideoColorProcessor.IsNeutralGrade(colSpec) && grainLevels <= 0)
+        {
+            srcToCopy = rawFrame;
+        }
+        else
+        {
+            if (gradedFrame == null || gradedFrame.Length != rawFrame.Length)
+                gradedFrame = new byte[rawFrame.Length];
+            var lutTable = PreviewVideoFx.GetLutTable(colSpec);
+            VideoColorProcessor.GradeAndGrainBgra(
+                rawFrame,
+                gradedFrame,
+                Video.Width,
+                Video.Height,
+                lutTable,
+                grainLevels,
+                frameSeed);
+            srcToCopy = gradedFrame;
+        }
+
+        using (var fb = Frame.Lock())
+        {
             int row = Video.Width * 4;
-            for (int y = 0; y < Video.Height; y++) Marshal.Copy(buf, y * row, fb.Address + y * fb.RowBytes, row);
-        }) || changed;
+            for (int y = 0; y < Video.Height; y++)
+                Marshal.Copy(srcToCopy, y * row, fb.Address + y * fb.RowBytes, row);
+        }
+        return true;
     }
 
     public void CloseVideo()
     {
         Video?.Dispose();
         Video = null;
+        rawFrame = null;
+        gradedFrame = null;
     }
 }
 
@@ -164,6 +223,13 @@ public sealed class LiveTrack
 
     /// <summary>The clip whose picture shows in the panel (the first one under the playhead).</summary>
     public LiveClip? ShownClip => Clips.FirstOrDefault(c => c.InClip);
+
+    /// <summary>Associates the project's settings with all clips on this track so <see cref="LiveClip.UpdateVideo"/> follows color and video FX changes.</summary>
+    public void SetProjectSettings(ProjectSettings? settings)
+    {
+        for (int i = 0; i < Clips.Count; i++)
+            Clips[i].Settings = settings;
+    }
 
     /// <summary>
     /// Updates the entire channel strip (saturator, compressor + its 4-stage EQ, 6-band track EQ, fader,

@@ -128,6 +128,8 @@ public static class WebImporter
                     Mirror = Bool(t, "mirror", false),
                 },
             };
+            if (Str(t, "role") is { } role)
+                clip.Extra = new() { ["role"] = JsonSerializer.SerializeToElement(role) };
             media.Extra ??= [];
             media.Extra["lastTimelineClip"] = JsonSerializer.SerializeToElement(clip, ProjectStore.Json);
             media.Extra["lastTimelineChannel"] = JsonSerializer.SerializeToElement(track.Channel, ProjectStore.Json);

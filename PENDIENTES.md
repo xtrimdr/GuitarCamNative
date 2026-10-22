@@ -74,15 +74,11 @@ Lo hicieron los agentes y compila con 0/0 y pasa sus pruebas de `gclab`, pero el
 lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](docs/COORDINACION.md)
 ("Para retomar"). Al aprobarlo, pasa a **Hecho** y se marca en MIGRACION.
 
-- A3 · edición de clips en el timeline (§3): mover, recortar, fades, mover/intercambiar de pista,
-  reordenar, menú contextual, "+ Nueva pista", Supr (`ClipEditing.cs`, `MainWindow.Timeline.cs`)
-- A4 (parte) · encuadre arrastrando y con la rueda en la preview (`InspectorEditing.cs`)
-- B2 · render offline de la mezcla (`MixRenderer`, `gclab mezclar`) y `AudioLoader` (remuestreo)
-- B3 · el grafo completo sonando en la ventana: EQ, EQ del preset, envíos, reverb, delay, fades
-  (`LiveTrack.ApplyChannel`, `PlaybackEngine`)
-- B4 · entrada (ganancia, modos, limitador suave), monitoreo por software y grabación en el motor
-  con cuenta, todo sobre el mismo reloj (`RecordingSession.cs`); falta el flujo en la ventana
-- B5 · calibración de latencia con cable o tocando (`LatencyCalibration.cs`, `gclab latencia`)
+- A5 · transporte y tempo (`MainWindow.Transport.cs`, `Controls/TempoControl.cs`): implementado, falta
+  la prueba a mano en la ventana (se cortó) y escuchar el click desde su menú (falta `PreviewClick` del motor)
+- B6 · el diálogo de exportación ya se abre con "Exportar MP4"; falta la captura lado a lado con la web
+- B7 · color y efectos de video en la preview (`VideoColorProcessor`, `PreviewVideoFx`): a medias,
+  Antigravity se quedó sin tokens; sin revisar
 
 ## Notas
 
@@ -103,6 +99,25 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
   y cuántos cuadros por segundo llegan de verdad con muchas tomas.
 
 ## Hecho
+
+- 2026-10-22: inspector completo (§1.2; tarea A4, ChatGPT): mezcla, saturación, compresor con estilos,
+  cantidad, ajuste fino y EQ del preset, EQ de 6 bandas con editor gráfico y plantillas, envíos de reverb
+  y delay, sincronización por clip, encuadre y clip (recortes y fades de audio y video), secciones
+  plegables recordadas (`MainWindow.Inspector.cs`, `Controls/EqEditor.cs`, `Controls/Inspector*.cs`).
+  Todo con deshacer. Falta el espectro en vivo del EQ.
+
+- 2026-10-22: render offline de la mezcla (parte de audio de §8; tarea B2, Antigravity):
+  `Dsp/MixRenderer.cs` (la cadena por pista y los buses, los mismos que usa la reproducción, sin la
+  demora del limitador) y `gclab mezclar`, verificado contra la web. `AudioLoader.cs` carga los medios y
+  los remuestrea a 48 kHz para escuchar y exportar (no es el remuestreador de Chromium: misma duración y
+  tono, no las mismas muestras).
+
+- 2026-10-22: calibración de latencia (§5.9, motor; tarea B5, Antigravity): `LatencyCalibration.cs`,
+  port de `latencyCalibration.ts` (con cable o tocando), verificada con `gclab verificar`; se guarda por
+  driver y canales en `%APPDATA%\GuitarCam Studio\latencia.json`. `gclab latencia --modo cable|tocando`,
+  `--ver`, `--borrar`, `--simular`. Falta la pantalla (Configuración → Sincronización).
+
+- 2026-10-22: tooltip "Rehacer (Ctrl+Y)", igual que la web (R5, ChatGPT).
 
 - 2026-10-22: ports del DSP que faltaba (§5.3 a §5.6 de MIGRACION; tarea B1, Antigravity), verificados
   muestra a muestra con `gclab verificar` (también con bloques de 100 y 441): presets y EQ del

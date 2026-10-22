@@ -24,6 +24,7 @@ static class ProjectCommands
             "clips" => Clips(dir),
             "editar" => EditClips(dir, a),
             "encuadre" => Frame(dir, a),
+            "sincronia" => Sync(dir, a),
             "cortar" => Crash(dir, a.Double("segundos", 3)),
             _ => throw new ArgumentException("proyecto importar|abrir|versiones|volver|cortar <carpeta>"),
         };
@@ -100,6 +101,26 @@ static class ProjectCommands
         p.AddLog("timeline-edited", op);
         store.Save();
         Console.WriteLine("Timeline actualizado; las grabaciones quedaron intactas.");
+        return 0;
+    }
+
+    static int Sync(string dir, Args a)
+    {
+        using var store = ProjectStore.Open(dir);
+        if (store.ReadOnly) throw new IOException(store.ReadOnlyReason);
+        string id = a.Positional.ElementAtOrDefault(2) ?? throw new ArgumentException("Falta el ID del clip.");
+        var clip = ClipEditing.Find(store.Project, id).Clip;
+        var media = store.Project.FindMedia(clip.MediaId);
+        if (a.Flag("heredar"))
+        {
+            InspectorEditing.SetSync(clip, media, media?.SyncMs ?? 0);
+            clip.SyncMs = clip.VideoOffsetMs = null;
+        }
+        if (a.Get("audio-ms") != null) InspectorEditing.SetSync(clip, media, a.Double("audio-ms", 0));
+        if (a.Get("camara-ms") != null) clip.VideoOffsetMs = a.Double("camara-ms", 80);
+        store.Project.AddLog("clip-sync");
+        store.Save();
+        Console.WriteLine($"Sincronía del clip: audio {clip.EffectiveSyncMs(media):0.###} ms · cámara {clip.EffectiveVideoOffsetMs(media):0.###} ms (anclaje conservado).");
         return 0;
     }
 
@@ -282,6 +303,17 @@ static class UndoChecks
         Check(count == 200 && p.Tracks[0].Name == "Pista 4", "límite de 200 pasos");
         history.Clear();
         Check(!history.CanUndo && !history.CanRedo && !history.Undo(p) && !history.Redo(p), "limpiar reinicia ambas pilas");
+        p.Tracks = [new Track { Clips = [new Clip { MediaId = media.Id, AtSec = 1 }] }];
+        media.SyncMs = -80;
+        history.Checkpoint(p);
+        InspectorEditing.SetSync(p.Tracks[0].Clips[0], media, 25);
+        p.Tracks[0].Clips[0].VideoOffsetMs = -40;
+        Check(history.Undo(p) && p.Tracks[0].Clips[0].SyncMs == null && p.Tracks[0].Clips[0].VideoOffsetMs == null
+            && p.Tracks[0].Clips[0].AtSec == 1 && ReferenceEquals(p.Media[0], media) && media.SyncMs == -80,
+            "deshacer sincronía restaura herencia y posición sin tocar Media");
+        Check(history.Redo(p) && p.Tracks[0].Clips[0].SyncMs == 25 && p.Tracks[0].Clips[0].VideoOffsetMs == -40
+            && Math.Abs(p.Tracks[0].Clips[0].AtSec - 1.105) < 1e-9,
+            "rehacer sincronía recupera ambos overrides y el ajuste de anclaje");
         Console.WriteLine($"Deshacer/rehacer: {checks} comprobaciones correctas (sin modificar archivos).");
         return 0;
     }
