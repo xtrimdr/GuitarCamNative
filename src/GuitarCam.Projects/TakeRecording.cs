@@ -8,8 +8,9 @@ namespace GuitarCam.Projects;
 /// Where a new take goes and how it lands in the project. Port of the target choice in
 /// handleStartRecordingSequence and of the take built in handleStopRecording (GuitarCam/src/App.tsx).
 /// The web keeps one take per lane; here the take becomes a Media plus a Clip on the target track, and
-/// the track keeps the channel strip it had (the web's withChannel). Native difference: there is no camera
-/// yet, so the take is audio only and a new track is created without a video panel.
+/// the track keeps the channel strip it had (the web's withChannel). The camera's video goes with it, mirrored
+/// if the live image was (the web's mirror: liveMirror). Native difference: without a camera the take is
+/// audio only and a new track is created without a video panel (the web refuses to record without one).
 /// </summary>
 public static class TakeRecording
 {
@@ -92,6 +93,7 @@ public static class TakeRecording
         {
             MediaId = media.Id,
             AtSec = j.AtSec,
+            Framing = new Framing { Mirror = j.Mirror && j.Video != null },
             Extra = new() { ["role"] = JsonSerializer.SerializeToElement(Role(slot)) },
         });
         p.AddLog("take-recorded", j.Name);

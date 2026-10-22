@@ -85,7 +85,11 @@
         </ScrollViewer>
       </Border>
 
-      <c:PreviewView Grid.Column="1" x:Name="Preview" />
+      <!-- the stage and, beside it, the "En vivo" monitor (the web's aside next to SplitScreenCanvas) -->
+      <Grid Grid.Column="1" ColumnDefinitions="*,Auto">
+        <c:PreviewView x:Name="Preview" />
+        <c:LiveMonitor Grid.Column="1" x:Name="Live" Width="256" Margin="0,16,16,16" VerticalAlignment="Top" />
+      </Grid>
     </Grid>
 
     <GridSplitter Grid.Row="2" Background="{StaticResource Line}" ResizeDirection="Rows" />

@@ -241,8 +241,8 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 
 ```
 ┌ barra de título propia (44) ─ logo · chip del proyecto ▾ · deshacer/rehacer · estado ·························· ⚙ · [Exportar MP4] ┐
-├ inspector (290) ─┬─ preview (el cuadro del video con un panel por pista con video) ───────────────────────────────────────┤
-│ TOMA + secciones │                                                                                                         │
+├ inspector (290) ─┬─ preview (el cuadro del video con un panel por pista con video) ──────────────────┬─ "En vivo" (256) ───┤
+│ TOMA + secciones │                                                                                  │ cámara + entrada    │
 ├──────────────────┴─ separador arrastrable ──────────────────────────────────────────────────────────────────────────────────┤
 │ timeline (280): regla de compases (32) · encabezados fijos (264) · un carril por pista (64, 40–160)                         │
 ├ transporte, siempre abajo (~52) ────────────────────────────────────────────────────────────────────────────────────────────┤
@@ -267,6 +267,9 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 - **Inspector**: título de la toma + una tarjeta (`Border.section`) por bloque, cada una con ícono +
   etiqueta en mayúscula y, si se puede apagar, un `ToggleSwitch` a la derecha. Apagada → clase `off`
   (los controles quedan al 40 % de opacidad, pero se pueden seguir tocando).
+- **Monitor "En vivo"** (`Controls/LiveMonitor.cs`), a la derecha de la preview: la cámara cruda, nunca
+  la composición. La cámara la abre `Video/LiveCamera.cs` (un solo FFmpeg, `CameraCapture`), que también
+  alimenta el video de la toma (`VideoTakeWriter`).
 - **Preview**: los paneles se calculan con `PanelLayout.Compute` sobre un lienzo de 1080 px de alto,
   **la misma cuenta que usa la exportación** (port de `panelLayout.js`). Lo que se ve tiene que ser lo que
   se exporta. Encuadre: cover-fit + zoom/paneo/espejo del clip. Etiqueta con el nombre de la pista abajo a la izquierda.

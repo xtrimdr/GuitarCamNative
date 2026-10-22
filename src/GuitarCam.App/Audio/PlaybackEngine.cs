@@ -52,6 +52,7 @@ public sealed class PlaybackEngine : IDisposable
     int recCountInBeats;
     bool recUsedCountIn;
     bool recUsedClick;
+    long recStartTimestamp;
     double? calibratedLatencyMs;
     int pendingTrackReset;
     int pendingBusReset;
@@ -74,6 +75,11 @@ public sealed class PlaybackEngine : IDisposable
     public string CalibrationOutputId => $"{InputOffset}:{OutputOffset}";
     public bool Playing => playing;
     public bool Recording => recording;
+    /// <summary>
+    /// Stopwatch time at which the take's first sample (timeline 0) was captured, 0 until then (still counting
+    /// in). The camera's video counts its frames from it.
+    /// </summary>
+    public long RecordingStartTimestamp => Interlocked.Read(ref recStartTimestamp);
     public bool Calibrating => activeCalibration != null;
     public bool ClickOn { get; set; }
 
@@ -326,6 +332,7 @@ public sealed class PlaybackEngine : IDisposable
         recCountInBeats = beats;
         recUsedCountIn = beats > 0;
         recUsedClick = ClickOn;
+        Interlocked.Exchange(ref recStartTimestamp, 0);
 
         double beatLen = SampleRate * 60.0 / bpm;
         long startFrame = beats > 0 ? -(long)Math.Round(beats * beatLen) : 0;
@@ -546,6 +553,9 @@ public sealed class PlaybackEngine : IDisposable
 
                 if (isRec)
                 {
+                    // the block's samples were captured over the n/SR seconds before this callback
+                    if (Interlocked.Read(ref recStartTimestamp) == 0)
+                        Interlocked.Exchange(ref recStartTimestamp, Math.Max(1, t0 - (long)((n - playOffset) * (double)Stopwatch.Frequency / SampleRate)));
                     recUsedClick |= ClickOn;
                     activeRecorder?.WriteFromCallback(
                         procL.Slice(playOffset, playCount),

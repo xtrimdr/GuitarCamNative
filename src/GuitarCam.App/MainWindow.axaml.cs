@@ -7,6 +7,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using GuitarCam.App.Audio;
 using GuitarCam.App.Model;
+using GuitarCam.App.Video;
 using GuitarCam.Audio;
 using GuitarCam.Audio.Dsp;
 using GuitarCam.Projects;
@@ -20,6 +21,7 @@ public partial class MainWindow : Window
     static readonly TimeSpan SaveDelay = TimeSpan.FromSeconds(1.5);
 
     readonly PlaybackEngine engine = new();
+    readonly LiveCamera camera = new();
     readonly UndoManager undo = new();
     readonly DispatcherTimer timer;
     readonly DispatcherTimer saveTimer;
@@ -56,7 +58,7 @@ public partial class MainWindow : Window
         };
         Export.ExportCompleted += _ => { MarkDirty(); SaveSoon(); };
         Export.Dismissed += () => Timeline.Focus();
-        Settings.Attach(engine, () => RecordingBusy);
+        Settings.Attach(engine, camera, () => RecordingBusy);
         Settings.AudioChanged += ShowAudioStatus;
         Settings.Dismissed += () => Timeline.Focus();
         SettingsButton.Click += (_, _) =>
@@ -64,6 +66,13 @@ public partial class MainWindow : Window
             if (Projects.IsVisible || Export.IsVisible || RecordingBusy) return;
             Settings.Show();
         };
+        Live.OpenInputs += () =>
+        {
+            if (Projects.IsVisible || Export.IsVisible || RecordingBusy) return;
+            Settings.Show("audio");
+        };
+        // the web's md / lg / xl widths of the monitor
+        SizeChanged += (_, e) => Live.Width = e.NewSize.Width >= 1280 ? 256 : 224;
         InitRecording();
         PlayButton.Click += (_, _) => TogglePlay();
         ToStartButton.Click += (_, _) => engine.Seek(0);
@@ -137,6 +146,7 @@ public partial class MainWindow : Window
             int.TryParse(AppConfig.Get("audio.outputOffset"), out int outputOffset);
             engine.Open(driver, 0, Math.Max(0, outputOffset));
             ShowAudioStatus();
+            _ = camera.Refresh();
             timer.Start();
             // like the web app, it starts on the project manager (a folder on the command line opens directly)
             if (dir != null && ProjectStore.IsProject(dir)) await LoadProject(dir);
@@ -165,6 +175,7 @@ public partial class MainWindow : Window
         {
             timer.Stop();
             engine.Dispose();
+            camera.Dispose();
         };
     }
 
@@ -490,6 +501,8 @@ public partial class MainWindow : Window
         if (RecordingBusy) RefreshRecording();
         var m = engine.TakeMeters();
         InputMeter.Push(m.InL, m.InR);
+        Live.Meter.Push(m.InL, m.InR);
+        TickCamera();
         if (Settings.IsVisible) Settings.Meter.Push(m.InL, m.InR);
         if (engine.IsOpen) DspText.Text = $"{engine.LoadPercent:0.0} %";
 

@@ -8,6 +8,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using GuitarCam.App.Audio;
 using GuitarCam.App.Controls;
+using GuitarCam.App.Video;
 using GuitarCam.Audio;
 using GuitarCam.Projects;
 
@@ -18,15 +19,17 @@ namespace GuitarCam.App.Dialogs;
 /// "Cámara" and "Sincronización", every control live. Same as the web except what ASIO imposes:
 /// "Interfaz" lists the ASIO drivers and "Dispositivo" the driver's output pairs (no "Predeterminada de
 /// Windows"), texts that say "navegador" say "driver", and the driver and output are remembered between
-/// sessions (the web remembers the output; it re-picks the interface by name). The camera tab keeps its
-/// shape, disabled, until the camera is ported. Like the web, gain, channels, monitoring and the fine
-/// adjustment live only in memory, and the calibration is stored per input + output pair.
+/// sessions (the web remembers the output; it re-picks the interface by name). The camera tab edits
+/// <see cref="LiveCamera"/> (the cameras are the ones FFmpeg lists through DirectShow). Like the web, gain,
+/// channels, monitoring, the fine adjustment and the camera settings live only in memory, and the
+/// calibration is stored per input + output pair.
 /// </summary>
 public sealed partial class SettingsDialog : UserControl
 {
-    const string NotYet = "Todavía no está en la versión nativa";
+    static readonly CameraResMode[] ResModes = [CameraResMode.Native, CameraResMode.R1080, CameraResMode.R720, CameraResMode.R480];
 
     PlaybackEngine? engine;
+    LiveCamera? cam;
     Func<bool> busy = () => false;
     CancellationTokenSource? calibration;
     CalibrationMethod? running;
@@ -45,6 +48,14 @@ public sealed partial class SettingsDialog : UserControl
     readonly StackPanel readout = new() { Spacing = 4 };
     readonly StackPanel calBox = new() { Spacing = 10 };
     readonly InspectorSlider fine;
+    readonly InspectorSlider cameraLatency;
+    readonly TextBlock cameraRes = new() { FontSize = 11, Foreground = Palette.Faint, Classes = { "mono" }, VerticalAlignment = VerticalAlignment.Center };
+    readonly List<ToggleButton> camKindButtons = [];
+    readonly ComboBox camBox = Combo(), resolutionBox = Combo();
+    readonly StackPanel driverFields = new() { Spacing = 14 };
+    readonly Control ipField;
+    readonly TextBox ipBox = new() { Height = 36, FontSize = 14, Classes = { "mono" }, Watermark = LiveCamera.DefaultIp, VerticalContentAlignment = VerticalAlignment.Center };
+    readonly ToggleButton mirrorButton = new() { Classes = { "chip" }, Width = 32, Height = 32, Padding = new Thickness(0), HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
 
     /// <summary>The input meter of the "Entrada" section; the window feeds it from the same read as the title bar's.</summary>
     public StereoMeter Meter { get; } = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
@@ -109,32 +120,62 @@ public sealed partial class SettingsDialog : UserControl
         output.Children.Add(Row(monitorLabel, monitorSwitch));
         audioPage.Children.Add(Card(output));
 
-        // --- Cámara: the web's shape, disabled until the native camera exists
-        var camera = Section("Cámara");
+        // --- Cámara
+        var camera = Section("Cámara", cameraRes);
         var camKind = new UniformGrid { Columns = 2 };
-        camKind.Children.Add(new ToggleButton { Content = "Webcam / Driver", IsChecked = true, Classes = { "seg" }, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center });
-        camKind.Children.Add(new ToggleButton { Content = "IP DroidCam", Classes = { "seg" }, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center });
+        foreach (var (ip, text) in new[] { (false, "Webcam / Driver"), (true, "IP DroidCam") })
+        {
+            var b = new ToggleButton { Content = text, Tag = ip, Classes = { "seg" }, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center };
+            b.Click += async (_, _) =>
+            {
+                if (cam == null) return;
+                Refresh();
+                await cam.SetUseIp(ip);
+            };
+            camKindButtons.Add(b);
+            camKind.Children.Add(b);
+        }
         camera.Children.Add(new Border { Classes = { "seg" }, Child = camKind });
-        var camBox = Combo();
-        camBox.ItemsSource = new[] { "Sin cámaras" };
-        camBox.SelectedIndex = 0;
+        camBox.SelectionChanged += async (_, _) =>
+        {
+            if (filling || cam == null || camBox.SelectedItem is not string d || !cam.Devices.Contains(d)) return;
+            await cam.SelectDevice(d);
+        };
         var camRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
         camRow.Children.Add(camBox);
-        var camRefresh = Act("", "Refrescar dispositivos", () => { });
+        var camRefresh = Act("\uE72C", "Refrescar dispositivos", () => _ = cam?.Refresh());
         camRefresh.Width = camRefresh.Height = 36;
         Grid.SetColumn(camRefresh, 1);
         camRow.Children.Add(camRefresh);
-        camera.Children.Add(Field("Dispositivo", camRow));
-        var resolution = Combo();
-        resolution.ItemsSource = new[] { "Auto (nativa)", "1080p · 30 fps", "720p · 30 fps", "480p · 30 fps" };
-        resolution.SelectedIndex = 0;
-        camera.Children.Add(Field("Resolución", resolution));
-        camera.Children.Add(Row(new TextBlock { Text = "Espejar imagen en vivo", FontSize = 12, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center },
-            Act("", "Espejar cámara en vivo", () => { })));
-        var cameraOff = new Border { Child = camera, IsEnabled = false, Opacity = 0.4 };
-        ToolTip.SetTip(cameraOff, NotYet);
-        ToolTip.SetShowOnDisabled(cameraOff, true);
-        cameraPage.Children.Add(Card(cameraOff));
+        driverFields.Children.Add(Field("Dispositivo", camRow));
+        resolutionBox.ItemsSource = new[] { "Auto (nativa)", "1080p · 30 fps", "720p · 30 fps", "480p · 30 fps" };
+        resolutionBox.SelectionChanged += async (_, _) =>
+        {
+            if (filling || cam == null || resolutionBox.SelectedIndex < 0) return;
+            await cam.SetMode(ResModes[resolutionBox.SelectedIndex]);
+        };
+        driverFields.Children.Add(Field("Resolución", resolutionBox));
+        camera.Children.Add(driverFields);
+        ipBox.TextChanged += (_, _) => { if (!filling && cam != null) cam.IpInput = ipBox.Text ?? ""; };
+        ipBox.KeyDown += async (_, e) =>
+        {
+            if (e.Key != Key.Enter || cam == null) return;
+            e.Handled = true;
+            await cam.ConnectIp();
+        };
+        var connect = new Button { Content = "Conectar", Classes = { "accent" }, Height = 36, FontSize = 14 };
+        connect.Click += async (_, _) => { if (cam != null) await cam.ConnectIp(); };
+        var ipRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
+        ipRow.Children.Add(ipBox);
+        Grid.SetColumn(connect, 1);
+        ipRow.Children.Add(connect);
+        ipField = Field("IP y puerto del celular", ipRow);
+        camera.Children.Add(ipField);
+        mirrorButton.Content = new TextBlock { Classes = { "icon" }, Text = "\uE8AB", FontSize = 13 };
+        ToolTip.SetTip(mirrorButton, "Espejar cámara en vivo");
+        mirrorButton.IsCheckedChanged += (_, _) => { if (!filling && cam != null) cam.Mirror = mirrorButton.IsChecked == true; };
+        camera.Children.Add(Row(new TextBlock { Text = "Espejar imagen en vivo", FontSize = 12, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center }, mirrorButton));
+        cameraPage.Children.Add(Card(camera));
 
         // --- Sincronización
         var sync = Section("Sincronización por defecto");
@@ -144,20 +185,19 @@ public sealed partial class SettingsDialog : UserControl
         fine = new InspectorSlider("Ajuste fino de audio (tomas nuevas)", -100, 100, 1, 0, v => v > 0 ? $"+{v:0} ms" : $"{v:0} ms",
             v => { OverdubOffsetMs = v; Refresh(); }, "Se suma a la latencia (calibrada o estimada). Negativo = la toma nueva queda más adelantada");
         sync.Children.Add(fine);
-        var cameraLatency = new InspectorSlider("Latencia de cámara", 0, 200, 5, 80, v => $"{v:0} ms", _ => { }, "Cuánto llega tarde la imagen respecto del audio");
-        cameraLatency.Set(80);
-        var cameraLatencyOff = new Border { Child = cameraLatency, IsEnabled = false, Opacity = 0.4 };
-        ToolTip.SetTip(cameraLatencyOff, NotYet);
-        ToolTip.SetShowOnDisabled(cameraLatencyOff, true);
-        sync.Children.Add(cameraLatencyOff);
+        cameraLatency = new InspectorSlider("Latencia de cámara", 0, 200, 5, LiveCamera.DefaultLatencyMs, v => $"{v:0} ms",
+            v => { if (cam != null) cam.LatencyMs = v; }, "Cuánto llega tarde la imagen respecto del audio");
+        sync.Children.Add(cameraLatency);
         syncPage.Children.Add(Card(sync));
     }
 
-    /// <summary>The engine whose devices and calibration this edits, and what says recording is going on.</summary>
-    public void Attach(PlaybackEngine e, Func<bool> recordingBusy)
+    /// <summary>The engine whose devices and calibration this edits, the camera, and what says recording is going on.</summary>
+    public void Attach(PlaybackEngine e, LiveCamera camera, Func<bool> recordingBusy)
     {
         engine = e;
+        cam = camera;
         busy = recordingBusy;
+        camera.Changed += () => Dispatcher.UIThread.Post(Refresh);
     }
 
     public void Show(string startTab = "audio")
@@ -297,12 +337,27 @@ public sealed partial class SettingsDialog : UserControl
                 : "Por acá suenan las pistas, el click y el monitoreo. Usá la salida de la interfaz para la menor latencia. Cada combinación de entrada y salida guarda su propia calibración.";
             monitorSwitch.IsChecked = e.SoftwareMonitor;
             fine.Set(OverdubOffsetMs);
+            if (cam != null) FillCamera(cam);
         }
         finally
         {
             filling = false;
         }
         RefreshSync(e);
+    }
+
+    void FillCamera(LiveCamera c)
+    {
+        foreach (var b in camKindButtons) b.IsChecked = (bool)b.Tag! == c.UseIp;
+        cameraRes.Text = c.Resolution;
+        driverFields.IsVisible = !c.UseIp;
+        ipField.IsVisible = c.UseIp;
+        camBox.ItemsSource = c.Devices.Length > 0 ? c.Devices : ["Sin cámaras"];
+        camBox.SelectedItem = c.Devices.Length > 0 ? c.Device : "Sin cámaras";
+        resolutionBox.SelectedIndex = Array.IndexOf(ResModes, c.Mode);
+        if (ipBox.Text != c.IpInput) ipBox.Text = c.IpInput;
+        mirrorButton.IsChecked = c.Mirror;
+        cameraLatency.Set(c.LatencyMs);
     }
 
     void RefreshSync(PlaybackEngine e)

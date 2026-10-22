@@ -47,6 +47,11 @@ static class TakeChecks
         Check(p.Tracks.Count == before + 1 && p.Tracks[^1] == t && !t.Video, "sin pista vacía: una nueva al final, solo audio");
         Check(t.Name == "Toma 6 — Arreglo" && t.Channel.Comp.Preset == "rhythm", "la cuarta pista es un arreglo");
 
+        j = new ProjectStore.RecordingJournal { MediaId = "med_v", Name = "x", Audio = "media/med_v.wav", Video = "media/med_v.mp4", VideoOffsetMs = 120, Mirror = true };
+        t = TakeRecording.AddTake(p, j, 1, 48000, 2, 7);
+        Check(t.Video && t.Clips[0].Framing.Mirror && p.FindMedia("med_v") is { Video: "media/med_v.mp4", VideoOffsetMs: 120 },
+            "con cámara: pista con panel, el video y su latencia en el medio, espejada como el monitor");
+
         var two = new Project { Tracks = [new Track { Clips = [new Clip()] }] };
         Check(TakeRecording.TakeName(two, null) == "Toma 1 — Solo / Punteo", "la segunda pista es el solo");
         j = new ProjectStore.RecordingJournal { MediaId = "med_d", Name = "x", Audio = "media/med_d.wav" };

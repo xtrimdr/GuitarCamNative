@@ -8,14 +8,19 @@ namespace GuitarCam.App;
 /// <summary>
 /// Recording a take from the window: port of handleStartRecordingSequence, handleStopRecording,
 /// discardRecording and cancelCountIn (GuitarCam/src/App.tsx) with the record buttons of TransportBar.tsx.
-/// Same as the web except: there is no camera yet, so the take is audio only (the web refuses to record
-/// without one), and the count-in, click and capture run on the ASIO clock inside <see cref="Audio.PlaybackEngine"/>.
+/// The camera's video records next to the WAV (<see cref="VideoTakeWriter"/>, its frames counted from the
+/// audio's first sample) with the camera latency and the mirror of the moment. Same as the web except: without
+/// a camera (or with one that sends nothing) the take is audio only (the web refuses to record without one),
+/// and the count-in, click and capture run on the ASIO clock inside <see cref="Audio.PlaybackEngine"/>.
 /// A journal is written before the first sample and removed only after the project with the take is
-/// saved, so if the program dies mid-take the next open recovers it (<see cref="ProjectStore.BeginRecording"/>).
+/// saved, so if the program dies mid-take the next open recovers it (<see cref="ProjectStore.BeginRecording"/>);
+/// the video survives too, because FFmpeg closes its file when the pipe ends.
 /// </summary>
 public partial class MainWindow
 {
     ProjectStore.RecordingJournal? recJournal;
+    VideoTakeWriter? recVideo;
+    CameraCapture? recCamera;
     int recTakeNumber;
     bool recFirstTake;
     bool recStopping;
@@ -55,15 +60,20 @@ public partial class MainWindow
         recFirstTake = TakeRecording.IsFirstTake(p);
         double syncMs = TakeRecorder.ComputeSyncMs(recFirstTake, countIn, engine.ClickOn, OverdubOffsetMs, engine.GetLatencyInfo().AppliedMs);
         var id = Ids.New("med");
+        var cam = camera.Capture is { HasSignal: true } c ? c : null;
         var j = new ProjectStore.RecordingJournal
         {
             MediaId = id,
             Name = TakeRecording.TakeName(p, target),
             Audio = $"{ProjectStore.MediaDir}/{id}.wav",
+            Video = cam != null ? $"{ProjectStore.MediaDir}/{id}.mp4" : null,
             TrackId = target?.Id,
             AtSec = syncMs / 1000,
             SyncMs = syncMs,
+            VideoOffsetMs = camera.LatencyMs,
+            Mirror = camera.Mirror,
         };
+        string? notice = camera.Capture != null && cam == null ? "La cámara no manda imagen: esta toma va a ser solo audio." : null;
         try
         {
             store.BeginRecording(j);
@@ -75,10 +85,25 @@ public partial class MainWindow
             Status($"No pude empezar a grabar: {e.Message}");
             return;
         }
+        if (cam != null)
+        {
+            try
+            {
+                var w = VideoTakeWriter.Start(store.Resolve(j.Video)!, cam.Width, cam.Height, () => engine.RecordingStartTimestamp);
+                cam.Attach(w);
+                (recVideo, recCamera) = (w, cam);
+            }
+            catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
+            {
+                j.Video = null;
+                try { store.BeginRecording(j); } catch (IOException) { }
+                notice = $"No pude grabar el video ({e.Message}): esta toma va a ser solo audio.";
+            }
+        }
         recJournal = j;
         recTakeNumber = TakeRecording.NextTakeNumber(p);
         Timeline.RecordingLane = target == null ? tracks.Count : p.Tracks.IndexOf(target);
-        Status("");
+        Status(notice ?? "");
         RefreshRecording();
     }
 
@@ -92,10 +117,23 @@ public partial class MainWindow
         recStopping = true;
         var st = store;
         bool first = recFirstTake;
+        var video = recVideo;
+        recVideo?.StopTaking();
+        recCamera?.Attach(null);
+        (recVideo, recCamera) = (null, null);
         RecordedTakeResult? res = null;
+        VideoTakeResult? vres = null;
         try
         {
-            res = await Task.Run(() => engine.StopRecording(discard, OverdubOffsetMs, first));
+            (res, vres) = await Task.Run(() =>
+            {
+                var r = engine.StopRecording(discard, OverdubOffsetMs, first);
+                if (video == null) return (r, null);
+                if (r == null) video.Discard();
+                var v = r == null ? null : video.Finish(r.DurationSec);
+                video.Dispose();
+                return (r, v);
+            });
         }
         catch (Exception e)
         {
@@ -115,7 +153,10 @@ public partial class MainWindow
         {
             string? problem = engine.RecordingError is { } err ? $"Hubo un problema escribiendo la toma en disco: {err}"
                 : engine.RecordingDroppedFrames > 0 ? $"Se perdieron {engine.RecordingDroppedFrames * 1000.0 / Audio.PlaybackEngine.SampleRate:0} ms de audio en la toma (el disco no dio abasto)"
+                : vres?.Error is { } verr ? $"Hubo un problema grabando el video: {verr}"
+                : video != null && res != null && vres == null ? "No llegó imagen de la cámara: la toma quedó solo audio."
                 : null;
+            if (vres == null) j.Video = null;
             if (res == null)
             {
                 st.EndRecording(j.MediaId);

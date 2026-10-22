@@ -22,6 +22,9 @@ Laboratorio para ver si GuitarCam Studio se puede pasar a .NET nativo. Corre al 
   - `Mp4Exporter.cs`: la exportación a MP4 (el `filter_complex` de FFmpeg de `server/index.js`, con el
     color de `colorGrade.js` y los efectos de `videoFx.js`, progreso, cancelación y `.part`)
   - `ClickSynth.cs`: los 6 sonidos de click de `clickSounds.ts`
+  - `CameraCapture.cs`: la cámara en vivo (DirectShow o DroidCam por IP) leída con FFmpeg, para el
+    monitor "En vivo" y la grabación; `VideoTakeWriter.cs`: el video de la toma (H.264 en MP4, 30 fps,
+    keyframe cada 1 s, MP4 fragmentado mientras graba para que un corte no lo pierda)
   - `AsioDuplex.cs`: entrada y salida ASIO en un mismo callback (NAudio)
 - `src/GuitarCam.Projects`: el proyecto nativo (`guitarcam.json`: medios, pistas, clips), guardado atómico,
   historial, recuperación de grabaciones e importador de proyectos de la web
@@ -29,9 +32,11 @@ Laboratorio para ver si GuitarCam Studio se puede pasar a .NET nativo. Corre al 
 - `src/GuitarCam.App`: la ventana (Avalonia). Arranca en el gestor "Proyectos" (como `SessionPicker`
   de la web: lista, buscador, nuevo con plantilla, renombrar, duplicar, Papelera, abrir carpeta,
   importar de la web), salvo que reciba una carpeta por línea de comandos; el chip del proyecto lo
-  vuelve a abrir. Timeline, preview e inspector, reproducción por ASIO, autoguardado. El ⚙ abre
-  Configuración: driver ASIO y salida (se recuerdan), canales, ganancia, monitoreo, calibración de
-  latencia y ajuste fino de sincronía.
+  vuelve a abrir. Timeline, preview con el monitor "En vivo" al lado (la cámara cruda y la entrada),
+  inspector, reproducción por ASIO, autoguardado. Las tomas se graban con el video de la cámara. El ⚙
+  abre Configuración: driver ASIO y salida (se recuerdan), canales, ganancia, monitoreo, cámara
+  (dispositivo, resolución, IP DroidCam, espejo), calibración de latencia, ajuste fino de sincronía y
+  latencia de cámara.
   R = grabar (grabando: detener y guardar; en la cuenta: cancelar), Esc = cancelar la cuenta,
   Espacio = play/pausa (grabando: detener y guardar), Inicio = al principio, C = click,
   Shift+C = cuenta, T = tap tempo, M/S = mute/solo, F = ver todo,
@@ -61,10 +66,13 @@ src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe
 | `procesar toma.wav --sat cinta --comp-estilo punteo --eq ritmica --reverb cuarto --delay punteada` | aplica efectos a un WAV (también `--comp-cant`, `--reverb-envio`, `--delay-envio`) |
 | `verificar [toma.wav]` | compara el DSP portado con el de la app web |
 | `click` | escribe todos los clicks a un WAV |
+| `camara [listar]` | las cámaras que ve FFmpeg (DirectShow) y sus formatos; `*` = la que elige la app |
+| `camara grabar [--dispositivo X \| --ip 192.168.1.50:4747] [--resolucion native\|1080p\|720p\|480p] [--segundos 5] [--salida camara.mp4]` | graba el video como una toma y lo revisa con ffprobe (duración, keyframes) |
+| `camara verificar-corte [--dispositivo X]` | corta una grabación a la mitad, matando solo el programa y también FFmpeg, y comprueba que el video quede |
 | `proyecto importar carpeta-web` | pasa un proyecto de la web al formato nativo, en una carpeta nueva |
 | `proyecto abrir carpeta` | abre un proyecto nativo y muestra pistas, avisos e historial |
-| `proyecto toma carpeta [--segundos 3] [--pista id]` | graba un tono como la ventana: a qué pista va, nombre, canal, guardado y diario |
-| `proyecto cortar carpeta` | graba un tono y corta sin cerrar, para probar la recuperación |
+| `proyecto toma carpeta [--segundos 3] [--pista id] [--camara]` | graba un tono como la ventana: a qué pista va, nombre, canal, guardado y diario; con `--camara`, también el video |
+| `proyecto cortar carpeta [--camara]` | graba un tono (y el video) y corta sin cerrar, para probar la recuperación |
 | `proyecto versiones carpeta` / `proyecto volver carpeta n` | las versiones guardadas en `historial/` (1 = la más nueva) / vuelve a una (lo de antes queda en el historial) |
 | `proyecto verificar-deshacer` / `proyecto verificar-clips` / `proyecto verificar-tomas` | pruebas de deshacer/rehacer, de edición de clips y de dónde cae una toma nueva, sin tocar archivos |
 | `proyecto clips carpeta` | lista pistas y clips |

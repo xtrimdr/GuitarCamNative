@@ -78,9 +78,11 @@ Lo hicieron los agentes y compila con 0/0 y pasa sus pruebas de `gclab`, pero el
 lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](docs/COORDINACION.md)
 ("Para retomar"). Al aprobarlo, pasa a **Hecho** y se marca en MIGRACION.
 
-- A5 · transporte y tempo (`MainWindow.Transport.cs`, `Controls/TempoControl.cs`): implementado, con la
-  escucha del click (`PreviewClick`); falta la prueba a mano en la ventana: Detener, play/pausa, loop,
-  reloj, tempo (arrastre, rueda, doble clic, TAP), Cuenta y el menú del click (que se escuche)
+- A5 · transporte y tempo (`MainWindow.Transport.cs`, `Controls/TempoControl.cs`): probado a mano el
+  2026-10-22 (sin mouse, por UI Automation): play/pausa, Detener (vuelve a donde arrancó), loop prendido y
+  apagado, reloj (compases ↔ minutos), TAP, la cuenta y Esc. Se arregló que cambiar el tempo dejaba un
+  paso de deshacer vacío. Falta: el tempo con el mouse (arrastre, rueda, doble clic) y escuchar el menú
+  del click; la calibración desde Configuración con cable o tocando (necesita el cable o la guitarra)
 - B6 · el diálogo de exportación ya se abre con "Exportar MP4"; falta la captura lado a lado con la web
 
 ## Notas
@@ -98,8 +100,22 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
   una pasada contra un `OfflineAudioContext` de verdad en Chromium para confirmarlos.
 - Sin probar todavía: saltos para atrás en el video mientras reproduce (reinicia FFmpeg en ese punto)
   y cuántos cuadros por segundo llegan de verdad con muchas tomas.
+- Cámara: mientras la app está abierta, la cámara queda tomada (como en la web), así que otro programa no
+  la puede usar. Si se desconecta, el monitor dice "Sin señal de cámara" y no se reconecta sola: hay que
+  tocar "Refrescar dispositivos".
 
 ## Hecho
+
+- 2026-10-22: cámara (§11 de MIGRACION) y monitor "En vivo" (§1.5): `CameraCapture.cs` (DirectShow por
+  FFmpeg, la elección de cámara de la web, resolución con sus alternativas, DroidCam por IP) y
+  `VideoTakeWriter.cs` (H.264 8 Mbps, keyframe cada 1 s, 30 fps contados desde la primera muestra de
+  audio, MP4 fragmentado mientras graba y con el índice adelante al terminar). La toma guarda
+  `media/{id}.mp4` con la latencia de cámara y el espejo; el diario lo recupera. Pestaña Cámara y
+  "Latencia de cámara" de Configuración prendidas (`Video/LiveCamera.cs`), monitor en
+  `Controls/LiveMonitor.cs`. `gclab camara listar|grabar|verificar-corte`, `proyecto toma|cortar --camara`.
+  Probado con la Smart Connect Camera (1280×720) sin el celular conectado (imagen de espera): toma de
+  3,4 s con video en la ventana, cuenta cancelada con Esc sin archivos, y los cortes. Sin probar:
+  DroidCam por IP (no hay celular en la red) y una cámara que ofrezca 1080p.
 
 - 2026-10-22: Configuración (§7 de MIGRACION): `Dialogs/SettingsDialog.axaml(.cs)` desde el ⚙, con
   Entradas y salidas (driver ASIO, medidor, canales, ganancia, par de salida, monitoreo), Sincronización

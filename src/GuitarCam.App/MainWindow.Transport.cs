@@ -13,7 +13,7 @@ namespace GuitarCam.App;
 
 /// <summary>Port of TransportBar.tsx and App.tsx transport actions. Native difference: Mixer remains
 /// pending. The click menu auditions through <see cref="PlaybackEngine.PreviewClick"/>. View preferences and
-/// click settings belong to the app, while tempo belongs to the project and its undo snapshots.</summary>
+/// click settings belong to the app, while tempo belongs to the project (outside undo, like the web).</summary>
 public partial class MainWindow
 {
     readonly HashSet<Key> transportKeys = [];
@@ -48,13 +48,13 @@ public partial class MainWindow
     void SetTempo(double value)
     {
         if (store == null || store.ReadOnly || restoring || store.Project.Settings.Bpm == value) return;
-        undo.Checkpoint(store.Project, "tempo");
+        // no undo step: the tempo stays outside the snapshots, like the web's setBpm
         store.Project.Settings.Bpm = value;
         engine.Bpm = value;
         Timeline.Bpm = value;
         Tempo.Set(value);
         Timeline.InvalidateVisual();
-        MarkDirty(); UpdateUndoButtons();
+        MarkDirty();
     }
 
     void BuildClickMenu()

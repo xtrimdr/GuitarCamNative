@@ -352,6 +352,8 @@ public sealed class ProjectStore : IDisposable
         public double AtSec { get; set; }
         public double SyncMs { get; set; }
         public double VideoOffsetMs { get; set; } = 80;
+        /// <summary>"Espejar imagen en vivo" when the take started: the clip shows mirrored, like the monitor.</summary>
+        public bool Mirror { get; set; }
         public DateTime StartedAt { get; set; } = DateTime.UtcNow;
     }
 
@@ -412,7 +414,9 @@ public sealed class ProjectStore : IDisposable
                 File.Delete(jf);
                 continue;
             }
-            string? video = Resolve(j.Video) is { } v && File.Exists(v) ? j.Video : null;
+            string? video = Resolve(j.Video) is { } v && File.Exists(v) && new FileInfo(v).Length > 0 ? j.Video : null;
+            // the camera's fragmented MP4 plays as it is; with the index up front it opens and seeks faster
+            if (video != null) Audio.VideoTakeWriter.Faststart(Resolve(video)!);
             var m = new Media
             {
                 Id = j.MediaId,
@@ -434,7 +438,7 @@ public sealed class ProjectStore : IDisposable
                 track = new Track { Name = j.Name, Video = video != null };
                 Project.Tracks.Add(track);
             }
-            track.Clips.Add(new Clip { MediaId = m.Id, AtSec = j.AtSec });
+            track.Clips.Add(new Clip { MediaId = m.Id, AtSec = j.AtSec, Framing = new Framing { Mirror = j.Mirror && video != null } });
             Project.AddLog("recording-recovered", j.Name);
             Notices.Add($"Recuperé la grabación interrumpida \"{j.Name}\" ({info.DurationSec:0.0} s)");
             done.Add(jf);

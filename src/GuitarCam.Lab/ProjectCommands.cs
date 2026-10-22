@@ -26,8 +26,8 @@ static class ProjectCommands
             "editar" => EditClips(dir, a),
             "encuadre" => Frame(dir, a),
             "sincronia" => Sync(dir, a),
-            "cortar" => Crash(dir, a.Double("segundos", 3)),
-            "toma" => RecordTake(dir, a.Double("segundos", 3), a.Get("pista")),
+            "cortar" => Crash(dir, a.Double("segundos", 3), a.Flag("camara")),
+            "toma" => RecordTake(dir, a.Double("segundos", 3), a.Get("pista"), a.Flag("camara")),
             _ => throw new ArgumentException("proyecto importar|abrir|versiones|volver|cortar <carpeta>"),
         };
     }
@@ -195,7 +195,41 @@ static class ProjectCommands
     /// Records a test tone the way the window does (journal, WAV, take into the project, save, journal off),
     /// to try where a take lands without the window. --pista plays the selected track.
     /// </summary>
-    static int RecordTake(string dir, double seconds, string? selected)
+    /// <summary>Opens the app's camera and starts its video for a take (gclab --camara).</summary>
+    static (CameraCapture Cam, VideoTakeWriter Writer) StartVideo(ProjectStore store, ProjectStore.RecordingJournal j, long start)
+    {
+        var cam = CameraCapture.Open(new CameraSource(CameraDevices.Pick(CameraDevices.List(), null)));
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while ((cam.Opening || !cam.HasSignal) && cam.Error == null && sw.Elapsed.TotalSeconds < 15) Thread.Sleep(50);
+        if (!cam.HasSignal)
+        {
+            cam.Dispose();
+            throw new InvalidOperationException(cam.Error ?? "La cámara no mandó imagen.");
+        }
+        var w = VideoTakeWriter.Start(store.Resolve(j.Video)!, cam.Width, cam.Height, () => start);
+        cam.Attach(w);
+        return (cam, w);
+    }
+
+    /// <summary>A 220 Hz tone, written in real time when a camera records along (so the video has its length).</summary>
+    static long WriteTone(RecordingWriter w, double seconds, bool realTime, long start)
+    {
+        const int sr = 48000;
+        long frames = (long)(seconds * sr);
+        var l = new float[480];
+        var r = new float[480];
+        long f = 0;
+        while (f < frames)
+        {
+            if (realTime)
+                while (System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalSeconds * sr < f) Thread.Sleep(2);
+            for (int i = 0; i < l.Length; i++, f++) l[i] = r[i] = 0.25f * MathF.Sin(2 * MathF.PI * 220 * f / sr);
+            w.Append(l, r);
+        }
+        return f;
+    }
+
+    static int RecordTake(string dir, double seconds, string? selected, bool camera)
     {
         using var store = ProjectStore.Open(dir);
         if (store.ReadOnly) throw new InvalidOperationException(store.ReadOnlyReason);
@@ -209,19 +243,25 @@ static class ProjectCommands
             MediaId = id,
             Name = TakeRecording.TakeName(p, target),
             Audio = $"{ProjectStore.MediaDir}/{id}.wav",
+            Video = camera ? $"{ProjectStore.MediaDir}/{id}.mp4" : null,
             TrackId = target?.Id,
         };
         store.BeginRecording(j);
-        long frames = (long)(seconds * sr);
+        long start = System.Diagnostics.Stopwatch.GetTimestamp();
+        var video = camera ? StartVideo(store, j, start) : default;
+        long frames;
         using (var w = new RecordingWriter(store.Resolve(j.Audio)!, sr))
+            frames = WriteTone(w, seconds, camera, start);
+        VideoTakeResult? vres = null;
+        if (camera)
         {
-            var l = new float[480];
-            var r = new float[480];
-            for (long f = 0; f < frames;)
-            {
-                for (int i = 0; i < l.Length; i++, f++) l[i] = r[i] = 0.25f * MathF.Sin(2 * MathF.PI * 220 * f / sr);
-                w.Append(l, r);
-            }
+            video.Writer.StopTaking();
+            video.Cam.Dispose();
+            if (seconds <= TakeRecording.MinTakeSec) video.Writer.Discard();
+            else vres = video.Writer.Finish(frames / (double)sr);
+            video.Writer.Dispose();
+            if (vres == null) j.Video = null;
+            else Console.WriteLine($"Video: {vres.Frames} cuadros · repetidos {vres.Duplicated} · descartados {vres.Dropped}");
         }
         if (seconds <= TakeRecording.MinTakeSec)
         {
@@ -233,37 +273,33 @@ static class ProjectCommands
         var track = TakeRecording.AddTake(p, j, frames / (double)sr, sr, 2, number);
         store.Save();
         store.EndRecording(id);
-        Console.WriteLine($"\"{j.Name}\" ({seconds:0.0} s) en la pista {p.Tracks.IndexOf(track) + 1}{(target == null ? " (nueva)" : "")} · compresor {(track.Channel.Comp.On ? track.Channel.Comp.Preset : "apagado")}");
+        Console.WriteLine($"\"{j.Name}\" ({seconds:0.0} s) en la pista {p.Tracks.IndexOf(track) + 1}{(target == null ? " (nueva)" : "")} · compresor {(track.Channel.Comp.On ? track.Channel.Comp.Preset : "apagado")}{(j.Video != null ? " · con video" : "")}");
         return 0;
     }
 
     /// <summary>Records a test tone like the app will and dies before finishing, to try the recovery.</summary>
-    static int Crash(string dir, double seconds)
+    static int Crash(string dir, double seconds, bool camera)
     {
         var store = ProjectStore.Open(dir);
         if (store.ReadOnly) throw new InvalidOperationException(store.ReadOnlyReason);
         const int sr = 48000;
         var id = Ids.New("med");
         string rel = $"{ProjectStore.MediaDir}/{id}.wav";
-        store.BeginRecording(new ProjectStore.RecordingJournal
+        var j = new ProjectStore.RecordingJournal
         {
             MediaId = id,
             Name = "Prueba de corte",
             Audio = rel,
+            Video = camera ? $"{ProjectStore.MediaDir}/{id}.mp4" : null,
             TrackId = store.Project.Tracks.FirstOrDefault(t => t.Clips.Count == 0)?.Id,
             AtSec = 0,
-        });
+        };
+        store.BeginRecording(j);
+        long start = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (camera) StartVideo(store, j, start);
         var w = new RecordingWriter(store.Resolve(rel)!, sr) { CheckpointSec = 0.5 };
-        var l = new float[480];
-        var r = new float[480];
-        long f = 0;
-        for (int b = 0; b < seconds * sr / l.Length; b++)
-        {
-            for (int i = 0; i < l.Length; i++, f++) l[i] = r[i] = 0.25f * MathF.Sin(2 * MathF.PI * 220 * f / sr);
-            w.Append(l, r);
-        }
-        // a few blocks after the last checkpoint, then the "crash": no Dispose, no save
-        for (int b = 0; b < 20; b++) w.Append(l, r);
+        // a few blocks after the last checkpoint, then the "crash": no Dispose, no save (the camera's FFmpeg is left orphaned)
+        long f = WriteTone(w, seconds + 0.2, camera, start);
         Console.WriteLine($"Grabé {f / (double)sr:0.0} s y corté sin cerrar el archivo. Abrilo con: gclab proyecto abrir \"{dir}\"");
         Environment.Exit(3);
         return 3;

@@ -71,10 +71,14 @@ lo que es del proyecto, a la derecha.
   se ve en el monitor "En vivo"", "Cargando video…" ✗.
 - La cámara en vivo **nunca** entra en la composición: va al monitor.
 
-### 1.5 Monitor en vivo ✗
+### 1.5 Monitor en vivo ✅
 Al lado del escenario: la cámara cruda (sin composición), el dispositivo de entrada y el medidor
 estéreo. Se pone rojo mientras graba. Mensajes: "Listo para grabar", "Sin señal de cámara / Elegila en
 Configuración"; botón "Configurar entradas".
+- Nativa: `Controls/LiveMonitor.cs`, con los mismos textos, "Cuenta n/4" y "GRABANDO mm:ss.s".
+  Diferencias: sin el punto que late ni el brillo rojo animado alrededor del cuadro (la nativa no tiene
+  animaciones decorativas; quedan los colores y el borde), y el medidor de entrada sigue también en la
+  barra de transporte (en la web, en pantallas anchas, solo está en el monitor).
 
 ### 1.6 Barra de transporte ◐
 - **Grabar** (R): botón con destino "→ Nombre de la pista" o "→ pista nueva". Durante la cuenta:
@@ -258,7 +262,7 @@ directa) → retorno → master.
   en la captura ✅ (motor, verificado); medidor de entrada con pico retenido y luz de clip ◐ (medidor sí).
 - **Monitoreo por software** opcional (para interfaces sin monitoreo directo) ◐ (motor sí; falta la opción en Configuración).
 
-### 5.8 Grabación ✅ (solo audio: falta la cámara, §11)
+### 5.8 Grabación ✅
 Todo programado sobre un mismo reloj de audio: pistas de fondo, click, cuenta de 4 y el comienzo de la
 grabación caen en el mismo cuadro. La toma nueva:
 - Llena la pista vacía seleccionada; si no, la siguiente vacía después de la seleccionada; si no hay,
@@ -272,9 +276,10 @@ grabación caen en el mismo cuadro. La toma nueva:
   cerrar la app grabando conserva la toma; errores de disco y muestras perdidas a la vista), con
   `RecordingWriter` y el diario `*.grabando.json` ✅. Flujo en la ventana ✅ (`MainWindow.Recording.cs`,
   `TakeRecording.cs`, `gclab proyecto toma` / `verificar-tomas`): R, cuenta, destino, nombre, canal,
-  descarte, deshacer, cerrar la ventana grabando guarda la toma. Diferencia: sin cámara la toma es solo
-  audio y una pista nueva no ocupa panel (la web no deja grabar sin cámara). Sin Configuración todavía,
-  el ajuste fino de sincronía vale 0 (el valor por defecto de la web).
+  descarte, deshacer, cerrar la ventana grabando guarda la toma. Con cámara, el video va al lado
+  (`media/{id}.mp4`, §11) con la latencia de cámara y el espejo del momento. Diferencia: sin cámara (o si
+  no manda imagen, con aviso) la toma es solo audio y una pista nueva no ocupa panel (la web no deja
+  grabar sin cámara).
 - **Sincronía por toma**: en la nativa, cada clip puede tener su propio ajuste de sincronía y de latencia de
   cámara (`Clip.SyncMs` / `VideoOffsetMs`, si faltan valen los de la grabación); entra en deshacer, como en la web ✅.
 
@@ -306,7 +311,7 @@ Pestaña **Color** de la barra derecha, secciones Plantillas / Filtro / Ajustes 
 
 ---
 
-## 7. Configuración (`SettingsDialog`) ◐ (entradas, salidas y sincronización ✅; cámara ✗)
+## 7. Configuración (`SettingsDialog`) ✅ (falta el botón del panel del driver)
 
 Diálogo de ajustes del programa (no del proyecto), con los atajos apagados mientras está abierto.
 - **Entradas y salidas**: interfaz (refrescar dispositivos), canales (Estéreo: Input 1 → L, Input 2 → R;
@@ -321,8 +326,9 @@ Diálogo de ajustes del programa (no del proyecto), con los atajos apagados mien
   web. Diferencias: "Interfaz" lista los drivers ASIO y "Dispositivo" los pares de salida del driver (no
   hay "Predeterminada de Windows"); donde la web dice "navegador" dice "driver"; driver y salida se
   recuerdan (`audio.driver`, `audio.outputOffset` en `config.json`), el resto vive en memoria como en la
-  web. La pestaña Cámara y "Latencia de cámara" están con la misma forma pero apagadas hasta que esté la
-  cámara (§11). Falta el botón del panel del driver (tamaño de buffer, hoy `gclab panel`).
+  web. Cámara: la lista es la de DirectShow por FFmpeg (`Video/LiveCamera.cs`); como en la web, la cámara,
+  la resolución, la IP, el espejo y la latencia de cámara viven en memoria y al abrir se vuelve a elegir
+  la cámara por la preferencia de la web. Falta el botón del panel del driver (tamaño de buffer, hoy `gclab panel`).
 
 ---
 
@@ -381,9 +387,14 @@ Los atajos no corren mientras se escribe en un campo ni con Configuración abier
 
 ## 11. Otros
 
-- **Cámara IP (DroidCam)**: el MJPEG se lee, se dibuja en un lienzo y de ahí se graba ✗.
+- **Cámara IP (DroidCam)**: el MJPEG se lee, se dibuja en un lienzo y de ahí se graba ✅ (FFmpeg lee
+  `http://IP:4747/video`, la misma dirección que arma el proxy de la web; sin probar con un celular).
 - **Grabación de video**: H.264 en MP4 cuando se puede (lo decodifica la GPU), keyframe cada 1 s para
-  que el scrub no se trabe, 8 Mbps ✗.
+  que el scrub no se trabe, 8 Mbps ✅ (`CameraCapture.cs` + `VideoTakeWriter.cs`). Diferencias: un solo
+  FFmpeg lee la cámara para el monitor y la toma; el video arranca en la muestra exacta en que arranca el
+  audio (la web lo arranca con un temporizador) y cada cuadro cae en el lugar que dice su hora de llegada,
+  así no se corre aunque la cámara vaya a 29,97; mientras graba es MP4 fragmentado, así un corte no lo
+  pierde.
 - **Video al reproducir y al mover el cabezal**: cada toma sigue al cabezal ✅ (decodificador FFmpeg).
 - **Miniaturas** de la tira de video, generadas y cacheadas por toma ✗.
 - **Selector de carpetas moderno de Windows** y "Mostrar en el Explorador" trayendo la ventana al frente ✗.

@@ -25,6 +25,7 @@ static class Program
                 "exportar" => DspCommands.Export(a),
                 "verificar" => DspCommands.Verify(a),
                 "click" => DspCommands.Click(a),
+                "camara" => CameraCommands.Run(a),
                 "proyecto" => ProjectCommands.Run(a),
                 "proyectos" => LibraryCommands.Run(a),
                 _ => Help(),
@@ -64,6 +65,12 @@ static class Program
               verificar [entrada.wav]      compara el DSP portado con los worklets de la app web (necesita Node)
               click     [--salida clicks.wav] [--bpm 100]
                                            escribe todos los sonidos de click a un WAV para escucharlos
+              camara    [listar]           lista las cámaras (DirectShow) y sus formatos; * = la que elige la app
+              camara grabar [--dispositivo X | --ip 192.168.1.50:4747] [--resolucion native|1080p|720p|480p]
+                        [--segundos 5] [--salida camara.mp4]
+                                           graba el video como una toma (H.264, 30 fps, keyframe cada 1 s)
+              camara verificar-corte [--dispositivo X]
+                                           corta una grabación a la mitad (con y sin FFmpeg) y comprueba que el video quede
               proyecto importar carpeta-web [--destino X]
                                            pasa un proyecto de la app web al formato nativo (no toca el original)
               proyecto abrir    carpeta    abre un proyecto nativo y muestra pistas, avisos e historial
@@ -80,10 +87,11 @@ static class Program
               proyecto editar carpeta inicio|fijar-corte|restaurar|quitar-clip clip | quitar-pista pista
               proyecto editar carpeta nueva-pista | agregar-toma medio [--pista pista]
               proyecto verificar-tomas     verifica a qué pista va una toma nueva, su nombre y su canal
-              proyecto toma     carpeta [--segundos 3] [--pista id]
-                                           graba un tono como la ventana (--pista: la pista seleccionada)
-              proyecto cortar   carpeta [--segundos 3]
-                                           graba un tono y corta sin cerrar, para probar la recuperación
+              proyecto toma     carpeta [--segundos 3] [--pista id] [--camara]
+                                           graba un tono como la ventana (--pista: la pista seleccionada;
+                                           --camara: con el video de la cámara que elige la app)
+              proyecto cortar   carpeta [--segundos 3] [--camara]
+                                           graba un tono (y el video) y corta sin cerrar, para probar la recuperación
               proyectos lista|plantillas [--raiz X]
               proyectos nuevo "Nombre" [--plantilla id] | renombrar carpeta "Nombre" | duplicar carpeta
               proyectos borrar carpeta | guardar-plantilla carpeta "Nombre"
