@@ -9,6 +9,8 @@ public sealed class MasterLimiter
     public const double LookaheadSec = 0.003;
     public const double CeilingDb = -0.3;
 
+    public static int LookaheadSamples(int sampleRate) => (int)Math.Round(LookaheadSec * sampleRate);
+
     readonly int N;
     readonly double ceiling;
     readonly float[] bufL, bufR, req;

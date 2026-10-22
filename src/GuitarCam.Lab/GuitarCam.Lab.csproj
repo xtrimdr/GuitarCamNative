@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\GuitarCam.Audio\GuitarCam.Audio.csproj" />
+    <ProjectReference Include="..\GuitarCam.Projects\GuitarCam.Projects.csproj" />
   </ItemGroup>
 
 </Project>

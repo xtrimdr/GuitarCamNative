@@ -3,5 +3,6 @@
     <Project Path="src/GuitarCam.App/GuitarCam.App.csproj" />
     <Project Path="src/GuitarCam.Audio/GuitarCam.Audio.csproj" />
     <Project Path="src/GuitarCam.Lab/GuitarCam.Lab.csproj" />
+    <Project Path="src/GuitarCam.Projects/GuitarCam.Projects.csproj" />
   </Folder>
 </Solution>

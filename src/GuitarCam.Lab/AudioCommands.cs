@@ -48,102 +48,200 @@ static class AudioCommands
     }
 
     /// <summary>
-    /// Loopback: plays seeded noise bursts and finds them in the input by cross-correlation (like the web
-    /// app's loopback calibration). In and out run on one callback, so the result is the true round trip.
+    /// Exercises <see cref="LatencyCalibration"/> and <see cref="CalibrationSession"/> (<c>loopback</c> or <c>tap</c>).
+    /// Supports <c>--modo cable|tocando</c>, <c>--ver</c>, <c>--borrar</c>, <c>--datos</c>, and <c>--simular &lt;ms&gt;</c>.
     /// </summary>
     public static int Latency(Args a)
     {
-        var driver = AsioDuplex.PickDriver(a.Get("driver"));
         int sr = a.Int("sr", 48000);
         int inCh = a.Int("entrada", 1) - 1;
         int outCh = a.Int("salida", 1) - 1;
-        const int pulses = 10;
-        const int burstLen = 2048;
-        int period = sr / 2;
-        int start = sr * 3 / 10;
-        int total = start + pulses * period + sr / 2;
+        string? dataDir = a.Get("datos");
+        var method = LatencyCalibration.ParseMethod(a.Get("modo", "cable"));
+        string outKey = $"{inCh}:{outCh}";
 
-        var burst = new float[burstLen];
-        uint s = 0x1234567;
-        for (int i = 0; i < burstLen; i++)
+        if (a.Flag("borrar"))
         {
-            s ^= s << 13;
-            s ^= s >> 17;
-            s ^= s << 5;
-            double hann = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / (burstLen - 1));
-            burst[i] = (float)((s / (double)uint.MaxValue * 2 - 1) * 0.5 * hann);
+            string dev = a.Get("driver") ?? TryPickDriver() ?? "ASIO";
+            LatencyCalibration.WriteCalibration(dev, outKey, null, dataDir);
+            Console.WriteLine($"Medición descartada para {dev} ({outKey}). Se vuelve a usar la latencia informada por el driver.");
+            return 0;
         }
 
-        var rec = new float[total];
-        long frame = 0;
+        if (a.Flag("ver"))
+        {
+            string dev = a.Get("driver") ?? TryPickDriver() ?? "ASIO";
+            var stored = LatencyCalibration.ReadCalibration(dev, outKey, dataDir);
+            if (stored == null)
+            {
+                Console.WriteLine($"Sin calibración guardada para {dev} ({outKey}).");
+                return 0;
+            }
+            double est = a.Double("estimada", stored.EstimateMs);
+            bool stale = LatencyCalibration.IsCalibrationStale(stored, est, sr);
+            Console.WriteLine($"Calibración guardada ({dev} · {outKey}): {stored.LatencyMs:0.0} ms ± {stored.SpreadMs:0.0} ms · modo {stored.Method} · {stored.SampleRate} Hz{(stale ? " · ¡DESACTUALIZADA!" : "")}");
+            return 0;
+        }
+
+        int lookahead = (int)Math.Round(MasterLimiter.LookaheadSec * sr);
+
+        if (a.Get("simular") != null)
+        {
+            double simMs = a.Double("simular", 12.5);
+            string simDev = a.Get("driver", "Simulado");
+            var simSession = new CalibrationSession(method, sr, lookahead);
+            SimulateCalibration(simSession, method, simMs, sr, lookahead);
+            var simRes = simSession.Analyze();
+            if (simRes == null)
+            {
+                Console.WriteLine("Falló la calibración simulada.");
+                return 2;
+            }
+            SaveAndPrintResult(simRes.Value, simDev, outKey, 15.0, sr, dataDir, !a.Flag("no-guardar"));
+            return 0;
+        }
+
+        var driver = AsioDuplex.PickDriver(a.Get("driver"));
+        var session = new CalibrationSession(method, sr, lookahead);
+        var inProc = new InputProcessor { InputGainDb = a.Double("ganancia", InputProcessor.DefaultInputGainDb) };
+        var procL = new float[8192];
+        var procR = new float[8192];
         using var done = new ManualResetEventSlim();
-        Console.WriteLine("Conectá un cable de la salida a la entrada (o poné un micrófono frente al parlante) y bajá el monitoreo directo.");
+
+        Console.WriteLine(method == CalibrationMethod.Loopback
+            ? "Conectá un cable de la salida a la entrada (o poné un micrófono frente al parlante) y bajá el monitoreo directo."
+            : $"Tocá una nota corta y apagada en cada click después de los {LatencyCalibration.TapCountIn} tiempos de cuenta ({LatencyCalibration.TapBpm:0} BPM).");
+
         using var io = new AsioDuplex(driver, sr, inCh, 1, outCh, (input, output, n) =>
         {
-            long f0 = frame;
-            for (int i = 0; i < n; i++)
+            if (n <= procL.Length)
             {
-                long f = f0 + i;
-                if (f < total) rec[f] = input[0][i];
-                long k = f - start;
-                if (k >= 0 && k / period < pulses && k % period < burstLen)
-                    output[0][i] = output[1][i] = burst[k % period];
+                inProc.Process(input[0].AsSpan(0, n), input[0].AsSpan(0, n), procL.AsSpan(0, n), procR.AsSpan(0, n), out _, out _, out _);
+                session.ProcessBlock(procL.AsSpan(0, n), procR.AsSpan(0, n), output[0].AsSpan(0, n), output[1].AsSpan(0, n), n);
             }
-            frame = f0 + n;
-            if (frame >= total) done.Set();
+            if (session.IsFinished) done.Set();
         });
+
         io.Start();
         WaitStarted(io);
-        done.Wait(TimeSpan.FromSeconds(total / (double)sr + 5));
-        io.Stop();
-        if (io.Error != null) throw io.Error;
         PrintStream(io);
 
-        int maxLag = sr / 4;
-        double eb = burst.Sum(v => (double)v * v);
-        var lags = new List<int>();
-        var scores = new List<double>();
-        for (int p = 0; p < pulses; p++)
+        while (!done.Wait(40))
         {
-            int e = start + p * period;
-            double best = 0;
-            int bestLag = 0;
-            for (int lag = 0; lag < maxLag && e + lag + burstLen <= total; lag++)
+            if (session.GetProgress() is { } p)
             {
-                double c = 0, er = 0;
-                for (int j = 0; j < burstLen; j++)
-                {
-                    double x = rec[e + lag + j];
-                    c += burst[j] * x;
-                    er += x * x;
-                }
-                double score = er > 0 ? Math.Abs(c) / Math.Sqrt(eb * er) : 0;
-                if (score > best)
-                {
-                    best = score;
-                    bestLag = lag;
-                }
+                string label = p.CountIn
+                    ? $"Cuenta… {p.Step}"
+                    : method == CalibrationMethod.Loopback
+                        ? $"Pulso {p.Step}/{p.Total}"
+                        : $"Golpe {p.Step}/{p.Total}";
+                Console.Write($"\r  {label,-24}");
             }
-            lags.Add(bestLag);
-            scores.Add(best);
+            if (io.Error != null) break;
         }
-        lags.Sort();
-        double median = lags[lags.Count / 2];
-        double quality = scores.Average();
+        io.Stop();
         Console.WriteLine();
-        if (quality < 0.3)
+        if (io.Error != null) throw io.Error;
+
+        var res = session.Analyze();
+        if (res == null)
         {
-            Console.WriteLine($"No encontré los pulsos en la entrada {inCh + 1} (correlación {quality:0.00}). ¿Está conectado el cable y subida la ganancia?");
+            Console.WriteLine(method == CalibrationMethod.Loopback
+                ? "No volvió la señal. Revisá que el cable vaya de la salida a una entrada de la interfaz (o el micrófono frente al parlante) y que la ganancia no esté al mínimo."
+                : "No detecté suficientes golpes. Tocá una nota corta y apagada en cada click, fuerte y sin dejarla sonar.");
             return 2;
         }
-        Console.WriteLine($"Latencia ida y vuelta: {median} muestras = {1000 * median / sr:0.00} ms");
-        Console.WriteLine($"Dispersión entre pulsos: {lags[^1] - lags[0]} muestras · correlación {quality:0.00}");
+
+        double estMs = Math.Round(((io.ReportedOutputLatency + io.FramesPerBuffer + lookahead) / (double)sr) * 1000.0, 1);
+        SaveAndPrintResult(res.Value, driver, outKey, estMs, sr, dataDir, !a.Flag("no-guardar"));
         return 0;
+    }
+
+    static void SaveAndPrintResult(
+        CalibrationResult res,
+        string driver,
+        string outKey,
+        double estimateMs,
+        int sr,
+        string? dataDir,
+        bool save)
+    {
+        double latMs = Math.Round(res.LatencyMs * 10.0) / 10.0;
+        double sprMs = Math.Round(res.SpreadMs * 10.0) / 10.0;
+        Console.WriteLine($"Latencia ida y vuelta ({LatencyCalibration.MethodToString(res.Method)}): {latMs:0.0} ms ± {sprMs:0.0} ms ({res.Matched}/{res.Total} detectados)");
+        if (save)
+        {
+            var cal = new StoredCalibration
+            {
+                LatencyMs = latMs,
+                SpreadMs = sprMs,
+                Method = LatencyCalibration.MethodToString(res.Method),
+                EstimateMs = estimateMs,
+                SampleRate = sr,
+                At = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            };
+            LatencyCalibration.WriteCalibration(driver, outKey, cal, dataDir);
+        }
+    }
+
+    static void SimulateCalibration(CalibrationSession session, CalibrationMethod method, double totalLatencyMs, int sr, int lookahead)
+    {
+        // Note: session delays output by `lookahead` samples so the measured latency includes `lookahead`.
+        // Therefore, a hardware round-trip of (totalLatencyMs - lookaheadMs) yields `totalLatencyMs` in Analyze().
+        int totalLagSamples = Math.Max(lookahead, (int)Math.Round(totalLatencyMs * sr / 1000.0));
+        int hwLag = totalLagSamples - lookahead;
+        int total = session.TotalFrames;
+        var outL = new float[total];
+        var outR = new float[total];
+        var inL = new float[total];
+        var inR = new float[total];
+
+        if (method == CalibrationMethod.Loopback)
+        {
+            // First pass to capture what the session plays, then feed it back shifted by hwLag.
+            var probe = new CalibrationSession(method, sr, lookahead);
+            probe.ProcessBlock(inL, inR, outL, outR, total);
+            for (int i = 0; i + hwLag < total; i++)
+                inL[i + hwLag] = inR[i + hwLag] = outL[i] * 0.6f;
+        }
+        else
+        {
+            double beatSec = 60.0 / LatencyCalibration.TapBpm;
+            for (int b = LatencyCalibration.TapCountIn; b < LatencyCalibration.TapCountIn + LatencyCalibration.TapBeats; b++)
+            {
+                int clickFrame = (int)Math.Round((CalibrationSession.LeadSec + b * beatSec) * sr);
+                int hitFrame = clickFrame + totalLagSamples;
+                int hitLen = (int)(0.025 * sr);
+                for (int k = 0; k < hitLen && hitFrame + k < total; k++)
+                {
+                    float env = MathF.Exp(-k / (0.005f * sr));
+                    float s = 0.5f * env * MathF.Sin(2f * MathF.PI * 220f * k / sr);
+                    inL[hitFrame + k] = inR[hitFrame + k] = s;
+                }
+            }
+        }
+
+        const int block = 192;
+        for (int pos = 0; pos < total; pos += block)
+        {
+            int n = Math.Min(block, total - pos);
+            session.ProcessBlock(
+                inL.AsSpan(pos, n),
+                inR.AsSpan(pos, n),
+                outL.AsSpan(pos, n),
+                outR.AsSpan(pos, n),
+                n);
+        }
+    }
+
+    static string? TryPickDriver()
+    {
+        try { return AsioDuplex.PickDriver(null); }
+        catch { return null; }
     }
 
     public static int Record(Args a)
     {
-        var driver = AsioDuplex.PickDriver(a.Get("driver"));
         int sr = a.Int("sr", 48000);
         double seconds = a.Double("segundos", 15);
         double bpm = Math.Clamp(a.Double("bpm", 100), 20, 300);
@@ -151,17 +249,62 @@ static class AudioCommands
         var sound = ParseClick(a.Get("click", "madera"));
         double clickDb = a.Double("volumen-click", 0);
         string channel = a.Get("canal", "1").ToLowerInvariant();
+        double gainDb = a.Double("ganancia", InputProcessor.DefaultInputGainDb);
         bool monitor = a.Flag("monitor");
+        bool discard = a.Flag("descartar");
+        double overdubOffsetMs = a.Double("ajuste-sincro", 0);
+        double appliedLatencyMs = a.Double("latencia-ms", 15);
         string? satArg = a.Get("sat");
         string path = Path.GetFullPath(a.Get("salida", $"toma_{DateTime.Now:yyyyMMdd_HHmmss}.wav"));
 
+        var inProc = new InputProcessor
+        {
+            ChannelMode = InputProcessor.ParseMode(channel),
+            InputGainDb = gainDb,
+        };
+        var procL = new float[8192];
+        var procR = new float[8192];
+
+        if (a.Flag("simular"))
+        {
+            using var simRec = new TakeRecorder(path, sr);
+            int totalFrames = (int)Math.Round(seconds * sr);
+            var raw0 = new float[192];
+            var raw1 = new float[192];
+            for (int pos = 0; pos < totalFrames; pos += 192)
+            {
+                int n = Math.Min(192, totalFrames - pos);
+                for (int i = 0; i < n; i++)
+                {
+                    raw0[i] = 0.25f * MathF.Sin(2f * MathF.PI * 220f * (pos + i) / sr);
+                    raw1[i] = 0f;
+                }
+                inProc.Process(raw0.AsSpan(0, n), raw1.AsSpan(0, n), procL.AsSpan(0, n), procR.AsSpan(0, n), out _, out _, out _);
+                simRec.WriteFromCallback(procL.AsSpan(0, n), procR.AsSpan(0, n));
+            }
+            var simResult = simRec.Finish(
+                discard: discard,
+                measuredLatencyMs: appliedLatencyMs,
+                defaultOverdubOffsetMs: overdubOffsetMs,
+                isFirstTake: a.Flag("primera-toma"),
+                usedCountIn: countIn > 0,
+                usedClick: !a.Flag("sin-click"));
+            if (simResult == null)
+            {
+                Console.WriteLine("Toma descartada (duración ≤ 0.3 s o descartada explícitamente).");
+                return 0;
+            }
+            Console.WriteLine($"Listo: {simResult.WavPath} · {simResult.DurationSec:0.00} s · syncMs {simResult.SyncMs:0.0} ms");
+            return 0;
+        }
+
+        var driver = AsioDuplex.PickDriver(a.Get("driver"));
         var clickHi = ClickSynth.Render(sound, true, sr, clickDb);
         var clickLo = ClickSynth.Render(sound, false, sr, clickDb);
+        int limLatency = (int)Math.Round(MasterLimiter.LookaheadSec * sr);
         double beatLen = sr * 60 / bpm;
         long recStart = (long)Math.Round(countIn * beatLen);
-        int recLen = (int)(seconds * sr);
-        var recL = new float[recLen];
-        var recR = new float[recLen];
+        int recLen = (int)Math.Round(seconds * sr);
 
         var sat = new Saturator(sr);
         if (satArg != null)
@@ -169,24 +312,31 @@ static class AudioCommands
         var monL = new float[8192];
         var monR = new float[8192];
 
-        int inputs = channel == "estereo" || channel == "2" ? 2 : 1;
+        int inputs = channel == "estereo" || channel == "2" || channel == "ch2-mono" ? 2 : 1;
         long frame = 0, nextBeat = 0;
         int beat = 0;
         float[]? click = null;
         int clickPos = 0;
         float peak = 0;
+        using var recorder = new TakeRecorder(path, sr);
         using var done = new ManualResetEventSlim();
 
         using var io = new AsioDuplex(driver, sr, a.Int("entrada", 1) - 1, inputs, a.Int("salida-ch", 1) - 1, (input, output, n) =>
         {
-            float[] inL = channel == "2" ? input[1] : input[0];
-            float[] inR = channel == "estereo" ? input[1] : inL;
+            if (n > procL.Length) return;
+            var ch0 = input[0].AsSpan(0, n);
+            var ch1 = input.Length > 1 ? input[1].AsSpan(0, n) : ch0;
+            var pl = procL.AsSpan(0, n);
+            var pr = procR.AsSpan(0, n);
+            inProc.Process(ch0, ch1, pl, pr, out float maxL, out float maxR, out _);
+            float pk = Math.Max(peak, Math.Max(maxL, maxR));
+            peak = pk;
+
             long f0 = frame;
-            float pk = peak;
             for (int i = 0; i < n; i++)
             {
                 long f = f0 + i;
-                if (f == nextBeat)
+                if (f >= nextBeat + limLatency)
                 {
                     click = beat % 4 == 0 ? clickHi : clickLo;
                     clickPos = 0;
@@ -199,22 +349,25 @@ static class AudioCommands
                     output[1][i] += click[clickPos];
                     if (++clickPos >= click.Length) click = null;
                 }
-                long r = f - recStart;
-                if (r >= 0 && r < recLen)
-                {
-                    recL[r] = inL[i];
-                    recR[r] = inR[i];
-                }
-                float x = Math.Max(Math.Abs(inL[i]), Math.Abs(inR[i]));
-                if (x > pk) pk = x;
             }
-            peak = pk;
+
+            // Samples at or after recStart go to the TakeRecorder on the exact same audio frame clock.
+            long blockEnd = f0 + n;
+            if (blockEnd > recStart && f0 < recStart + recLen)
+            {
+                int startIdx = (int)Math.Max(0, recStart - f0);
+                int endIdx = (int)Math.Min(n, recStart + recLen - f0);
+                int count = endIdx - startIdx;
+                if (count > 0)
+                    recorder.WriteFromCallback(pl.Slice(startIdx, count), pr.Slice(startIdx, count));
+            }
+
             if (monitor && n <= monL.Length)
             {
                 var ml = monL.AsSpan(0, n);
                 var mr = monR.AsSpan(0, n);
-                inL.AsSpan(0, n).CopyTo(ml);
-                inR.AsSpan(0, n).CopyTo(mr);
+                pl.CopyTo(ml);
+                pr.CopyTo(mr);
                 sat.Process(ml, mr);
                 for (int i = 0; i < n; i++)
                 {
@@ -243,10 +396,27 @@ static class AudioCommands
         io.Stop();
         Console.WriteLine();
         if (io.Error != null) throw io.Error;
-        Wav.Write(path, recL, recR, sr);
-        Console.WriteLine($"Listo: {path}");
+
+        double estMs = Math.Round(((io.ReportedOutputLatency + io.FramesPerBuffer + limLatency) / (double)sr) * 1000.0, 1);
+        var cal = LatencyCalibration.ReadCalibration(driver, $"{a.Int("entrada", 1) - 1}:{a.Int("salida-ch", 1) - 1}");
+        double measuredLatencyMs = cal != null && !LatencyCalibration.IsCalibrationStale(cal, estMs, sr) ? cal.LatencyMs : estMs;
+        var result = recorder.Finish(
+            discard: discard,
+            measuredLatencyMs: measuredLatencyMs,
+            defaultOverdubOffsetMs: overdubOffsetMs,
+            isFirstTake: false,
+            usedCountIn: countIn > 0,
+            usedClick: true);
+
+        if (result == null)
+        {
+            Console.WriteLine("Toma descartada (duración ≤ 0.3 s o descartada explícitamente).");
+            return 0;
+        }
+
+        Console.WriteLine($"Listo: {result.WavPath} ({result.DurationSec:0.00} s · syncMs {result.SyncMs:0.0} ms)");
         Console.WriteLine("El tiempo 0 del archivo es el primer tiempo después de la cuenta, tal como salió por la salida;");
-        Console.WriteLine("lo que tocaste llega tarde por la latencia ida y vuelta, que hay que restar (como hace la app web).");
+        Console.WriteLine("lo que tocaste llega tarde por la latencia ida y vuelta, que se compensa con syncMs (como hace la app web).");
         return 0;
     }
 

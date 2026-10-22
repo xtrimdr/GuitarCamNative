@@ -1,0 +1,319 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GuitarCam.App.Controls.ProjectsDialog"
+             Background="#F20b0b0d" KeyboardNavigation.TabNavigation="Cycle" Focusable="True">
+
+  <!-- Same structure, sizes and texts as SessionPicker in the web app (GuitarCam/src/components/SessionPicker.tsx) -->
+  <UserControl.Styles>
+    <Style Selector="TextBox.field">
+      <Setter Property="Height" Value="36" />
+      <Setter Property="MinHeight" Value="36" />
+      <Setter Property="Background" Value="{StaticResource Raised}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox.field:pointerover /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="{StaticResource Raised}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+    </Style>
+    <Style Selector="TextBox.field:focus /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="{StaticResource Raised}" />
+      <Setter Property="BorderBrush" Value="#B322d3ee" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="TextBox.field /template/ TextBlock#PART_Watermark">
+      <Setter Property="Foreground" Value="{StaticResource Faint}" />
+    </Style>
+
+    <!-- buttons: accent (h-9 / h-8), outline, ghost, row action, danger -->
+    <Style Selector="Button.btn">
+      <Setter Property="Height" Value="36" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.btn.sm">
+      <Setter Property="Height" Value="32" />
+      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="Button.btn:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+    <Style Selector="Button.btn.outline">
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button.btn.outline /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+    </Style>
+    <Style Selector="Button.btn.outline:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+    <Style Selector="Button.btn.outline:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+    </Style>
+    <Style Selector="Button.btn.primary">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="#0b0b0d" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.btn.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#4fdcf1" />
+      <Setter Property="Foreground" Value="#0b0b0d" />
+    </Style>
+    <Style Selector="Button.btn.danger">
+      <Setter Property="Background" Value="{StaticResource Rec}" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.btn.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#f26464" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.btn:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Opacity" Value="0.6" />
+    </Style>
+    <Style Selector="Button.btn.primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="#0b0b0d" />
+    </Style>
+    <Style Selector="Button.btn.danger:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Rec}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <Style Selector="Button.act">
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.act:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+    <Style Selector="Button.act.danger">
+      <Setter Property="Foreground" Value="{StaticResource Faint}" />
+    </Style>
+    <Style Selector="Button.act.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource RecSoft}" />
+      <Setter Property="Foreground" Value="{StaticResource Rec}" />
+    </Style>
+    <Style Selector="Button.act:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Faint}" />
+      <Setter Property="Opacity" Value="0.3" />
+    </Style>
+
+    <!-- project rows: the time ago swaps for the actions on hover / focus -->
+    <Style Selector="Border.row">
+      <Setter Property="Margin" Value="8,0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.row.highlight">
+      <Setter Property="Background" Value="{StaticResource Raised}" />
+    </Style>
+    <Style Selector="Border.row.deleting">
+      <Setter Property="Background" Value="{StaticResource RecSoft}" />
+    </Style>
+    <Style Selector="Border.row.live:pointerover, Border.row.live:focus-within">
+      <Setter Property="Background" Value="{StaticResource Raised}" />
+    </Style>
+    <Style Selector="Border.row StackPanel.actions">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="Border.row:pointerover StackPanel.actions, Border.row:focus-within StackPanel.actions">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="Border.row:pointerover TextBlock.ago, Border.row:focus-within TextBlock.ago">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="Button.rowmain">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="16,10,160,10" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="Button.rowmain:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.rowmain:pressed /template/ ContentPresenter#PART_ContentPresenter, Button.rowmain:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <!-- template options of the new project form -->
+    <Style Selector="Border.tpl">
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="Background" Value="{StaticResource Panel}" />
+    </Style>
+    <Style Selector="Border.tpl:pointerover">
+      <Setter Property="Background" Value="{StaticResource Raised}" />
+    </Style>
+    <Style Selector="Border.tpl.selected, Border.tpl.selected:pointerover">
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+      <Setter Property="Background" Value="{StaticResource AccentSoft}" />
+    </Style>
+    <Style Selector="Border.tpl Button.tpldel">
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="Border.tpl:pointerover Button.tpldel, Border.tpl Button.tpldel:focus">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="Button.tplmain">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="10,6" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.tplmain:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.tplmain:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <!-- Loader2: an open ring that turns -->
+    <Style Selector="Arc.spin">
+      <Setter Property="StartAngle" Value="0" />
+      <Setter Property="SweepAngle" Value="270" />
+      <Setter Property="StrokeThickness" Value="2" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="RenderTransform" Value="rotate(0deg)" />
+      <Style.Animations>
+        <Animation Duration="0:0:0.8" IterationCount="Infinite">
+          <KeyFrame Cue="0%">
+            <Setter Property="RotateTransform.Angle" Value="0" />
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="RotateTransform.Angle" Value="360" />
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+  </UserControl.Styles>
+
+  <Border x:Name="Card" HorizontalAlignment="Center" VerticalAlignment="Top" MaxWidth="672" Margin="16"
+          Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12"
+          BoxShadow="0 25 50 -12 #80000000" ClipToBounds="True">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+
+      <!-- header -->
+      <Grid ColumnDefinitions="*,Auto" Margin="24,24,24,16">
+        <StackPanel Orientation="Horizontal" Spacing="12">
+          <Border Width="36" Height="36" CornerRadius="8" Background="{StaticResource Accent}">
+            <TextBlock Classes="icon" Text="&#xE722;" FontSize="18" Foreground="#0b0b0d" HorizontalAlignment="Center" />
+          </Border>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="Proyectos" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Text="Cada toma que grabes se guarda sola en la carpeta del proyecto." FontSize="12" Foreground="{StaticResource Dim}" Margin="0,2,0,0" />
+          </StackPanel>
+        </StackPanel>
+        <Button Grid.Column="1" x:Name="CloseButton" Classes="act" Width="32" Height="32" Margin="0,-4,-8,0" VerticalAlignment="Top"
+                Foreground="{StaticResource Faint}" ToolTip.Tip="Cerrar">
+          <TextBlock Classes="icon" Text="&#xE711;" FontSize="14" />
+        </Button>
+      </Grid>
+
+      <!-- toolbar -->
+      <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*" Margin="24,0">
+        <Button x:Name="NewButton" Classes="btn primary" Padding="14,0">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="icon" Text="&#xE710;" FontSize="13" FontWeight="Bold" />
+            <TextBlock Text="Nuevo proyecto" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="1" x:Name="OpenFolderButton" Classes="btn outline" Margin="8,0,0,0" ToolTip.Tip="Abrir un proyecto guardado en otra carpeta">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Panel Width="16" Height="16">
+              <TextBlock x:Name="OpenFolderIcon" Classes="icon" Text="&#xE8DA;" FontSize="15" HorizontalAlignment="Center" />
+              <Arc x:Name="OpenFolderSpin" Classes="spin" Width="14" Height="14" Stroke="{StaticResource Dim}" IsVisible="False" />
+            </Panel>
+            <TextBlock x:Name="OpenFolderText" Text="Abrir carpeta…" />
+          </StackPanel>
+        </Button>
+        <Panel Grid.Column="2" Margin="8,0,0,0">
+          <TextBox x:Name="SearchBox" Classes="field" Watermark="Buscar" AutomationProperties.Name="Buscar proyectos" Padding="32,0,12,0" />
+          <TextBlock Classes="icon" Text="&#xE721;" FontSize="13" Foreground="{StaticResource Faint}" Margin="11,0,0,0"
+                     HorizontalAlignment="Left" IsHitTestVisible="False" />
+        </Panel>
+      </Grid>
+
+      <!-- new project form -->
+      <Border Grid.Row="2" x:Name="NewForm" IsVisible="False" Margin="24,12,24,0" Padding="12" CornerRadius="8"
+              BorderThickness="1" BorderBrush="#6622d3ee" Background="#0F22d3ee">
+        <StackPanel Spacing="8">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Nombre del proyecto nuevo" FontSize="12" Foreground="{StaticResource Dim}" />
+            <Grid ColumnDefinitions="*,Auto,Auto">
+              <TextBox x:Name="NewName" Classes="field" MaxLength="120" />
+              <Button Grid.Column="1" x:Name="NewCancel" Classes="btn" Margin="8,0,0,0" Content="Cancelar" />
+              <Button Grid.Column="2" x:Name="NewCreate" Classes="btn primary" Margin="8,0,0,0" Padding="16,0">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Arc x:Name="CreateSpin" Classes="spin" Width="14" Height="14" Stroke="#0b0b0d" IsVisible="False" />
+                  <TextBlock Text="Crear" />
+                </StackPanel>
+              </Button>
+            </Grid>
+          </StackPanel>
+          <TextBlock x:Name="NewPath" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}" TextWrapping="Wrap" />
+          <TextBlock x:Name="NewTaken" FontSize="11" Foreground="{StaticResource Accent}" TextWrapping="Wrap" IsVisible="False" />
+          <StackPanel Spacing="6" Margin="0,4,0,0">
+            <TextBlock Text="Plantilla" FontSize="12" Foreground="{StaticResource Dim}" />
+            <ScrollViewer MaxHeight="208" Padding="0,0,2,0">
+              <UniformGrid x:Name="TemplateGrid" Columns="2" />
+            </ScrollViewer>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <StackPanel Grid.Row="3" x:Name="NoticePanel" Margin="24,12,24,0" Spacing="8" IsVisible="False">
+        <TextBlock x:Name="NoticeText" FontSize="12" TextWrapping="Wrap" IsVisible="False" />
+        <Button x:Name="ImportWebButton" Classes="btn outline" Content="Importar de la app web…" IsVisible="False" HorizontalAlignment="Left" />
+      </StackPanel>
+
+      <!-- project list -->
+      <Border Grid.Row="4" Margin="0,16,0,0" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
+        <ScrollViewer x:Name="ListScroll">
+          <StackPanel x:Name="ListPanel" Margin="0,8" />
+        </ScrollViewer>
+      </Border>
+
+      <!-- footer: projects folder -->
+      <Border Grid.Row="5" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="24,12">
+        <Grid ColumnDefinitions="*,Auto,Auto">
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="Carpeta de proyectos" FontSize="11" Foreground="{StaticResource Faint}" />
+            <TextBlock x:Name="RootText" Classes="mono" FontSize="11" Foreground="{StaticResource Dim}" TextTrimming="CharacterEllipsis" Text="…" />
+          </StackPanel>
+          <Button Grid.Column="1" x:Name="RevealRoot" Classes="btn sm" Margin="12,0,0,0" Content="Mostrar" />
+          <Button Grid.Column="2" x:Name="ChangeRoot" Classes="btn sm outline" Margin="12,0,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <Arc x:Name="RootSpin" Classes="spin" Width="12" Height="12" Stroke="{StaticResource Dim}" IsVisible="False" />
+              <TextBlock Text="Cambiar…" />
+            </StackPanel>
+          </Button>
+        </Grid>
+      </Border>
+    </Grid>
+  </Border>
+</UserControl>

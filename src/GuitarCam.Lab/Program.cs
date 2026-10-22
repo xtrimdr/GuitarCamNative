@@ -21,8 +21,11 @@ static class Program
                 "latencia" => AudioCommands.Latency(a),
                 "grabar" => AudioCommands.Record(a),
                 "procesar" => DspCommands.Process(a),
+                "mezclar" => DspCommands.Mix(a),
                 "verificar" => DspCommands.Verify(a),
                 "click" => DspCommands.Click(a),
+                "proyecto" => ProjectCommands.Run(a),
+                "proyectos" => LibraryCommands.Run(a),
                 _ => Help(),
             };
         }
@@ -48,11 +51,39 @@ static class Program
                                            graba sobre el click; con --monitor te escuchás con la saturación
               procesar  entrada.wav [--salida x.wav] [--sat valvula|cinta] [--vida 0.3]
                         [--comp] [--umbral -24] [--ratio 4] [--ataque 10] [--release 150] [--knee 6]
-                        [--makeup 0] [--limit]
-                                           aplica saturación y/o compresor a un WAV
+                        [--makeup 0] [--limit] [--comp-estilo rasgueo|arpegio|punteo] [--comp-cant 0.5]
+                        [--eq ritmica|punteo|acustica|frente] [--reverb cuarto|sala|salon|placa|catedral]
+                        [--delay slapback|corchea|punteada|pingpong|ambiente] [--bpm 120]
+                                           aplica efectos de pista y buses a un WAV
+              mezclar   carpeta-proyecto|entrada.wav [--salida mezcla.wav] [--segundos N]
+                                           renderiza la mezcla completa offline (sin la demora del limitador)
               verificar [entrada.wav]      compara el DSP portado con los worklets de la app web (necesita Node)
               click     [--salida clicks.wav] [--bpm 100]
                                            escribe todos los sonidos de click a un WAV para escucharlos
+              proyecto importar carpeta-web [--destino X]
+                                           pasa un proyecto de la app web al formato nativo (no toca el original)
+              proyecto abrir    carpeta    abre un proyecto nativo y muestra pistas, avisos e historial
+              proyecto versiones carpeta   lista las versiones guardadas, de más nueva a más vieja
+              proyecto volver   carpeta n  restaura la versión n y conserva el estado actual en el historial
+              proyecto verificar-deshacer  verifica fotos, agrupación de sliders y rehacer sin modificar archivos
+              proyecto verificar-clips     verifica anclaje, imanes, recortes, fades y operaciones de pistas
+              proyecto clips carpeta       lista los IDs de pistas y clips para editar desde la consola
+              proyecto encuadre carpeta clip [--zoom 1.5] [--panx 0.2] [--pany -0.3] [--espejar] [--restaurar]
+              proyecto editar carpeta mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos
+                        [--libre] [--iman 1/4] [--pps 100] [--cabezal 0]
+              proyecto editar carpeta a-pista clip pista [--intercambiar clip] | reordenar desde hasta
+              proyecto editar carpeta inicio|fijar-corte|restaurar|quitar-clip clip | quitar-pista pista
+              proyecto editar carpeta nueva-pista | agregar-toma medio [--pista pista]
+              proyecto cortar   carpeta [--segundos 3]
+                                           graba un tono y corta sin cerrar, para probar la recuperación
+              proyectos lista|plantillas [--raiz X]
+              proyectos nuevo "Nombre" [--plantilla id] | renombrar carpeta "Nombre" | duplicar carpeta
+              proyectos borrar carpeta | guardar-plantilla carpeta "Nombre"
+              proyectos previsualizar "Nombre" | olvidar carpeta | carpeta ruta
+              proyectos borrar-plantilla id
+              proyectos nuevo "Nombre" [--plantilla id] [--carpeta vacía]
+                                           el gestor de proyectos sin la ventana (--raiz: otra carpeta de proyectos)
+                                           --datos X: configuración, recientes y plantillas aislados para pruebas
             """);
         return 0;
     }

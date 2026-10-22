@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using GuitarCam.Audio;
 using GuitarCam.Audio.Dsp;
+using GuitarCam.Projects;
 
 namespace GuitarCam.Lab;
 
@@ -26,18 +27,115 @@ static class DspCommands
             sat.Set(p);
             Console.WriteLine($"Saturación {mode}: drive {p.Drive:0.###}, bias {p.Bias:0.##}, tono {p.Tone:0} Hz, bump {p.Bump:0.#} dB");
         }
+
+        var compEq = new CompEqFilter(sr);
         var comp = new Compressor(sr)
         {
-            Bypass = !a.Flag("comp"),
+            Bypass = !a.Flag("comp") && a.Get("comp-estilo") == null,
             Threshold = a.Double("umbral", -24),
             Ratio = a.Double("ratio", 4),
             Attack = a.Double("ataque", 10) / 1000,
             Release = a.Double("release", 150) / 1000,
             Knee = a.Double("knee", 6),
             Makeup = a.Double("makeup", 0),
-            Limit = a.Flag("limit"),
-            Ceiling = -3,
+            Limit = a.Flag("limit") || a.Get("comp-estilo") != null,
+            Ceiling = CompPresets.TrackLimitCeilingDb,
         };
+        string? compStyle = a.Get("comp-estilo");
+        if (compStyle != null)
+        {
+            string presetId = compStyle.ToLowerInvariant() switch
+            {
+                "arpegio" or "arpeggio" => "arpeggio",
+                "punteo" or "lead" => "lead",
+                _ => "rhythm",
+            };
+            var state = CompPresets.UpdateComp(
+                CompState.Defaults with { On = true, Preset = presetId, Amount = a.Double("comp-cant", 0.5), Limit = !a.Flag("sin-limit") },
+                ch,
+                sr);
+            comp.Bypass = false;
+            comp.Threshold = state.Threshold;
+            comp.Ratio = state.Ratio;
+            comp.Attack = state.Attack;
+            comp.Release = state.Release;
+            comp.Knee = state.Knee;
+            comp.Makeup = state.Makeup;
+            comp.Limit = state.Limit;
+            comp.Ceiling = CompPresets.TrackLimitCeilingDb;
+            compEq.Set(true, state.Eq);
+            Console.WriteLine($"Compresor {CompPresets.PresetLabel(presetId)} ({state.Amount * 100:0}%): umbral {state.Threshold:0.#} dB, {state.Ratio:0.#}:1, makeup {state.Makeup:+0.#;-0.#;0} dB ({CompPresets.Summary(state)})");
+        }
+
+        var trackEq = new TrackEq(sr);
+        string? eqArg = a.Get("eq");
+        if (eqArg != null)
+        {
+            string eqId = eqArg.ToLowerInvariant() switch
+            {
+                "ritmica" or "rítmica" or "rhythm" => "rhythm",
+                "punteo" or "lead" => "lead",
+                "acustica" or "acústica" or "acoustic" => "acoustic",
+                "frente" or "al-frente" or "front" => "front",
+                _ => "flat",
+            };
+            trackEq.Set(true, TrackEq.ApplyPreset(eqId));
+            Console.WriteLine($"EQ de pista: preset {eqId}");
+        }
+
+        ReverbBus? reverb = null;
+        float revSend = (float)a.Double("reverb-envio", 0.35);
+        string? revArg = a.Get("reverb");
+        if (revArg != null || a.Flag("reverb"))
+        {
+            reverb = new ReverbBus(sr);
+            var rp = ReverbParams.Defaults;
+            if (revArg != null)
+            {
+                string label = revArg.ToLowerInvariant() switch
+                {
+                    "cuarto" => "Cuarto",
+                    "sala" => "Sala",
+                    "salon" or "salón" => "Salón",
+                    "placa" => "Placa",
+                    "catedral" => "Catedral",
+                    _ => "",
+                };
+                if (label.Length > 0) rp = ReverbBus.ApplyPreset(rp, label);
+            }
+            reverb.Set(rp);
+            Console.WriteLine($"Reverb ({(ReverbBus.PresetOf(rp) is { Length: > 0 } rl ? rl : "Personalizada")}): decay {rp.Decay:0.#} s, pre-delay {rp.PreDelayMs:0} ms, envío {revSend * 100:0}%");
+        }
+
+        DelayBus? delay = null;
+        float dlySend = (float)a.Double("delay-envio", 0.35);
+        string? dlyArg = a.Get("delay");
+        if (dlyArg != null || a.Flag("delay"))
+        {
+            delay = new DelayBus(sr);
+            var dp = DelayParams.Defaults;
+            if (dlyArg != null)
+            {
+                string label = dlyArg.ToLowerInvariant() switch
+                {
+                    "slapback" => "Slapback",
+                    "corchea" => "Corchea",
+                    "punteada" => "Punteada",
+                    "pingpong" or "ping-pong" => "Ping-pong",
+                    "ambiente" => "Ambiente",
+                    _ => "",
+                };
+                if (label.Length > 0) dp = DelayBus.ApplyPreset(dp, label);
+            }
+            double bpm = a.Double("bpm", 120);
+            delay.Set(dp, bpm, glide: false);
+            Console.WriteLine($"Delay ({(DelayBus.PresetOf(dp) is { Length: > 0 } dl ? dl : "Personalizado")}): {DelayBus.TimeLabel(dp)} a {bpm:0} BPM, fb {dp.Feedback * 100:0}%, envío {dlySend * 100:0}%");
+        }
+
+        var revL = new float[Block];
+        var revR = new float[Block];
+        var dlyL = new float[Block];
+        var dlyR = new float[Block];
 
         var sw = Stopwatch.StartNew();
         double minGr = 0;
@@ -48,7 +146,24 @@ static class DspCommands
             var l = ch[0].AsSpan(i, n);
             var r = ch[1].AsSpan(i, n);
             sat.Process(l, r);
-            comp.Process(l, r);
+            compEq.ProcessWith(comp, l, r);
+            trackEq.Process(l, r);
+            if (reverb != null)
+            {
+                var rl = revL.AsSpan(0, n);
+                var rr = revR.AsSpan(0, n);
+                for (int k = 0; k < n; k++) { rl[k] = l[k] * revSend; rr[k] = r[k] * revSend; }
+                reverb.Process(rl, rr);
+                for (int k = 0; k < n; k++) { l[k] += rl[k]; r[k] += rr[k]; }
+            }
+            if (delay != null)
+            {
+                var dl = dlyL.AsSpan(0, n);
+                var dr = dlyR.AsSpan(0, n);
+                for (int k = 0; k < n; k++) { dl[k] = l[k] * dlySend; dr[k] = r[k] * dlySend; }
+                delay.Process(dl, dr);
+                for (int k = 0; k < n; k++) { l[k] += dl[k]; r[k] += dr[k]; }
+            }
             minGr = Math.Min(minGr, comp.TakeMeter());
         }
         sw.Stop();
@@ -84,11 +199,198 @@ static class DspCommands
         return 0;
     }
 
+    public static int Mix(Args a)
+    {
+        if (a.Positional.Count == 0) throw new ArgumentException("Falta la carpeta del proyecto nativo (o un WAV).");
+        string target = Path.GetFullPath(a.Positional[0]);
+        int sr = a.Int("sr", 48000);
+
+        List<MixTrackSpec> trackSpecs = [];
+        MixBusSpec busSpec = new();
+        string defaultOut;
+
+        if (Directory.Exists(target))
+        {
+            using var store = ProjectStore.Open(target);
+            var p = store.Project;
+            defaultOut = Path.Combine(target, "exports", "mezcla.wav");
+
+            var mediaCache = new Dictionary<string, (float[] L, float[] R, double RmsDb)>();
+            foreach (var m in p.Media)
+            {
+                if (store.Resolve(m.Audio) is { } audioPath && File.Exists(audioPath))
+                {
+                    var loaded = AudioLoader.Load(audioPath, sr);
+                    float[][] ch = [loaded.Left, loaded.Right];
+                    var (rms, _) = LevelAnalysis.Analyze(ch, loaded.SampleRate);
+                    mediaCache[m.Id] = (loaded.Left, loaded.Right, rms);
+                }
+            }
+
+            foreach (var t in p.Tracks)
+            {
+                var clips = new List<MixClipSpec>();
+                double trackRms = -24;
+                bool hasRms = false;
+                foreach (var c in t.Clips)
+                {
+                    if (!mediaCache.TryGetValue(c.MediaId, out var ma)) continue;
+                    var m = p.FindMedia(c.MediaId);
+                    if (!hasRms) { trackRms = ma.RmsDb; hasRms = true; }
+                    clips.Add(new MixClipSpec
+                    {
+                        Left = ma.L,
+                        Right = ma.R,
+                        DurationSec = m?.DurationSec > 0 ? m.DurationSec : ma.L.Length / (double)sr,
+                        AtSec = c.AtSec,
+                        TrimStartSec = c.TrimStartSec,
+                        TrimEndSec = c.TrimEndSec,
+                        FadeInSec = c.FadeInSec,
+                        FadeOutSec = c.FadeOutSec,
+                        GainDb = c.GainDb,
+                        SyncMs = m?.SyncMs ?? 0,
+                    });
+                }
+
+                var ch = t.Channel;
+                var sat = SatParams.From(
+                    ch.Sat.On,
+                    ch.Sat.Mode == "tape" ? SatMode.Tape : SatMode.Tube,
+                    ch.Sat.Amount,
+                    trackRms);
+                var compEq = new CompEqParams(
+                    ch.Comp.Eq.HpfHz,
+                    ch.Comp.Eq.MudDb,
+                    ch.Comp.Eq.PresenceDb,
+                    ch.Comp.Eq.PresenceHz,
+                    ch.Comp.Eq.AirDb);
+                var comp = new CompState(
+                    ch.Comp.On,
+                    ch.Comp.Preset,
+                    ch.Comp.Amount,
+                    ch.Comp.Limit,
+                    ch.Comp.Threshold,
+                    ch.Comp.Ratio,
+                    ch.Comp.Attack,
+                    ch.Comp.Release,
+                    ch.Comp.Knee,
+                    ch.Comp.Makeup,
+                    compEq);
+                var bands = new EqBandSpec[TrackEq.BandCount];
+                for (int i = 0; i < TrackEq.BandCount; i++)
+                {
+                    if (i < ch.Eq.Bands.Count)
+                    {
+                        var b = ch.Eq.Bands[i];
+                        bands[i] = EqBandSpec.FromStrings(b.On, b.Type, b.Freq, b.Gain, b.Q, b.Slope, TrackEq.DefaultBands[i].Type);
+                    }
+                    else bands[i] = TrackEq.DefaultBands[i];
+                }
+
+                trackSpecs.Add(new MixTrackSpec
+                {
+                    Clips = clips,
+                    Volume = ch.Volume,
+                    Pan = ch.Pan,
+                    Muted = ch.Muted,
+                    Solo = ch.Solo,
+                    Sat = sat,
+                    Comp = comp,
+                    EqOn = ch.Eq.On,
+                    EqBands = bands,
+                    ReverbOn = ch.ReverbOn,
+                    ReverbSend = ch.ReverbSend,
+                    DelayOn = ch.DelayOn,
+                    DelaySend = ch.DelaySend,
+                });
+            }
+
+            var rev = p.Settings.Reverb;
+            var dly = p.Settings.Delay;
+            busSpec = new MixBusSpec
+            {
+                Bpm = p.Settings.Bpm,
+                Reverb = new ReverbParams(rev.Decay, rev.PreDelayMs, rev.Tone, rev.LowCut, rev.Width, rev.ReturnGain, rev.Muted),
+                Delay = new DelayParams(
+                    DelayParams.ParseMode(dly.Mode),
+                    dly.Sync,
+                    dly.Division,
+                    dly.TimeMs,
+                    dly.Feedback,
+                    dly.Tone,
+                    dly.LowCut,
+                    dly.Width,
+                    dly.Duck,
+                    dly.ReturnGain,
+                    dly.Muted),
+            };
+            Console.WriteLine($"Proyecto: {p.Name} ({trackSpecs.Count} pistas, {p.Settings.Bpm:0.#} BPM)");
+        }
+        else
+        {
+            var loaded = AudioLoader.Load(target, sr);
+            sr = loaded.SampleRate;
+            float[][] ch = [loaded.Left, loaded.Right];
+            var (rms, _) = LevelAnalysis.Analyze(ch, sr);
+            defaultOut = Path.ChangeExtension(target, null) + "_mezcla.wav";
+            var compState = CompPresets.UpdateComp(
+                CompState.Defaults with { On = a.Flag("comp"), Preset = a.Get("comp-estilo", "rhythm"), Amount = a.Double("comp-cant", 0.5) },
+                ch,
+                sr);
+            trackSpecs.Add(new MixTrackSpec
+            {
+                Clips =
+                [
+                    new MixClipSpec
+                    {
+                        Left = ch[0],
+                        Right = ch[1],
+                        DurationSec = ch[0].Length / (double)sr,
+                        FadeInSec = a.Double("fade-in", 0),
+                        FadeOutSec = a.Double("fade-out", 0),
+                        GainDb = a.Double("ganancia", 0),
+                    },
+                ],
+                Volume = a.Double("volumen", 1),
+                Pan = a.Double("pan", 0),
+                Sat = SatParams.From(a.Get("sat") != null, a.Get("sat")?.StartsWith("c", StringComparison.OrdinalIgnoreCase) == true ? SatMode.Tape : SatMode.Tube, a.Double("vida", 0.3), rms),
+                Comp = compState,
+                EqOn = a.Get("eq") != null,
+                EqBands = a.Get("eq") is { } eqId ? TrackEq.ApplyPreset(eqId) : TrackEq.DefaultBands,
+                ReverbOn = true,
+                ReverbSend = a.Double("reverb-envio", 0),
+                DelayOn = true,
+                DelaySend = a.Double("delay-envio", 0),
+            });
+        }
+
+        double durationSec = a.Double("segundos", MixRenderer.MixDurationSec(trackSpecs, sr));
+        var sw = Stopwatch.StartNew();
+        var (outL, outR) = MixRenderer.Render(trackSpecs, busSpec, durationSec, sr);
+        sw.Stop();
+
+        float peak = 0;
+        for (int i = 0; i < outL.Length; i++)
+        {
+            float pk = Math.Max(Math.Abs(outL[i]), Math.Abs(outR[i]));
+            if (pk > peak) peak = pk;
+        }
+        double peakDb = peak > 1e-6 ? 20 * Math.Log10(peak) : -120;
+
+        string outPath = a.Get("salida", defaultOut);
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outPath))!);
+        Wav.Write(outPath, outL, outR, sr);
+        double dspPct = 100.0 * sw.Elapsed.TotalSeconds / Math.Max(0.001, durationSec);
+        Console.WriteLine($"Mezcla offline: {durationSec:0.0} s en {sw.Elapsed.TotalMilliseconds:0} ms ({durationSec / Math.Max(0.001, sw.Elapsed.TotalSeconds):0}× tiempo real · carga equivalente DSP {dspPct:0.0}%), pico {peakDb:0.0} dB (techo limitador {MasterLimiter.CeilingDb:0.0} dB)");
+        Console.WriteLine($"Escrito: {Path.GetFullPath(outPath)}");
+        return 0;
+    }
+
     sealed record Case(string Name, object[] Chain, Action<float[], float[]> Native);
 
     /// <summary>
-    /// Runs the web app's own worklet code (fxWorklet.ts, in Node) and the C# ports on the same audio and
-    /// compares them sample by sample.
+    /// Runs the web app's own worklet and DSP code (fxWorklet.ts, compPresets.ts, eq.ts, mixGraph.ts, in Node)
+    /// and the C# ports on the same audio and compares them sample by sample.
     /// </summary>
     public static int Verify(Args a)
     {
@@ -113,6 +415,7 @@ static class DspCommands
             Console.WriteLine("Señal: guitarra sintética de prueba (8 s). Pasá un WAV para usar una toma real.");
         }
         var (rms, _) = LevelAnalysis.Analyze(ch, sr);
+        var env = CompPresets.Analyze(ch, sr);
 
         // AudioParams are float32 in Web Audio, so the ports get the same rounded values.
         static double F(double v) => (float)v;
@@ -141,12 +444,98 @@ static class DspCommands
             };
             return (l, r) => Run(l, r, c.Process);
         }
+        object CompPresetStage(string preset, double amount) => new
+        {
+            name = "gc-comp-preset",
+            @params = new { preset, amount, limit = true },
+        };
+        Action<float[], float[]> CompPresetNative(string preset, double amount)
+        {
+            var state = CompPresets.UpdateComp(
+                CompState.Defaults with { On = true, Preset = preset, Amount = amount, Limit = true },
+                env);
+            var eq = new CompEqFilter(sr);
+            eq.Set(true, state.Eq);
+            var c = new Compressor(sr)
+            {
+                Bypass = false,
+                Threshold = F(state.Threshold),
+                Ratio = F(state.Ratio),
+                Knee = F(state.Knee),
+                Attack = F(state.Attack),
+                Release = F(state.Release),
+                Makeup = F(state.Makeup),
+                Limit = state.Limit,
+                Ceiling = F(CompPresets.TrackLimitCeilingDb),
+            };
+            return (l, r) => Run(l, r, (sl, srSpan) => eq.ProcessWith(c, sl, srSpan));
+        }
+        object TrackEqStage(string preset) => new
+        {
+            name = "gc-track-eq",
+            @params = new { preset },
+        };
+        Action<float[], float[]> TrackEqNative(string preset)
+        {
+            var eq = new TrackEq(sr);
+            eq.Set(true, TrackEq.ApplyPreset(preset));
+            return (l, r) => Run(l, r, eq.Process);
+        }
+        object ReverbStage(ReverbParams r) => new
+        {
+            name = "gc-reverb",
+            @params = new
+            {
+                decay = r.Decay,
+                preDelayMs = r.PreDelayMs,
+                tone = r.Tone,
+                lowCut = r.LowCut,
+                width = r.Width,
+                returnGain = r.ReturnGain,
+                muted = r.Muted,
+            },
+        };
+        Action<float[], float[]> ReverbNative(ReverbParams r, int blockSize = Block)
+        {
+            var bus = new ReverbBus(sr);
+            bus.Set(r);
+            return (l, rSpan) => Run(l, rSpan, bus.Process, blockSize);
+        }
+        object DelayStage(DelayParams d, double bpm) => new
+        {
+            name = "gc-delay",
+            @params = new
+            {
+                mode = DelayParams.ModeToString(d.Mode),
+                sync = d.Sync,
+                division = d.Division,
+                timeMs = d.TimeMs,
+                feedback = d.Feedback,
+                tone = d.Tone,
+                lowCut = d.LowCut,
+                width = d.Width,
+                duck = d.Duck,
+                returnGain = d.ReturnGain,
+                muted = d.Muted,
+                bpm,
+            },
+        };
+        Action<float[], float[]> DelayNative(DelayParams d, double bpm, int blockSize = Block)
+        {
+            var bus = new DelayBus(sr);
+            bus.Set(d, bpm, glide: false);
+            return (l, rSpan) => Run(l, rSpan, bus.Process, blockSize);
+        }
         int look = (int)Math.Round(MasterLimiter.LookaheadSec * sr);
 
         var tube30 = SatParams.From(true, SatMode.Tube, 0.3, rms);
         var tube100 = SatParams.From(true, SatMode.Tube, 1, rms);
         var tape80 = SatParams.From(true, SatMode.Tape, 0.8, rms);
         var tape50 = SatParams.From(true, SatMode.Tape, 0.5, rms);
+        var revCuarto = ReverbBus.ApplyPreset(ReverbParams.Defaults, "Cuarto");
+        var dlyPunt = DelayBus.ApplyPreset(DelayParams.Defaults, "Punteada");
+        var dlyPing = DelayBus.ApplyPreset(DelayParams.Defaults, "Ping-pong");
+
         var cases = new List<Case>
         {
             new("Saturación válvula, Vida 30%", [SatStage(tube30)], SatNative(tube30)),
@@ -154,6 +543,18 @@ static class DspCommands
             new("Saturación cinta, Vida 80%", [SatStage(tape80)], SatNative(tape80)),
             new("Compresor -30 dB 4:1 +8", [CompStage(-30, 4, 8, false)], CompNative(-30, 4, 8, false)),
             new("Compresor + limitador de pista", [CompStage(-30, 4, 14, true)], CompNative(-30, 4, 14, true)),
+            new("Compresor Rasgueo 50% + CompEq", [CompPresetStage("rhythm", 0.5)], CompPresetNative("rhythm", 0.5)),
+            new("Compresor Arpegio 70% + CompEq", [CompPresetStage("arpeggio", 0.7)], CompPresetNative("arpeggio", 0.7)),
+            new("Compresor Punteo 85% + CompEq", [CompPresetStage("lead", 0.85)], CompPresetNative("lead", 0.85)),
+            new("EQ de pista: Rítmica (24 dB/oct)", [TrackEqStage("rhythm")], TrackEqNative("rhythm")),
+            new("EQ de pista: Acústica (shelf+bell)", [TrackEqStage("acoustic")], TrackEqNative("acoustic")),
+            new("EQ de pista: Punteo (LPF+HPF+bell)", [TrackEqStage("lead")], TrackEqNative("lead")),
+            new("Reverb bus: Cuarto (IR + conv)", [ReverbStage(revCuarto)], ReverbNative(revCuarto)),
+            new("Reverb bus: Cuarto (bloque 100)", [ReverbStage(revCuarto)], ReverbNative(revCuarto, 100)),
+            new("Reverb bus: Cuarto (bloque 441)", [ReverbStage(revCuarto)], ReverbNative(revCuarto, 441)),
+            new("Delay bus: Punteada 1/8. + ducker", [DelayStage(dlyPunt, 120)], DelayNative(dlyPunt, 120)),
+            new("Delay bus: Punteada (bloque 100)", [DelayStage(dlyPunt, 120)], DelayNative(dlyPunt, 120, 100)),
+            new("Delay bus: Ping-pong 1/4 + ducker", [DelayStage(dlyPing, 128)], DelayNative(dlyPing, 128)),
             new("Cinta 50% → compresor + limitador", [SatStage(tape50), CompStage(-30, 6, 12, true)], (l, r) =>
             {
                 SatNative(tape50)(l, r);
@@ -162,6 +563,85 @@ static class DspCommands
             new("Limitador master (-6 dB)",
                 [new { name = "gc-limiter", options = new { lookahead = look, ceilingDb = -6.0 } }],
                 (l, r) => Run(l, r, new MasterLimiter(sr, look, -6).Process)),
+            new("RenderMix offline (fades+pan+lim)",
+                [new { name = "gc-mix", @params = new { fadeInSec = 0.2, fadeOutSec = 0.3 } }],
+                (l, r) =>
+                {
+                    var trk = new MixTrackSpec
+                    {
+                        Clips =
+                        [
+                            new MixClipSpec
+                            {
+                                Left = (float[])l.Clone(),
+                                Right = (float[])r.Clone(),
+                                DurationSec = l.Length / (double)sr,
+                                FadeInSec = 0.2,
+                                FadeOutSec = 0.3,
+                            },
+                        ],
+                        Volume = 0.85,
+                        Pan = -0.35,
+                    };
+                    var (ml, mr) = MixRenderer.Render([trk], new MixBusSpec(), l.Length / (double)sr, sr);
+                    ml.CopyTo(l, 0);
+                    mr.CopyTo(r, 0);
+                }),
+            new("Captura: +12 dB + softLimit (stereo)",
+                [new { name = "gc-capture", @params = new { mode = "stereo", gainDb = 12.0 } }],
+                (l, r) =>
+                {
+                    var ip = new InputProcessor { ChannelMode = InputChannelMode.Stereo, InputGainDb = 12.0 };
+                    Run(l, r, (sl, srSpan) => ip.Process(sl, srSpan, sl, srSpan, out _, out _, out _));
+                }),
+            new("Captura: +18 dB + softLimit (mono 1)",
+                [new { name = "gc-capture", @params = new { mode = "ch1-mono", gainDb = 18.0 } }],
+                (l, r) =>
+                {
+                    var ip = new InputProcessor { ChannelMode = InputChannelMode.Ch1Mono, InputGainDb = 18.0 };
+                    Run(l, r, (sl, srSpan) => ip.Process(sl, srSpan, sl, srSpan, out _, out _, out _));
+                }),
+            new("Calibración: pulso + loopback + tap",
+                [new { name = "gc-cal-pulse" }],
+                (l, r) =>
+                {
+                    Array.Clear(l);
+                    Array.Clear(r);
+                    var pulse = LatencyCalibration.MakePulse(sr);
+                    Array.Copy(pulse, l, Math.Min(l.Length, pulse.Length));
+                    int[] pulseFrames = [1000, 30000, 60000, 90000, 120000, 150000, 180000, 210000];
+                    int lag = 600;
+                    var loopRecL = new float[l.Length];
+                    var loopRecR = new float[l.Length];
+                    foreach (int p0 in pulseFrames)
+                    {
+                        for (int k = 0; k < pulse.Length && p0 + lag + k < l.Length; k++)
+                            loopRecL[p0 + lag + k] = -pulse[k] * 0.7f;
+                    }
+                    var loopRes = LatencyCalibration.AnalyzeLoopback(loopRecL, loopRecR, pulse, pulseFrames, sr);
+                    if (loopRes is { } lr)
+                    {
+                        r[0] = (float)lr.LatencyMs;
+                        r[1] = (float)lr.SpreadMs;
+                        r[2] = lr.Matched;
+                    }
+                    int[] clickFrames = [10000, 42000, 74000, 106000, 138000, 170000, 202000, 234000];
+                    int tapLag = 840;
+                    var tapRecL = new float[l.Length];
+                    var tapRecR = new float[l.Length];
+                    foreach (int c0 in clickFrames)
+                    {
+                        for (int k = 0; k < 960 && c0 + tapLag + k < l.Length; k++)
+                            tapRecR[c0 + tapLag + k] = (float)(0.5 * Math.Exp(-k / 200.0) * Math.Sin(2.0 * Math.PI * 220.0 * k / sr));
+                    }
+                    var tapRes = LatencyCalibration.AnalyzeTap(tapRecL, tapRecR, clickFrames, 32000, sr);
+                    if (tapRes is { } tr)
+                    {
+                        r[3] = (float)tr.LatencyMs;
+                        r[4] = (float)tr.SpreadMs;
+                        r[5] = tr.Matched;
+                    }
+                }),
         };
 
         string tmp = Path.Combine(Path.GetTempPath(), "gclab-verify");
@@ -198,6 +678,36 @@ static class DspCommands
             allOk &= ok;
             Console.WriteLine($"{c.Name,-36} {Db(diffDb),12} {Db(relDb),10}  {(ok ? "igual" : "DISTINTO")}");
         }
+
+        // Verify 44.1 kHz -> 48 kHz resampling in AudioLoader (duration and pitch preservation)
+        int sr44 = 44100, sr48 = 48000;
+        int len44 = sr44 * 2;
+        var s44L = new float[len44];
+        var s44R = new float[len44];
+        for (int i = 0; i < len44; i++)
+        {
+            double t = i / (double)sr44;
+            s44L[i] = (float)(0.5 * Math.Sin(2.0 * Math.PI * 440.0 * t));
+            s44R[i] = (float)(0.5 * Math.Cos(2.0 * Math.PI * 880.0 * t));
+        }
+        string wav44 = Path.Combine(tmp, "test_44k1.wav");
+        Wav.Write(wav44, s44L, s44R, sr44);
+        var loaded48 = AudioLoader.Load(wav44, sr48);
+        int expected48 = sr48 * 2;
+        double maxResampleErr = 0;
+        for (int i = 64; i < expected48 - 64; i++)
+        {
+            double t = i / (double)sr48;
+            float refL = (float)(0.5 * Math.Sin(2.0 * Math.PI * 440.0 * t));
+            float refR = (float)(0.5 * Math.Cos(2.0 * Math.PI * 880.0 * t));
+            maxResampleErr = Math.Max(maxResampleErr, Math.Max(Math.Abs(loaded48.Left[i] - refL), Math.Abs(loaded48.Right[i] - refR)));
+        }
+        double resDiffDb = maxResampleErr > 0 ? 20 * Math.Log10(maxResampleErr) : double.NegativeInfinity;
+        double resRelDb = maxResampleErr > 0 ? 20 * Math.Log10(maxResampleErr / 0.5) : double.NegativeInfinity;
+        bool resOk = loaded48.SampleRate == sr48 && loaded48.Left.Length == expected48 && resRelDb < -85;
+        allOk &= resOk;
+        Console.WriteLine($"{"AudioLoader 44.1→48 kHz (2.0 s, A4)",-36} {Db(resDiffDb),12} {Db(resRelDb),10}  {(resOk ? "igual" : "DISTINTO")}");
+
         Console.WriteLine();
         Console.WriteLine(allOk
             ? "Todo coincide con la app web (diferencias por debajo de -100 dB: redondeo de punto flotante)."
@@ -207,11 +717,11 @@ static class DspCommands
 
     static string Db(double db) => double.IsNegativeInfinity(db) ? "exacto" : $"{db:0.0} dB";
 
-    static void Run(float[] l, float[] r, SpanAction process)
+    static void Run(float[] l, float[] r, SpanAction process, int blockSize = Block)
     {
-        for (int i = 0; i < l.Length; i += Block)
+        for (int i = 0; i < l.Length; i += blockSize)
         {
-            int n = Math.Min(Block, l.Length - i);
+            int n = Math.Min(blockSize, l.Length - i);
             process(l.AsSpan(i, n), r.AsSpan(i, n));
         }
     }
@@ -221,7 +731,7 @@ static class DspCommands
     static void RunNode(string script, string worklet, string job)
     {
         var psi = new ProcessStartInfo("node", [script, worklet, job]) { RedirectStandardError = true, UseShellExecute = false };
-        using var p = System.Diagnostics.Process.Start(psi) ??throw new InvalidOperationException("No pude ejecutar node.");
+        using var p = System.Diagnostics.Process.Start(psi) ?? throw new InvalidOperationException("No pude ejecutar node.");
         string err = p.StandardError.ReadToEnd();
         p.WaitForExit();
         if (p.ExitCode != 0) throw new InvalidOperationException($"node falló: {err}");

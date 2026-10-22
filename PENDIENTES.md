@@ -64,18 +64,25 @@ _Ideas que surgieron charlando. Todas apuntan al video._
 
 ## Falta portar de la app web
 
-_Lo que la web ya tiene y el lab todavía no. Ya portado: saturación, compresor, limitador master,
-análisis de nivel, sonidos de click, ASIO dúplex._
+El relevamiento completo (qué hace cada cosa en la web, cómo funciona y en qué estado está acá) está en
+[docs/MIGRACION.md](docs/MIGRACION.md), con el orden sugerido al final. Todo se porta igual que en la web
+([AGENTS.md → Migrar algo de la web](AGENTS.md#migrar-algo-de-la-web)).
 
-- [ ] EQ de pista (6 bandas, `audio/eq.ts`)
-- [ ] Reverb (bus con impulso sintético) y delay (bus con ducking)
-- [ ] Mezcla completa: falta sends, EQ del compresor (`CompEq`), fades y automatizar presets
-  (ya hay pistas, paneo, mute/solo, fader, master con limitador)
-- [ ] Calibración de latencia guardada por dispositivo
-- [ ] Captura de cámara y grabación de video
-- [ ] Interfaz: mover/recortar clips, mixer, configuración, color; grabar desde la ventana
-- [ ] Sesiones: guardar (hoy solo abre `session.json`, no escribe)
-- [ ] Exportación a MP4 (FFmpeg, paneles, color, efectos de video)
+## Entregado, falta revisar (2026-10-22)
+
+Lo hicieron los agentes y compila con 0/0 y pasa sus pruebas de `gclab`, pero el coordinador todavía no
+lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](docs/COORDINACION.md)
+("Para retomar"). Al aprobarlo, pasa a **Hecho** y se marca en MIGRACION.
+
+- A3 · edición de clips en el timeline (§3): mover, recortar, fades, mover/intercambiar de pista,
+  reordenar, menú contextual, "+ Nueva pista", Supr (`ClipEditing.cs`, `MainWindow.Timeline.cs`)
+- A4 (parte) · encuadre arrastrando y con la rueda en la preview (`InspectorEditing.cs`)
+- B2 · render offline de la mezcla (`MixRenderer`, `gclab mezclar`) y `AudioLoader` (remuestreo)
+- B3 · el grafo completo sonando en la ventana: EQ, EQ del preset, envíos, reverb, delay, fades
+  (`LiveTrack.ApplyChannel`, `PlaybackEngine`)
+- B4 · entrada (ganancia, modos, limitador suave), monitoreo por software y grabación en el motor
+  con cuenta, todo sobre el mismo reloj (`RecordingSession.cs`); falta el flujo en la ventana
+- B5 · calibración de latencia con cable o tocando (`LatencyCalibration.cs`, `gclab latencia`)
 
 ## Notas
 
@@ -84,10 +91,49 @@ análisis de nivel, sonidos de click, ASIO dúplex._
   decodificado quedan solo unos pocos píxeles negros sobre casi negro, invisibles. Ojo al revisar
   capturas: las de GDI (CopyFromScreen/PrintWindow) dan alfa 0 en los píxeles negros y los visores los
   pintan blancos, aunque en pantalla se vean bien. Mirar el RGB, no el alfa.
+- "Volver a una versión guardada" no tiene dónde tocarse en la ventana: el menú provisorio del chip se
+  fue con el gestor y su lugar es la pestaña Historial (§2.3 de MIGRACION). Mientras tanto,
+  `gclab proyecto versiones` / `volver`.
+  La grabación todavía no usa `RecordingWriter` desde la ventana:
+  hay que alimentarlo desde un hilo aparte, nunca desde el callback de ASIO.
+- `gclab verificar` corre los `.ts` reales de la web, pero los nodos nativos de Web Audio (Biquad,
+  Delay, Convolver) y el ruteo de los buses son una emulación en JS (`tools/worklet-ref.mjs`). Falta
+  una pasada contra un `OfflineAudioContext` de verdad en Chromium para confirmarlos.
 - Sin probar todavía: saltos para atrás en el video mientras reproduce (reinicia FFmpeg en ese punto)
   y cuántos cuadros por segundo llegan de verdad con muchas tomas.
 
 ## Hecho
+
+- 2026-10-22: ports del DSP que faltaba (§5.3 a §5.6 de MIGRACION; tarea B1, Antigravity), verificados
+  muestra a muestra con `gclab verificar` (también con bloques de 100 y 441): presets y EQ del
+  compresor, EQ de pista, reverb, delay con ducker, plantillas de paneo y fades de clip, en
+  `src/GuitarCam.Audio/Dsp/`. Todavía no suenan en la ventana (tarea B3).
+
+- 2026-10-22: deshacer / rehacer (§9 de MIGRACION; tarea A2, ChatGPT): `GuitarCam.Projects/UndoManager.cs`,
+  port de las fotos de `App.tsx` (pistas, clips, canales, formato, aspecto, reverb, delay, color, efectos;
+  200 pasos; misma clave en menos de 800 ms = un paso). Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z y los botones de la
+  barra; se vacía al cambiar de proyecto. `gclab proyecto verificar-deshacer`. Además, `gclab proyecto
+  versiones` / `volver` para las versiones guardadas.
+
+- 2026-10-22: gestor "Proyectos" y plantillas, igual que `SessionPicker` de la web (§2.1 y §2.2 de
+  MIGRACION; tarea A1, hecha por Claude y ChatGPT):
+  - `GuitarCam.Projects/ProjectLibrary.cs`: lista de la carpeta de proyectos + recientes, nombres
+    limpios para Windows y "(2)", renombrar (con la carpeta), duplicar (con hard links, sin exports,
+    en una carpeta temporal que se publica al terminar), Papelera, carpeta de proyectos cambiable
+  - `ProjectTemplates.cs`: las 5 de fábrica + las del usuario en `%APPDATA%`, "Guardar como plantilla"
+  - `Controls/ProjectsDialog.axaml(.cs)`: la app arranca ahí y el chip lo abre; los atajos de la
+    ventana se apagan mientras está abierto
+  - `gclab proyectos …` para todo lo anterior
+
+- 2026-10-22: formato de proyecto propio (`src/GuitarCam.Projects`), sin compatibilidad con la web:
+  - `guitarcam.json` con medios / pistas / clips (varios clips por pista, pistas solo audio)
+  - escritura atómica (tmp + `File.Replace` con `.bak`), autoguardado a los 1,5 s, Ctrl+S
+  - historial en `historial/` (cada 10 min, 30 recientes + una por día por 90 días) y "Volver a una versión guardada"
+  - si el archivo está dañado abre la copia válida más nueva; bloqueo para no abrirlo en dos ventanas
+  - versión del formato con migraciones; una versión más nueva abre solo para ver
+  - grabaciones recuperables: `RecordingWriter` + diario `*.grabando.json`; archivos sueltos en `media/` vuelven como medios
+  - importador de la web (`WebImporter`, menú del proyecto o `gclab proyecto importar`): carpeta nueva
+    "Nombre (nativa)" con enlaces duros a los medios, el original no se toca
 
 - 2026-10-22: video decodificado de verdad en la preview (`Video/VideoDecoder.cs`): FFmpeg por pipe,
   BGRA a 30 fps y hasta 640 px de ancho, un hilo por toma que lee un poco por delante del playhead

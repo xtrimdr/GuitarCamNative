@@ -49,10 +49,10 @@
         </Button>
 
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" Margin="8,0,0,0">
-          <Button Classes="ghost" IsEnabled="False" ToolTip.Tip="Deshacer (Ctrl+Z)">
+          <Button x:Name="UndoButton" Classes="ghost" IsEnabled="False" ToolTip.Tip="Deshacer (Ctrl+Z)">
             <TextBlock Classes="icon" Text="&#xE7A7;" />
           </Button>
-          <Button Classes="ghost" IsEnabled="False" ToolTip.Tip="Rehacer (Ctrl+Y)">
+          <Button x:Name="RedoButton" Classes="ghost" IsEnabled="False" ToolTip.Tip="Rehacer (Ctrl+Y)">
             <TextBlock Classes="icon" Text="&#xE7A6;" />
           </Button>
         </StackPanel>
@@ -210,7 +210,28 @@
         </Grid>
       </Border>
 
-      <c:TimelineView Grid.Row="1" x:Name="Timeline" />
+      <Grid Grid.Row="1">
+        <c:TimelineView x:Name="Timeline" />
+        <Grid x:Name="TimelineToolbar" Width="264" Height="32" HorizontalAlignment="Left" VerticalAlignment="Top"
+              Background="{StaticResource Panel}" ColumnDefinitions="26,26,84,26,*" Margin="0">
+          <Button x:Name="BarsRulerButton" Classes="ghost" Padding="2" MinWidth="0" ToolTip.Tip="Regla en compases y tiempos (4/4, al tempo del click)">
+            <TextBlock Classes="icon" Text="&#xE8D6;" FontSize="13" />
+          </Button>
+          <Button Grid.Column="1" x:Name="TimeRulerButton" Classes="ghost" Padding="2" MinWidth="0" ToolTip.Tip="Regla en minutos y segundos">
+            <TextBlock Classes="icon" Text="&#xE823;" FontSize="13" />
+          </Button>
+          <ComboBox Grid.Column="2" x:Name="SnapBox" FontSize="11" MinHeight="24" Height="26" Padding="4,0" VerticalAlignment="Center"
+                    ToolTip.Tip="Imán a la grilla: cabezal, mover clips, recortes y fades (Alt: sin imán)" AutomationProperties.Name="Imán a la grilla" />
+          <Button Grid.Column="3" x:Name="TimelineFitButton" Classes="ghost" Padding="2" MinWidth="0" ToolTip.Tip="Ver todo (ajustar el zoom al ancho)">
+            <TextBlock Classes="icon" Text="&#xE9A6;" FontSize="13" />
+          </Button>
+          <Slider Grid.Column="4" x:Name="TrackHeightSlider" Minimum="40" Maximum="160" Value="64" Margin="6,0,8,0" VerticalAlignment="Center"
+                  ToolTip.Tip="Altura de las pistas" AutomationProperties.Name="Altura de las pistas" />
+        </Grid>
+      </Grid>
     </Grid>
+
+    <!-- the "Proyectos" manager covers the whole window, like in the web app -->
+    <c:ProjectsDialog Grid.RowSpan="4" x:Name="Projects" IsVisible="False" />
   </Grid>
 </Window>
