@@ -9,12 +9,19 @@ Laboratorio para ver si GuitarCam Studio se puede pasar a .NET nativo. Corre al 
   - `ClickSynth.cs`: los 6 sonidos de click de `clickSounds.ts`
   - `AsioDuplex.cs`: entrada y salida ASIO en un mismo callback (NAudio)
 - `src/GuitarCam.Lab`: `gclab.exe`, la consola de pruebas
+- `src/GuitarCam.App`: la ventana (Avalonia). Abre el último proyecto de la app web (o el que elijas
+  con el chip del proyecto), muestra timeline, preview e inspector y reproduce por ASIO.
+  Espacio = play/stop, Inicio = al principio, C = click, M/S = mute/solo, F = ver todo,
+  Shift+rueda = zoom, Alt+rueda = alto de pista
 - `tools/worklet-ref.mjs`: corre los worklets originales en Node para comparar muestra a muestra
+
+Lo que queda por hacer está en [PENDIENTES.md](PENDIENTES.md).
 
 ## Uso
 
 ```
 dotnet build
+src\GuitarCam.App\bin\Debug\net10.0-windows\GuitarCam.exe
 src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe
 ```
 

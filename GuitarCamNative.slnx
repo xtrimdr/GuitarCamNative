@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/GuitarCam.App/GuitarCam.App.csproj" />
     <Project Path="src/GuitarCam.Audio/GuitarCam.Audio.csproj" />
     <Project Path="src/GuitarCam.Lab/GuitarCam.Lab.csproj" />
   </Folder>

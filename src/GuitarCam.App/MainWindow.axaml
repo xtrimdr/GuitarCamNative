@@ -1,0 +1,216 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="using:GuitarCam.App.Controls"
+        x:Class="GuitarCam.App.MainWindow"
+        Title="GuitarCam Studio"
+        Width="1440" Height="900" MinWidth="1000" MinHeight="640"
+        WindowStartupLocation="CenterScreen"
+        TransparencyLevelHint="None"
+        Background="{StaticResource App}"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="44"
+        ExtendClientAreaChromeHints="PreferSystemChrome">
+
+  <!-- TransparencyLevelHint None: with transparency allowed, some dark video pixels let the window behind show through -->
+  <Window.Styles>
+    <Style Selector="Border.section">
+      <Setter Property="Background" Value="{StaticResource Raised}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="12,10" />
+    </Style>
+    <Style Selector="Border.section.off TextBlock.dim, Border.section.off Slider, Border.section.off UniformGrid, Border.section.off CheckBox">
+      <Setter Property="Opacity" Value="0.4" />
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="44,*,4,340">
+
+    <!-- top bar (also the window's title bar) -->
+    <Border x:Name="TitleBar" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="12,0,150,0">
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <Border Width="24" Height="24" CornerRadius="6" Background="{StaticResource Accent}">
+            <TextBlock Classes="icon" Text="&#xE714;" FontSize="13" Foreground="#0b0b0d" HorizontalAlignment="Center" />
+          </Border>
+          <TextBlock Text="GuitarCam Studio" FontWeight="SemiBold" FontSize="13.5" VerticalAlignment="Center" />
+          <Border Background="{StaticResource AccentSoft}" CornerRadius="4" Padding="5,1" VerticalAlignment="Center">
+            <TextBlock Text="NATIVO" FontSize="9.5" FontWeight="Bold" LetterSpacing="0.8" Foreground="{StaticResource Accent}" />
+          </Border>
+        </StackPanel>
+
+        <Button Grid.Column="1" x:Name="SessionChip" Classes="chip" Margin="18,0,0,0">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Classes="icon" Text="&#xE8B7;" FontSize="13" Foreground="{StaticResource Dim}" />
+            <TextBlock x:Name="SessionName" Text="Sin proyecto" FontWeight="SemiBold" />
+            <TextBlock Classes="icon" Text="&#xE70D;" FontSize="9" Foreground="{StaticResource Faint}" />
+          </StackPanel>
+        </Button>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" Margin="8,0,0,0">
+          <Button Classes="ghost" IsEnabled="False" ToolTip.Tip="Deshacer (Ctrl+Z)">
+            <TextBlock Classes="icon" Text="&#xE7A7;" />
+          </Button>
+          <Button Classes="ghost" IsEnabled="False" ToolTip.Tip="Rehacer (Ctrl+Y)">
+            <TextBlock Classes="icon" Text="&#xE7A6;" />
+          </Button>
+        </StackPanel>
+
+        <TextBlock Grid.Column="3" x:Name="StatusText" Classes="dim" HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="10" Margin="0,0,14,0" VerticalAlignment="Center">
+          <TextBlock Classes="label" Text="ENTRADA 1-2" VerticalAlignment="Center" />
+          <c:StereoMeter x:Name="InputMeter" Width="160" VerticalAlignment="Center" ToolTip.Tip="Entrada de la interfaz (clic: apaga el indicador de clip)" />
+          <Button Classes="ghost" ToolTip.Tip="Configuración">
+            <TextBlock Classes="icon" Text="&#xE713;" />
+          </Button>
+        </StackPanel>
+
+        <Button Grid.Column="5" x:Name="ExportButton" Classes="accent" ToolTip.Tip="Todavía no está en la versión nativa">
+          <StackPanel Orientation="Horizontal" Spacing="7">
+            <TextBlock Classes="icon" Text="&#xE72D;" FontSize="12" Foreground="#0b0b0d" />
+            <TextBlock Text="Exportar MP4" />
+          </StackPanel>
+        </Button>
+      </Grid>
+    </Border>
+
+    <!-- inspector + preview -->
+    <Grid Grid.Row="1" ColumnDefinitions="290,*">
+      <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+        <ScrollViewer>
+          <StackPanel x:Name="Inspector" Margin="14,16" Spacing="12">
+            <StackPanel Spacing="3" Margin="2,0,2,4">
+              <TextBlock Classes="label" Text="TOMA" />
+              <TextBlock x:Name="TakeTitle" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Text="Ninguna seleccionada" />
+              <TextBlock x:Name="TakeInfo" Classes="dim" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <Border Classes="section">
+              <StackPanel Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Classes="icon" Text="&#xE9E9;" FontSize="12" Foreground="{StaticResource Dim}" />
+                  <TextBlock Classes="label" Text="MEZCLA" VerticalAlignment="Center" />
+                </StackPanel>
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Classes="dim" Text="Volumen" />
+                  <TextBlock Grid.Column="1" x:Name="VolText" Classes="dim mono" />
+                </Grid>
+                <Slider x:Name="VolSlider" Minimum="0" Maximum="2" />
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Classes="dim" Text="Paneo" />
+                  <TextBlock Grid.Column="1" x:Name="PanText" Classes="dim mono" />
+                </Grid>
+                <Slider x:Name="PanSlider" Minimum="-1" Maximum="1" />
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="SatSection" Classes="section">
+              <StackPanel Spacing="10">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                  <TextBlock Classes="icon" Text="&#xE945;" FontSize="12" Foreground="{StaticResource Dim}" Margin="0,0,8,0" />
+                  <TextBlock Grid.Column="1" Classes="label" Text="SATURACIÓN" VerticalAlignment="Center" />
+                  <ToggleSwitch Grid.Column="2" x:Name="SatSwitch" Margin="0,-8,-12,-8" />
+                </Grid>
+                <UniformGrid Columns="2">
+                  <ToggleButton x:Name="TubeButton" Classes="chip" Content="Válvula" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" CornerRadius="6,0,0,6" />
+                  <ToggleButton x:Name="TapeButton" Classes="chip" Content="Cinta" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" CornerRadius="0,6,6,0" />
+                </UniformGrid>
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Classes="dim" Text="Vida" />
+                  <TextBlock Grid.Column="1" x:Name="VidaText" Classes="dim mono" />
+                </Grid>
+                <Slider x:Name="VidaSlider" Minimum="0" Maximum="1" />
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="CompSection" Classes="section">
+              <StackPanel Spacing="10">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                  <TextBlock Classes="icon" Text="&#xE9D9;" FontSize="12" Foreground="{StaticResource Dim}" Margin="0,0,8,0" />
+                  <TextBlock Grid.Column="1" Classes="label" Text="COMPRESOR" VerticalAlignment="Center" />
+                  <ToggleSwitch Grid.Column="2" x:Name="CompSwitch" Margin="0,-8,-12,-8" />
+                </Grid>
+                <TextBlock x:Name="CompPreset" Classes="dim" />
+                <TextBlock x:Name="CompRaw" Classes="dim mono" FontSize="11" />
+                <CheckBox x:Name="LimitCheck" Content="Limitador de pista" FontSize="12" Foreground="{StaticResource Dim}" />
+                <StackPanel Spacing="4">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Classes="dim" Text="Reducción" FontSize="11" />
+                    <TextBlock Grid.Column="1" x:Name="GrText" Classes="dim mono" FontSize="11" />
+                  </Grid>
+                  <Border x:Name="GrTrack" Height="6" CornerRadius="3" Background="{StaticResource App}">
+                    <Border x:Name="GrBar" Width="0" HorizontalAlignment="Right" CornerRadius="3" Background="{StaticResource Accent}" />
+                  </Border>
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+            <TextBlock Classes="dim" FontSize="11" Foreground="{StaticResource Faint}" TextWrapping="Wrap" Margin="2,4"
+                       Text="Versión nativa de prueba: reverb, delay, EQ, color y grabación todavía no están portados. El video va a 1 cuadro por segundo." />
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+
+      <c:PreviewView Grid.Column="1" x:Name="Preview" />
+    </Grid>
+
+    <GridSplitter Grid.Row="2" Background="{StaticResource Line}" ResizeDirection="Rows" />
+
+    <!-- transport + timeline -->
+    <Grid Grid.Row="3" RowDefinitions="Auto,*">
+      <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="12,8">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button x:Name="ToStartButton" Classes="transport" ToolTip.Tip="Al inicio (Inicio)">
+              <TextBlock Classes="icon" Text="&#xE892;" FontSize="13" />
+            </Button>
+            <Button x:Name="PlayButton" Classes="transport play" ToolTip.Tip="Reproducir / parar (Espacio)">
+              <TextBlock x:Name="PlayIcon" Classes="icon" Text="&#xE768;" FontSize="14" />
+            </Button>
+            <Button x:Name="RecButton" Classes="transport rec" ToolTip.Tip="Grabar (R)">
+              <Ellipse Width="12" Height="12" Fill="{StaticResource Rec}" />
+            </Button>
+          </StackPanel>
+
+          <Border Grid.Column="1" Margin="16,0,0,0" Background="{StaticResource App}" CornerRadius="6" Padding="14,4" BorderBrush="{StaticResource Line}" BorderThickness="1">
+            <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+              <TextBlock x:Name="TimeText" Classes="mono" FontSize="19" Text="00:00.000" VerticalAlignment="Center" />
+              <TextBlock x:Name="BarText" Classes="mono dim" FontSize="12" Text="1.1" VerticalAlignment="Center" />
+            </StackPanel>
+          </Border>
+
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0">
+            <Border Background="{StaticResource Raised}" CornerRadius="6" Padding="10,4" BorderBrush="{StaticResource Line}" BorderThickness="1" VerticalAlignment="Center">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock x:Name="BpmText" Classes="mono" FontSize="14" Text="120.00" VerticalAlignment="Center" />
+                <TextBlock Classes="label" Text="BPM" VerticalAlignment="Center" />
+              </StackPanel>
+            </Border>
+            <ToggleButton x:Name="ClickToggle" Classes="chip" ToolTip.Tip="Click (C)">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Classes="icon" Text="&#xE8D6;" FontSize="12" />
+                <TextBlock Text="Click" />
+              </StackPanel>
+            </ToggleButton>
+            <ComboBox x:Name="ClickSoundBox" FontSize="12" MinHeight="30" VerticalAlignment="Center" />
+          </StackPanel>
+
+          <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+            <TextBlock x:Name="DspText" Classes="mono dim" FontSize="11" VerticalAlignment="Center" ToolTip.Tip="Carga del callback de audio" />
+            <TextBlock x:Name="AudioStatus" Classes="dim" FontSize="11" VerticalAlignment="Center" />
+            <Button x:Name="FitButton" Classes="chip" ToolTip.Tip="Ver todo (F)">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Classes="icon" Text="&#xE9A6;" FontSize="12" />
+                <TextBlock Text="Ver todo" />
+              </StackPanel>
+            </Button>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <c:TimelineView Grid.Row="1" x:Name="Timeline" />
+    </Grid>
+  </Grid>
+</Window>
