@@ -1,0 +1,99 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GuitarCam.App.Dialogs.SettingsDialog"
+             AutomationProperties.Name="Configuración"
+             Background="#B3000000" KeyboardNavigation.TabNavigation="Cycle" Focusable="True">
+
+  <!-- Port of SettingsDialog from GuitarCam/src/components/SettingsDialog.tsx -->
+  <UserControl.Styles>
+    <Style Selector="Button.nav">
+      <Setter Property="Height" Value="36" />
+      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.nav:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+    <Style Selector="Button.nav.active">
+      <Setter Property="Background" Value="{StaticResource AccentSoft}" />
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+    </Style>
+    <Style Selector="Button.nav.active:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentSoft}" />
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+    </Style>
+    <Style Selector="Button.act">
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Faint}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.act:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+    <Style Selector="Button.link">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Foreground" Value="{StaticResource Faint}" />
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+    <Style Selector="Button.link:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+    <Style Selector="ComboBox.field">
+      <Setter Property="Height" Value="36" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="Background" Value="{StaticResource Raised}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+  </UserControl.Styles>
+
+  <Border x:Name="Panel" Width="768" Height="640" HorizontalAlignment="Center" VerticalAlignment="Center"
+          Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12" ClipToBounds="True">
+    <Grid RowDefinitions="Auto,*">
+      <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="20,10,12,10">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="Configuración" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <Button Grid.Column="1" x:Name="CloseButton" Classes="act" Width="32" Height="32" ToolTip.Tip="Cerrar" AutomationProperties.Name="Cerrar">
+            <TextBlock Classes="icon" Text="&#xE711;" FontSize="13" />
+          </Button>
+        </Grid>
+      </Border>
+      <Grid Grid.Row="1" ColumnDefinitions="208,*">
+        <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0" Padding="8">
+          <StackPanel Spacing="2">
+            <Button x:Name="AudioTab" Classes="nav">
+              <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE8D6;" FontSize="15" /><TextBlock Text="Entradas y salidas" /></StackPanel>
+            </Button>
+            <Button x:Name="CameraTab" Classes="nav">
+              <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE722;" FontSize="15" /><TextBlock Text="Cámara" /></StackPanel>
+            </Button>
+            <Button x:Name="SyncTab" Classes="nav">
+              <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE916;" FontSize="15" /><TextBlock Text="Sincronización" /></StackPanel>
+            </Button>
+          </StackPanel>
+        </Border>
+        <ScrollViewer Grid.Column="1" x:Name="Body" HorizontalScrollBarVisibility="Disabled" />
+      </Grid>
+    </Grid>
+  </Border>
+</UserControl>

@@ -21,8 +21,8 @@ public partial class MainWindow
     bool recStopping;
     bool? recShown;
 
-    /// <summary>Default overdub fine adjustment of the web's Configuración; 0 until that screen is ported.</summary>
-    const double OverdubOffsetMs = 0;
+    /// <summary>"Ajuste fino de audio (tomas nuevas)" of Configuración → Sincronización.</summary>
+    double OverdubOffsetMs => Settings.OverdubOffsetMs;
 
     bool RecordingBusy => recJournal != null || recStopping;
 

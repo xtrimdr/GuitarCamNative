@@ -104,7 +104,7 @@ public partial class MainWindow
                 powerLabel.Children.Add(new TextBlock { Classes = { "icon" }, Text = "\uE7E8", FontSize = 11, Foreground = on() ? Palette.App : Palette.Faint });
                 powerLabel.Children.Add(new TextBlock { Text = on() ? "ON" : "OFF", FontSize = 10.5, FontWeight = FontWeight.Bold, Foreground = on() ? Palette.App : Palette.Faint });
                 toggle.Content = powerLabel;
-                toggle.Background = on() ? Palette.Accent : Palette.Panel;
+                toggle.Background = on() ? Palette.Accent : Brushes.Transparent;
                 toggle.Foreground = on() ? Palette.App : Palette.Faint;
                 ToolTip.SetTip(toggle, (on() ? "Apagar " : "Prender ") + (title == "EQ" ? "el EQ" : title == "Saturación" ? "la saturación" : title == "Compresor" ? "el compresor" : title == "Reverb" ? "el envío a la reverb" : "el envío al delay"));
             });
@@ -183,14 +183,14 @@ public partial class MainWindow
         Slider(mix, "Volumen", 0, 1.5, 0.01, 1, () => sel!.Channel.Volume, v => Edit(t => t.Channel.Volume = v, "volume"), v => $"{v * 100:0}%");
         Slider(mix, "Paneo", -1, 1, 0.05, 0, () => sel!.Channel.Pan, v => Edit(t => t.Channel.Pan = Math.Abs(v) < 0.04 ? 0 : v, "pan"), v => v == 0 ? "C" : $"{(v < 0 ? "L" : "R")} {Math.Abs(v) * 100:0}");
         var sat = Section("Saturación", "\uE945", () => sel!.Channel.Sat.On, on => Edit(t => t.Channel.Sat.On = on, "sat.on"));
-        var modes = new UniformGrid { Columns = 2 };
+        var modes = new StackPanel { Orientation = Orientation.Horizontal };
+        sat.Children.Add(new Border { Classes = { "seg" }, HorizontalAlignment = HorizontalAlignment.Left, Child = modes });
         foreach (var (id, text) in new[] { ("tube", "Válvula"), ("tape", "Cinta") })
         {
-            var b = new ToggleButton { Content = text, Classes = { "chip" }, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center };
+            var b = new ToggleButton { Content = text, Classes = { "seg" } };
             b.Click += (_, _) => Edit(t => { t.Channel.Sat.Mode = id; t.Channel.Sat.On = true; }, "sat.mode");
             inspectorRefresh.Add(() => b.IsChecked = sel!.Channel.Sat.Mode == id); modes.Children.Add(b);
         }
-        sat.Children.Add(modes);
         Slider(sat, "Vida", 0, 1, 0.01, 0.3, () => sel!.Channel.Sat.Amount, v => Edit(t => { t.Channel.Sat.Amount = v; t.Channel.Sat.On = true; }, "sat.amount"),
             v => $"{(v < .2 ? "Apenas" : v < .45 ? "Sutil" : v < .7 ? "Con vida" : v < .9 ? "Caliente" : "Al palo")} · {v * 100:0}%",
             "Cuánto empuja la toma contra la válvula o la cinta. Se calibra con el nivel de la toma");
@@ -207,11 +207,11 @@ public partial class MainWindow
         var presets = new UniformGrid { Columns = 3 };
         foreach (var (id, label) in new[] { ("rhythm", "Rasgueo"), ("arpeggio", "Arpegio"), ("lead", "Punteo") })
         {
-            var b = new ToggleButton { Content = label, Classes = { "chip" }, FontSize = 12, Padding = new Thickness(3), HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center };
+            var b = new ToggleButton { Content = label, Classes = { "seg", "pick" }, Padding = new Thickness(3, 0), Margin = new Thickness(2, 0) };
             b.Click += (_, _) => CompEdit(c => { c.Preset = id; c.On = true; }, "preset", recalculate: true);
             inspectorRefresh.Add(() => b.IsChecked = sel!.Channel.Comp.Preset == id); presets.Children.Add(b);
         }
-        comp.Children.Add(presets);
+        comp.Children.Add(new Border { Classes = { "seg" }, Child = presets });
         var amountRow = new Grid { ColumnDefinitions = new ColumnDefinitions("64,*"), Margin = new Thickness(0, 2) };
         var knob = new InspectorKnob(); knob.Changed += v => CompEdit(c => { c.Amount = v; c.On = true; }, "amount", recalculate: true);
         amountRow.Children.Add(knob);

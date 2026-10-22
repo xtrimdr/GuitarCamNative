@@ -66,6 +66,12 @@ public sealed class PlaybackEngine : IDisposable
     public string Status { get; private set; } = "Audio apagado";
     public string? DriverName => io?.Driver;
     public bool IsOpen => io != null;
+    public int InputOffset { get; private set; }
+    public int OutputOffset { get; private set; }
+    /// <summary>Output channels of the open driver (the Configuración "Dispositivo" lists them in pairs).</summary>
+    public int OutputChannels => io?.DriverOutputChannels ?? 0;
+    /// <summary>The output side of the calibration key: each input + output pair keeps its own measurement.</summary>
+    public string CalibrationOutputId => $"{InputOffset}:{OutputOffset}";
     public bool Playing => playing;
     public bool Recording => recording;
     public bool Calibrating => activeCalibration != null;
@@ -163,14 +169,16 @@ public sealed class PlaybackEngine : IDisposable
             io = null;
             string driver = AsioDuplex.PickDriver(wantedDriver);
             io = new AsioDuplex(driver, SampleRate, inputOffset, 2, outputOffset, Process);
+            InputOffset = inputOffset;
+            OutputOffset = outputOffset;
             io.Start();
             for (int i = 0; i < 100 && io.FramesPerBuffer == 0; i++) Thread.Sleep(10);
             double ms = 1000.0 * io.FramesPerBuffer / SampleRate;
             Status = $"{driver} · {SampleRate / 1000} kHz · {io.FramesPerBuffer} muestras ({ms:0.0} ms)";
 
-            var stored = LatencyCalibration.ReadCalibration(driver, $"{inputOffset}:{outputOffset}");
-            if (stored != null && !LatencyCalibration.IsCalibrationStale(stored, GetEstimatedRoundtripLatencyMs(), SampleRate))
-                calibratedLatencyMs = stored.LatencyMs;
+            // like the web, a saved measurement applies even when stale (Configuración warns about it);
+            // a pair with nothing saved goes back to the driver's estimate
+            calibratedLatencyMs = LatencyCalibration.ReadCalibration(driver, CalibrationOutputId)?.LatencyMs;
         }
         catch (Exception e)
         {

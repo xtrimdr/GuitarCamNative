@@ -127,6 +127,15 @@ public partial class MainWindow
     }
     static string TransportTime(double sec) => $"{(long)(Math.Max(0, sec) / 60):00}:{Math.Max(0, sec) % 60:00.0}";
 
+    // bottom bar cell: format on top, driver name as the label ("Focusrite USB ASIO · 48 kHz · …")
+    void ShowAudioStatus()
+    {
+        var parts = engine.Status.Split(" · ", 2);
+        AudioStatus.Text = parts.Length == 2 ? parts[1] : parts[0];
+        AudioDriverText.Text = parts.Length == 2 ? parts[0] : "Audio";
+        ToolTip.SetTip(AudioCell, engine.Status);
+    }
+
     void RefreshTransport(double pos)
     {
         bool bars = Timeline.RulerInBars;
@@ -140,9 +149,8 @@ public partial class MainWindow
         if (transportPlaying != engine.Playing)
         {
             transportPlaying = engine.Playing;
-            PlayIcon.Text = engine.Playing ? "\uE769" : "\uE768";
-            PlayButton.Background = engine.Playing ? Palette.Alpha(Palette.AccentColor, .14) : Palette.Raised;
-            PlayButton.Foreground = engine.Playing ? Palette.Accent : Palette.Fg;
+            PlayIcon.Text = engine.Playing ? "\uF8AE" : "\uF5B0";
+            PlayButton.Classes.Set("on", engine.Playing);
             ToolTip.SetTip(PlayButton, engine.Playing ? "Pausa (Espacio)" : "Reproducir desde el cabezal (Espacio)");
         }
         StopButton.IsEnabled = !engine.Recording && (engine.Playing || pos > 0);

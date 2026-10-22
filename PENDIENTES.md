@@ -41,6 +41,10 @@ _Cosas que no están en la app web o que la versión nativa debería hacer disti
 - [ ] Transiciones entre clips y entre layouts
 - [ ] Recorte y encuadre animados (zoom/paneo que cambian con el tiempo)
 
+#### 5. Atajos personalizables
+- [ ] Un apartado (probablemente en Configuración) para cambiar las teclas de cada acción. Los atajos ya
+  se muestran solo en los tooltips; cuando exista, los tooltips tienen que leer la tecla configurada.
+
 ### Sugerencias (para decidir)
 
 _Ideas que surgieron charlando. Todas apuntan al video._
@@ -96,6 +100,14 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
   y cuántos cuadros por segundo llegan de verdad con muchas tomas.
 
 ## Hecho
+
+- 2026-10-22: Configuración (§7 de MIGRACION): `Dialogs/SettingsDialog.axaml(.cs)` desde el ⚙, con
+  Entradas y salidas (driver ASIO, medidor, canales, ganancia, par de salida, monitoreo), Sincronización
+  (latencia calibrada/estimada con sus avisos, calibrar con cable o tocando, "Usar la estimación",
+  ajuste fino que usa la grabación) y Cámara con la forma de la web pero apagada. El driver y la salida se
+  recuerdan. El motor ahora aplica la calibración guardada aunque esté vieja (avisa) y vuelve a la
+  estimación en un par sin medir. Probado abrirlo con la Focusrite; la calibración desde el diálogo
+  todavía no se probó con cable ni tocando.
 
 - 2026-10-22: grabar desde la ventana (§5.8 de MIGRACION): R / botón Grabar, cuenta con "Cancelar n/4"
   (Esc), Detener (Espacio / R) y Descartar, reloj y cabezal rojos, "Grabando…" en la pista destino o en

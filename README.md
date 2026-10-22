@@ -29,7 +29,9 @@ Laboratorio para ver si GuitarCam Studio se puede pasar a .NET nativo. Corre al 
 - `src/GuitarCam.App`: la ventana (Avalonia). Arranca en el gestor "Proyectos" (como `SessionPicker`
   de la web: lista, buscador, nuevo con plantilla, renombrar, duplicar, Papelera, abrir carpeta,
   importar de la web), salvo que reciba una carpeta por línea de comandos; el chip del proyecto lo
-  vuelve a abrir. Timeline, preview e inspector, reproducción por ASIO, autoguardado.
+  vuelve a abrir. Timeline, preview e inspector, reproducción por ASIO, autoguardado. El ⚙ abre
+  Configuración: driver ASIO y salida (se recuerdan), canales, ganancia, monitoreo, calibración de
+  latencia y ajuste fino de sincronía.
   R = grabar (grabando: detener y guardar; en la cuenta: cancelar), Esc = cancelar la cuenta,
   Espacio = play/pausa (grabando: detener y guardar), Inicio = al principio, C = click,
   Shift+C = cuenta, T = tap tempo, M/S = mute/solo, F = ver todo,

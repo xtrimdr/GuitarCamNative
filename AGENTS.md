@@ -136,7 +136,7 @@ El callback de ASIO (`AsioDuplex.ProcessBlock`, `PlaybackEngine.Process`) corre 
   caída visual (×0,82 por tick en pistas, 24 dB/s en el medidor estéreo) se hace del lado de la UI.
 - Lo que va a disco sale del callback por otro hilo (ver `RecordingWriter`).
 - Sample rate del motor: 48 kHz (`PlaybackEngine.SampleRate`).
-- `PlaybackEngine` muestra la carga del callback ("DSP x %"): si un cambio la sube mucho, decilo.
+- `PlaybackEngine` muestra la carga del callback ("x %" con la etiqueta DSP, abajo a la izquierda): si un cambio la sube mucho, decilo.
 
 Cadena por pista (como en la web, `buildTrack` de `mixGraph.ts`): clips (con fades y ganancia) →
 saturación → EQ del preset antes (corte de graves, barro) → compresor → EQ del preset después (presencia,
@@ -178,7 +178,7 @@ coincida con la web).
 | Token | Valor | Uso |
 |---|---|---|
 | `App` | `#0b0b0d` | fondo de la ventana, del timeline, de la preview; texto sobre acento |
-| `Panel` | `#131316` | barras (título, transporte), inspector, encabezados de pista |
+| `Panel` | `#131316` | barras (título, transporte de abajo), inspector, encabezados de pista |
 | `Raised` | `#1c1c20` | secciones, chips, botones, pista seleccionada |
 | `Hover` | `#26262b` | hover; fondo de toggles apagados y badges |
 | `Line` | `#27272c` | todos los bordes y separadores (1 px) |
@@ -232,7 +232,7 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 ### Formas y espaciado
 
 - Radios: **8** secciones, **6** botones/chips/cajas, **5** clips y badges, **4** toggles M/S y etiquetas,
-  **18** (círculo) botones de transporte, **2** barras de medidor.
+  **2** barras de medidor.
 - Bordes de 1 px en `Line`. Sin sombras, sin gradientes, sin animaciones decorativas.
 - Padding de sección `12,10`; separación vertical entre bloques 10–12; márgenes del inspector `14,16`.
 - Alturas mínimas: chips 30, transporte 36×36.
@@ -240,18 +240,29 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 ### Estructura de la ventana
 
 ```
-┌ barra de título propia (44) ─ logo · chip del proyecto ▾ · deshacer/rehacer · estado · ENTRADA 1-2 [medidor] · ⚙ · [Exportar MP4] ┐
+┌ barra de título propia (44) ─ logo · chip del proyecto ▾ · deshacer/rehacer · estado ·························· ⚙ · [Exportar MP4] ┐
 ├ inspector (290) ─┬─ preview (el cuadro del video con un panel por pista con video) ───────────────────────────────────────┤
 │ TOMA + secciones │                                                                                                         │
 ├──────────────────┴─ separador arrastrable ──────────────────────────────────────────────────────────────────────────────────┤
-│ transporte: ⏮ ▶ ● · reloj · BPM · Click · sonido ·························· DSP % · driver ASIO · Ver todo                  │
-│ timeline (340 en total): regla de compases (32) · encabezados fijos (264) · un carril por pista (64, 40–160)               │
+│ timeline (280): regla de compases (32) · encabezados fijos (264) · un carril por pista (64, 40–160)                         │
+├ transporte, siempre abajo (~52) ────────────────────────────────────────────────────────────────────────────────────────────┤
+│ DSP % · formato/driver · ENTRADA 1-2 ··· [ reloj │ ⏮ ■ ▶ Grabar loop │ Compás Tempo TAP Cuenta Click ▾ ] ··· Timeline/Mixer · Ver todo │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+- **Transporte abajo, al estilo Fender Studio Pro** (pedido del usuario; en la web va arriba del timeline):
+  celdas planas con el valor arriba y una etiqueta chica abajo. A la izquierda el estado del audio (carga
+  DSP, formato con el driver como etiqueta, medidor de entrada), a la derecha la vista, y en el medio **un
+  solo recuadro oscuro** (`Border.metro`) con reloj │ transporte (`Button.tbtn`, Grabar, loop) │ metrónomo,
+  separados por `Border.vsep`. Ese recuadro queda **siempre centrado en la ventana**: columnas `*,Auto,*`;
+  si falta lugar, el texto del audio de la izquierda se recorta antes de que el recuadro se mueva.
 
 - La barra de título es la de la app (`ExtendClientAreaToDecorationsHint`), arrastrable, doble clic
   maximiza; los botones del sistema quedan a la derecha (margen 150). `TransparencyLevelHint="None"` no se
   toca: con transparencia, píxeles oscuros del video dejan ver lo que hay detrás.
+- Maximizada, Windows corre la ventana 8 px afuera de cada borde de la pantalla (por la barra de título
+  propia). La grilla raíz lleva `Margin="{Binding $parent[Window].OffScreenMargin}"` para compensarlo; no
+  lo saques o se cortan los costados y la barra de transporte.
 - **Barra de estado** = el `StatusText` del centro de la barra de título. Ahí van los avisos, no en diálogos.
 - **Inspector**: título de la toma + una tarjeta (`Border.section`) por bloque, cada una con ícono +
   etiqueta en mayúscula y, si se puede apagar, un `ToggleSwitch` a la derecha. Apagada → clase `off`
@@ -268,10 +279,13 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 
 | Clase | Qué es |
 |---|---|
-| `Button.chip` / `ToggleButton.chip` | botón normal (Raised + borde). Activado: fondo `AccentSoft`, borde y texto `Accent` |
+| `Button.chip` / `ToggleButton.chip` | botón normal, de contorno como en la web: fondo transparente, borde `Line`, texto `Dim` (`Faint` si es un toggle apagado). Activado (o `Button.chip.on`): fondo `AccentSoft`, borde acento al 40 %, texto `Accent`. Deshabilitado: opacidad 0,35 |
+| `Border.seg` + `ToggleButton.seg` | control segmentado (`Segmented` de la web): caja `Raised` y la opción activa como pastilla blanca al 11 %. `.seg.pick` = variante de acento (estilo del compresor) |
+| `Border.metro` + `ToggleButton.cell` + `Border.vsep` | recuadro oscuro del centro de la barra de transporte (reloj │ transporte │ metrónomo, con divisores verticales `vsep`). El metrónomo, al estilo Studio One (pedido del usuario; en la web son chips sueltos): una caja con celdas valor arriba (`TextBlock.metro-value`) y etiqueta chica abajo (`TextBlock.metro-label`): Compás · Tempo · TAP · Cuenta · Click (sin atajos visibles; ícono `MetronomeIcon`, dibujado porque Segoe no tiene metrónomo) · sonido ▾ |
 | `Button.ghost` | botón de ícono sin fondo (barra de título) |
 | `Button.accent` | **la** acción principal. Uno solo por pantalla (hoy: "Exportar MP4") |
-| `Button.transport` (+ `.play`, `.rec`) | botones redondos de transporte. Play relleno de acento, grabar con punto rojo |
+| `Button.tbtn` / `ToggleButton.tbtn` | botones de la barra de transporte: planos, 36×36, ícono `Fg`; hover `Hover`. Activo (loop, o `.on` mientras suena): ícono `Accent`. `Button.clock` = el reloj plano |
+| `StackPanel.bar-cell` | celda de la barra de transporte (valor arriba, `TextBlock.metro-label` abajo) |
 | `Border.section` (+ `.off`) | tarjeta del inspector |
 | `TextBlock.label` / `.dim` / `.mono` / `.icon` | etiqueta / secundario / números / ícono |
 
@@ -311,8 +325,10 @@ Mismo comportamiento que el `StereoMeter` de la web: ataque instantáneo, caída
 | rueda / Shift o Ctrl+rueda / Alt+rueda | desplazar / zoom en el puntero / alto de pista |
 | clic en la regla, doble clic en un carril | mover el playhead |
 
-- Los atajos se manejan en `MainWindow.OnKey` (evento en túnel). Cada atajo nuevo va también en el
-  tooltip del botón, entre paréntesis: `"Reproducir / parar (Espacio)"`, y en el README.
+- Los atajos se manejan en `MainWindow.OnKey` (evento en túnel). Todo lo que tenga atajo lo muestra
+  **solo en el tooltip**, entre paréntesis: `"Reproducir / parar (Espacio)"`, y en el README. Nunca en el
+  texto visible del control (nada de "Click C" ni cajitas de tecla, aunque la web las tenga): la idea es
+  que los atajos se puedan personalizar más adelante, y entonces solo cambia el tooltip.
 - Todo botón de ícono solo tiene `ToolTip.Tip`.
 - Los cambios se aplican en vivo (se escucha mientras movés el slider). El paneo se imanta al centro (|x| < 0,04).
 

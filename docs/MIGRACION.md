@@ -278,7 +278,7 @@ grabación caen en el mismo cuadro. La toma nueva:
 - **Sincronía por toma**: en la nativa, cada clip puede tener su propio ajuste de sincronía y de latencia de
   cámara (`Clip.SyncMs` / `VideoOffsetMs`, si faltan valen los de la grabación); entra en deshacer, como en la web ✅.
 
-### 5.9 Calibración de latencia ◐ (motor ✅; falta la UI)
+### 5.9 Calibración de latencia ✅ (en Configuración → Sincronización)
 En Configuración → Sincronización. **Con cable** (pulsos de ruido con semilla y correlación cruzada;
 cable de salida a entrada o micrófono frente a los parlantes) o **Tocando** (4 de cuenta + 12 clicks;
 detecta tus ataques). Guarda mediana y dispersión por par entrada + salida, con la latencia estimada y
@@ -306,7 +306,7 @@ Pestaña **Color** de la barra derecha, secciones Plantillas / Filtro / Ajustes 
 
 ---
 
-## 7. Configuración (`SettingsDialog`) ✗
+## 7. Configuración (`SettingsDialog`) ◐ (entradas, salidas y sincronización ✅; cámara ✗)
 
 Diálogo de ajustes del programa (no del proyecto), con los atajos apagados mientras está abierto.
 - **Entradas y salidas**: interfaz (refrescar dispositivos), canales (Estéreo: Input 1 → L, Input 2 → R;
@@ -317,6 +317,12 @@ Diálogo de ajustes del programa (no del proyecto), con los atajos apagados mien
   Auto (nativa) / 1080p / 720p / 480p a 30 fps; espejar la imagen en vivo.
 - **Sincronización**: estado (latencia calibrada / estimada), Calibrar latencia (§5.9), ajuste fino de
   audio para tomas nuevas, latencia de cámara por defecto (80 ms).
+- Nativa (`Dialogs/SettingsDialog.axaml(.cs)`, botón ⚙): las tres pestañas con la forma y los textos de la
+  web. Diferencias: "Interfaz" lista los drivers ASIO y "Dispositivo" los pares de salida del driver (no
+  hay "Predeterminada de Windows"); donde la web dice "navegador" dice "driver"; driver y salida se
+  recuerdan (`audio.driver`, `audio.outputOffset` en `config.json`), el resto vive en memoria como en la
+  web. La pestaña Cámara y "Latencia de cámara" están con la misma forma pero apagadas hasta que esté la
+  cámara (§11). Falta el botón del panel del driver (tamaño de buffer, hoy `gclab panel`).
 
 ---
 

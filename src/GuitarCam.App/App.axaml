@@ -41,6 +41,9 @@
     <FontFamily x:Key="Ui">Segoe UI Variable Text, Segoe UI</FontFamily>
     <FontFamily x:Key="Mono">Cascadia Mono, Consolas</FontFamily>
     <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+
+    <!-- Segoe has no metronome: body with a window, pendulum and weight on a 16 px grid (nonzero fill) -->
+    <StreamGeometry x:Key="MetronomeIcon">F1 M5,1 L11,1 L15,15 L1,15 Z M5.9,2.5 L3.6,10.5 L12.4,10.5 L10.1,2.5 Z M3.2,12 L2.7,13.7 L13.3,13.7 L12.8,12 Z M10.6,2.94 L11.8,3.46 L8.6,10.76 L7.4,10.24 Z M11.55,6.4 L10.91,7.86 L7.97,6.58 L8.61,5.12 Z</StreamGeometry>
   </Application.Resources>
 
   <Application.Styles>
@@ -74,23 +77,40 @@
       <Setter Property="FontFamily" Value="{StaticResource Mono}" />
     </Style>
 
-    <!-- chip buttons -->
+    <!-- chip buttons: outlined like the web's IconButton / ChipToggle (transparent, border-line, text-dim) -->
     <Style Selector=":is(Button).chip">
-      <Setter Property="Background" Value="{StaticResource Raised}" />
-      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
       <Setter Property="BorderBrush" Value="{StaticResource Line}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Padding" Value="10,5" />
       <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="Medium" />
       <Setter Property="MinHeight" Value="30" />
       <Setter Property="VerticalAlignment" Value="Center" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
     </Style>
     <Style Selector=":is(Button).chip:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource Hover}" />
       <Setter Property="BorderBrush" Value="{StaticResource Line}" />
       <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+    <Style Selector=":is(Button).chip:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+    </Style>
+    <!-- off toggles are faint and only brighten their text on hover (ChipToggle in TransportBar.tsx) -->
+    <Style Selector="ToggleButton.chip">
+      <Setter Property="Foreground" Value="{StaticResource Faint}" />
+    </Style>
+    <Style Selector="ToggleButton.chip:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+    </Style>
+    <Style Selector="ToggleButton.chip:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
     </Style>
     <!-- recording buttons (TransportBar.tsx): hover keeps their own color -->
     <Style Selector="Button.chip.rec:pointerover /template/ ContentPresenter#PART_ContentPresenter">
@@ -114,20 +134,202 @@
       <Setter Property="Background" Value="#4022d3ee" />
       <Setter Property="BorderBrush" Value="#8022d3ee" />
     </Style>
-    <Style Selector="ToggleButton.chip:checked /template/ ContentPresenter#PART_ContentPresenter">
+    <!-- on: accent-soft fill, accent/40 border, accent text; also Button.chip.on (play while playing) -->
+    <Style Selector="ToggleButton.chip:checked /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.chip:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.chip:checked:pressed /template/ ContentPresenter#PART_ContentPresenter, Button.chip.on /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource AccentSoft}" />
-      <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+      <Setter Property="BorderBrush" Value="#6622d3ee" />
       <Setter Property="Foreground" Value="{StaticResource Accent}" />
     </Style>
-    <Style Selector="ToggleButton.chip.inspector-power:checked /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="Button.chip.on:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#4022d3ee" />
+      <Setter Property="BorderBrush" Value="#6622d3ee" />
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+    </Style>
+    <Style Selector="ToggleButton.chip.inspector-power:checked /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.chip.inspector-power:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource Accent}" />
       <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
       <Setter Property="Foreground" Value="{StaticResource App}" />
     </Style>
-    <Style Selector="Button.chip:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="ToggleButton.chip.inspector-power:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+    </Style>
+    <!-- disabled: the web fades the whole button (disabled:opacity-35) -->
+    <Style Selector=":is(Button).chip:disabled">
+      <Setter Property="Opacity" Value="0.35" />
+    </Style>
+    <Style Selector=":is(Button).chip:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+    </Style>
+    <Style Selector="ToggleButton.chip:checked:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentSoft}" />
+      <Setter Property="BorderBrush" Value="#6622d3ee" />
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+    </Style>
+    <Style Selector="ToggleButton.chip.inspector-power:checked:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+    </Style>
+
+    <!-- bottom transport bar (Fender Studio Pro style): flat icon buttons, value-over-label cells -->
+    <Style Selector=":is(Button).tbtn">
+      <Setter Property="Width" Value="36" />
+      <Setter Property="Height" Value="36" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector=":is(Button).tbtn:pointerover /template/ ContentPresenter#PART_ContentPresenter, :is(Button).tbtn:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+    <Style Selector="ToggleButton.tbtn">
+      <Setter Property="Foreground" Value="{StaticResource Faint}" />
+    </Style>
+    <Style Selector="ToggleButton.tbtn:checked /template/ ContentPresenter#PART_ContentPresenter, Button.tbtn.on /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+    </Style>
+    <Style Selector="ToggleButton.tbtn:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.tbtn.on:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+    </Style>
+    <Style Selector=":is(Button).tbtn:disabled">
+      <Setter Property="Opacity" Value="0.35" />
+    </Style>
+    <Style Selector=":is(Button).tbtn:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.clock">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="14,0" />
+      <Setter Property="Height" Value="38" />
+      <Setter Property="MinWidth" Value="120" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.clock:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.clock:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+    </Style>
+    <!-- divider between the groups of the transport box: inset so it doesn't touch the border -->
+    <Style Selector="Border.vsep">
+      <Setter Property="Width" Value="1" />
+      <Setter Property="Margin" Value="0,8" />
+      <Setter Property="Background" Value="{StaticResource Line}" />
+    </Style>
+    <Style Selector="StackPanel.bar-cell">
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="StackPanel.bar-cell > TextBlock">
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+
+    <!-- metronome panel: one box with flush cells split by 1 px lines (Studio One style) -->
+    <Style Selector="Border.metro">
+      <Setter Property="Background" Value="{StaticResource App}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Height" Value="40" />
+      <Setter Property="ClipToBounds" Value="True" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="StackPanel.metro-cell">
+      <Setter Property="Margin" Value="14,0,2,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.metro-value">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.metro-label">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="Foreground" Value="{StaticResource Faint}" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ToggleButton.cell PathIcon">
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+    </Style>
+    <Style Selector="ToggleButton.cell:checked PathIcon">
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+    </Style>
+    <Style Selector=":is(Button).cell">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="Height" Value="38" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector=":is(Button).cell:pointerover /template/ ContentPresenter#PART_ContentPresenter, :is(Button).cell:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+    </Style>
+    <Style Selector="ToggleButton.cell:checked /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.cell:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.cell:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentSoft}" />
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+    </Style>
+
+    <!-- segmented control (Segmented in ui.tsx): a raised box with the active option as a lighter pill -->
+    <Style Selector="Border.seg">
       <Setter Property="Background" Value="{StaticResource Raised}" />
       <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="2" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector=":is(Button).seg">
+      <Setter Property="Background" Value="Transparent" />
       <Setter Property="Foreground" Value="{StaticResource Faint}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector=":is(Button).seg:pointerover /template/ ContentPresenter#PART_ContentPresenter, :is(Button).seg:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+    </Style>
+    <Style Selector="ToggleButton.seg:checked /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.seg:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.seg:checked:pressed /template/ ContentPresenter#PART_ContentPresenter, Button.seg.on /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#1cffffff" />
+      <Setter Property="BorderBrush" Value="#0fffffff" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+    <Style Selector=":is(Button).seg:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Faint}" />
+    </Style>
+    <!-- accent variant: compressor style picker (CompControl.tsx) -->
+    <Style Selector="ToggleButton.seg.pick">
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+      <Setter Property="CornerRadius" Value="4" />
+    </Style>
+    <Style Selector="ToggleButton.seg.pick:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+    <Style Selector="ToggleButton.seg.pick:checked /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.seg.pick:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentSoft}" />
+      <Setter Property="BorderBrush" Value="#8022d3ee" />
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
     </Style>
 
     <Style Selector="Button.ghost">
@@ -159,37 +361,6 @@
     <Style Selector="Button.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="#4fdcf1" />
       <Setter Property="Foreground" Value="#0b0b0d" />
-    </Style>
-
-    <!-- round transport buttons -->
-    <Style Selector=":is(Button).transport">
-      <Setter Property="Width" Value="36" />
-      <Setter Property="Height" Value="36" />
-      <Setter Property="CornerRadius" Value="18" />
-      <Setter Property="Padding" Value="0" />
-      <Setter Property="Background" Value="{StaticResource Raised}" />
-      <Setter Property="Foreground" Value="{StaticResource Fg}" />
-      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
-      <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="HorizontalContentAlignment" Value="Center" />
-      <Setter Property="VerticalContentAlignment" Value="Center" />
-    </Style>
-    <Style Selector=":is(Button).transport:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="{StaticResource Hover}" />
-      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
-      <Setter Property="Foreground" Value="{StaticResource Fg}" />
-    </Style>
-    <Style Selector="Button.transport.play">
-      <Setter Property="Background" Value="{StaticResource Accent}" />
-      <Setter Property="Foreground" Value="#0b0b0d" />
-      <Setter Property="BorderThickness" Value="0" />
-    </Style>
-    <Style Selector="Button.transport.play:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#4fdcf1" />
-      <Setter Property="Foreground" Value="#0b0b0d" />
-    </Style>
-    <Style Selector="Button.transport.rec">
-      <Setter Property="Foreground" Value="{StaticResource Rec}" />
     </Style>
 
     <Style Selector="Slider">

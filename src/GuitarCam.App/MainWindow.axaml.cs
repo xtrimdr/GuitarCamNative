@@ -56,6 +56,14 @@ public partial class MainWindow : Window
         };
         Export.ExportCompleted += _ => { MarkDirty(); SaveSoon(); };
         Export.Dismissed += () => Timeline.Focus();
+        Settings.Attach(engine, () => RecordingBusy);
+        Settings.AudioChanged += ShowAudioStatus;
+        Settings.Dismissed += () => Timeline.Focus();
+        SettingsButton.Click += (_, _) =>
+        {
+            if (Projects.IsVisible || Export.IsVisible || RecordingBusy) return;
+            Settings.Show();
+        };
         InitRecording();
         PlayButton.Click += (_, _) => TogglePlay();
         ToStartButton.Click += (_, _) => engine.Seek(0);
@@ -125,8 +133,10 @@ public partial class MainWindow : Window
         {
             Status("Abriendo el audio…");
             await Task.Delay(50);
-            engine.Open();
-            AudioStatus.Text = engine.Status;
+            string? driver = AppConfig.Get("audio.driver");
+            int.TryParse(AppConfig.Get("audio.outputOffset"), out int outputOffset);
+            engine.Open(driver, 0, Math.Max(0, outputOffset));
+            ShowAudioStatus();
             timer.Start();
             // like the web app, it starts on the project manager (a folder on the command line opens directly)
             if (dir != null && ProjectStore.IsProject(dir)) await LoadProject(dir);
@@ -387,6 +397,11 @@ public partial class MainWindow : Window
             Export.HandleKey(e);
             return;
         }
+        if (Settings.IsVisible)
+        {
+            Settings.HandleKey(e);
+            return;
+        }
         // shortcuts are off while the manager is open; Esc goes to it
         if (Projects.IsVisible)
         {
@@ -475,7 +490,8 @@ public partial class MainWindow : Window
         if (RecordingBusy) RefreshRecording();
         var m = engine.TakeMeters();
         InputMeter.Push(m.InL, m.InR);
-        if (engine.IsOpen) DspText.Text = $"DSP {engine.LoadPercent:0.0}%";
+        if (Settings.IsVisible) Settings.Meter.Push(m.InL, m.InR);
+        if (engine.IsOpen) DspText.Text = $"{engine.LoadPercent:0.0} %";
 
         if (sel != null)
         {
