@@ -16,22 +16,27 @@ están decididas son las del formato de proyecto propio (ver §2).
 
 ## 1. Pantalla principal
 
-### 1.1 Barra superior ◐
+### 1.1 Barra superior ✅ (`MainWindow.TopBar.cs`)
 - **Logo + "Studio"**, **chip del proyecto** (nombre; tooltip con la carpeta; abre el gestor "Proyectos").
   Nativa: abre el gestor (§2.1) ✅.
 - **Indicador de guardado**: girando mientras guarda, tilde cuando terminó, "Error al guardar" en rojo
-  si falló ✗.
+  si falló ✅. Nativa: sigue a `guitarcam.json` (en la web, a la subida de las tomas), así que también dice
+  "Guardando" en el 1,5 s antes de guardar una edición, y "Solo lectura" si el proyecto está abierto en otra ventana.
 - **Deshacer / Rehacer** (Ctrl+Z / Ctrl+Y o Ctrl+Shift+Z) ✅. Ver §9.
-- **Medidor de entrada estéreo** (clic: abre Configuración → Entradas) ◐ (se ve, sin abrir Configuración).
+- **Medidor de entrada estéreo** (clic: abre Configuración → Entradas; clic en la luz roja: la apaga) ✅
+  (en la nativa está en la barra de transporte).
 - **Medidor del sistema**: CPU / GPU / RAM de toda la PC, cada 1,5 s. CPU y RAM salen del sistema; GPU
   (el motor más cargado, como el Administrador de tareas) y VRAM, de los contadores de rendimiento de
-  Windows. Tooltips "Procesador…", "Placa de video…", "Memoria…" ✗. En nativo se lee directo, sin servidor.
-- **Aviso "FFmpeg no encontrado"** si falta en el PATH (no se va a poder exportar) ✗.
+  Windows. Tooltips "Procesador…", "Placa de video…", "Memoria…" ✅ (`SystemStats.cs` por PDH, sin
+  PowerShell; `gclab sistema`). Se oculta con la ventana a menos de 1600 px, para dejarle lugar a la barra de estado.
+- **Aviso "FFmpeg no encontrado"** si falta en el PATH (no se va a poder exportar) ✅, junto a la resolución de
+  la cámara y "48 kHz". La nativa muestra solo el número de versión ("FFmpeg 8.1.2"; el resto, en el tooltip).
 - **Selector de tema** (ícono de paleta): acento (presets + "Color a elección") y fondo (Grafito,
   Pizarra, Madera, Bosque, Ciruela, Negro). Siempre oscuro. Por defecto, cian sobre Grafito. Se recuerda
-  entre sesiones ✗. *(Hoy la nativa tiene un solo tema fijo: hay que pasar los tokens a recursos dinámicos.)*
-- **Engranaje** → Configuración (§7) ✗.
-- **Exportar MP4** (botón de acento) → diálogo de exportación (§8) ✗.
+  entre sesiones ✅ (`UiTheme.cs`, `Controls/ThemePicker.cs`). "Color a elección" abre el selector de color de
+  Windows (se aplica al aceptar, no mientras arrastrás).
+- **Engranaje** → Configuración (§7) ✅.
+- **Exportar MP4** (botón de acento) → diálogo de exportación (§8) ✅.
 
 ### 1.2 Barra lateral izquierda: "Toma" (inspector de la pista seleccionada) ◐ (secciones ✅; faltan plegar el panel y las plantillas de paneo)
 Se puede plegar a una tira de íconos (se recuerda). Las secciones se pliegan por título y eso también se
@@ -418,4 +423,4 @@ Los atajos no corren mientras se escribe en un campo ni con Configuración abier
 4. **Inspector completo** (§1.2) y **Mixer** (§4), con tempo y transporte completos (§1.6, §4.5).
 5. **Exportación** (§8) con color y efectos (§6): cierra "mezclo y exporto" para proyectos importados.
 6. **Grabación** (§5.8), calibración (§5.9), monitor en vivo (§1.5), cámara (§11) y Configuración (§7).
-7. **Historial** (§2.3), barras laterales plegables, medidor del sistema y tema (§1.1).
+7. **Historial** (§2.3) y barras laterales plegables (medidor del sistema y tema ✅).

@@ -282,7 +282,7 @@ public sealed class TimelineView : Control
         while (step * bar * pps < 56) step *= 2;
         int first = Math.Max(0, (int)(Sec(HeaderW) / bar) - 1);
         var tick = Palette.Pen(Palette.Line);
-        var beatPen = Palette.Pen(Palette.Alpha(Color.Parse("#27272c"), 0.7));
+        var beatPen = Palette.Pen(Palette.Alpha(Palette.LineColor, 0.7));
         for (int b = first - first % step; ; b += step)
         {
             double x = X(b * bar);
@@ -304,7 +304,7 @@ public sealed class TimelineView : Control
         double y = LaneY(i);
         if (y + laneH < RulerH || y > Bounds.Height) return;
         bool sel = i == Selected;
-        if (sel) ctx.FillRectangle(Palette.Alpha(Color.Parse("#1c1c20"), 0.6), new Rect(HeaderW, y, W - HeaderW, laneH));
+        if (sel) ctx.FillRectangle(Palette.Alpha(Palette.RaisedColor, 0.6), new Rect(HeaderW, y, W - HeaderW, laneH));
         foreach (var c in t.Clips) DrawClip(ctx, t, c, y, sel, W);
         if (t.Clips.Count == 0)
         {
@@ -327,7 +327,7 @@ public sealed class TimelineView : Control
         var color = c.Offline ? Color.Parse("#71717a") : Palette.AccentColor;
         bool silent = t.Channel.Muted || tracks.Any(o => o.Channel.Solo) && !t.Channel.Solo;
         using var opacity = ctx.PushOpacity(!c.Offline && silent ? 0.5 : 1);
-        var fill = c.Offline ? Palette.Alpha(color, silent ? 0.05 : sel ? 0.16 : 0.10) : Palette.Alpha(Color.Parse("#26262b"), 0.4);
+        var fill = c.Offline ? Palette.Alpha(color, silent ? 0.05 : sel ? 0.16 : 0.10) : Palette.Alpha(Palette.HoverColor, 0.4);
         var border = Palette.Pen(c.Offline ? Palette.Alpha(color, sel ? 0.9 : 0.45)
             : sel ? Palette.Alpha(Palette.AccentColor, 0.6) : Palette.Line, c.Offline && sel ? 1.5 : 1);
         ctx.DrawRectangle(fill, border, clip, 5, 5);
@@ -341,7 +341,7 @@ public sealed class TimelineView : Control
             else
             {
                 var geo = Waveform(c, model, w, y, W);
-                var wave = silent ? Palette.Faint : sel ? Palette.Accent : Palette.Alpha(Color.Parse("#a1a1aa"), 0.8);
+                var wave = silent ? Palette.Faint : sel ? Palette.Accent : Palette.Alpha(Palette.DimColor, 0.8);
                 ctx.DrawGeometry(null, Palette.Pen(wave, 1), geo);
             }
             var f = ClipEnvelope.FitFades(model.FadeInSec, model.FadeOutSec, w.End - w.Start);

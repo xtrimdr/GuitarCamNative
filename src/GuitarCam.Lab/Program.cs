@@ -26,6 +26,7 @@ static class Program
                 "verificar" => DspCommands.Verify(a),
                 "click" => DspCommands.Click(a),
                 "camara" => CameraCommands.Run(a),
+                "sistema" => SystemCommands.Run(a),
                 "proyecto" => ProjectCommands.Run(a),
                 "proyectos" => LibraryCommands.Run(a),
                 _ => Help(),
@@ -71,6 +72,7 @@ static class Program
                                            graba el video como una toma (H.264, 30 fps, keyframe cada 1 s)
               camara verificar-corte [--dispositivo X]
                                            corta una grabación a la mitad (con y sin FFmpeg) y comprueba que el video quede
+              sistema   [--segundos 5]     muestra CPU, GPU y RAM cada 1,5 s como la barra de arriba, y si está FFmpeg
               proyecto importar carpeta-web [--destino X]
                                            pasa un proyecto de la app web al formato nativo (no toca el original)
               proyecto abrir    carpeta    abre un proyecto nativo y muestra pistas, avisos e historial

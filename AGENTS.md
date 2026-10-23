@@ -174,7 +174,11 @@ exportación: no los dupliques. Los medios se cargan y remuestrean a 48 kHz con 
 
 Están definidos **dos veces y tienen que coincidir**: en `App.axaml` (para XAML) y en
 `Controls/Palette.cs` (para los controles que dibujan). Si agregás o cambiás uno, cambiá los dos (y que
-coincida con la web).
+coincida con la web). Los valores de la tabla son los del tema por defecto (cian sobre Grafito): el selector
+de tema (`UiTheme.cs`, port de `theme.ts`) cambia en vivo los pinceles de superficie y de acento. Por eso:
+usá siempre el pincel (`Palette.Accent`, `{StaticResource Accent}`) y no un color escrito a mano; leé
+`Palette.AccentColor` y compañía cuando dibujás, no lo guardes; las variantes del acento en XAML son
+`AccentFg` (texto sobre acento), `AccentHover`, `AccentTint` y `Accent25/40/50/70` (alfa).
 
 | Token | Valor | Uso |
 |---|---|---|
@@ -197,7 +201,7 @@ coincida con la web).
 Reglas: no inventes colores nuevos para estados nuevos sin necesidad; el acento no se usa como
 decoración; el rojo significa **grabación o peligro de clip**, nunca "error genérico". Las variantes con
 transparencia salen de `Palette.Alpha(color, a)` (por ejemplo, relleno de clip 0,10 / 0,16 seleccionado,
-borde 0,45 / 0,9). El hover del acento es `#4fdcf1`. El tema es solo oscuro (`RequestedThemeVariant="Dark"`).
+borde 0,45 / 0,9). El hover del acento es `#4fdcf1`. El tema es siempre oscuro (`RequestedThemeVariant="Dark"`).
 
 ### Tipografía
 
@@ -241,7 +245,7 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 ### Estructura de la ventana
 
 ```
-┌ barra de título propia (44) ─ logo · chip del proyecto ▾ · deshacer/rehacer · estado ·························· ⚙ · [Exportar MP4] ┐
+┌ barra de título propia (44) ─ logo · chip del proyecto (guardado) ▾ · deshacer/rehacer · estado ···· CPU GPU RAM · cámara · kHz · FFmpeg · tema · ⚙ · [Exportar MP4] ┐
 ├ inspector (290) ─┬─ preview (un panel por pista con video) ────────┬─ "En vivo" (256) ─┬─ proyecto (290, plegable a 44) ┤
 │ TOMA + secciones │                                                 │ cámara + entrada  │ pestañas Color / Historial     │
 ├──────────────────┴─ separador arrastrable ─────────────────────────┴───────────────────┤                                │

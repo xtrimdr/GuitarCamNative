@@ -26,6 +26,14 @@
     <SolidColorBrush x:Key="Faint" Color="{StaticResource FaintColor}" />
     <SolidColorBrush x:Key="Accent" Color="{StaticResource AccentColor}" />
     <SolidColorBrush x:Key="AccentSoft" Color="#2422d3ee" />
+    <!-- accent variants, recolored with the theme (Theme.cs): text on accent, hover, and the alpha steps the styles use -->
+    <SolidColorBrush x:Key="AccentFg" Color="#0b0b0d" />
+    <SolidColorBrush x:Key="AccentHover" Color="#4fdcf1" />
+    <SolidColorBrush x:Key="AccentTint" Color="#0F22d3ee" />
+    <SolidColorBrush x:Key="Accent25" Color="#4022d3ee" />
+    <SolidColorBrush x:Key="Accent40" Color="#6622d3ee" />
+    <SolidColorBrush x:Key="Accent50" Color="#8022d3ee" />
+    <SolidColorBrush x:Key="Accent70" Color="#B322d3ee" />
     <SolidColorBrush x:Key="Rec" Color="{StaticResource RecColor}" />
     <SolidColorBrush x:Key="RecSoft" Color="#24ef4444" />
 
@@ -131,24 +139,24 @@
       <Setter Property="Foreground" Value="{StaticResource Rec}" />
     </Style>
     <Style Selector="Button.chip.count:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#4022d3ee" />
-      <Setter Property="BorderBrush" Value="#8022d3ee" />
+      <Setter Property="Background" Value="{StaticResource Accent25}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Accent50}" />
     </Style>
     <!-- on: accent-soft fill, accent/40 border, accent text; also Button.chip.on (play while playing) -->
     <Style Selector="ToggleButton.chip:checked /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.chip:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.chip:checked:pressed /template/ ContentPresenter#PART_ContentPresenter, Button.chip.on /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource AccentSoft}" />
-      <Setter Property="BorderBrush" Value="#6622d3ee" />
+      <Setter Property="BorderBrush" Value="{StaticResource Accent40}" />
       <Setter Property="Foreground" Value="{StaticResource Accent}" />
     </Style>
     <Style Selector="Button.chip.on:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#4022d3ee" />
-      <Setter Property="BorderBrush" Value="#6622d3ee" />
+      <Setter Property="Background" Value="{StaticResource Accent25}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Accent40}" />
       <Setter Property="Foreground" Value="{StaticResource Accent}" />
     </Style>
     <Style Selector="ToggleButton.chip.inspector-power:checked /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.chip.inspector-power:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource Accent}" />
       <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
-      <Setter Property="Foreground" Value="{StaticResource App}" />
+      <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
     </Style>
     <Style Selector="ToggleButton.chip.inspector-power:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource Hover}" />
@@ -163,7 +171,7 @@
     </Style>
     <Style Selector="ToggleButton.chip:checked:disabled /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource AccentSoft}" />
-      <Setter Property="BorderBrush" Value="#6622d3ee" />
+      <Setter Property="BorderBrush" Value="{StaticResource Accent40}" />
       <Setter Property="Foreground" Value="{StaticResource Accent}" />
     </Style>
     <Style Selector="ToggleButton.chip.inspector-power:checked:disabled /template/ ContentPresenter#PART_ContentPresenter">
@@ -328,7 +336,7 @@
     </Style>
     <Style Selector="ToggleButton.seg.pick:checked /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.seg.pick:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource AccentSoft}" />
-      <Setter Property="BorderBrush" Value="#8022d3ee" />
+      <Setter Property="BorderBrush" Value="{StaticResource Accent50}" />
       <Setter Property="Foreground" Value="{StaticResource Accent}" />
     </Style>
 
@@ -349,9 +357,26 @@
       <Setter Property="Foreground" Value="{StaticResource Faint}" />
     </Style>
 
+    <!-- an open popover's button (IconButton active in ui.tsx; the web's border is transparent in the top bar) -->
+    <Style Selector="Button.ghost.on /template/ ContentPresenter#PART_ContentPresenter, Button.ghost.on:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentSoft}" />
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+    </Style>
+    <!-- theme swatches: the swatch itself is the button, no hover fill -->
+    <Style Selector="Button.swatch">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.swatch:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.swatch:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+
     <Style Selector="Button.accent">
       <Setter Property="Background" Value="{StaticResource Accent}" />
-      <Setter Property="Foreground" Value="#0b0b0d" />
+      <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Padding" Value="12,6" />
@@ -359,8 +384,27 @@
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="Button.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#4fdcf1" />
-      <Setter Property="Foreground" Value="#0b0b0d" />
+      <Setter Property="Background" Value="{StaticResource AccentHover}" />
+      <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
+    </Style>
+
+    <!-- Loader2: an open ring that turns -->
+    <Style Selector="Arc.spin">
+      <Setter Property="StartAngle" Value="0" />
+      <Setter Property="SweepAngle" Value="270" />
+      <Setter Property="StrokeThickness" Value="2" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="RenderTransform" Value="rotate(0deg)" />
+      <Style.Animations>
+        <Animation Duration="0:0:0.8" IterationCount="Infinite">
+          <KeyFrame Cue="0%">
+            <Setter Property="RotateTransform.Angle" Value="0" />
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="RotateTransform.Angle" Value="360" />
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
     </Style>
 
     <Style Selector="Slider">

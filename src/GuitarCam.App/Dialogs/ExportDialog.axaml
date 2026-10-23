@@ -25,7 +25,7 @@
     </Style>
     <Style Selector="TextBox.field:focus /template/ Border#PART_BorderElement">
       <Setter Property="Background" Value="{StaticResource Raised}" />
-      <Setter Property="BorderBrush" Value="#B322d3ee" />
+      <Setter Property="BorderBrush" Value="{StaticResource Accent70}" />
       <Setter Property="BorderThickness" Value="1" />
     </Style>
     <Style Selector="TextBox.field /template/ TextBlock#PART_Watermark">
@@ -63,12 +63,12 @@
     </Style>
     <Style Selector="Button.btn.primary">
       <Setter Property="Background" Value="{StaticResource Accent}" />
-      <Setter Property="Foreground" Value="#0b0b0d" />
+      <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="Button.btn.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#4fdcf1" />
-      <Setter Property="Foreground" Value="#0b0b0d" />
+      <Setter Property="Background" Value="{StaticResource AccentHover}" />
+      <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
     </Style>
     <Style Selector="Button.btn.danger">
       <Setter Property="Background" Value="{StaticResource Rec}" />
@@ -84,7 +84,7 @@
     </Style>
     <Style Selector="Button.btn.primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource Accent}" />
-      <Setter Property="Foreground" Value="#0b0b0d" />
+      <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
     </Style>
 
     <Style Selector="Button.seg">
@@ -104,12 +104,12 @@
     </Style>
     <Style Selector="Button.seg.active">
       <Setter Property="Background" Value="{StaticResource Accent}" />
-      <Setter Property="Foreground" Value="#0b0b0d" />
+      <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="Button.seg.active:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource Accent}" />
-      <Setter Property="Foreground" Value="#0b0b0d" />
+      <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
     </Style>
 
     <Style Selector="Button.link">
@@ -130,7 +130,7 @@
     </Style>
     <Style Selector="Button.link.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="#4fdcf1" />
+      <Setter Property="Foreground" Value="{StaticResource AccentHover}" />
     </Style>
 
     <Style Selector="Button.act">
@@ -149,23 +149,6 @@
       <Setter Property="Foreground" Value="{StaticResource Fg}" />
     </Style>
 
-    <Style Selector="Arc.spin">
-      <Setter Property="StartAngle" Value="0" />
-      <Setter Property="SweepAngle" Value="270" />
-      <Setter Property="StrokeThickness" Value="2" />
-      <Setter Property="StrokeLineCap" Value="Round" />
-      <Setter Property="RenderTransform" Value="rotate(0deg)" />
-      <Style.Animations>
-        <Animation Duration="0:0:0.8" IterationCount="Infinite">
-          <KeyFrame Cue="0%">
-            <Setter Property="RotateTransform.Angle" Value="0" />
-          </KeyFrame>
-          <KeyFrame Cue="100%">
-            <Setter Property="RotateTransform.Angle" Value="360" />
-          </KeyFrame>
-        </Animation>
-      </Style.Animations>
-    </Style>
   </UserControl.Styles>
 
   <Border x:Name="Card" HorizontalAlignment="Center" VerticalAlignment="Center" Width="512" Margin="16"
@@ -282,7 +265,7 @@
             <Button x:Name="SetupCancelButton" Classes="btn" Content="Cancelar" />
             <Button x:Name="SetupStartButton" Classes="btn primary">
               <StackPanel Orientation="Horizontal" Spacing="8">
-                <TextBlock Classes="icon" Text="&#xE896;" FontSize="13" Foreground="#0b0b0d" />
+                <TextBlock Classes="icon" Text="&#xE896;" FontSize="13" Foreground="{StaticResource AccentFg}" />
                 <TextBlock x:Name="SetupStartText" Text="Exportar" />
               </StackPanel>
             </Button>
@@ -387,7 +370,7 @@
             <Button Grid.Column="1" x:Name="DoneCloseButton" Classes="btn" Content="Cerrar" />
             <Button Grid.Column="2" x:Name="DoneRevealButton" Classes="btn primary" Margin="8,0,0,0">
               <StackPanel Orientation="Horizontal" Spacing="8">
-                <TextBlock Classes="icon" Text="&#xE8DA;" FontSize="14" Foreground="#0b0b0d" />
+                <TextBlock Classes="icon" Text="&#xE8DA;" FontSize="14" Foreground="{StaticResource AccentFg}" />
                 <TextBlock Text="Mostrar en la carpeta" />
               </StackPanel>
             </Button>

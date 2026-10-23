@@ -6,7 +6,8 @@ namespace GuitarCam.App.Controls;
 
 /// <summary>
 /// Horizontal stereo meter like the web app's StereoMeter: fast attack, 24 dB/s release, 1.5 s peak hold
-/// and a clip light that stays on until clicked.
+/// and a clip light that stays on until clicked. A click anywhere else raises <see cref="OpenRequested"/> (the web's
+/// meter wrapper opens Configuración → Entradas); with nobody listening it has no tooltip and no hand cursor there.
 /// </summary>
 public sealed class StereoMeter : Control
 {
@@ -17,10 +18,42 @@ public sealed class StereoMeter : Control
     bool clip;
     DateTime last = DateTime.Now;
 
+    const double LightW = 7;
+    const string ClipTip = "Saturación: se prende si la entrada llega al máximo (bajá la ganancia). Click para apagarlo.";
+    const string OpenTip = "Configurar entradas y salidas";
+    static readonly Avalonia.Input.Cursor Hand = new(Avalonia.Input.StandardCursorType.Hand);
+
+    Action? openRequested;
+    bool overLight;
+
+    /// <summary>A click outside the clip light.</summary>
+    public event Action? OpenRequested
+    {
+        add { openRequested += value; UpdateHover(); }
+        remove { openRequested -= value; UpdateHover(); }
+    }
+
     public StereoMeter()
     {
         Height = 14;
-        Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
+        UpdateHover();
+    }
+
+    bool OnLight(Point p) => p.X >= Bounds.Width - LightW - 3;
+
+    void UpdateHover()
+    {
+        bool open = openRequested != null;
+        Cursor = overLight || open ? Hand : null;
+        ToolTip.SetTip(this, overLight ? ClipTip : open ? OpenTip : null);
+    }
+
+    protected override void OnPointerMoved(Avalonia.Input.PointerEventArgs e)
+    {
+        bool on = OnLight(e.GetPosition(this));
+        if (on == overLight) return;
+        overLight = on;
+        UpdateHover();
     }
 
     public void Push(float peakL, float peakR)
@@ -46,8 +79,14 @@ public sealed class StereoMeter : Control
 
     protected override void OnPointerPressed(Avalonia.Input.PointerPressedEventArgs e)
     {
+        if (!OnLight(e.GetPosition(this)))
+        {
+            openRequested?.Invoke();
+            return;
+        }
         clip = false;
         InvalidateVisual();
+        e.Handled = true;
     }
 
     public override void Render(DrawingContext ctx)
@@ -67,6 +106,6 @@ public sealed class StereoMeter : Control
             double hk = (hold[c] - MinDb) / -MinDb;
             if (hk > 0) ctx.FillRectangle(hold[c] > -1 ? Palette.Rec : Palette.Fg, new Rect(w * hk - 1.5, r.Y, 1.5, h));
         }
-        ctx.DrawRectangle(clip ? Palette.Rec : Palette.Raised, null, new Rect(w + 3, 0, 7, Bounds.Height), 2, 2);
+        ctx.DrawRectangle(clip ? Palette.Rec : Palette.Raised, null, new Rect(w + 3, 0, LightW, Bounds.Height), 2, 2);
     }
 }

@@ -36,7 +36,7 @@
       <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="12,0,150,0">
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <Border Width="24" Height="24" CornerRadius="6" Background="{StaticResource Accent}">
-            <TextBlock Classes="icon" Text="&#xE714;" FontSize="13" Foreground="#0b0b0d" HorizontalAlignment="Center" />
+            <TextBlock Classes="icon" Text="&#xE714;" FontSize="13" Foreground="{StaticResource AccentFg}" HorizontalAlignment="Center" />
           </Border>
           <TextBlock Text="GuitarCam Studio" FontWeight="SemiBold" FontSize="13.5" VerticalAlignment="Center" />
           <Border Background="{StaticResource AccentSoft}" CornerRadius="4" Padding="5,1" VerticalAlignment="Center">
@@ -47,7 +47,13 @@
         <Button Grid.Column="1" x:Name="SessionChip" Classes="ghost" Foreground="{StaticResource Fg}" Height="32" Padding="10,0" VerticalContentAlignment="Center" FontSize="12" Margin="18,0,0,0">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <TextBlock Classes="icon" Text="&#xE8B7;" FontSize="13" Foreground="{StaticResource Dim}" />
-            <TextBlock x:Name="SessionName" Text="Sin proyecto" FontWeight="SemiBold" />
+            <TextBlock x:Name="SessionName" Text="Sin proyecto" FontWeight="SemiBold" MaxWidth="180" TextTrimming="CharacterEllipsis" />
+            <!-- save state (the web's Guardando / Guardado / Error al guardar next to the name) -->
+            <StackPanel x:Name="SaveState" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" IsVisible="False">
+              <Arc x:Name="SaveSpin" Classes="spin" Width="11" Height="11" StrokeThickness="1.5" Stroke="{StaticResource Dim}" IsVisible="False" />
+              <TextBlock x:Name="SaveIcon" Classes="icon" Text="&#xE73E;" FontSize="10" Foreground="{StaticResource Faint}" />
+              <TextBlock x:Name="SaveText" Text="Guardado" FontSize="11" FontWeight="Normal" Foreground="{StaticResource Faint}" />
+            </StackPanel>
             <TextBlock Classes="icon" Text="&#xE70D;" FontSize="9" Foreground="{StaticResource Faint}" />
           </StackPanel>
         </Button>
@@ -64,6 +70,18 @@
         <TextBlock Grid.Column="3" x:Name="StatusText" Classes="dim" HorizontalAlignment="Center" VerticalAlignment="Center" />
 
         <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="10" Margin="0,0,14,0" VerticalAlignment="Center">
+          <!-- system load, camera, sample rate and FFmpeg (the web's text-[11px] text-faint group) -->
+          <StackPanel x:Name="SystemInfo" Orientation="Horizontal" Spacing="16" Margin="0,0,6,0" VerticalAlignment="Center">
+            <c:SystemMeter x:Name="SysMeter" />
+            <Border x:Name="SysMeterSep" Width="1" Height="16" Background="{StaticResource Line}" />
+            <TextBlock x:Name="CameraResText" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}" VerticalAlignment="Center" IsVisible="False" />
+            <TextBlock x:Name="SampleRateText" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}" VerticalAlignment="Center" Text="48 kHz" />
+            <StackPanel x:Name="FfmpegState" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Background="Transparent" ToolTip.Tip="Buscando FFmpeg…">
+              <Ellipse x:Name="FfmpegDot" Width="6" Height="6" Fill="{StaticResource Faint}" VerticalAlignment="Center" />
+              <TextBlock x:Name="FfmpegText" FontSize="11" Foreground="{StaticResource Faint}" VerticalAlignment="Center" Text="FFmpeg" />
+            </StackPanel>
+          </StackPanel>
+          <c:ThemePicker x:Name="ThemePick" VerticalAlignment="Center" />
           <Button x:Name="SettingsButton" Classes="ghost" ToolTip.Tip="Configuración">
             <TextBlock Classes="icon" Text="&#xE713;" />
           </Button>
@@ -71,7 +89,7 @@
 
         <Button Grid.Column="5" x:Name="ExportButton" Classes="accent" ToolTip.Tip="Exportar MP4">
           <StackPanel Orientation="Horizontal" Spacing="7">
-            <TextBlock Classes="icon" Text="&#xE72D;" FontSize="12" Foreground="#0b0b0d" />
+            <TextBlock Classes="icon" Text="&#xE72D;" FontSize="12" Foreground="{StaticResource AccentFg}" />
             <TextBlock Text="Exportar MP4" />
           </StackPanel>
         </Button>
@@ -135,7 +153,7 @@
             <TextBlock x:Name="AudioDriverText" Classes="metro-label" Text="Audio" TextTrimming="CharacterEllipsis" />
           </StackPanel>
           <StackPanel Grid.Column="2" Classes="bar-cell">
-            <c:StereoMeter x:Name="InputMeter" Width="110" Margin="0,1,0,3" ToolTip.Tip="Entrada de la interfaz (clic: apaga el indicador de clip)" />
+            <c:StereoMeter x:Name="InputMeter" Width="110" Margin="0,1,0,3" />
             <TextBlock Classes="metro-label" Text="Entrada 1-2" />
           </StackPanel>
         </Grid>
@@ -178,7 +196,7 @@
                   <TextBlock Text="Descartar" FontSize="14" />
                 </StackPanel>
               </Button>
-              <Button x:Name="CountCancelButton" Classes="chip count" Height="30" Padding="12,0,16,0" IsVisible="False" Foreground="{StaticResource Fg}" Background="{StaticResource AccentSoft}" BorderBrush="#8022d3ee" ToolTip.Tip="Cancelar la cuenta (Esc)">
+              <Button x:Name="CountCancelButton" Classes="chip count" Height="30" Padding="12,0,16,0" IsVisible="False" Foreground="{StaticResource Fg}" Background="{StaticResource AccentSoft}" BorderBrush="{StaticResource Accent50}" ToolTip.Tip="Cancelar la cuenta (Esc)">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                   <TextBlock Classes="icon" Text="&#xE711;" FontSize="14" />
                   <TextBlock Text="Cancelar" FontSize="14" FontWeight="SemiBold" />
@@ -229,8 +247,8 @@
     </Border>
 
     <!-- the "Proyectos" manager covers the whole window, like in the web app -->
-    <c:ProjectsDialog Grid.RowSpan="5" x:Name="Projects" IsVisible="False" />
-    <d:ExportDialog Grid.RowSpan="5" x:Name="Export" IsVisible="False" AutomationProperties.Name="Exportar video" />
-    <d:SettingsDialog Grid.RowSpan="5" x:Name="Settings" IsVisible="False" />
+    <c:ProjectsDialog Grid.RowSpan="5" Grid.ColumnSpan="2" x:Name="Projects" IsVisible="False" />
+    <d:ExportDialog Grid.RowSpan="5" Grid.ColumnSpan="2" x:Name="Export" IsVisible="False" AutomationProperties.Name="Exportar video" />
+    <d:SettingsDialog Grid.RowSpan="5" Grid.ColumnSpan="2" x:Name="Settings" IsVisible="False" />
   </Grid>
 </Window>

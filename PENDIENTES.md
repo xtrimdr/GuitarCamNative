@@ -106,6 +106,17 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
 
 ## Hecho
 
+- 2026-10-22: barra superior (§1.1 de MIGRACION): `MainWindow.TopBar.cs`. Indicador "Guardando / Guardado /
+  Error al guardar" en el chip del proyecto; medidor CPU / GPU / RAM (`GuitarCam.Audio/SystemStats.cs`, contadores
+  de Windows por PDH; `gclab sistema`); resolución de la cámara, "48 kHz" y FFmpeg con su punto verde o "FFmpeg no
+  encontrado"; selector de tema (`UiTheme.cs`, `Controls/ThemePicker.cs`) con los acentos, "Color a elección" y
+  los seis fondos de la web, en vivo y recordado. Los tokens de color ahora son pinceles que cambian con el tema
+  (`Palette` y App.axaml). Clic en el medidor de entrada abre Configuración → Entradas. De paso: los diálogos
+  (Proyectos, Exportar, Configuración) no tapaban la barra derecha. Probado en la ventana con la Focusrite: el
+  indicador, FFmpeg, abrir el tema, Madera + Violeta en vivo y recordado. Sin probar: "Color a elección"
+  (diálogo de Windows) y el medidor del sistema en la ventana (necesita 1600 px; con `gclab sistema` sí).
+  Lo que se arma una sola vez (el número de toma del inspector) conserva el acento anterior hasta reabrir.
+
 - 2026-10-22: mixer (§4 y §1.7 de MIGRACION): `MainWindow.Mixer.cs`, port de `Mixer.tsx` y
   `MiniTimeline.tsx`. Se alterna con el timeline (X o el botón de abajo) y tiene su propia altura
   (recordada). Tiras amplias (paneo y un panel por efecto: Sat, Comp con LIM y "Comprime", EQ con el

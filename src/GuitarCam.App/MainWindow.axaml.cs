@@ -107,6 +107,7 @@ public partial class MainWindow : Window
         InitInspector();
         InitProjectBar();
         InitMixer();
+        InitTopBar();
 
         AddHandler(KeyDownEvent, OnKey, RoutingStrategies.Tunnel);
 
@@ -520,6 +521,7 @@ public partial class MainWindow : Window
         InputMeter.Push(m.InL, m.InR);
         Live.Meter.Push(m.InL, m.InR);
         TickCamera();
+        TickTopBar();
         if (Settings.IsVisible) Settings.Meter.Push(m.InL, m.InR);
         if (engine.IsOpen) DspText.Text = $"{engine.LoadPercent:0.0} %";
 

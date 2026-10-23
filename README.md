@@ -69,6 +69,7 @@ src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe
 | `procesar toma.wav --sat cinta --comp-estilo punteo --eq ritmica --reverb cuarto --delay punteada` | aplica efectos a un WAV (también `--comp-cant`, `--reverb-envio`, `--delay-envio`) |
 | `verificar [toma.wav]` | compara el DSP portado con el de la app web |
 | `click` | escribe todos los clicks a un WAV |
+| `sistema [--segundos 5]` | CPU, GPU y RAM cada 1,5 s como la barra de arriba, y si FFmpeg está en el PATH |
 | `camara [listar]` | las cámaras que ve FFmpeg (DirectShow) y sus formatos; `*` = la que elige la app |
 | `camara grabar [--dispositivo X \| --ip 192.168.1.50:4747] [--resolucion native\|1080p\|720p\|480p] [--segundos 5] [--salida camara.mp4]` | graba el video como una toma y lo revisa con ffprobe (duración, keyframes) |
 | `camara verificar-corte [--dispositivo X]` | corta una grabación a la mitad, matando solo el programa y también FFmpeg, y comprueba que el video quede |

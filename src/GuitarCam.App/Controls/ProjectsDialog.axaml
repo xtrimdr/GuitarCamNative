@@ -23,7 +23,7 @@
     </Style>
     <Style Selector="TextBox.field:focus /template/ Border#PART_BorderElement">
       <Setter Property="Background" Value="{StaticResource Raised}" />
-      <Setter Property="BorderBrush" Value="#B322d3ee" />
+      <Setter Property="BorderBrush" Value="{StaticResource Accent70}" />
       <Setter Property="BorderThickness" Value="1" />
     </Style>
     <Style Selector="TextBox.field /template/ TextBlock#PART_Watermark">
@@ -69,12 +69,12 @@
     </Style>
     <Style Selector="Button.btn.primary">
       <Setter Property="Background" Value="{StaticResource Accent}" />
-      <Setter Property="Foreground" Value="#0b0b0d" />
+      <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="Button.btn.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#4fdcf1" />
-      <Setter Property="Foreground" Value="#0b0b0d" />
+      <Setter Property="Background" Value="{StaticResource AccentHover}" />
+      <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
     </Style>
     <Style Selector="Button.btn.danger">
       <Setter Property="Background" Value="{StaticResource Rec}" />
@@ -90,7 +90,7 @@
     </Style>
     <Style Selector="Button.btn.primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource Accent}" />
-      <Setter Property="Foreground" Value="#0b0b0d" />
+      <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
     </Style>
     <Style Selector="Button.btn.danger:disabled /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource Rec}" />
@@ -192,24 +192,6 @@
       <Setter Property="Background" Value="Transparent" />
     </Style>
 
-    <!-- Loader2: an open ring that turns -->
-    <Style Selector="Arc.spin">
-      <Setter Property="StartAngle" Value="0" />
-      <Setter Property="SweepAngle" Value="270" />
-      <Setter Property="StrokeThickness" Value="2" />
-      <Setter Property="StrokeLineCap" Value="Round" />
-      <Setter Property="RenderTransform" Value="rotate(0deg)" />
-      <Style.Animations>
-        <Animation Duration="0:0:0.8" IterationCount="Infinite">
-          <KeyFrame Cue="0%">
-            <Setter Property="RotateTransform.Angle" Value="0" />
-          </KeyFrame>
-          <KeyFrame Cue="100%">
-            <Setter Property="RotateTransform.Angle" Value="360" />
-          </KeyFrame>
-        </Animation>
-      </Style.Animations>
-    </Style>
   </UserControl.Styles>
 
   <Border x:Name="Card" HorizontalAlignment="Center" VerticalAlignment="Top" MaxWidth="672" Margin="16"
@@ -221,7 +203,7 @@
       <Grid ColumnDefinitions="*,Auto" Margin="24,24,24,16">
         <StackPanel Orientation="Horizontal" Spacing="12">
           <Border Width="36" Height="36" CornerRadius="8" Background="{StaticResource Accent}">
-            <TextBlock Classes="icon" Text="&#xE722;" FontSize="18" Foreground="#0b0b0d" HorizontalAlignment="Center" />
+            <TextBlock Classes="icon" Text="&#xE722;" FontSize="18" Foreground="{StaticResource AccentFg}" HorizontalAlignment="Center" />
           </Border>
           <StackPanel VerticalAlignment="Center">
             <TextBlock Text="Proyectos" FontSize="16" FontWeight="SemiBold" />
@@ -260,7 +242,7 @@
 
       <!-- new project form -->
       <Border Grid.Row="2" x:Name="NewForm" IsVisible="False" Margin="24,12,24,0" Padding="12" CornerRadius="8"
-              BorderThickness="1" BorderBrush="#6622d3ee" Background="#0F22d3ee">
+              BorderThickness="1" BorderBrush="{StaticResource Accent40}" Background="{StaticResource AccentTint}">
         <StackPanel Spacing="8">
           <StackPanel Spacing="6">
             <TextBlock Text="Nombre del proyecto nuevo" FontSize="12" Foreground="{StaticResource Dim}" />
@@ -269,7 +251,7 @@
               <Button Grid.Column="1" x:Name="NewCancel" Classes="btn" Margin="8,0,0,0" Content="Cancelar" />
               <Button Grid.Column="2" x:Name="NewCreate" Classes="btn primary" Margin="8,0,0,0" Padding="16,0">
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Arc x:Name="CreateSpin" Classes="spin" Width="14" Height="14" Stroke="#0b0b0d" IsVisible="False" />
+                  <Arc x:Name="CreateSpin" Classes="spin" Width="14" Height="14" Stroke="{StaticResource AccentFg}" IsVisible="False" />
                   <TextBlock Text="Crear" />
                 </StackPanel>
               </Button>
