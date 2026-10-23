@@ -123,6 +123,30 @@ static class ClipChecks
         var roleClip = new Clip { Extra = new() { ["role"] = System.Text.Json.JsonSerializer.SerializeToElement("solo") } };
         Check(InspectorEditing.DefaultCompPreset(roleClip) == "lead" && InspectorEditing.DefaultCompPreset(new Clip(), "rhythm") == "rhythm",
             "el reset del compresor usa el rol original y admite proyectos nativos anteriores");
+        var sp = new Project { Media = [media], Tracks = [new Track { Name = "Base" }] };
+        var whole = new Clip { MediaId = media.Id, AtSec = 1.08, TrimStartSec = 0.5, TrimEndSec = 1, FadeInSec = 0.3, FadeOutSec = 0.4, GainDb = -2 };
+        sp.Tracks[0].Clips.Add(whole);
+        var before = ClipEditing.Window(whole, media);
+        string rightId = ClipEditing.Split(sp, whole.Id, 4.2);
+        var piece = ClipEditing.Find(sp, rightId).Clip;
+        var wl = ClipEditing.Window(whole, media); var wr = ClipEditing.Window(piece, media);
+        Check(sp.Tracks[0].Clips.Count == 2 && sp.Tracks[0].Clips[1] == piece && Near(wl.End, wr.Start) && Near(wr.Start, 4.2),
+            "dividir deja dos clips pegados en el cabezal");
+        Check(Near(wl.Start, before.Start) && Near(wr.End, before.End) && piece.AtSec == whole.AtSec && piece.MediaId == media.Id,
+            "dividir no mueve el audio ni cambia el medio");
+        Check(whole.FadeInSec == 0.3 && whole.FadeOutSec == 0 && piece.FadeInSec == 0 && piece.FadeOutSec == 0.4 && piece.GainDb == -2,
+            "la izquierda conserva el fade in y la derecha el fade out");
+        bool refused = false;
+        try { ClipEditing.Split(sp, whole.Id, wl.Start + 0.05); } catch (ArgumentException) { refused = true; }
+        Check(refused, "no divide pegado al borde");
+        string copyId = ClipEditing.Duplicate(sp, piece.Id);
+        var wc = ClipEditing.Window(ClipEditing.Find(sp, copyId).Clip, media);
+        Check(sp.Tracks[0].Clips.Count == 3 && Near(wc.Start, wr.End) && Near(wc.End - wc.Start, wr.End - wr.Start),
+            "duplicar pone la copia justo después del original");
+        var cutAtZero = new Clip { MediaId = media.Id, AtSec = -1 };
+        sp.Tracks[0].Clips.Add(cutAtZero);
+        var wz = ClipEditing.Window(ClipEditing.Find(sp, ClipEditing.Duplicate(sp, cutAtZero.Id)).Clip, media);
+        Check(Near(wz.Start, 9) && Near(wz.End, 19), "duplicar un clip cortado en 0 copia la toma entera");
         Console.WriteLine($"Edición de clips: {n} comprobaciones correctas (sin modificar archivos).");
         return 0;
     }

@@ -34,6 +34,9 @@
   importar de la web), salvo que reciba una carpeta por línea de comandos; el chip del proyecto lo
   vuelve a abrir. Timeline, preview con el monitor "En vivo" al lado (la cámara cruda y la entrada),
   inspector, barra derecha con la pestaña Color (filtro, ajustes, efectos y plantillas de video),
+  el interruptor **Video | Solo audio** de la barra de arriba (también al crear el proyecto: en solo audio no
+  hay composición ni cámara, el timeline ocupa ese lugar y "Exportar audio" saca la mezcla en WAV o MP3; se
+  puede cambiar en cualquier momento sin perder nada) y "En el video" por pista (inspector o clic derecho),
   mixer en lugar del timeline (X: tiras amplias o compactas, retornos de reverb y delay, master,
   plantillas de paneo y mini timeline), reproducción por ASIO, autoguardado. Las tomas se graban con el video de la cámara. El ⚙
   abre Configuración: driver ASIO y salida (se recuerdan), canales, ganancia, monitoreo, cámara
@@ -43,7 +46,10 @@
   Espacio = play/pausa (grabando: detener y guardar), Inicio = al principio, C = click,
   Shift+C = cuenta, T = tap tempo, M/S = mute/solo, F = ver todo, X = timeline / mixer,
   Shift+rueda = zoom, Alt+rueda = alto de pista, Ctrl+Z = deshacer, Ctrl+Y o Ctrl+Shift+Z = rehacer,
-  Supr = quitar clip (otra vez: quitar la pista vacía), Esc = cancelar el arrastre.
+  Supr = quitar clip (otra vez: quitar la pista vacía), Esc = cancelar el arrastre,
+  Alt+X = dividir el clip en el cabezal, D = duplicar el clip (la copia va justo después).
+  El ● de cada pista (timeline y mixer) la arma para grabar: R graba ahí, aunque tenga una toma (la nueva la
+  reemplaza y la anterior queda en Historial). La pista donde va a caer la toma siempre se ve teñida de rojo.
   En el gestor: F2 = renombrar la fila, Esc = cierra el formulario y después el gestor (si hay un
   proyecto abierto)
 - `tools/make-icon.ps1`: dibuja el ícono de la app (`src/GuitarCam.App/Assets/GuitarCam.ico` y el logo de la barra de título `GuitarCam-64.png`, vista previa en `docs/icon-256.png`)
@@ -65,7 +71,7 @@ src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe
 | `dispositivos` | drivers ASIO y dispositivos WASAPI |
 | `panel` | panel del driver ASIO (tamaño de buffer) |
 | `latencia [--modo cable\|tocando] [--ver] [--borrar] [--simular ms] [--datos X]` | mide la latencia ida y vuelta (con cable o tocando 4 + 12 clicks) o muestra / borra la guardada |
-| `grabar --monitor --sat valvula` | graba sobre el click; con `--monitor` te escuchás con el efecto, vía ASIO (también `--ganancia`, `--descartar`, `--latencia-ms`, `--ajuste-sincro`, `--simular`) |
+| `grabar --monitor --sat valvula` | graba sobre el click; con `--monitor` te escuchás con el efecto, vía ASIO (también `--ganancia`, `--descartar`, `--latencia-ms`, `--ajuste-sincro`, `--simular`; con `--simular --ruido-2 0.0001`, la entrada 2 con soplido) |
 | `mezclar proyecto\|toma.wav [--salida mezcla.wav] [--segundos N]` | renderiza la mezcla offline, con el mismo grafo que la reproducción |
 | `procesar toma.wav --sat cinta --comp-estilo punteo --eq ritmica --reverb cuarto --delay punteada` | aplica efectos a un WAV (también `--comp-cant`, `--reverb-envio`, `--delay-envio`) |
 | `verificar [toma.wav]` | compara el DSP portado con el de la app web |
@@ -85,11 +91,13 @@ src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe
 | `proyecto verificar-historial` | prueba el registro de tomas que salen o vuelven al timeline, la Papelera y las frases de Actividad (en una carpeta temporal) |
 | `proyecto clips carpeta` | lista pistas y clips |
 | `proyecto editar carpeta mover\|recortar-inicio\|recortar-final\|fade-in\|fade-out clip delta [--iman 1/4] [--libre]` | edita un clip como en el timeline (imán, anclaje de sincronía) |
-| `proyecto editar carpeta a-pista clip pista [--intercambiar clip]`, `reordenar desde hasta`, `inicio\|fijar-corte\|restaurar\|quitar-clip clip`, `quitar-pista pista`, `nueva-pista`, `agregar-toma medio [--pista p]` | el resto de las operaciones del timeline |
+| `proyecto editar carpeta a-pista clip pista [--intercambiar clip]`, `reordenar desde hasta`, `inicio\|fijar-corte\|restaurar\|duplicar\|quitar-clip clip`, `dividir clip segundos`, `quitar-pista pista`, `nueva-pista`, `agregar-toma medio [--pista p]` | el resto de las operaciones del timeline |
 | `proyecto encuadre carpeta clip [--zoom 1.5] [--panx 0.2] [--pany -0.3] [--espejar] [--restaurar]` | encuadre del clip en su panel |
 | `proyecto sincronia carpeta clip [--audio-ms -30] [--camara-ms 80] [--heredar]` | ajuste de sincronía y de latencia de cámara de un clip (`--heredar` vuelve a los de la grabación) |
 | `proyecto formato carpeta [--relacion 16:9\|9:16\|1:1] [--disposicion lado-a-lado\|apilado]` | formato del video, como en la ventana (9:16 pasa a apilado y 16:9 a lado a lado) |
 | `exportar [proyecto] [--salida nombre] [--carpeta destino] [--calidad alta\|estandar\|borrador] [--reemplazar] [--prueba]` | exporta el MP4 (mezcla offline + FFmpeg); `--prueba` arma un proyecto de prueba y prueba colisión y cancelación |
+| `exportar proyecto --audio wav\|mp3 [--salida nombre]` | exporta solo la mezcla (WAV de 24 bits o MP3 de 320 kbps); un proyecto en solo audio lo hace sin `--audio` |
+| `proyecto modo carpeta [video\|audio] [--pista id --en-video si\|no]` | el modo del proyecto (video / solo audio) y si una pista sale en el video |
 | `proyectos lista` / `proyectos plantillas` | la lista del gestor (carpeta de proyectos + recientes) / las plantillas |
 | `proyectos nuevo "Nombre" [--plantilla id] [--carpeta vacía]` | crea un proyecto (nombre limpio para Windows y "(2)" si ya existe) |
 | `proyectos previsualizar "Nombre"` | el nombre y la carpeta que tendría un proyecto nuevo |

@@ -14,6 +14,7 @@ public enum InputChannelMode
 /// routes input channels (<c>stereo</c> with automatic mono-ch0 detection when ch1 is silent,
 /// <c>ch1-mono</c>, <c>ch2-mono</c>), applies input pre-amp gain (+12 dB default), soft-limits peaks
 /// above 0.92 with <c>tanh</c>, and reports peak levels and clipping without allocating in <see cref="Process"/>.
+/// Same as the web except that automatic mono latches instead of being decided block by block (see <see cref="Process"/>).
 /// </summary>
 public sealed class InputProcessor
 {
@@ -22,6 +23,11 @@ public sealed class InputProcessor
     volatile InputChannelMode mode = InputChannelMode.Stereo;
     volatile float gainLinear = (float)Math.Pow(10.0, DefaultInputGainDb / 20.0);
     double gainDb = DefaultInputGainDb;
+    /// <summary>Raw input-2 peak below which it counts as unused (-66 dBFS, above any interface's hiss).</summary>
+    const float Ch1SilenceThreshold = 0.0005f;
+    /// <summary>Raw input-2 peak that counts as a real signal and ends automatic mono (the level the web uses for input 1).</summary>
+    const float Ch1SignalThreshold = 0.002f;
+    bool autoMono; // audio thread only
 
     public InputChannelMode ChannelMode
     {
@@ -90,7 +96,13 @@ public sealed class InputProcessor
 
         var curMode = mode;
         float g = gainLinear;
-        bool autoMonoCh0 = curMode == InputChannelMode.Stereo && rawMax0 > 0.002f && rawMax1 < 0.00005f;
+        // The web decides this per block with input 2 below 0.00005: an interface whose unused input hisses
+        // around that level flips the right side on and off hundreds of times a second, and one that hisses
+        // a little more never goes mono. Here input 2 counts as silent up to -66 dBFS and the decision
+        // latches: mono-ch0 until input 2 carries a real signal.
+        if (curMode != InputChannelMode.Stereo || rawMax1 >= Ch1SignalThreshold) autoMono = false;
+        else if (rawMax0 > 0.002f && rawMax1 < Ch1SilenceThreshold) autoMono = true;
+        bool autoMonoCh0 = autoMono;
 
         float ml = 0f;
         float mr = 0f;

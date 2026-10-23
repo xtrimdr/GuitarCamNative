@@ -52,7 +52,9 @@ static class Program
               grabar    [--driver X] [--segundos 15] [--bpm 100] [--cuenta 4] [--click madera]
                         [--volumen-click 0] [--canal 1|2|estereo] [--monitor]
                         [--sat valvula|cinta] [--vida 0.3] [--salida toma.wav]
-                                           graba sobre el click; con --monitor te escuchás con la saturación
+                        [--simular [--ruido-2 0.0001]]
+                                           graba sobre el click; con --monitor te escuchás con la saturación;
+                                           --simular graba un tono sin la placa (--ruido-2: la entrada 2 con soplido)
               procesar  entrada.wav [--salida x.wav] [--sat valvula|cinta] [--vida 0.3]
                         [--comp] [--umbral -24] [--ratio 4] [--ataque 10] [--release 150] [--knee 6]
                         [--makeup 0] [--limit] [--comp-estilo rasgueo|arpegio|punteo] [--comp-cant 0.5]

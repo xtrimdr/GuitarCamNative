@@ -9,8 +9,9 @@ namespace GuitarCam.Projects;
 /// handleStartRecordingSequence and of the take built in handleStopRecording (GuitarCam/src/App.tsx).
 /// The web keeps one take per lane; here the take becomes a Media plus a Clip on the target track, and
 /// the track keeps the channel strip it had (the web's withChannel). The camera's video goes with it, mirrored
-/// if the live image was (the web's mirror: liveMirror). Native difference: without a camera the take is
-/// audio only and a new track is created without a video panel (the web refuses to record without one).
+/// if the live image was (the web's mirror: liveMirror). Native differences: without a camera the take is
+/// audio only and a new track is created without a video panel (the web refuses to record without one), and a
+/// track armed by hand can already have clips: the take replaces them (they stay in Historial, undo brings them back).
 /// </summary>
 public static class TakeRecording
 {
@@ -54,11 +55,14 @@ public static class TakeRecording
 
     /// <summary>
     /// Adds the recorded WAV as a media and a clip at its sync correction (recording starts at timeline 0).
-    /// Returns the track that got it. A target that was removed meanwhile counts as no target.
+    /// Returns the track that got it. A target that was removed meanwhile counts as no target; one with clips
+    /// (armed by hand) loses them to the take.
     /// </summary>
     public static Track AddTake(Project p, ProjectStore.RecordingJournal j, double durationSec, int sampleRate, int channels, int takeNumber)
     {
-        var target = p.Tracks.Find(t => t.Id == j.TrackId && t.Clips.Count == 0);
+        var target = p.Tracks.Find(t => t.Id == j.TrackId);
+        if (target != null)
+            foreach (var c in target.Clips.ToList()) ClipEditing.RemoveClip(p, c.Id);
         int slot = Slot(p, target);
         var media = new Media
         {

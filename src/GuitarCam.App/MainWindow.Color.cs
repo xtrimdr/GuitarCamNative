@@ -113,6 +113,14 @@ public partial class MainWindow
         if (save) SaveViewPref("projectBarCollapsed", collapsed ? "1" : "2");
     }
 
+    /// <summary>Solo audio has no picture to color: the Color tab hides and Historial shows (the saved tab stays).</summary>
+    void SetColorTabVisible(bool visible)
+    {
+        foreach (var (key, tab, rail) in projectTabs)
+            if (key == "color") tab.IsVisible = rail.IsVisible = visible;
+        if (!visible && projectTab == "color") SetProjectTab("history", save: false);
+    }
+
     void SetProjectTab(string key, bool save = true)
     {
         projectTab = key;

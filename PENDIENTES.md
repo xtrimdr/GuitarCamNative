@@ -13,13 +13,15 @@ _Cosas que no están en la app web o que la versión nativa debería hacer disti
 ### Pedidas
 
 #### 1. Usarla también como DAW, solo audio
-- [ ] Proyectos o pistas sin video: grabar solo audio (la pista no ocupa panel en el video)
-- [ ] Edición de clips: dividir (cortar en el cursor), recortar, mover, duplicar, borrar un pedazo
+- [x] Proyectos o pistas sin video (hecho, ver abajo)
+- [ ] Edición de clips: ~~dividir, duplicar~~ (hechos), borrar un pedazo (rango), mover un clip a otra pista
+  a otro tiempo (hoy cambiar de pista conserva el tiempo, como la web)
 - [ ] Ganancia por clip, aparte del fader de la pista (con su curva de volumen dentro del clip)
-- [ ] Varios clips por pista (hoy es una toma por carril)
+- [ ] Varios clips por pista: ya se reproducen, se dibujan y se exportan (comparten el panel); falta grabar
+  desde el cabezal (hoy toda toma arranca en 0) y elegir qué clip se ve cuando se pisan
 - [ ] Importar audio externo (WAV, MP3, FLAC…): pistas de acompañamiento, loops, tomas de otro lado
 - [ ] Mejorar el mixer: inserts reordenables, más sends/buses, grupos, medidores más completos
-- [ ] Exportar solo el audio (WAV/MP3), la mezcla o las pistas por separado (stems)
+- [ ] Exportar las pistas por separado (stems). La mezcla en WAV / MP3 ya está
 - …y más: ir sumando acá
 
 #### 2. Soporte de plugins VST
@@ -94,6 +96,39 @@ mano está en [docs/PRUEBAS.md](docs/PRUEBAS.md).
 
 ## Hecho
 
+- 2026-10-23: **Video | Solo audio** (ítem 1, pedido del usuario): interruptor en la barra de título y en "Nuevo
+  proyecto" (`ProjectSettings.Mode`, `MainWindow.Mode.cs`, `gclab proyecto modo`). En solo audio el timeline ocupa el
+  lugar de la composición, la cámara queda libre, se ocultan Color, Encuadre y lo de video del inspector, y
+  "Exportar audio" saca la mezcla en WAV de 24 bits o MP3 de 320 kbps (`AudioExporter`, `gclab exportar --audio`).
+  Se cambia en cualquier momento, es un paso de deshacer y no borra nada. Además, "En el video" por pista
+  (inspector y clic derecho) para una pista que suena sin panel. Probado en la ventana con una copia de PruebasNEW:
+  pasar a solo audio y volver, exportar un MP3 y abrirlo desde Historial, Ctrl+Z del cambio; y con `gclab` (WAV y
+  MP3 revisados con ffprobe, `verificar-deshacer`). Sin probar: grabar una toma en solo audio y el formulario de
+  "Nuevo proyecto" en la ventana. No quedó en el mixer el interruptor "En el video" (no entra en las tiras
+  angostas): está en el inspector y en el clic derecho del timeline.
+
+- 2026-10-23: dividir y duplicar clips (ítem 1, primer tramo): Alt+X divide el clip en el cabezal y D lo duplica
+  justo después, también desde el clic derecho (`ClipEditing.Split` / `Duplicate`, `gclab proyecto editar …
+  dividir|duplicar`, comprobados en `verificar-clips`). La exportación pone todos los clips de una pista en su
+  panel, cada uno en su tramo (`ExportTakeSpec.Panel` en `Mp4Exporter`); probado con `gclab exportar` sobre una
+  copia de PruebasNEW con clips divididos, movidos y duplicados (cuadros revisados a mano).
+- 2026-10-23: armar pistas para grabar (pedido del usuario): ● en cada encabezado del timeline y en cada tira
+  del mixer; la pista donde cae la toma se tiñe de rojo; armada con una toma, la nueva la reemplaza (la vieja
+  queda en Historial) y la pista no suena mientras grabás. El botón Grabar del transporte quedó como un ● chico.
+  Probado en la ventana: armar, ver el tinte en timeline y mixer, y grabar unos segundos sobre una pista con
+  dos clips. Sin probar: grabar tocando de verdad (la toma salió muda).
+
+- 2026-10-23: editar el timeline ya no recarga el proyecto: mover, recortar, fades, cambiar de pista, quitar,
+  reordenar, deshacer y sumar una toma grabada se aplican en el lugar (`ApplyTracks` en `MainWindow.Timeline.cs`):
+  pistas y clips se emparejan por id y siguen con su audio, su video, el estado de los efectos y el cabezal,
+  sin parar la reproducción. Solo se lee del disco la toma nueva. Antes cada gesto paraba el audio, reabría
+  todos los videos y el clip soltado volvía un instante a su lugar viejo.
+- 2026-10-23: las tomas grababan con cortes en el lado derecho: en estéreo, el "mono automático" (la entrada 1
+  a los dos lados si la 2 está muda) se decidía cada bloque y el soplido de la entrada 2 de la Focusrite
+  (~0,0001) caía justo en el umbral de la web (0,00005), así que el lado derecho se prendía y apagaba ~60
+  veces por segundo. Ahora la decisión queda trabada hasta que la entrada 2 trae señal de verdad y la 2
+  cuenta como muda hasta -66 dBFS (`InputProcessor`, `RecordingSession.cs`). La web tiene el mismo problema.
+  Se prueba con `gclab grabar --simular --canal estereo --ruido-2 0.00005`.
 - 2026-10-23: la app se llama **GuitarCam Studio Native**: título de la ventana, badge "NATIVE" en la barra
   de título (`MainWindow.axaml`), nombre y descripción del exe (`GuitarCam.App.csproj`), acceso directo del
   escritorio (`tools/make-shortcut.ps1`, borra el viejo "(nativa)") y docs. El logo de la barra de título

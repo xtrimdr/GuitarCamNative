@@ -103,10 +103,14 @@ public partial class MainWindow
     {
         if (mixer == mixerView) return;
         var row = Root.RowDefinitions[3];
-        if (mixerView) mixerH = row.ActualHeight; else timelineH = row.ActualHeight;
+        // in solo audio both views fill the stage's place and the bottom row stays closed
+        if (!audioMode)
+        {
+            if (mixerView) mixerH = row.ActualHeight; else timelineH = row.ActualHeight;
+            row.MinHeight = mixer ? MixerMinH : TimelineMinH;
+            row.Height = new GridLength(mixer ? mixerH : timelineH);
+        }
         mixerView = mixer;
-        row.MinHeight = mixer ? MixerMinH : TimelineMinH;
-        row.Height = new GridLength(mixer ? mixerH : timelineH);
         TimelineHost.IsVisible = !mixer;
         MixerHost.IsVisible = mixer;
         ToolTip.SetTip(BottomSplitter, $"Arrastrá para cambiar la altura {(mixer ? "del mixer" : "de la timeline")}");
@@ -119,6 +123,7 @@ public partial class MainWindow
     /// <summary>Remembers the height of the view on screen (gc.timelineHeight / gc.mixerHeight in the web).</summary>
     void SaveBottomHeight()
     {
+        if (audioMode) return;
         double h = Root.RowDefinitions[3].ActualHeight;
         if (mixerView) mixerH = h; else timelineH = h;
         SaveViewPref(mixerView ? "mixerHeight" : "timelineHeight", h.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -339,9 +344,11 @@ public partial class MainWindow
         };
         void Paint()
         {
-            bool selected = sel == t;
-            box.Background = selected ? Palette.Raised : hover ? Palette.Alpha(Palette.RaisedColor, 0.6) : Palette.Panel;
-            box.BorderBrush = selected ? Palette.Alpha(Palette.AccentColor, 0.4) : Palette.Line;
+            bool selected = sel == t, armed = Timeline.ArmedIndex == tracks.IndexOf(t);
+            // the armed strip (where R records) is tinted red, like its lane in the timeline
+            box.Background = armed && !selected ? Palette.Alpha(Palette.RecColor, 0.08)
+                : selected ? Palette.Raised : hover ? Palette.Alpha(Palette.RaisedColor, 0.6) : Palette.Panel;
+            box.BorderBrush = armed ? Palette.Alpha(Palette.RecColor, 0.5) : selected ? Palette.Alpha(Palette.AccentColor, 0.4) : Palette.Line;
             top.Background = selected ? Palette.Accent : Brushes.Transparent;
         }
         mixerRefresh.Add(Paint);
@@ -363,6 +370,7 @@ public partial class MainWindow
         double btn = wide ? 28 : 24;
         var mute = StripToggle("M", "Mute (M)", btn, () => t.Channel.Muted, false, () => EditTrack(t, x => x.Channel.Muted = !x.Channel.Muted, "mute"));
         var solo = StripToggle("S", "Solo (S)", btn, () => t.Channel.Solo, true, () => EditTrack(t, x => x.Channel.Solo = !x.Channel.Solo, "solo"));
+        var arm = ArmToggle(t, btn);
         var fader = new Fader();
         fader.Changed += v => EditTrack(t, x => x.Channel.Volume = v, "volume");
         var db = new TextBlock { Classes = { "mono" }, FontSize = wide ? 11 : 10, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center };
@@ -374,12 +382,13 @@ public partial class MainWindow
         Control head, controls, foot;
         if (wide)
         {
-            var h = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto,Auto"), Height = 28 };
+            var h = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto,Auto,Auto"), Height = 28 };
             h.Children.Add(badge);
             name.Margin = new Thickness(8, 0); Grid.SetColumn(name, 1); h.Children.Add(name);
             emptyHint.Margin = new Thickness(0, 0, 8, 0); Grid.SetColumn(emptyHint, 2); h.Children.Add(emptyHint);
-            Grid.SetColumn(mute, 3); h.Children.Add(mute);
-            solo.Margin = new Thickness(4, 0, 0, 0); Grid.SetColumn(solo, 4); h.Children.Add(solo);
+            arm.Margin = new Thickness(0, 0, 4, 0); Grid.SetColumn(arm, 3); h.Children.Add(arm);
+            Grid.SetColumn(mute, 4); h.Children.Add(mute);
+            solo.Margin = new Thickness(4, 0, 0, 0); Grid.SetColumn(solo, 5); h.Children.Add(solo);
             head = h;
             var fx = new StackPanel { Spacing = 6 };
             WideFx(fx, t);
@@ -412,7 +421,7 @@ public partial class MainWindow
                 () => $"Envío al delay {t.Channel.DelaySend * 100:0}% (doble click: 0)"));
             stack.Children.Add(knobs);
             var toggles = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center };
-            toggles.Children.Add(mute); toggles.Children.Add(solo);
+            toggles.Children.Add(arm); toggles.Children.Add(mute); toggles.Children.Add(solo);
             // C = compressor on/off, with its gain reduction as a bar along the bottom
             var grBar = new Border { Height = 3, Width = 0, Background = Palette.Accent, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom, IsHitTestVisible = false };
             var cText = new TextBlock { Text = "C", Classes = { "mono" }, FontSize = 10, FontWeight = FontWeight.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
@@ -707,6 +716,26 @@ public partial class MainWindow
             b.Background = lit ? (solo ? Palette.Fg : Palette.Accent) : Brushes.Transparent;
             b.BorderBrush = lit ? (solo ? Palette.Fg : Palette.Accent) : Palette.Line;
             ((TextBlock)b.Content!).Foreground = lit ? Palette.App : Palette.Faint;
+        });
+        return b;
+    }
+
+    /// <summary>The strip's record-arm toggle (native only), the same ● as the timeline header: lit red on the track R records to.</summary>
+    Button ArmToggle(LiveTrack t, double size)
+    {
+        var dot = new Avalonia.Controls.Shapes.Ellipse { Width = 9, Height = 9 };
+        var b = new Button { Classes = { "chip" }, Width = size, Height = size, MinHeight = size, Padding = new Thickness(0), CornerRadius = new CornerRadius(4),
+            HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center, Content = dot };
+        b.Click += (_, _) => ToggleArm(t);
+        mixerRefresh.Add(() =>
+        {
+            bool lit = Timeline.ArmedIndex == tracks.IndexOf(t);
+            b.Background = lit ? Palette.Rec : Brushes.Transparent;
+            b.BorderBrush = lit ? Palette.Rec : Palette.Line;
+            dot.Fill = lit ? Palette.Fg : Palette.Alpha(Palette.RecColor, 0.7);
+            ToolTip.SetTip(b, lit ? "Armada: la próxima toma (R) se graba en esta pista"
+                : t.Clips.Count == 0 ? "Armar para grabar en esta pista"
+                : "Armar para grabar en esta pista: la toma nueva reemplaza la que tiene (queda en Historial)");
         });
         return b;
     }

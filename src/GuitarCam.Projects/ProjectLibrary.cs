@@ -204,7 +204,8 @@ public static partial class ProjectLibrary
     // --- operations -------------------------------------------------------------------------------
 
     /// <summary>A new project in the projects folder (or in <paramref name="dir"/>, an empty folder the user picked).</summary>
-    public static string Create(string name, ProjectTemplate? template, string? dir = null)
+    /// <param name="mode">video | audio (native only): the project's mode, from the manager's "Video / Solo audio".</param>
+    public static string Create(string name, ProjectTemplate? template, string? dir = null, string mode = "video")
     {
         name = CleanName(name);
         if (dir == null)
@@ -221,6 +222,7 @@ public static partial class ProjectLibrary
         }
         var p = new Project { Name = name };
         template?.ApplyTo(p);
+        p.Settings.SetMode(mode);
         p.AddLog("session-created");
         using var store = ProjectStore.Create(dir, p);
         Directory.CreateDirectory(Path.Combine(dir, "exports"));

@@ -25,6 +25,7 @@ public partial class MainWindow
     Task clickPrefsSaving = Task.CompletedTask;
     bool? transportPlaying;
     string? clockTip;
+    string? recTip;
     static readonly string[] ClickLabels = ["Bip", "Madera", "Clave", "Aguja", "Cencerro", "Batería"];
     static readonly string[] ClickHints = ["El de siempre, suave", "Woodblock seco, corta bien sobre la guitarra", "Agudo y corto, se escucha sobre la distorsión", "Electrónico, muy agudo y filoso", "Metálico, con cuerpo", "Bombo en el 1, hi-hat en el resto"];
 
@@ -157,8 +158,10 @@ public partial class MainWindow
         PlayButton.IsEnabled = ToStartButton.IsEnabled = !engine.Recording;
         Tempo.Set(engine.Bpm);
         Tempo.IsEnabled = store != null && !store.ReadOnly && !restoring && !RecordingBusy;
-        string? target = sel != null && sel.Clips.Count == 0 ? sel.Track.Name : null;
-        RecordTargetText.Text = target == null ? "→ pista nueva" : $"→ {target}";
-        ToolTip.SetTip(RecButton, target == null ? "Grabar en una pista nueva al final (R)" : $"Grabar en \"{target}\" (R)");
+        ShowArm();
+        var target = RecordTarget();
+        string recordTip = target == null ? "Grabar en una pista nueva al final (R)"
+            : target.Clips.Count > 0 ? $"Grabar en \"{target.Name}\", reemplazando su toma (R)" : $"Grabar en \"{target.Name}\" (R)";
+        if (recordTip != recTip) { recTip = recordTip; ToolTip.SetTip(RecButton, recordTip); }
     }
 }

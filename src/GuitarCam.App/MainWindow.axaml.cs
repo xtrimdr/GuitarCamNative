@@ -110,6 +110,7 @@ public partial class MainWindow : Window
         InitTimelineEditing();
         InitTransport();
         InitPreview();
+        InitMode();
 
         InitInspector();
         InitProjectBar();
@@ -184,7 +185,8 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             timer.Stop();
-            try { AppConfig.Set(mixerView ? "mixerHeight" : "timelineHeight", Root.RowDefinitions[3].ActualHeight.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
+            // in solo audio the bottom row is closed: the heights remembered before stay
+            try { if (!audioMode) AppConfig.Set(mixerView ? "mixerHeight" : "timelineHeight", Root.RowDefinitions[3].ActualHeight.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* View preference only. */ }
             engine.Dispose();
             camera.Dispose();
@@ -393,6 +395,7 @@ public partial class MainWindow : Window
         RefreshFormat();
         RefreshColorPanel();
         ShowTrack(list.FirstOrDefault());
+        ApplyMode();
 
         var notes = new List<string>();
         if (st.ReadOnlyReason != null) notes.Add(st.ReadOnlyReason);
@@ -402,6 +405,7 @@ public partial class MainWindow : Window
             ? string.Join(" · ", notes)
             : $"{list.Count} pistas · {engine.LengthSec / 60:0}:{engine.LengthSec % 60:00} · {p.Settings.Aspect}");
 
+        if (p.Settings.AudioOnly) return;
         var clips = list.Where(t => t.Track.Video).SelectMany(t => t.Clips).ToList();
         await Task.WhenAll(clips.Select(c => Task.Run(() => c.OpenVideo(st))));
         var noVideo = clips.Where(c => c.Video == null && c.Media?.Video != null).Select(c => c.Name).ToList();
@@ -461,7 +465,13 @@ public partial class MainWindow : Window
             }
             return;
         }
-        if ((e.KeyModifiers & KeyModifiers.Alt) != 0) return;
+        if ((e.KeyModifiers & KeyModifiers.Alt) != 0)
+        {
+            if (e.Key != Key.X) return;
+            e.Handled = true;
+            await SplitAtPlayhead();
+            return;
+        }
         if (e.Key is Key.Space or Key.Home or Key.C or Key.T or Key.R && !transportKeys.Add(e.Key)) { e.Handled = true; return; }
         switch (e.Key)
         {
@@ -483,6 +493,9 @@ public partial class MainWindow : Window
                 break;
             case Key.F:
                 Timeline.FitAll();
+                break;
+            case Key.D:
+                await DuplicateSelection();
                 break;
             case Key.X:
                 SetMixerView(!mixerView);
@@ -582,12 +595,8 @@ public partial class MainWindow : Window
         if (restoring || RecordingBusy || store == null || store.ReadOnly || Projects.IsVisible) return;
         var st = store;
         string? selected = sel?.Track.Id;
-        double position = engine.PositionSec;
-        var audio = tracks.SelectMany(t => t.Clips).Where(c => c.Media != null)
-            .GroupBy(c => c.Media!.Id).ToDictionary(g => g.Key, g => g.First().Audio);
         if (!(redo ? undo.Redo(st.Project) : undo.Undo(st.Project))) return;
         restoring = true;
-        engine.Stop();
         MarkDirty();
         saveTimer.Stop();
         Inspector.IsEnabled = Timeline.IsEnabled = TimelineToolbar.IsEnabled = SessionChip.IsEnabled = false;
@@ -618,10 +627,9 @@ public partial class MainWindow : Window
                 RefreshFormat();
                 RefreshColorPanel();
             }
-            else await ShowProject(st, audio, true);
+            else await ApplyTracks(st);
             int index = tracks.FindIndex(t => t.Track.Id == selected);
             Timeline.Select(index >= 0 ? index : tracks.Count - 1);
-            engine.Seek(position);
             Status(redo ? "Rehice el último cambio" : "Deshice el último cambio");
         }
         catch (Exception e)
@@ -634,6 +642,7 @@ public partial class MainWindow : Window
             Timeline.IsEnabled = TimelineToolbar.IsEnabled = SessionChip.IsEnabled = true;
             Inspector.IsEnabled = sel != null;
             RefreshColorPanel();
+            ApplyMode();
             RefreshMixer();
             MarkDirty();
             UpdateUndoButtons();

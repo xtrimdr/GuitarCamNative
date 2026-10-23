@@ -36,6 +36,8 @@ public sealed partial class ProjectsDialog : UserControl
     string? pendingWebDir;
     List<ProjectTemplate> myTemplates = ProjectTemplates.User();
     string templateId = ProjectTemplates.LastId;
+    /// <summary>"Video" / "Solo audio" of a new project (native only), remembered like the template.</summary>
+    string newMode = AppConfig.Get("newProjectMode") == "audio" ? "audio" : "video";
     TextBox? rowInput;
     int previewVersion;
 
@@ -81,6 +83,8 @@ public sealed partial class ProjectsDialog : UserControl
         SearchBox.TextChanged += (_, _) => RenderList();
         NewCancel.Click += (_, _) => SetDraft(null);
         NewCreate.Click += async (_, _) => await SubmitDraft();
+        NewVideoButton.Click += (_, _) => { newMode = "video"; RenderAll(); };
+        NewAudioButton.Click += (_, _) => { newMode = "audio"; RenderAll(); };
         NewName.TextChanged += (_, _) =>
         {
             if (draft?.Kind == DraftKind.New) draft = draft with { Name = NewName.Text ?? "" };
@@ -306,13 +310,15 @@ public sealed partial class ProjectsDialog : UserControl
         if (d.Kind == DraftKind.New)
         {
             var tpl = SelectedTemplate;
+            string mode = newMode;
             await Run("__create", async () =>
             {
                 string freeName = FreeName(name);
                 string dir = await Task.Run(() => d.Dir != null
-                    ? ProjectLibrary.Create(freeName, tpl, d.Dir)
-                    : ProjectLibrary.Create(name, tpl));
+                    ? ProjectLibrary.Create(freeName, tpl, d.Dir, mode)
+                    : ProjectLibrary.Create(name, tpl, mode: mode));
                 ProjectTemplates.LastId = tpl?.Id ?? ProjectTemplates.None;
+                AppConfig.Set("newProjectMode", mode);
                 draft = null;
                 if (OpenProject != null) await OpenProject(dir);
             }, "No se pudo crear el proyecto");
@@ -496,6 +502,8 @@ public sealed partial class ProjectsDialog : UserControl
         if (d == null) return;
         string name = d.Name.Trim();
         NewCreate.IsEnabled = busy == null && name.Length > 0;
+        NewVideoButton.IsChecked = newMode == "video";
+        NewAudioButton.IsChecked = newMode == "audio";
         CreateSpin.IsVisible = busy == "__create";
         NewPath.Text = d.Dir ?? (root.Length > 0 ? System.IO.Path.Combine(root, ProjectLibrary.FolderNameFor(FreeName(d.Name))) : "");
         bool taken = name.Length > 0 && NameTaken(name);

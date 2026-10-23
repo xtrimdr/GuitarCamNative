@@ -58,6 +58,15 @@ static class TakeChecks
         Check(TakeRecording.AddTake(two, j, 1, 48000, 2, 1).Channel.Comp.Preset == "lead", "el solo arranca con el preset de punteo");
         Check(TakeRecording.IsFirstTake(new Project { Tracks = [new Track()] }), "pistas vacías: es la primera toma");
 
+        full.Channel.Pan = -0.4;
+        var old = full.Clips[0];
+        j = new ProjectStore.RecordingJournal { MediaId = "med_e", Name = "Toma 8 — Solo / Punteo", Audio = "media/med_e.wav", TrackId = full.Id };
+        t = TakeRecording.AddTake(p, j, 3, 48000, 2, 8);
+        Check(t == full && t.Clips.Count == 1 && t.Clips[0].MediaId == "med_e" && t.Channel.Pan == -0.4,
+            "armada con una toma: la nueva la reemplaza y el canal queda");
+        Check(p.FindMedia(old.MediaId) is { } kept && kept.Extra?.ContainsKey("lastTimelineClip") == true,
+            "la toma reemplazada queda en el historial con su clip");
+
         Console.WriteLine($"Tomas: {n} comprobaciones correctas (sin modificar archivos).");
         return 0;
     }

@@ -202,6 +202,44 @@ public static class ClipEditing
         clip.TrimStartSec = Fixed3(w.TrimStart + w.Cut);
     }
 
+    /// <summary>
+    /// Splits a clip at a timeline time into two clips of the same media (native only: the web has one take
+    /// per lane). The left piece keeps the fade in, the right one the fade out and everything else (gain,
+    /// framing, sync); the boundary is shared exactly, so playback and export carry on without a gap.
+    /// Returns the right piece's id.
+    /// </summary>
+    public static string Split(Project p, string id, double atSec, double? durationSec = null)
+    {
+        var (track, left) = Find(p, id);
+        var w = Window(left, p.FindMedia(left.MediaId), durationSec);
+        if (atSec < w.Start + ClipEnvelope.MinClipSec || atSec > w.End - ClipEnvelope.MinClipSec)
+            throw new ArgumentException("El cabezal tiene que estar adentro del clip, a más de 0,1 s de los bordes.");
+        double trimStart = Fixed3(atSec - w.Origin);
+        var right = Copy(left);
+        right.Id = Ids.New("clp");
+        right.TrimStartSec = trimStart;
+        right.FadeInSec = right.VideoFadeInSec = 0;
+        left.TrimEndSec = w.Dur - trimStart;
+        left.FadeOutSec = left.VideoFadeOutSec = 0;
+        track.Clips.Insert(track.Clips.IndexOf(left) + 1, right);
+        return right.Id;
+    }
+
+    /// <summary>
+    /// Copies a clip on its own track right after its end (D in Studio One), including the part a cut at 0
+    /// hides, so the copy starts exactly where the original stops. Returns the copy's id.
+    /// </summary>
+    public static string Duplicate(Project p, string id, double? durationSec = null)
+    {
+        var (track, clip) = Find(p, id);
+        var w = Window(clip, p.FindMedia(clip.MediaId), durationSec);
+        var copy = Copy(clip);
+        copy.Id = Ids.New("clp");
+        copy.AtSec = Milliseconds(clip.AtSec + w.End - (w.Origin + w.TrimStart));
+        track.Clips.Insert(track.Clips.IndexOf(clip) + 1, copy);
+        return copy.Id;
+    }
+
     public static void Reset(Project p, string id)
     {
         var (_, c) = Find(p, id);

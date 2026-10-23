@@ -3,7 +3,8 @@ using System.Text.Json;
 namespace GuitarCam.Projects;
 
 /// <summary>
-/// Port of the editable snapshots in GuitarCam/src/App.tsx: lanes, layout, aspect and bus/video settings.
+/// Port of the editable snapshots in GuitarCam/src/App.tsx: lanes, layout, aspect and bus/video settings,
+/// plus the native project mode (video / solo audio).
 /// Mutable native objects are serialized for isolation; media, exports, log, tempo and project identity
 /// stay outside undo, like the web. Same 200-step limit and 800 ms coalescing per nonempty key.
 /// </summary>
@@ -19,7 +20,7 @@ public sealed class UndoManager(TimeProvider? timeProvider = null)
 
     /// <summary>Only the editable state; serialized before every edit, never the immutable recordings.</summary>
     sealed record Editable(List<Track> Tracks, string Layout, string Aspect, ReverbSettings Reverb,
-        DelaySettings Delay, ColorGrade Color, VideoFx VideoFx);
+        DelaySettings Delay, ColorGrade Color, VideoFx VideoFx, string? Mode = null);
 
     public bool CanUndo => undo.Count > 0;
     public bool CanRedo => redo.Count > 0;
@@ -54,13 +55,14 @@ public sealed class UndoManager(TimeProvider? timeProvider = null)
         s.Delay = state.Delay;
         s.Color = state.Color;
         s.VideoFx = state.VideoFx;
+        s.Mode = state.Mode ?? s.Mode;
         project.Normalize();
         lastKey = "";
         return true;
     }
 
     static string Capture(Project p) => JsonSerializer.Serialize(new Editable(p.Tracks, p.Settings.Layout,
-        p.Settings.Aspect, p.Settings.Reverb, p.Settings.Delay, p.Settings.Color, p.Settings.VideoFx), ProjectStore.Json);
+        p.Settings.Aspect, p.Settings.Reverb, p.Settings.Delay, p.Settings.Color, p.Settings.VideoFx, p.Settings.Mode), ProjectStore.Json);
 
     public void Clear()
     {

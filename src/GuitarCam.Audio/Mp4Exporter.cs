@@ -127,6 +127,11 @@ public sealed record ExportTakeSpec
     public double PanX { get; init; }
     public double PanY { get; init; }
     public bool Mirror { get; init; }
+    /// <summary>
+    /// The panel this clip shows in; -1 = a panel of its own (one take per panel, like the web). Several clips
+    /// of a track share its panel (native only), each one shown during its own window.
+    /// </summary>
+    public int Panel { get; init; } = -1;
 
     public ClipEnvelope.ClipWindow Window =>
         ClipEnvelope.Window(DurationSec, AtSec, TrimStartSec, TrimEndSec, SyncMs);
@@ -292,9 +297,10 @@ public static partial class Mp4Exporter
     /// <summary>
     /// Port of <c>exportTarget</c> and <c>/api/export/check</c> (<c>server/index.js:109-137</c>):
     /// resolves the destination folder and <c>.mp4</c> file name, checks whether it already exists,
-    /// and computes the first free <c>"name (n)"</c> suggestion.
+    /// and computes the first free <c>"name (n)"</c> suggestion. <paramref name="ext"/> is the native audio export's
+    /// <c>.wav</c> / <c>.mp3</c>.
     /// </summary>
-    public static ExportCheck CheckDestination(string projectDir, string? outDir, string? fileName)
+    public static ExportCheck CheckDestination(string projectDir, string? outDir, string? fileName, string ext = ".mp4")
     {
         if (string.IsNullOrWhiteSpace(projectDir))
             throw new ArgumentException("Falta la carpeta del proyecto.");
@@ -306,9 +312,9 @@ public static partial class Mp4Exporter
         bool isDefault = rawOut.Length == 0;
         string folder = isDefault ? Path.Combine(dir, "exports") : Path.GetFullPath(rawOut);
         string baseName = SafeFileName(fileName, "GuitarCam");
-        string full = Path.Combine(folder, $"{baseName}.mp4");
+        string full = Path.Combine(folder, $"{baseName}{ext}");
         string suggested = baseName;
-        for (int i = 2; File.Exists(Path.Combine(folder, $"{suggested}.mp4")); i++)
+        for (int i = 2; File.Exists(Path.Combine(folder, $"{suggested}{ext}")); i++)
             suggested = $"{baseName} ({i})";
 
         bool exists = File.Exists(full);
@@ -329,6 +335,10 @@ public static partial class Mp4Exporter
     public static byte[] VignetteMask(ExportVideoFxSpec? fx, int w, int h) => VideoColorProcessor.VignetteMask(fx, w, h);
 
     // --- FFmpeg filter_complex & arguments (port of server/index.js:201-379) ---------------------
+
+    /// <summary>How many panels the video has: one per take, or one per track when its clips share a panel.</summary>
+    public static int PanelCount(IReadOnlyList<ExportTakeSpec> takes) =>
+        takes.Select((t, i) => t.Panel >= 0 ? t.Panel : i).Distinct().Count();
 
     static string F3(double v) => Math.Max(0, v).ToString("0.000", CultureInfo.InvariantCulture);
 
@@ -358,6 +368,8 @@ public static partial class Mp4Exporter
 
         var (outW, outH) = ExportSize(job.AspectRatio);
         int numTakes = job.Takes.Count;
+        int PanelOf(int i) => job.Takes[i].Panel >= 0 ? job.Takes[i].Panel : i;
+        int numPanels = PanelCount(job.Takes);
         var ffmpegArgs = new List<string> { "-y" };
 
         for (int i = 0; i < numTakes; i++)
@@ -371,7 +383,7 @@ public static partial class Mp4Exporter
         ffmpegArgs.Add("-i");
         ffmpegArgs.Add(mixWavPath);
 
-        var panelRects = PanelLayout.Compute(numTakes, job.Layout, outW, outH);
+        var panelRects = PanelLayout.Compute(numPanels, job.Layout, outW, outH);
         string id = runId ?? $"{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}_{Guid.NewGuid():N}"[..20];
         var tempFiles = new List<string>();
 
@@ -411,7 +423,10 @@ public static partial class Mp4Exporter
         {
             var t = job.Takes[i];
             string vIn = $"{i}:v";
-            var rect = panelRects[i];
+            var rect = panelRects[PanelOf(i)];
+            // a later clip of a shared panel starts at its own time instead of padding with the background,
+            // which would cover the clips before it
+            bool later = Enumerable.Range(0, i).Any(k => PanelOf(k) == PanelOf(i));
             int pw = rect.W - (rect.W % 2);
             int ph = rect.H - (rect.H % 2);
 
@@ -435,7 +450,7 @@ public static partial class Mp4Exporter
             string cropXExpr = $"((iw-{pw})/2)*(1+({panX.ToString("0.000", CultureInfo.InvariantCulture)}))";
             string cropYExpr = $"((ih-{ph})/2)*(1+({panY.ToString("0.000", CultureInfo.InvariantCulture)}))";
 
-            int padInner = job.BorderSize > 0 && numTakes > 1 ? job.BorderSize : 0;
+            int padInner = job.BorderSize > 0 && numPanels > 1 ? job.BorderSize : 0;
             int innerW = pw - padInner * 2 - ((pw - padInner * 2) % 2);
             int innerH = ph - padInner * 2 - ((ph - padInner * 2) % 2);
 
@@ -486,8 +501,12 @@ public static partial class Mp4Exporter
                     vf.Add($"drawbox=x=0:y=ih-{bar}:w=iw:h={bar}:color={BG}:t=fill");
                 }
                 if (hold > 0.0005) vf.Add($"tpad=start_duration={F3(hold)}:start_mode=clone");
-                if (visStart > 0.0005) vf.Add($"tpad=start_duration={F3(visStart)}:color={BG}");
-                vf.Add("setpts=PTS-STARTPTS");
+                if (later) vf.Add($"setpts=PTS-STARTPTS+{F3(visStart)}/TB");
+                else
+                {
+                    if (visStart > 0.0005) vf.Add($"tpad=start_duration={F3(visStart)}:color={BG}");
+                    vf.Add("setpts=PTS-STARTPTS");
+                }
                 double vfIn = Math.Max(0, w.Start + fades.Video.FadeIn - visStart);
                 if (vfIn > 0.001) vf.Add($"fade=t=in:st={F3(visStart)}:d={F3(vfIn)}:color={BG}");
                 if (fades.Video.FadeOut > 0.001)
@@ -498,7 +517,8 @@ public static partial class Mp4Exporter
                 string nextBase = $"base{i + 1}";
                 int ox = rect.X + padInner;
                 int oy = rect.Y + padInner;
-                filterParts.Add($"[{baseLabel}][v{i}]overlay=x={ox}:y={oy}:eof_action=pass[{nextBase}]");
+                string enable = later ? $":enable='between(t,{F3(visStart)},{F3(visEnd)})'" : "";
+                filterParts.Add($"[{baseLabel}][v{i}]overlay=x={ox}:y={oy}:eof_action=pass{enable}[{nextBase}]");
                 baseLabel = nextBase;
             }
         }
@@ -745,7 +765,7 @@ public static partial class Mp4Exporter
         }
     }
 
-    static void WriteFloatStereoWav(string path, ReadOnlySpan<float> left, ReadOnlySpan<float> right, int sampleRate)
+    internal static void WriteFloatStereoWav(string path, ReadOnlySpan<float> left, ReadOnlySpan<float> right, int sampleRate)
     {
         int n = Math.Min(left.Length, right.Length);
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, 1 << 16);
@@ -765,7 +785,7 @@ public static partial class Mp4Exporter
         }
     }
 
-    static void TryDelete(string path)
+    internal static void TryDelete(string path)
     {
         try
         {

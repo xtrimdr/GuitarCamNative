@@ -1,5 +1,6 @@
 using Avalonia.Input;
 using GuitarCam.App.Controls;
+using GuitarCam.App.Model;
 using GuitarCam.Audio;
 using GuitarCam.Projects;
 
@@ -15,6 +16,9 @@ namespace GuitarCam.App;
 /// A journal is written before the first sample and removed only after the project with the take is
 /// saved, so if the program dies mid-take the next open recovers it (<see cref="ProjectStore.BeginRecording"/>);
 /// the video survives too, because FFmpeg closes its file when the pipe ends.
+/// Native only: a track can be armed by hand (● in its header or mixer strip) to take the next take, also
+/// when it already has clips (the take replaces them and the track stays silent meanwhile); without one armed
+/// the target is the web's pick. The target is always tinted red, so it shows where R will record.
 /// </summary>
 public partial class MainWindow
 {
@@ -25,6 +29,9 @@ public partial class MainWindow
     bool recFirstTake;
     bool recStopping;
     bool? recShown;
+    LiveTrack? recSilenced;
+    /// <summary>The track armed by hand; null = the web's pick (<see cref="TakeRecording.PickTarget"/>). Not saved, like the selection.</summary>
+    string? armedTrackId;
 
     /// <summary>"Ajuste fino de audio (tomas nuevas)" of Configuración → Sincronización.</summary>
     double OverdubOffsetMs => Settings.OverdubOffsetMs;
@@ -37,6 +44,33 @@ public partial class MainWindow
         RecStopButton.Click += async (_, _) => await StopRecording(false);
         RecDiscardButton.Click += async (_, _) => await StopRecording(true);
         CountCancelButton.Click += async (_, _) => await StopRecording(true);
+        Timeline.ArmRequested += ToggleArm;
+    }
+
+    /// <summary>Where R records now: the armed track, else the web's pick; null = a new track at the end.</summary>
+    Track? RecordTarget()
+    {
+        if (store == null) return null;
+        var p = store.Project;
+        return p.Tracks.Find(t => t.Id == armedTrackId) ?? TakeRecording.PickTarget(p, sel?.Track.Id);
+    }
+
+    /// <summary>Arms a track, or gives the choice back to the app when it was the one armed by hand.</summary>
+    void ToggleArm(LiveTrack t)
+    {
+        if (RecordingBusy || store == null || store.ReadOnly) return;
+        armedTrackId = armedTrackId == t.Track.Id ? null : t.Track.Id;
+        ShowArm();
+    }
+
+    /// <summary>Tints the target track in the timeline and the mixer; cheap enough for every tick, repaints only on change.</summary>
+    void ShowArm()
+    {
+        var target = RecordTarget();
+        int index = target == null ? -1 : tracks.FindIndex(t => t.Track == target);
+        if (Timeline.ArmedIndex == index) return;
+        Timeline.ArmedIndex = index;
+        if (mixerView) RefreshMixer();
     }
 
     void StartRecording()
@@ -55,12 +89,12 @@ public partial class MainWindow
         Timeline.CancelGesture();
         Preview.CancelGesture();
         var p = store.Project;
-        var target = TakeRecording.PickTarget(p, sel?.Track.Id);
+        var target = RecordTarget();
         bool countIn = CountInToggle.IsChecked == true;
         recFirstTake = TakeRecording.IsFirstTake(p);
         double syncMs = TakeRecorder.ComputeSyncMs(recFirstTake, countIn, engine.ClickOn, OverdubOffsetMs, engine.GetLatencyInfo().AppliedMs);
         var id = Ids.New("med");
-        var cam = camera.Capture is { HasSignal: true } c ? c : null;
+        var cam = !AudioOnly && camera.Capture is { HasSignal: true } c ? c : null;
         var j = new ProjectStore.RecordingJournal
         {
             MediaId = id,
@@ -101,6 +135,12 @@ public partial class MainWindow
             }
         }
         recJournal = j;
+        // a take that replaces the track's clips is played against the rest of the song, not against them
+        if (target is { Clips.Count: > 0 } && tracks.Find(t => t.Track == target) is { } silenced)
+        {
+            silenced.RecordMuted = true;
+            recSilenced = silenced;
+        }
         recTakeNumber = TakeRecording.NextTakeNumber(p);
         Timeline.RecordingLane = target == null ? tracks.Count : p.Tracks.IndexOf(target);
         Status(notice ?? "");
@@ -145,6 +185,8 @@ public partial class MainWindow
         }
         finally
         {
+            if (recSilenced != null) recSilenced.RecordMuted = false;
+            recSilenced = null;
             recJournal = null;
             Timeline.RecordingLane = null;
             Timeline.SetPlayhead(0, true); // back to the start with the playhead, like the web

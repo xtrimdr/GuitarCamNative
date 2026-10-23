@@ -29,6 +29,7 @@ static class ProjectCommands
             "encuadre" => Frame(dir, a),
             "sincronia" => Sync(dir, a),
             "formato" => Format(dir, a),
+            "modo" => Mode(dir, a),
             "cortar" => Crash(dir, a.Double("segundos", 3), a.Flag("camara")),
             "toma" => RecordTake(dir, a.Double("segundos", 3), a.Get("pista"), a.Flag("camara")),
             _ => throw new ArgumentException("proyecto importar|abrir|versiones|volver|cortar <carpeta>"),
@@ -88,12 +89,14 @@ static class ProjectCommands
             case "inicio": ClipEditing.ToStart(p, id); break;
             case "fijar-corte": ClipEditing.FixCut(p, id); break;
             case "restaurar": ClipEditing.Reset(p, id); break;
+            case "dividir": Console.WriteLine(ClipEditing.Split(p, id, double.Parse(value, System.Globalization.CultureInfo.InvariantCulture))); break;
+            case "duplicar": Console.WriteLine(ClipEditing.Duplicate(p, id)); break;
             default:
                 var mode = op switch
                 {
                     "mover" => ClipEditMode.Move, "recortar-inicio" => ClipEditMode.TrimStart,
                     "recortar-final" => ClipEditMode.TrimEnd, "fade-in" => ClipEditMode.FadeIn, "fade-out" => ClipEditMode.FadeOut,
-                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; a-pista|inicio|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar"),
+                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; duplicar|a-pista|inicio|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar"),
                 };
                 var (_, clip) = ClipEditing.Find(p, id);
                 double dx = double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
@@ -156,6 +159,25 @@ static class ProjectCommands
         store.Project.AddLog("format-changed");
         store.Save();
         Console.WriteLine($"Formato: {s.Aspect} · {(s.Layout == "top-to-bottom" ? "Apilado" : "Lado a lado")}");
+        return 0;
+    }
+
+    /// <summary>The project's mode (video / solo audio) and, with --pista, whether a track gets a panel in the video.</summary>
+    static int Mode(string dir, Args a)
+    {
+        using var store = ProjectStore.Open(dir);
+        if (store.ReadOnly) throw new IOException(store.ReadOnlyReason);
+        var p = store.Project;
+        if (a.Positional.ElementAtOrDefault(2) is { } mode) p.Settings.SetMode(mode);
+        if (a.Get("pista") is { } id)
+        {
+            var t = p.Tracks.Find(x => x.Id == id) ?? throw new ArgumentException("No encontré esa pista.");
+            t.Video = a.Get("en-video", "si") != "no";
+        }
+        p.AddLog("mode-changed");
+        store.Save();
+        Console.WriteLine($"Modo: {(p.Settings.AudioOnly ? "solo audio" : "video")}");
+        foreach (var t in p.Tracks) Console.WriteLine($"  {t.Name,-24} {(t.Video ? "en el video" : "fuera del video")} · {t.Id}");
         return 0;
     }
 
@@ -398,6 +420,14 @@ static class UndoChecks
             "fotos profundas de clips, canales y ajustes");
         Check(history.Redo(p) && p.Tracks[0].Name == "Otra" && p.Settings.Reverb.Decay == 7 && p.Tracks[1].Clips[0].GainDb == -12,
             "las fotos no comparten referencias mutables");
+        history.Clear();
+        history.Checkpoint(p);
+        p.Settings.SetMode("audio");
+        p.Tracks[0].Video = false;
+        Check(history.Undo(p) && p.Settings.Mode == "video" && p.Tracks[0].Video, "deshacer vuelve de solo audio a video y la pista al video");
+        Check(history.Redo(p) && p.Settings.AudioOnly && !p.Tracks[0].Video, "rehacer vuelve a solo audio");
+        p.Settings.SetMode("video");
+        p.Tracks[0].Video = true;
         history.Clear();
         for (int i = 0; i < 205; i++) { history.Checkpoint(p); p.Tracks[0].Name = $"Pista {i}"; }
         int count = 0;

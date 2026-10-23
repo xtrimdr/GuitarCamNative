@@ -269,19 +269,32 @@ static class AudioCommands
         {
             using var simRec = new TakeRecorder(path, sr);
             int totalFrames = (int)Math.Round(seconds * sr);
+            // --ruido-2: input 2 hisses with peaks around that level and input 1 alternates strums and near-silence every half second
+            float hiss = (float)a.Double("ruido-2", 0);
+            var rng = new Random(1);
             var raw0 = new float[192];
             var raw1 = new float[192];
+            int monoBlocks = 0, blocks = 0, switches = 0;
+            bool lastMono = false;
             for (int pos = 0; pos < totalFrames; pos += 192)
             {
                 int n = Math.Min(192, totalFrames - pos);
+                float amp = hiss > 0 && (pos / (sr / 2)) % 2 == 1 ? 0.0008f : 0.25f;
                 for (int i = 0; i < n; i++)
                 {
-                    raw0[i] = 0.25f * MathF.Sin(2f * MathF.PI * 220f * (pos + i) / sr);
-                    raw1[i] = 0f;
+                    raw0[i] = amp * MathF.Sin(2f * MathF.PI * 220f * (pos + i) / sr);
+                    raw1[i] = hiss / 3f * MathF.Sqrt(-2f * MathF.Log(1f - rng.NextSingle())) * MathF.Cos(2f * MathF.PI * rng.NextSingle());
                 }
                 inProc.Process(raw0.AsSpan(0, n), raw1.AsSpan(0, n), procL.AsSpan(0, n), procR.AsSpan(0, n), out _, out _, out _);
                 simRec.WriteFromCallback(procL.AsSpan(0, n), procR.AsSpan(0, n));
+                bool mono = procL.AsSpan(0, n).SequenceEqual(procR.AsSpan(0, n));
+                if (mono) monoBlocks++;
+                if (blocks > 0 && mono != lastMono) switches++;
+                lastMono = mono;
+                blocks++;
             }
+            if (hiss > 0)
+                Console.WriteLine($"Entrada 1 en los dos lados: {monoBlocks}/{blocks} bloques · cambios mono/estéreo: {switches}");
             var simResult = simRec.Finish(
                 discard: discard,
                 measuredLatencyMs: appliedLatencyMs,

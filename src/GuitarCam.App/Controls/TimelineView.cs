@@ -13,7 +13,7 @@ namespace GuitarCam.App.Controls;
 /// <summary>
 /// The timeline: bar ruler, one lane per track with its clips and waveforms, sticky track headers
 /// Port of GuitarCam/src/components/Timeline.tsx gestures, handles, snap and lane controls.
-/// Native differences: drag previews are local and commit on release while the window rebuilds audio;
+/// Native differences: drag previews are local and commit on release (the window applies them in place, still playing);
 /// multiple clips per track swap only with the clip under the pointer. Thumbnails are not ported yet.
 /// </summary>
 public sealed class TimelineView : Control
@@ -54,6 +54,9 @@ public sealed class TimelineView : Control
     public string SnapMode { get => snapMode; set { snapMode = value; InvalidateVisual(); } }
     public bool RulerInBars { get => bars; set { bars = value; InvalidateVisual(); } }
     public double TrackHeight => laneH;
+    bool showVideo = true;
+    /// <summary>False in a solo audio project: clips show only their waveform, without the filmstrip.</summary>
+    public bool ShowVideo { get => showVideo; set { if (showVideo == value) return; showVideo = value; waveCache.Clear(); InvalidateVisual(); } }
     int? recordingLane;
     /// <summary>
     /// The track a take is going into while recording (tracks.Count = an extra row for a new track at the
@@ -65,7 +68,15 @@ public sealed class TimelineView : Control
         set { recordingLane = value; CancelGesture(); ClampScroll(); InvalidateVisual(); }
     }
     int ExtraRows => recordingLane == tracks.Count ? 1 : 0;
-    public event Action? EditGestureStarted;
+    int armedIndex = -1;
+    /// <summary>The track the next take goes to (armed by hand or picked by the window), tinted red; -1 = a new track.</summary>
+    public int ArmedIndex
+    {
+        get => armedIndex;
+        set { if (armedIndex == value) return; armedIndex = value; InvalidateVisual(); }
+    }
+    /// <summary>The ● of a track header was clicked (native only: the web has no record arming).</summary>
+    public event Action<LiveTrack>? ArmRequested;
     public event Action<Clip, string?, string?>? ClipEditCommitted;
     public event Action<int, int>? ReorderRequested;
     public event Action<string>? RemoveTrackRequested;
@@ -109,6 +120,16 @@ public sealed class TimelineView : Control
         if (!preserveView) SetFit(true);
         Selected = list.Count > 0 ? 0 : -1;
         if (!list.Any(t => t.Clips.Any(c => c.Clip.Id == SelectedClipId))) SelectedClipId = null;
+        ClampScroll();
+        InvalidateVisual();
+    }
+
+    /// <summary>After an edit applied in place: same view and selection, and only the waveforms of clips that left are dropped.</summary>
+    public void UpdateTracks(IReadOnlyList<LiveTrack> list)
+    {
+        tracks = list;
+        var live = list.SelectMany(t => t.Clips).ToHashSet();
+        foreach (var gone in waveCache.Keys.Where(c => !live.Contains(c)).ToList()) waveCache.Remove(gone);
         ClampScroll();
         InvalidateVisual();
     }
@@ -318,6 +339,7 @@ public sealed class TimelineView : Control
         if (y + laneH < RulerH || y > Bounds.Height) return;
         bool sel = i == Selected;
         if (sel) ctx.FillRectangle(Palette.Alpha(Palette.RaisedColor, 0.6), new Rect(HeaderW, y, W - HeaderW, laneH));
+        if (i == armedIndex && recordingLane == null) ctx.FillRectangle(Palette.Alpha(Palette.RecColor, 0.06), new Rect(HeaderW, y, W - HeaderW, laneH));
         foreach (var c in t.Clips) DrawClip(ctx, t, c, y, sel, W);
         if (t.Clips.Count == 0)
         {
@@ -341,7 +363,7 @@ public sealed class TimelineView : Control
         bool silent = t.Channel.Muted || tracks.Any(o => o.Channel.Solo) && !t.Channel.Solo;
         using var opacity = ctx.PushOpacity(!c.Offline && silent ? 0.5 : 1);
         // the web shows the filmstrip from SHOW_THUMBS_AT; audio-only media (native only) keeps the plain clip
-        bool thumbs = !c.Offline && laneH >= ShowThumbsAt && c.VideoPath != null;
+        bool thumbs = showVideo && t.Track.Video && !c.Offline && laneH >= ShowThumbsAt && c.VideoPath != null;
         var fill = c.Offline ? Palette.Alpha(color, silent ? 0.05 : sel ? 0.16 : 0.10) : thumbs ? null : Palette.Alpha(Palette.HoverColor, 0.4);
         var border = Palette.Pen(c.Offline ? Palette.Alpha(color, sel ? 0.9 : 0.45)
             : sel ? Palette.Alpha(Palette.AccentColor, 0.6) : Palette.Line, c.Offline && sel ? 1.5 : 1);
@@ -483,6 +505,7 @@ public sealed class TimelineView : Control
         return geo;
     }
 
+    Rect ArmRect(int i) => new(HeaderW - 122, LaneY(i) + 8, 24, 24);
     Rect MuteRect(int i) => new(HeaderW - 94, LaneY(i) + 8, 24, 24);
     Rect SoloRect(int i) => new(HeaderW - 66, LaneY(i) + 8, 24, 24);
     Rect RemoveRect(int i) => new(HeaderW - 38, LaneY(i) + 8, 24, 24);
@@ -496,6 +519,7 @@ public sealed class TimelineView : Control
         if (y + laneH < RulerH || y > Bounds.Height) return;
         bool sel = i == Selected;
         ctx.FillRectangle(sel ? Palette.Raised : Palette.Panel, new Rect(0, y, HeaderW, laneH));
+        if (i == armedIndex) ctx.FillRectangle(Palette.Alpha(Palette.RecColor, 0.10), new Rect(0, y, HeaderW, laneH));
         if (sel) ctx.FillRectangle(Palette.Accent, new Rect(0, y, 2, laneH));
 
         for (int k = 0; k < 3; k++)
@@ -509,14 +533,15 @@ public sealed class TimelineView : Control
         ctx.DrawText(num, new Point(badge.Center.X - num.Width / 2, badge.Center.Y - num.Height / 2));
         if (recordingLane == i)
         {
-            ctx.DrawText("Grabando…", 13, Palette.Rec, new Point(52, y + 11), Palette.Ui, HeaderW - 152);
+            ctx.DrawText("Grabando…", 13, Palette.Rec, new Point(52, y + 11), Palette.Ui, HeaderW - 180);
             ctx.DrawEllipse(Palette.Rec, null, new Point(RemoveRect(i).Center.X, y + 20), 4, 4);
         }
-        else ctx.DrawText(t.Track.Name, 12.5, Palette.Fg, new Point(52, y + 11), Palette.UiBold, HeaderW - 152);
+        else ctx.DrawText(t.Track.Name, 12.5, Palette.Fg, new Point(52, y + 11), Palette.UiBold, HeaderW - 180);
 
         if (recordingLane != i && lastPointer.Y >= y && lastPointer.Y < y + laneH)
             ctx.DrawText("×", 16, Palette.Faint, new Point(RemoveRect(i).X + 6, y + 7));
         ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, y + laneH - 0.5), new Point(HeaderW, y + laneH - 0.5));
+        DrawArm(ctx, ArmRect(i), i == armedIndex);
         if (t.Clips.Count == 0) return;
 
         var ch = t.Channel;
@@ -544,6 +569,13 @@ public sealed class TimelineView : Control
         double mh = laneH - 20, mx = HeaderW - 10;
         DrawMeterBar(ctx, new Rect(mx, y + 10, 4, mh), t.ShowL);
         DrawMeterBar(ctx, new Rect(mx + 6, y + 10, 4, mh), t.ShowR);
+    }
+
+    /// <summary>The record-arm toggle: a red dot, lit red while the track takes the next take.</summary>
+    static void DrawArm(DrawingContext ctx, Rect r, bool on)
+    {
+        ctx.DrawRectangle(on ? Palette.Rec : Palette.Hover, on ? null : Palette.Pen(Palette.Line), r, 4, 4);
+        ctx.DrawEllipse(on ? Palette.Fg : Palette.Alpha(Palette.RecColor, 0.7), null, r.Center, 4.5, 4.5);
     }
 
     static void DrawToggle(DrawingContext ctx, Rect r, string label, bool on, IBrush onBrush)
@@ -610,6 +642,12 @@ public sealed class TimelineView : Control
         if (p.X < HeaderW && RemoveRect(i).Contains(p))
         {
             RemoveTrackRequested?.Invoke(tracks[i].Track.Id);
+            return;
+        }
+        if (p.X < HeaderW && ArmRect(i).Contains(p))
+        {
+            ArmRequested?.Invoke(tracks[i]);
+            e.Handled = true;
             return;
         }
         if (p.X < HeaderW && tracks[i].Clips.Count == 0) { Select(i); return; }
@@ -728,7 +766,6 @@ public sealed class TimelineView : Control
         else
         {
             if (!moved && Math.Abs(dxPx) < 3 && Math.Abs(lastPointer.Y - down.Y) < 3) return;
-            if (!moved) EditGestureStarted?.Invoke();
             moved = true;
             if (gesture == "reorder")
                 overIndex = Math.Clamp((int)Math.Floor(fromIndex + (lastPointer.Y - down.Y + scrollY - downScrollY) / laneH + 0.5), 0, tracks.Count - 1);
@@ -797,6 +834,10 @@ public sealed class TimelineView : Control
         else if (i >= 0 && i < tracks.Count)
         {
             if (lastPointer.X < 24) { tip = "Arrastrar para reordenar"; cursor = StandardCursorType.Hand; }
+            else if (ArmRect(i).Contains(lastPointer))
+                tip = i == armedIndex ? "Armada: la próxima toma (R) se graba en esta pista"
+                    : tracks[i].Clips.Count == 0 ? "Armar para grabar en esta pista"
+                    : "Armar para grabar en esta pista: la toma nueva reemplaza la que tiene (queda en Historial)";
             else if (RemoveRect(i).Contains(lastPointer)) tip = tracks[i].Clips.Count == 0 ? "Quitar pista (Supr)" : "Quitar pista del timeline (el archivo queda en Historial) · click derecho: más opciones";
             else if (lastPointer.X < HeaderW && tracks[i].Clips.Count == 0) tip = null;
             else if (MuteRect(i).Contains(lastPointer)) tip = tracks[i].Channel.Muted ? "Activar sonido" : "Silenciar (Mute)";
@@ -817,7 +858,7 @@ public sealed class TimelineView : Control
                 {
                     ClipEditMode.TrimStart => "Recortar inicio", ClipEditMode.TrimEnd => "Recortar final",
                     ClipEditMode.FadeIn => $"Fade in {f.FadeIn:0.00} s", ClipEditMode.FadeOut => $"Fade out {f.FadeOut:0.00} s",
-                    _ => "Arrastrá para mover (Alt: sin imán; arriba/abajo: a otra pista) · bordes: recortar · esquinas de arriba: fades · Supr: quitar clip · click derecho: opciones",
+                    _ => "Arrastrá para mover (Alt: sin imán; arriba/abajo: a otra pista) · bordes: recortar · esquinas de arriba: fades · Alt+X: dividir en el cabezal · D: duplicar · Supr: quitar clip · click derecho: opciones",
                 };
                 if (w.AnchorCut > 0.0005 && X(w.End) - X(w.Start) > 60
                     && new Rect(X(w.Start) + 10, LaneY(i) + laneH - 24,

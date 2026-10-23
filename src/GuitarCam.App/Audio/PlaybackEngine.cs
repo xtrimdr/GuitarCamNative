@@ -225,6 +225,16 @@ public sealed class PlaybackEngine : IDisposable
     }
 
     /// <summary>
+    /// Swaps in the track list after a timeline edit while it keeps playing: no stop, the playhead stays and
+    /// neither the tracks' chains nor the buses are reset (reused tracks keep their compressor and tails).
+    /// </summary>
+    public void UpdateTracks(IReadOnlyList<LiveTrack> list)
+    {
+        tracks = list.ToArray();
+        RefreshClipTiming();
+    }
+
+    /// <summary>
     /// Recomputes <see cref="LengthSec"/> (<c>endFrame</c>) from the current <see cref="LiveTrack"/> list
     /// without stopping playback, moving the playhead or resetting DSP chains/buses.
     /// </summary>

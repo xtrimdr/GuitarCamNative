@@ -139,6 +139,29 @@
           </StackPanel>
           <TextBlock x:Name="NewPath" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}" TextWrapping="Wrap" />
           <TextBlock x:Name="NewTaken" FontSize="11" Foreground="{StaticResource Accent}" TextWrapping="Wrap" IsVisible="False" />
+          <!-- native only: video or solo audio, the same switch the title bar has once it is open -->
+          <StackPanel Spacing="6" Margin="0,4,0,0">
+            <TextBlock Text="Tipo" FontSize="12" Foreground="{StaticResource Dim}" />
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <Border Classes="seg">
+                <StackPanel Orientation="Horizontal">
+                  <ToggleButton x:Name="NewVideoButton" Classes="seg" ToolTip.Tip="Con cámara: cada toma tiene su panel en el video y exportás un MP4">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <TextBlock Classes="icon" Text="&#xE714;" FontSize="12" VerticalAlignment="Center" />
+                      <TextBlock Text="Video" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </ToggleButton>
+                  <ToggleButton x:Name="NewAudioButton" Classes="seg" ToolTip.Tip="Sin cámara: grabás audio y exportás la mezcla en WAV o MP3">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <TextBlock Classes="icon" Text="&#xE8D6;" FontSize="12" VerticalAlignment="Center" />
+                      <TextBlock Text="Solo audio" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </ToggleButton>
+                </StackPanel>
+              </Border>
+              <TextBlock Text="Lo podés cambiar después desde la barra de arriba." FontSize="11" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
+            </StackPanel>
+          </StackPanel>
           <StackPanel Spacing="6" Margin="0,4,0,0">
             <TextBlock Text="Plantilla" FontSize="12" Foreground="{StaticResource Dim}" />
             <ScrollViewer MaxHeight="208" Padding="0,0,2,0">

@@ -126,10 +126,6 @@
       <Setter Property="Background" Value="Transparent" />
     </Style>
     <!-- recording buttons (TransportBar.tsx): hover keeps their own color -->
-    <Style Selector="Button.chip.rec:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#40ef4444" />
-      <Setter Property="BorderBrush" Value="#80ef4444" />
-    </Style>
     <Style Selector="Button.chip.rec-stop:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="#f25a5a" />
       <Setter Property="BorderBrush" Value="#f25a5a" />

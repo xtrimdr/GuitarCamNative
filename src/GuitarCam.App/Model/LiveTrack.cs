@@ -56,11 +56,15 @@ public sealed class MediaAudio
     }
 }
 
-/// <summary>A clip loaded for playback: its media's audio (null = offline) and its own video decoder.</summary>
+/// <summary>
+/// A clip loaded for playback: its media's audio (null = offline) and its own video decoder. A timeline edit
+/// or an undo points <see cref="Clip"/> at the project's new object instead of building another one, so the
+/// audio and the decoder carry on; the audio thread reads the reference once per block.
+/// </summary>
 public sealed class LiveClip
 {
-    public Clip Clip { get; }
-    public Media? Media { get; }
+    public Clip Clip { get; set; }
+    public Media? Media { get; set; }
     public MediaAudio? Audio { get; }
     public bool Offline => Audio == null;
 
@@ -93,8 +97,12 @@ public sealed class LiveClip
     public ClipEnvelope.FadePair AudioFades => ClipEnvelope.Fades(Window, Clip.FadeInSec, Clip.FadeOutSec).Audio;
     public float Gain => (float)Math.Pow(10, Clip.GainDb / 20);
 
+    /// <summary>True once <see cref="OpenVideo"/> ran, so a picture that can't be opened isn't retried on every edit.</summary>
+    public bool VideoTried { get; private set; }
+
     public void OpenVideo(ProjectStore store)
     {
+        VideoTried = true;
         if (store.Resolve(Media?.Video) is { } path) Video = VideoDecoder.Open(path);
     }
 
@@ -171,10 +179,13 @@ public sealed class LiveClip
         return true;
     }
 
+    /// <summary>Closes the decoder; <see cref="OpenVideo"/> may open it again (a project switched back from solo audio).</summary>
     public void CloseVideo()
     {
         Video?.Dispose();
         Video = null;
+        VideoTried = false;
+        InClip = false;
         rawFrame = null;
         gradedFrame = null;
     }
@@ -183,15 +194,16 @@ public sealed class LiveClip
 /// <summary>
 /// A track loaded for playback: its clips, the full per-track DSP chain (<see cref="TrackDspChain"/>:
 /// clip fades → saturator → compressor EQ → compressor → 6-band track EQ → panner → fader → post-fader sends)
-/// and the live meters.
+/// and the live meters. Timeline edits re-point <see cref="Track"/> and swap <see cref="Clips"/> for a new list
+/// (never changed in place: the audio thread may be walking the old one), keeping the chain's state.
 /// </summary>
 public sealed class LiveTrack
 {
     readonly int sampleRate;
 
-    public Track Track { get; }
+    public Track Track { get; set; }
     public Channel Channel => Track.Channel;
-    public IReadOnlyList<LiveClip> Clips { get; }
+    public IReadOnlyList<LiveClip> Clips { get; set; }
     public TrackDspChain Chain { get; }
     public Saturator Sat => Chain.Sat;
     public CompEqFilter CompEq => Chain.CompEq;
@@ -205,6 +217,8 @@ public sealed class LiveTrack
     public double GrDb;
     public float ShowL, ShowR; // UI side, with fall-off
     public double GrPeak, GrShow; // UI side: this tick's reduction, and the mixer's (instant attack, slow release)
+    /// <summary>Silences the track while a take that replaces its clips is being recorded (set by the UI).</summary>
+    public volatile bool RecordMuted;
 
     public LiveTrack(Track track, IReadOnlyList<LiveClip> clips, int sampleRate)
     {
@@ -224,8 +238,8 @@ public sealed class LiveTrack
     public bool HasPanel => Track.Video && Clips.Count > 0;
     public double EndSec => Clips.Count == 0 ? 0 : Clips.Max(c => c.ClipEndSec);
 
-    /// <summary>The clip whose picture shows in the panel (the first one under the playhead).</summary>
-    public LiveClip? ShownClip => Clips.FirstOrDefault(c => c.InClip);
+    /// <summary>The clip whose picture shows in the panel: the last one under the playhead, the one on top in the timeline and the export.</summary>
+    public LiveClip? ShownClip => Clips.LastOrDefault(c => c.InClip);
 
     /// <summary>Associates the project's settings with all clips on this track so <see cref="LiveClip.UpdateVideo"/> follows color and video FX changes.</summary>
     public void SetProjectSettings(ProjectSettings? settings)
@@ -345,9 +359,10 @@ public sealed class LiveTrack
         br.Clear();
 
         double invSr = 1.0 / sampleRate;
-        for (int cIdx = 0; cIdx < Clips.Count; cIdx++)
+        var clips = Clips;
+        for (int cIdx = 0; cIdx < clips.Count; cIdx++)
         {
-            var c = Clips[cIdx];
+            var c = clips[cIdx];
             var a = c.Audio;
             if (a == null || a.L.Length == 0) continue;
             var w = c.Window;
@@ -378,7 +393,7 @@ public sealed class LiveTrack
         var ch = Channel;
         Chain.Volume = ch.Volume;
         Chain.Pan = ch.Pan;
-        Chain.Muted = ch.Muted;
+        Chain.Muted = ch.Muted || RecordMuted;
         Chain.Solo = ch.Solo;
         Chain.ReverbOn = ch.ReverbOn;
         Chain.ReverbSend = ch.ReverbSend;

@@ -904,9 +904,11 @@ static class DspCommands
 
             var takes = new List<ExportTakeSpec>();
             var mixTracks = new List<MixTrackSpec>();
+            int panels = 0;
             foreach (var trk in p.Tracks)
             {
                 var clips = new List<MixClipSpec>();
+                int? panel = null; // like the window: a panel when the first clip has a picture, shared by the rest
                 double trackRms = -24;
                 bool hasRms = false;
                 foreach (var c in trk.Clips)
@@ -933,8 +935,9 @@ static class DspCommands
                             SyncMs = c.EffectiveSyncMs(m),
                         });
                     }
-                    if (trk.Video && clips.Count <= 1 && store.Resolve(m?.Video) is { } vp && File.Exists(vp))
+                    if (trk.Video && (panel != null || c == trk.Clips[0]) && store.Resolve(m?.Video) is { } vp && File.Exists(vp))
                     {
+                        panel ??= panels++;
                         takes.Add(new ExportTakeSpec
                         {
                             Id = c.Id,
@@ -955,6 +958,7 @@ static class DspCommands
                             PanX = c.Framing.PanX,
                             PanY = c.Framing.PanY,
                             Mirror = c.Framing.Mirror,
+                            Panel = panel.Value,
                         });
                     }
                 }
@@ -1016,6 +1020,19 @@ static class DspCommands
             };
 
             int lastPct = -1;
+            // --audio wav|mp3, or a project in solo audio: the mix as an audio file, like the window's "Exportar audio"
+            if (a.Get("audio") is { } fmtArg || p.Settings.AudioOnly)
+            {
+                var fmt = AudioExporter.ParseFormat(a.Get("audio") ?? p.Settings.Export.AudioFormat);
+                string last = "";
+                var ares = AudioExporter.ExportAsync(job, fmt, prog =>
+                {
+                    string line = $"  [{prog.Stage}] {Math.Floor(prog.Fraction * 10) * 10:0}%";
+                    if (line != last) Console.WriteLine(last = line);
+                }).GetAwaiter().GetResult();
+                Console.WriteLine($"Exportado: {ares.FullPath} ({Mp4Exporter.FormatBytes(ares.Bytes)}, {ares.DurationSec:0.0} s en {ares.ElapsedSec:0.0} s)");
+                return 0;
+            }
             var res = Mp4Exporter.ExportAsync(job, prog =>
             {
                 if (prog.Percent != lastPct && (prog.Percent % 10 == 0 || prog.Percent == 100))

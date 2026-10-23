@@ -314,6 +314,13 @@ public partial class MainWindow
         var mix = Section("Mezcla", "\uE9E9", action: InspectorIcon("\uE74F", "Silenciar toma", () => Edit(t => t.Channel.Muted = !t.Channel.Muted, "mute")));
         Slider(mix, "Volumen", 0, 1.5, 0.01, 1, () => sel!.Channel.Volume, v => Edit(t => t.Channel.Volume = v, "volume"), v => $"{v * 100:0}%");
         Slider(mix, "Paneo", -1, 1, 0.05, 0, () => sel!.Channel.Pan, v => Edit(t => t.Channel.Pan = Math.Abs(v) < 0.04 ? 0 : v, "pan"), v => v == 0 ? "C" : $"{(v < 0 ? "L" : "R")} {Math.Abs(v) * 100:0}");
+        // native only: a track that sounds without a panel (a backing track, a click…)
+        var inVideo = new CheckBox { Content = "En el video", FontSize = 12 };
+        ToolTip.SetTip(inVideo, "La pista tiene su panel en el video. Apagalo para que solo suene (una base, un click…)");
+        inVideo.IsCheckedChanged += async (_, _) => { if (!syncing && sel != null) await SetInVideo(sel, inVideo.IsChecked == true); };
+        inspectorRefresh.Add(() => inVideo.IsChecked = sel!.Track.Video);
+        mix.Children.Add(inVideo);
+        videoOnly.Add(inVideo);
         var sat = Section("Saturación", FxIcon.Sat, () => sel!.Channel.Sat.On, on => Edit(t => t.Channel.Sat.On = on, "sat.on"));
         var modes = new StackPanel { Orientation = Orientation.Horizontal };
         sat.Children.Add(new Border { Classes = { "seg" }, HorizontalAlignment = HorizontalAlignment.Left, Child = modes });
@@ -405,8 +412,9 @@ public partial class MainWindow
             var b = new Button { Content = delta < 0 ? "−5" : "+5", Classes = { "chip", "mono" }, FontSize = 10.5, Padding = new Thickness(4, 0), MinHeight = 22 };
             b.Click += (_, _) => SetSync(C().EffectiveSyncMs(M()) + delta); offset.Trailing.Children.Add(b);
         }
-        Slider(sync, "Latencia de cámara", -250, 250, 5, 80, () => C().EffectiveVideoOffsetMs(M()), v => ClipEdit((c, _) => c.VideoOffsetMs = v, "video-offset"), Ms,
+        var cameraLatency = Slider(sync, "Latencia de cámara", -250, 250, 5, 80, () => C().EffectiveVideoOffsetMs(M()), v => ClipEdit((c, _) => c.VideoOffsetMs = v, "video-offset"), Ms,
             "Compensa el retraso de la cámara para que los dedos coincidan con el audio");
+        videoOnly.Add(cameraLatency);
         var resetClip = InspectorIcon("\uE777", "Restaurar clip (sin recortes ni fades)", () => ClipEdit((c, _) => ClipEditing.Reset(store!.Project, c.Id), "reset"));
         var clip = Section("Clip", "\uE8C6", action: resetClip);
         Slider(clip, "Recorte inicio", 0, 10, .01, 0, () => C().TrimStartSec, v => ClipEdit((c, _) => c.TrimStartSec = v, "trim-start"), Sec,
@@ -425,17 +433,19 @@ public partial class MainWindow
                 if (!c.LinkVideoFades) { c.VideoFadeInSec = audio.FadeIn; c.VideoFadeOutSec = audio.FadeOut; } }, "link-fades");
         };
         clip.Children.Add(link);
+        videoOnly.Add(link);
         var video = new StackPanel { Spacing = 10 }; clip.Children.Add(video);
         ClipEnvelope.FadePair Video() => ClipEnvelope.FitFades(C().VideoFadeInSec, C().VideoFadeOutSec, Len());
         Slider(video, "Fade in (video)", 0, 10, .01, 0, () => Video().FadeIn, v => ClipEdit((c, _) => c.VideoFadeInSec = v, "video-fade-in"), Sec, maximum: Len);
         Slider(video, "Fade out (video)", 0, 10, .01, 0, () => Video().FadeOut, v => ClipEdit((c, _) => c.VideoFadeOutSec = v, "video-fade-out"), Sec, maximum: Len);
-        inspectorRefresh.Add(() => { link.IsChecked = C().LinkVideoFades; video.IsVisible = !C().LinkVideoFades;
+        inspectorRefresh.Add(() => { link.IsChecked = C().LinkVideoFades; video.IsVisible = !AudioOnly && !C().LinkVideoFades;
             resetClip.IsEnabled = C().TrimStartSec > 0 || C().TrimEndSec > 0 || C().FadeInSec > 0 || C().FadeOutSec > 0 || !C().LinkVideoFades && (C().VideoFadeInSec > 0 || C().VideoFadeOutSec > 0); });
         clip.Children.Add(Help("En el timeline: arrastrá el clip para moverlo, sus bordes para recortar y las esquinas de arriba para los fades."));
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         var mirror = InspectorIcon("\uE8AB", "Espejar horizontalmente", () => ClipEdit((c, _) => c.Framing.Mirror = !c.Framing.Mirror, "mirror"));
         actions.Children.Add(mirror); actions.Children.Add(InspectorIcon("\uE777", "Resetear encuadre", () => ClipEdit((c, _) => InspectorEditing.ResetFrame(c), "framing")));
         var frame = Section("Encuadre", "\uE7A8", action: actions);
+        videoOnly.Add((Control)frame.Parent!.Parent!); // the whole card
         inspectorRefresh.Add(() => mirror.Foreground = C().Framing.Mirror ? Palette.Accent : Palette.Dim);
         Slider(frame, "Zoom", 1, 2.5, .01, 1, () => C().Framing.Zoom, v => ClipEdit((c, _) => InspectorEditing.Frame(c, zoom: v), "framing"), v => $"{v:0.00}×");
         frame.Children.Add(Help("Arrastrá el panel en el video para mover el encuadre; la rueda del mouse hace zoom."));

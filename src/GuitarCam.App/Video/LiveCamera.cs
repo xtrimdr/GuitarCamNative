@@ -8,6 +8,8 @@ namespace GuitarCam.App.Video;
 /// defaultCameraLatencyMs). Like the web it lives in memory: every start re-picks the camera by the web's
 /// preference, the IP stream opens only after "Conectar", and switching modes closes the other stream.
 /// Opening and closing run off the UI thread, one after the other (a camera opens in one process at a time).
+/// Native only: <see cref="SetPaused"/> lets go of the camera while a solo audio project is open, so another
+/// program can use it, and opens it again when the project goes back to video.
 /// </summary>
 public sealed class LiveCamera : IDisposable
 {
@@ -29,6 +31,9 @@ public sealed class LiveCamera : IDisposable
     public double LatencyMs { get; set; } = DefaultLatencyMs;
     public CameraCapture? Capture { get; private set; }
     public bool Listing { get; private set; }
+    public bool Paused { get; private set; }
+
+    public Task SetPaused(bool paused) => paused == Paused ? Task.CompletedTask : Queue(() => Reopen(() => Paused = paused));
 
     public string Resolution => Capture?.Resolution ?? "";
     public bool HasSignal => Capture?.HasSignal == true;
@@ -69,7 +74,8 @@ public sealed class LiveCamera : IDisposable
         Capture = null;
         old?.Dispose();
         change();
-        if (UseIp)
+        if (Paused) { /* stays closed until SetPaused(false) */ }
+        else if (UseIp)
         {
             if (ActiveIpHost.Length > 0) Capture = CameraCapture.Open(new CameraSource(null, CameraResMode.Native, ActiveIpHost));
         }

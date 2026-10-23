@@ -147,7 +147,8 @@ public partial class MainWindow
 
         // Exportaciones
         var exports = p.Exports.OrderByDescending(e => e.CreatedAt).ToList();
-        if (exports.Count == 0) historyExports.Children.Add(Help("Acá aparecen los MP4 que exportes, estén donde estén."));
+        if (exports.Count == 0) historyExports.Children.Add(Help(AudioOnly ? "Acá aparecen los audios que exportes, estén donde estén."
+            : "Acá aparecen los MP4 que exportes, estén donde estén."));
         else
         {
             var list = new StackPanel { Margin = new Thickness(-16, -4) };
@@ -297,9 +298,10 @@ public partial class MainWindow
     Control ExportRow(ProjectStore st, ExportRecord e, bool editable)
     {
         string name = Path.GetFileName(e.File.Replace('/', '\\'));
+        bool audioFile = GuitarCam.Audio.AudioExporter.IsAudioFile(name); // "Exportar audio" of a solo audio project
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), ColumnSpacing = 4 };
         var body = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 12 };
-        body.Children.Add(HistoryIcon("\uE8B2", 14, Palette.Faint));
+        body.Children.Add(HistoryIcon(audioFile ? "\uE8D6" : "\uE8B2", 14, Palette.Faint));
         var text = new StackPanel();
         var title = new TextBlock { Text = name, FontSize = 13, Foreground = Palette.Fg, TextTrimming = TextTrimming.CharacterEllipsis };
         ToolTip.SetTip(title, e.File);
@@ -313,7 +315,7 @@ public partial class MainWindow
         Grid.SetColumn(text, 1); body.Children.Add(text);
         var open = new Button { Classes = { "ghost" }, Content = body, Padding = new Thickness(16, 8, 0, 8), HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch, Background = Brushes.Transparent, CornerRadius = new CornerRadius(0) };
-        ToolTip.SetTip(open, "Ver el video");
+        ToolTip.SetTip(open, audioFile ? "Ver el archivo" : "Ver el video");
         open.Click += (_, _) =>
         {
             if (recJournal != null || Export.IsRunning) return;
@@ -323,7 +325,7 @@ public partial class MainWindow
         grid.Children.Add(open);
         var reveal = RowButton("\uE838", "Mostrar el archivo en el Explorador", () => RevealInExplorer(null, ProjectHistory.ExportPath(st.Dir, e)));
         Grid.SetColumn(reveal, 1); grid.Children.Add(reveal);
-        var delete = RowButton("\uE74D", "Mandar el video a la Papelera", () => { historyDeletingExport = e.File; RefreshHistory(); }, danger: true);
+        var delete = RowButton("\uE74D", audioFile ? "Mandar el archivo a la Papelera" : "Mandar el video a la Papelera", () => { historyDeletingExport = e.File; RefreshHistory(); }, danger: true);
         delete.IsEnabled = editable;
         Grid.SetColumn(delete, 2); grid.Children.Add(delete);
         return HistoryRow(grid, [reveal, delete], new Thickness(0, 0, 8, 0));

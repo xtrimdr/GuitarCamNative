@@ -252,20 +252,21 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 ### Estructura de la ventana
 
 ```
-┌ barra de título propia (44) ─ logo · chip del proyecto (guardado) ▾ · deshacer/rehacer · estado ···· CPU GPU RAM · cámara · kHz · FFmpeg · tema · ⚙ · [Exportar MP4] ┐
+┌ barra de título propia (44) ─ logo · chip del proyecto (guardado) ▾ · Video|Solo audio · deshacer/rehacer · estado ···· CPU GPU RAM · cámara · kHz · FFmpeg · tema · ⚙ · [Exportar MP4] ┐
 ├ inspector (290) ─┬─ preview (un panel por pista con video) ────────┬─ "En vivo" (256) ─┬─ proyecto (290, plegable a 44) ┤
 │ TOMA + secciones │                                                 │ cámara + entrada  │ pestañas Color / Historial     │
 ├──────────────────┴─ separador arrastrable ─────────────────────────┴───────────────────┤                                │
 │ timeline (280): regla (32) · encabezados fijos (264) · un carril por pista (64, 40–160) │                                │
 ├ transporte, siempre abajo (~52) ────────────────────────────────────────────────────────────────────────────────────────────┤
-│ DSP % · formato/driver · ENTRADA 1-2 ··· [ reloj │ ⏮ ■ ▶ Grabar loop │ Compás Tempo TAP Cuenta Click ▾ ] ··· Timeline/Mixer · Ver todo │
+│ DSP % · formato/driver · ENTRADA 1-2 ··· [ reloj │ ⏮ ■ ▶ ● loop │ Compás Tempo TAP Cuenta Click ▾ ] ··· Timeline/Mixer · Ver todo │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 - **Transporte abajo, al estilo Fender Studio Pro** (pedido del usuario; en la web va arriba del timeline):
   celdas planas con el valor arriba y una etiqueta chica abajo. A la izquierda el estado del audio (carga
   DSP, formato con el driver como etiqueta, medidor de entrada), a la derecha la vista, y en el medio **un
-  solo recuadro oscuro** (`Border.metro`) con reloj │ transporte (`Button.tbtn`, Grabar, loop) │ metrónomo,
+  solo recuadro oscuro** (`Border.metro`) con reloj │ transporte (`Button.tbtn`, también Grabar: un ● rojo sin
+  texto, pedido del usuario; en la web es un chip grande con la pista destino) │ metrónomo,
   separados por `Border.vsep`. Ese recuadro queda **siempre centrado en la ventana**: columnas `*,Auto,*`;
   si falta lugar, el texto del audio de la izquierda se recorta antes de que el recuadro se mueva.
 
@@ -315,6 +316,20 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
   adentro; un clip sin archivo, gris con "Sin conexión…". Con video y carriles de 52 px o más, la tira de
   miniaturas (`Video/VideoThumbnails.cs`) con la onda blanca abajo sobre un degradé, como `Filmstrip` de la web. Pista
   seleccionada con barra de acento de 2 px a la izquierda del encabezado; playhead de acento con triángulo.
+  Varios clips por pista (solo nativa): Alt+X divide en el cabezal y D duplica (`ClipEditing.Split` /
+  `Duplicate`); los clips de una pista comparten su panel y se ve el de arriba (el último), igual en la preview
+  (`LiveTrack.ShownClip`) y en la exportación (`ExportTakeSpec.Panel`).
+- **Video | Solo audio** (solo nativa, pedido del usuario; `MainWindow.Mode.cs`, `ProjectSettings.Mode`): el
+  interruptor de la barra de título y del "Nuevo proyecto" del gestor. En solo audio el timeline (o el mixer) se
+  mueve al lugar de la preview (`AudioArea`) y la fila de abajo se cierra; la cámara se suelta
+  (`LiveCamera.SetPaused`), los decodificadores se cierran, se ocultan Color, Encuadre, la latencia de cámara, los
+  fades de video y "En el video" (`videoOnly`), y "Exportar MP4" pasa a "Exportar audio" (el mismo `ExportDialog`
+  con WAV / MP3, `AudioExporter`). Es un paso de deshacer y no borra nada. Todo lo nuevo que solo sirva con imagen
+  va a `videoOnly` o mira `AudioOnly`.
+- **Armar para grabar** (solo nativa, pedido del usuario): el ● de cada encabezado de pista y de cada tira del
+  mixer elige dónde graba R (`armedTrackId` en `MainWindow.Recording.cs`; sin pista armada, la elección de la
+  web). La pista destino siempre se tiñe de rojo (`TimelineView.ArmedIndex`). Si tiene clips, la toma los
+  reemplaza (`TakeRecording.AddTake`, quedan en Historial) y la pista no suena mientras grabás (`LiveTrack.RecordMuted`).
 
 ### Componentes (clases de estilo en `App.axaml`)
 
@@ -324,7 +339,7 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 | `Border.seg` + `ToggleButton.seg` | control segmentado (`Segmented` de la web): caja `Raised` y la opción activa como pastilla blanca al 11 %. `.seg.pick` = variante de acento (estilo del compresor) |
 | `Border.metro` + `ToggleButton.cell` + `Border.vsep` | recuadro oscuro del centro de la barra de transporte (reloj │ transporte │ metrónomo, con divisores verticales `vsep`). El metrónomo, al estilo Studio One (pedido del usuario; en la web son chips sueltos): una caja con celdas valor arriba (`TextBlock.metro-value`) y etiqueta chica abajo (`TextBlock.metro-label`): Compás · Tempo · TAP · Cuenta · Click (sin atajos visibles; ícono `MetronomeIcon`, dibujado porque Segoe no tiene metrónomo) · sonido ▾ |
 | `Button.ghost` | botón de ícono sin fondo (barra de título) |
-| `Button.accent` | **la** acción principal. Uno solo por pantalla (hoy: "Exportar MP4") |
+| `Button.accent` | **la** acción principal. Uno solo por pantalla (hoy: "Exportar MP4", o "Exportar audio" en solo audio) |
 | `Button.tbtn` / `ToggleButton.tbtn` | botones de la barra de transporte: planos, 36×36, ícono `Fg`; hover `Hover`. Activo (loop, o `.on` mientras suena): ícono `Accent`. `Button.clock` = el reloj plano |
 | `StackPanel.bar-cell` | celda de la barra de transporte (valor arriba, `TextBlock.metro-label` abajo) |
 | `Border.section` (+ `.off`) | tarjeta del inspector |
@@ -363,7 +378,8 @@ Mismo comportamiento que el `StereoMeter` de la web: ataque instantáneo, caída
 | X | timeline / mixer |
 | Ctrl+S | guardar ya |
 | Ctrl+Z / Ctrl+Y o Ctrl+Shift+Z | deshacer / rehacer |
-| Supr | quitar el clip (la pista queda vacía); en una pista vacía, quitar la pista |
+| Supr | quitar el clip; en una pista vacía, quitar la pista |
+| Alt+X / D | dividir el clip en el cabezal / duplicar el clip |
 | Esc | cancelar la cuenta antes de grabar; cancelar el gesto en curso en el timeline; en el gestor, cerrar el formulario y después el gestor |
 | R | grabar; grabando, detener y guardar la toma; durante la cuenta, cancelarla (Espacio hace lo mismo mientras graba) |
 | rueda / Shift o Ctrl+rueda / Alt+rueda | desplazar / zoom en el puntero / alto de pista |

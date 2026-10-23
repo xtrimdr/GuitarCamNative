@@ -4,8 +4,10 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.Layout;
 using Avalonia.Threading;
+using GuitarCam.App.Audio;
 using GuitarCam.App.Controls;
 using GuitarCam.App.Model;
+using GuitarCam.Audio.Dsp;
 using GuitarCam.Projects;
 
 namespace GuitarCam.App;
@@ -106,7 +108,6 @@ public partial class MainWindow
             timelineSyncing = false;
             Prefs();
         };
-        Timeline.EditGestureStarted += engine.Stop;
         Timeline.ChannelRequested += (track, volume, pan) => EditTrack(track, t =>
         {
             if (volume is { } v) t.Channel.Volume = v;
@@ -129,29 +130,25 @@ public partial class MainWindow
         Timeline.ClipContextRequested += ShowTimelineMenu;
     }
 
-    /// <summary>One checkpoint per committed gesture; audio stays cached and disk work runs in the background.</summary>
+    /// <summary>
+    /// One checkpoint per committed gesture, applied in place (<see cref="ApplyTracks"/>): it keeps playing and
+    /// nothing on screen is rebuilt, like the web, where editing a lane is just a state change.
+    /// </summary>
     async Task EditTimeline(Func<Project, string?> edit, string? activity, string? clipId = null)
     {
         if (restoring || store == null || store.ReadOnly || Projects.IsVisible) return;
         var st = store;
-        var audio = tracks.SelectMany(t => t.Clips).Where(c => c.Media != null)
-            .GroupBy(c => c.Media!.Id).ToDictionary(g => g.Key, g => g.First().Audio);
-        double position = engine.PositionSec;
         restoring = true;
-        engine.Stop();
         undo.Checkpoint(st.Project);
-        Inspector.IsEnabled = Timeline.IsEnabled = TimelineToolbar.IsEnabled = SessionChip.IsEnabled = false;
         UpdateUndoButtons();
         try
         {
             string? selected = edit(st.Project);
             if (activity != null) st.Project.AddLog(activity);
             MarkDirty();
-            saveTimer.Stop();
-            await ShowProject(st, audio, true);
+            await ApplyTracks(st);
             int index = st.Project.Tracks.FindIndex(t => t.Id == selected);
             Timeline.SelectClip(index, clipId);
-            engine.Seek(position);
         }
         catch (Exception e)
         {
@@ -160,12 +157,76 @@ public partial class MainWindow
         finally
         {
             restoring = false;
-            Timeline.IsEnabled = TimelineToolbar.IsEnabled = SessionChip.IsEnabled = true;
             Inspector.IsEnabled = sel != null;
             MarkDirty();
             UpdateUndoButtons();
             RefreshHistory();
         }
+    }
+
+    /// <summary>
+    /// Puts the project's tracks in the engine and on screen reusing what is loaded: tracks and clips are
+    /// matched by id, so their audio, video decoder, effect state (compressor, tails) and the playhead carry on.
+    /// Only media that isn't loaded yet (a take brought back from Historial) is read, in the background;
+    /// everything else happens before the next frame, so a released clip never shows at its old place.
+    /// </summary>
+    async Task ApplyTracks(ProjectStore st)
+    {
+        var p = st.Project;
+        var liveTracks = tracks.ToDictionary(t => t.Track.Id);
+        var liveClips = tracks.SelectMany(t => t.Clips).ToDictionary(c => c.Clip.Id);
+        var audio = tracks.SelectMany(t => t.Clips).Where(c => c.Media != null)
+            .GroupBy(c => c.Media!.Id).ToDictionary(g => g.Key, g => g.First().Audio);
+        var missing = p.Tracks.SelectMany(t => t.Clips).Where(c => !audio.ContainsKey(c.MediaId))
+            .Select(c => p.FindMedia(c.MediaId)).OfType<Media>().DistinctBy(m => m.Id).ToList();
+        if (missing.Count > 0)
+        {
+            Status("Cargando la toma…");
+            var loaded = await Task.Run(() => missing.Select(m =>
+            {
+                try { return (m.Id, Audio: st.Resolve(m.Audio) is { } path && File.Exists(path) ? new MediaAudio(path) : null); }
+                catch { return (m.Id, Audio: (MediaAudio?)null); }
+            }).ToList());
+            foreach (var (id, a) in loaded) audio[id] = a;
+            Status("");
+        }
+
+        var used = new HashSet<LiveClip>();
+        var list = new List<LiveTrack>();
+        foreach (var t in p.Tracks)
+        {
+            var clips = new List<LiveClip>();
+            foreach (var c in t.Clips)
+            {
+                var m = p.FindMedia(c.MediaId);
+                if (liveClips.TryGetValue(c.Id, out var lc) && lc.Media?.Id == m?.Id && used.Add(lc))
+                {
+                    lc.Clip = c;
+                    lc.Media = m;
+                    clips.Add(lc);
+                }
+                else clips.Add(new LiveClip(c, m, m == null ? null : audio.GetValueOrDefault(m.Id)) { VideoPath = st.Resolve(m?.Video) });
+            }
+            if (liveTracks.TryGetValue(t.Id, out var live))
+            {
+                live.Track = t;
+                live.Clips = clips;
+                live.ApplyChannel();
+            }
+            else live = new LiveTrack(t, clips, PlaybackEngine.SampleRate);
+            live.SetProjectSettings(p.Settings);
+            list.Add(live);
+        }
+
+        var dropped = liveClips.Values.Where(c => !used.Contains(c)).ToList();
+        tracks = list;
+        engine.UpdateTracks(list);
+        Timeline.LengthSec = engine.LengthSec;
+        Timeline.UpdateTracks(list);
+        Preview.SetProject(list, p.Settings);
+        if (dropped.Count > 0) _ = Task.Run(() => { foreach (var c in dropped) c.CloseVideo(); });
+
+        await OpenMissingVideos(st);
     }
 
     Task DeleteTimelineSelection()
@@ -179,6 +240,37 @@ public partial class MainWindow
             ClipEditing.RemoveTrack(p, trackId);
             return null;
         }, clipId != null ? "clip-removed" : "track-removed");
+    }
+
+    /// <summary>The clip of the selected track under the playhead: the selected one if the playhead is on it, else the one on top.</summary>
+    LiveClip? ClipUnderPlayhead()
+    {
+        double at = engine.PositionSec;
+        bool Inside(LiveClip c) => at > c.ClipStartSec && at < c.ClipEndSec;
+        return sel?.Clips.FirstOrDefault(c => c.Clip.Id == Timeline.SelectedClipId && Inside(c)) ?? sel?.Clips.LastOrDefault(Inside);
+    }
+
+    /// <summary>Alt+X, like Studio One: splits the clip under the playhead and selects the right piece.</summary>
+    async Task SplitAtPlayhead()
+    {
+        if (sel == null) { Status("Elegí una pista y poné el cabezal sobre el clip que querés dividir."); return; }
+        if (ClipUnderPlayhead() is not { } clip) { Status("El cabezal no está sobre ningún clip de esta pista: ponelo donde querés cortar."); return; }
+        string trackId = sel.Track.Id;
+        double at = engine.PositionSec, length = clip.LengthSec;
+        string? right = null;
+        await EditTimeline(p => { right = ClipEditing.Split(p, clip.Clip.Id, at, length); return trackId; }, "clip-split");
+        if (right != null) Timeline.SelectClip(Timeline.Selected, right);
+    }
+
+    /// <summary>D, like Studio One: copies the selected clip right after its end and selects the copy.</summary>
+    async Task DuplicateSelection()
+    {
+        var clip = sel?.Clips.FirstOrDefault(c => c.Clip.Id == Timeline.SelectedClipId);
+        if (sel == null || clip == null) { Status("Elegí el clip que querés duplicar."); return; }
+        string trackId = sel.Track.Id;
+        string? copy = null;
+        await EditTimeline(p => { copy = ClipEditing.Duplicate(p, clip.Clip.Id, clip.LengthSec); return trackId; }, "clip-duplicated");
+        if (copy != null) Timeline.SelectClip(Timeline.Selected, copy);
     }
 
     static MenuItem MenuAction(string label, Func<Task> action, string? hint = null, bool enabled = true, bool danger = false, string? icon = null)
@@ -271,7 +363,24 @@ public partial class MainWindow
                 EditTrack(track, t => t.Channel.Solo = !t.Channel.Solo, "solo");
                 return Task.CompletedTask;
             }, "S", enabled));
+            if (!AudioOnly)
+                list.Add(MenuAction(track.Track.Video ? "Sacar del video" : "Mostrar en el video", () => SetInVideo(track, !track.Track.Video),
+                    enabled: enabled, icon: "\uE714"));
             list.Add(new Separator());
+            double at = engine.PositionSec;
+            bool under = at > clip.ClipStartSec + ClipEnvelope.MinClipSec && at < clip.ClipEndSec - ClipEnvelope.MinClipSec;
+            list.Add(MenuAction("Dividir en el cabezal", async () =>
+            {
+                string? right = null;
+                await EditTimeline(p => { right = ClipEditing.Split(p, id, at, clip.LengthSec); return track.Track.Id; }, "clip-split");
+                if (right != null) Timeline.SelectClip(Timeline.Selected, right);
+            }, "Alt+X", enabled && under));
+            list.Add(MenuAction("Duplicar", async () =>
+            {
+                string? copy = null;
+                await EditTimeline(p => { copy = ClipEditing.Duplicate(p, id, clip.LengthSec); return track.Track.Id; }, "clip-duplicated");
+                if (copy != null) Timeline.SelectClip(Timeline.Selected, copy);
+            }, "D", enabled));
             list.Add(MenuAction("Llevar al inicio", () => Command(p => ClipEditing.ToStart(p, id, clip.LengthSec), "clip-moved"), enabled: enabled));
             var w = ClipEditing.Window(clip.Clip, clip.Media, clip.LengthSec);
             list.Add(MenuAction("Fijar el corte en 0", () => Command(p => ClipEditing.FixCut(p, id, clip.LengthSec), "clip-trimmed"),
@@ -286,9 +395,9 @@ public partial class MainWindow
             clip == null ? "Supr" : null, enabled, danger: true));
         if (clip != null) list.Add(new MenuItem { IsEnabled = false, Header = new TextBlock
         {
-            Text = "Quitar clip deja la pista vacía. El archivo queda en Historial.", FontSize = 10.5,
+            Text = track.Clips.Count > 1 ? "El archivo del clip queda en Historial." : "Quitar clip deja la pista vacía. El archivo queda en Historial.", FontSize = 10.5,
             TextWrapping = Avalonia.Media.TextWrapping.Wrap, MaxWidth = 212,
         } });
-        OpenTimelineMenu(Popup(list, 240), point, clip == null ? 80 : 320);
+        OpenTimelineMenu(Popup(list, 240), point, clip == null ? 80 : 390);
     }
 }

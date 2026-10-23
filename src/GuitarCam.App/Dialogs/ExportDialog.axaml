@@ -160,7 +160,7 @@
             <TextBlock Text="Nombre del archivo" FontSize="11" FontWeight="Medium" Foreground="{StaticResource Dim}" />
             <Grid ColumnDefinitions="*,Auto">
               <TextBox x:Name="FileNameBox" Classes="field" Watermark="Mi video" MaxLength="180" />
-              <TextBlock Grid.Column="1" Classes="mono" Text=".mp4" FontSize="14" Foreground="{StaticResource Faint}"
+              <TextBlock Grid.Column="1" x:Name="ExtText" Classes="mono" Text=".mp4" FontSize="14" Foreground="{StaticResource Faint}"
                          VerticalAlignment="Center" Margin="8,0,0,0" />
             </Grid>
           </StackPanel>
@@ -197,9 +197,16 @@
 
           <!-- Calidad -->
           <StackPanel Spacing="6">
-            <TextBlock Text="Calidad" FontSize="11" FontWeight="Medium" Foreground="{StaticResource Dim}" />
-            <Grid ColumnDefinitions="Auto,*">
-              <Border Classes="seg">
+            <TextBlock x:Name="QualityLabel" Text="Calidad" FontSize="11" FontWeight="Medium" Foreground="{StaticResource Dim}" />
+            <Grid ColumnDefinitions="Auto,Auto,*">
+              <!-- solo audio (native only): the format instead of the video quality -->
+              <Border x:Name="FormatSeg" Classes="seg" IsVisible="False">
+                <StackPanel Orientation="Horizontal" Spacing="2">
+                  <Button x:Name="FormatWavBtn" Classes="seg on" Content="WAV" ToolTip.Tip="Sin pérdida (24 bits, 48 kHz)." />
+                  <Button x:Name="FormatMp3Btn" Classes="seg" Content="MP3" ToolTip.Tip="320 kbps: liviano, para mandar o subir." />
+                </StackPanel>
+              </Border>
+              <Border Grid.Column="1" x:Name="QualitySeg" Classes="seg">
                 <StackPanel Orientation="Horizontal" Spacing="2">
                   <Button x:Name="QualityAltaBtn" Classes="seg on" Content="Alta"
                           ToolTip.Tip="Máxima calidad (CRF 18). Para publicar." />
@@ -209,7 +216,7 @@
                           ToolTip.Tip="Rápido y liviano, para revisar (CRF 28)." />
                 </StackPanel>
               </Border>
-              <TextBlock Grid.Column="1" x:Name="EstBytesText" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}"
+              <TextBlock Grid.Column="2" x:Name="EstBytesText" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}"
                          HorizontalAlignment="Right" VerticalAlignment="Center" />
             </Grid>
             <TextBlock x:Name="QualityDescText" FontSize="11" Foreground="{StaticResource Faint}" />
@@ -315,7 +322,17 @@
 
       <!-- Phase 4: Done -->
       <StackPanel x:Name="DonePanel" IsVisible="False" Spacing="0">
-        <Border Background="Black" MinHeight="220">
+        <!-- an exported audio file (native only): its name and length instead of the picture -->
+        <Grid x:Name="AudioDoneRow" ColumnDefinitions="Auto,*" Margin="20,18" IsVisible="False">
+          <Border Width="36" Height="36" CornerRadius="8" Background="{StaticResource AccentSoft}" VerticalAlignment="Center">
+            <TextBlock Classes="icon" Text="&#xE8D6;" FontSize="16" Foreground="{StaticResource Accent}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" Spacing="2">
+            <TextBlock x:Name="AudioDoneName" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="AudioDoneInfo" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}" />
+          </StackPanel>
+        </Grid>
+        <Border x:Name="DoneStage" Background="Black" MinHeight="220">
           <Panel>
             <TextBlock x:Name="MissingVideoText"
                        Text="El archivo ya no está en esa ubicación (lo movieron o lo borraron)."

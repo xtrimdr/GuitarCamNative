@@ -54,6 +54,12 @@ public sealed class ProjectSettings
 {
     /// <summary>110 like a new project in the web app.</summary>
     public double Bpm { get; set; } = 110;
+    /// <summary>
+    /// video | audio (native only). Audio hides the stage and the camera and exports the mix instead of an MP4;
+    /// nothing is deleted, so switching back to video shows everything again.
+    /// </summary>
+    public string Mode { get; set; } = "video";
+    public bool AudioOnly => Mode == "audio";
     /// <summary>side-by-side | top-to-bottom</summary>
     public string Layout { get; set; } = "side-by-side";
     /// <summary>"16:9", "9:16", "1:1", "4:5"…</summary>
@@ -91,9 +97,16 @@ public sealed class ProjectSettings
         Layout = layout;
     }
 
+    public void SetMode(string mode)
+    {
+        if (mode is not ("video" or "audio")) throw new ArgumentException("El modo tiene que ser video o audio.");
+        Mode = mode;
+    }
+
     internal void Normalize()
     {
         if (!(Bpm is >= 20 and <= 400)) Bpm = 110;
+        Mode = Mode == "audio" ? Mode : "video";
         Layout = Layout == "top-to-bottom" ? Layout : "side-by-side";
         Aspect ??= "16:9";
         Reverb ??= new();
@@ -186,6 +199,8 @@ public sealed class ExportSettings
     /// <summary>Last export folder; null = the project's exports folder.</summary>
     public string? Dir { get; set; }
     public string Quality { get; set; } = "alta";
+    /// <summary>wav | mp3: the last "Exportar audio" format (native only).</summary>
+    public string AudioFormat { get; set; } = "wav";
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 
