@@ -13,7 +13,8 @@ namespace GuitarCam.App.Controls;
 /// the surface palettes and "Restablecer", applied live and remembered (<see cref="UiTheme"/>). Same as the web
 /// except: "Color a elección" opens the Windows color dialog (the web's &lt;input type="color"&gt;), so the color
 /// applies when you accept it instead of while you drag; the swatches don't grow on hover and the popover has
-/// no shadow (no decorative effects in the native app).
+/// no shadow (no decorative effects in the native app); eight extra accent presets and three extra dark
+/// surface palettes are available in the same grids.
 /// </summary>
 public sealed class ThemePicker : Panel
 {

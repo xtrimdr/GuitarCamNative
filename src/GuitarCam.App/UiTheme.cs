@@ -9,7 +9,8 @@ namespace GuitarCam.App;
 /// <summary>
 /// UI themes, port of GuitarCam/src/theme.ts: always dark, an accent color plus a surface palette (the greys,
 /// tinted). Applied live to the App.axaml brushes, to <see cref="Palette"/> and to the Fluent accent colors.
-/// Same as the web except it is remembered in the program's config ("theme") instead of localStorage.
+/// Same as the web except it adds eight accent presets and three dark surface palettes, and is remembered
+/// in the program's config ("theme") instead of localStorage.
 /// </summary>
 static class UiTheme
 {
@@ -28,12 +29,17 @@ static class UiTheme
         S("forest", "Bosque", "#090c0b", "#111614", "#1a201d", "#232b27", "#242c28", "#e8efeb", "#9cada5", "#64736c"),
         S("plum", "Ciruela", "#0c0a0e", "#151218", "#1e1a22", "#28232d", "#29242f", "#eeeaf1", "#a69eae", "#6e6677"),
         S("black", "Negro", "#000000", "#0a0a0b", "#141416", "#1e1e21", "#222225", "#ededef", "#a0a0a6", "#68686f"),
+        S("ocean", "Océano", "#080c12", "#101720", "#18222e", "#202d3c", "#263445", "#e7eef7", "#9cacc1", "#687b93"),
+        S("coffee", "Café", "#100b08", "#1a130e", "#261c15", "#32271e", "#382c22", "#f3ece3", "#b8a797", "#847161"),
+        S("smoke", "Humo", "#101112", "#191b1d", "#232629", "#2d3135", "#34393e", "#eceff1", "#a8b0b7", "#747e87"),
     ];
 
     public static readonly (string Name, string Hex)[] Accents =
     [
         ("Ámbar", "#f5a524"), ("Cyan", "#22d3ee"), ("Turquesa", "#2dd4bf"), ("Verde", "#4ade80"),
         ("Lima", "#a3e635"), ("Azul", "#60a5fa"), ("Violeta", "#a78bfa"), ("Rosa", "#f472b6"),
+        ("Naranja", "#fb923c"), ("Oro", "#facc15"), ("Esmeralda", "#34d399"), ("Menta", "#99f6e4"),
+        ("Celeste", "#7dd3fc"), ("Índigo", "#818cf8"), ("Lavanda", "#c4b5fd"), ("Fucsia", "#e879f9"),
     ];
 
     public static readonly Settings Default = new("#22d3ee", "neutral");

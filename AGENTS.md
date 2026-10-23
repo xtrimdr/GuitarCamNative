@@ -175,7 +175,8 @@ exportación: no los dupliques. Los medios se cargan y remuestrean a 48 kHz con 
 Están definidos **dos veces y tienen que coincidir**: en `App.axaml` (para XAML) y en
 `Controls/Palette.cs` (para los controles que dibujan). Si agregás o cambiás uno, cambiá los dos (y que
 coincida con la web). Los valores de la tabla son los del tema por defecto (cian sobre Grafito): el selector
-de tema (`UiTheme.cs`, port de `theme.ts`) cambia en vivo los pinceles de superficie y de acento. Por eso:
+de tema (`UiTheme.cs`, port de `theme.ts`) cambia en vivo los pinceles de superficie y de acento. La nativa
+amplía el catálogo de la web a 16 acentos y 9 fondos oscuros, a pedido del usuario. Por eso:
 usá siempre el pincel (`Palette.Accent`, `{StaticResource Accent}`) y no un color escrito a mano; leé
 `Palette.AccentColor` y compañía cuando dibujás, no lo guardes; las variantes del acento en XAML son
 `AccentFg` (texto sobre acento), `AccentHover`, `AccentTint` y `Accent25/40/50/70` (alfa).

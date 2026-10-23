@@ -109,6 +109,10 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
 
 ## Hecho
 
+- 2026-10-23: más colores en el selector de tema (`UiTheme.cs`): 8 acentos nuevos (Naranja, Oro,
+  Esmeralda, Menta, Celeste, Índigo, Lavanda y Fucsia) y 3 fondos oscuros (Océano, Café y Humo).
+  El catálogo queda en 16 acentos y 9 fondos, con el mismo selector y tema predeterminado.
+
 - 2026-10-22: barra superior (§1.1 de MIGRACION): `MainWindow.TopBar.cs`. Indicador "Guardando / Guardado /
   Error al guardar" en el chip del proyecto; medidor CPU / GPU / RAM (`GuitarCam.Audio/SystemStats.cs`, contadores
   de Windows por PDH; `gclab sistema`); resolución de la cámara, "48 kHz" y FFmpeg con su punto verde o "FFmpeg no
