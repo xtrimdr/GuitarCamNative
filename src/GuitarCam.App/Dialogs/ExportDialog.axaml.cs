@@ -500,9 +500,9 @@ public sealed partial class ExportDialog : UserControl
     {
         if (active)
         {
-            if (!btn.Classes.Contains("active")) btn.Classes.Add("active");
+            if (!btn.Classes.Contains("on")) btn.Classes.Add("on");
         }
-        else btn.Classes.Remove("active");
+        else btn.Classes.Remove("on");
     }
 
     async Task SubmitSetup()

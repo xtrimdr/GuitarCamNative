@@ -87,31 +87,6 @@
       <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
     </Style>
 
-    <Style Selector="Button.seg">
-      <Setter Property="Height" Value="28" />
-      <Setter Property="Padding" Value="12,0" />
-      <Setter Property="CornerRadius" Value="5" />
-      <Setter Property="FontSize" Value="12" />
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="{StaticResource Dim}" />
-      <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="VerticalContentAlignment" Value="Center" />
-      <Setter Property="HorizontalContentAlignment" Value="Center" />
-    </Style>
-    <Style Selector="Button.seg:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="{StaticResource Fg}" />
-    </Style>
-    <Style Selector="Button.seg.active">
-      <Setter Property="Background" Value="{StaticResource Accent}" />
-      <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
-      <Setter Property="FontWeight" Value="SemiBold" />
-    </Style>
-    <Style Selector="Button.seg.active:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="{StaticResource Accent}" />
-      <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
-    </Style>
-
     <Style Selector="Button.link">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
@@ -224,10 +199,9 @@
           <StackPanel Spacing="6">
             <TextBlock Text="Calidad" FontSize="11" FontWeight="Medium" Foreground="{StaticResource Dim}" />
             <Grid ColumnDefinitions="Auto,*">
-              <Border Background="{StaticResource Raised}" BorderBrush="{StaticResource Line}" BorderThickness="1"
-                      CornerRadius="6" Padding="2">
+              <Border Classes="seg">
                 <StackPanel Orientation="Horizontal" Spacing="2">
-                  <Button x:Name="QualityAltaBtn" Classes="seg active" Content="Alta"
+                  <Button x:Name="QualityAltaBtn" Classes="seg on" Content="Alta"
                           ToolTip.Tip="Máxima calidad (CRF 18). Para publicar." />
                   <Button x:Name="QualityEstandarBtn" Classes="seg" Content="Estándar"
                           ToolTip.Tip="Muy buena calidad y archivo más liviano (CRF 22)." />

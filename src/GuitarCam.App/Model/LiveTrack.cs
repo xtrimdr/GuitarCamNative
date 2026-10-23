@@ -65,6 +65,8 @@ public sealed class LiveClip
     public bool Offline => Audio == null;
 
     public VideoDecoder? Video { get; private set; }
+    /// <summary>The take's video file (it may be missing), for the lane's thumbnails; null for audio-only media.</summary>
+    public string? VideoPath { get; init; }
     public WriteableBitmap? Frame { get; private set; }
     public bool InClip { get; private set; }
     public ProjectSettings? Settings { get; set; }

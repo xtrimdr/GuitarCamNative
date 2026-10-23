@@ -96,7 +96,7 @@ Configuración"; botón "Configurar entradas".
   animaciones decorativas; quedan los colores y el borde), y el medidor de entrada sigue también en la
   barra de transporte (en la web, en pantallas anchas, solo está en el monitor).
 
-### 1.6 Barra de transporte ✅ (`MainWindow.Transport.cs`; falta probar el tempo con el mouse y escuchar el menú del click)
+### 1.6 Barra de transporte ✅ (`MainWindow.Transport.cs`; falta escuchar el menú del click)
 - **Grabar** (R): botón con destino "→ Nombre de la pista" o "→ pista nueva". Durante la cuenta:
   "Cancelar n/4" (Esc). Grabando: "Detener y guardar la toma" (Espacio / R) y "Parar sin guardar esta toma" ✅
   (`MainWindow.Recording.cs`; el reloj y el cabezal se ponen rojos, el timeline muestra "Grabando…").
@@ -104,7 +104,7 @@ Configuración"; botón "Configurar entradas".
   **Play / Pausa** (Espacio) desde el cabezal ✅. **Loop** ("Repetir en loop", prendido por defecto) ✅.
 - **Reloj**: posición / total, en compases.tiempos.semicorcheas o en minutos:segundos (clic alterna;
   compartido con la regla) ✅.
-- **Tempo** (§4.5) ✅ (TAP y teclado probados; falta probar arrastre, rueda y doble clic con el mouse).
+- **Tempo** (§4.5) ✅ (TAP, teclado, arrastre del entero y del decimal, rueda y doble clic probados).
 - **Cuenta** (Shift+C, cuenta de 4 antes de grabar, prendida por defecto) ✅.
 - **Click** (C) ✅ y su menú: sonido (Bip, Madera, Clave, Aguja, Cencerro, Batería: clic para elegirlo y
   escucharlo) y **volumen** (-24 a +9 dB). Se recuerda entre sesiones ◐ (todo implementado, también la
@@ -176,7 +176,7 @@ proyecto); guardar con el mismo nombre reemplaza; se borran desde el formulario 
 
 ---
 
-## 3. Timeline ◐ (todo menos las miniaturas)
+## 3. Timeline ✅
 
 - **Regla** en compases y tiempos (4/4 al tempo) o en minutos y segundos ✅. Clic o arrastre mueve el
   cabezal con imán; Alt sin imán ✅.
@@ -186,7 +186,8 @@ proyecto); guardar con el mismo nombre reemplaza; se borran desde el formulario 
 - **Encabezado de pista**: agarre para reordenar, número, nombre, M, S, quitar, volumen, perilla de
   paneo, medidor ✅. Las pistas vacías dicen "Pista vacía · seleccionala para grabar acá" /
   "Apretá R para grabar en esta pista"; mientras graba, "Grabando…".
-- **Carriles**: tira de miniaturas del video debajo de la onda ✗; onda ✅ (gris, acento si está
+- **Carriles**: tira de miniaturas del video debajo de la onda ✅ (`Video/VideoThumbnails.cs`, desde 52 px de
+  alto; las tomas solo audio, que la web no tiene, quedan como antes); onda ✅ (gris, acento si está
   seleccionado, como la web); parte cortada antes del 0 rayada con la tijera y "N s" ✅.
 - **Clips**: arrastrar el cuerpo para moverlo (imán a 0, cabezal, bordes de otros clips y grilla, sobre
   el anclaje para no romper la sincronía; Alt libre); arrastrar arriba/abajo a otra pista (mueve o
@@ -360,7 +361,7 @@ Diálogo de ajustes del programa (no del proyecto), con los atajos apagados mien
 
 ---
 
-## 8. Exportación ◐ (motor, diálogo y `gclab exportar` ✅; falta compararlo con la web lado a lado)
+## 8. Exportación ✅ (motor, diálogo y `gclab exportar`)
 
 - **Diálogo de configuración**: nombre del archivo (arranca en uno libre, "nombre (2)"), carpeta (la
   `exports` del proyecto o otra elegida; "Esa carpeta ya no existe. Elegí otra."), calidad **Alta** (CRF
@@ -381,7 +382,8 @@ Diálogo de ajustes del programa (no del proyecto), con los atajos apagados mien
   `gclab mezclar`; los medios se remuestrean a 48 kHz con `AudioLoader`) ✅. `Mp4Exporter`: el mismo
   `filter_complex` que `server/index.js` (LUT de color y viñeta idénticas byte a byte a las de la web),
   progreso, cancelación y `.part` ✅; `gclab exportar` ✅. El diálogo (`Dialogs/ExportDialog`) está hecho
-  y se abre desde "Exportar MP4" ✅; falta la captura lado a lado con la web ◐.
+  y se abre desde "Exportar MP4" ✅; comparado con la web lado a lado el 2026-10-23 (mismos textos y orden; la
+  calidad pasó al `Segmented` gris de la web) ✅.
 
 ---
 
@@ -424,7 +426,9 @@ Los atajos no corren mientras se escribe en un campo ni con Configuración abier
   así no se corre aunque la cámara vaya a 29,97; mientras graba es MP4 fragmentado, así un corte no lo
   pierde.
 - **Video al reproducir y al mover el cabezal**: cada toma sigue al cabezal ✅ (decodificador FFmpeg).
-- **Miniaturas** de la tira de video, generadas y cacheadas por toma ✗.
+- **Miniaturas** de la tira de video, generadas y cacheadas por toma ✅ (16 cuadros de 160 px por archivo, en
+  memoria durante la sesión como la web; FFmpeg los saca de a uno con búsqueda rápida, una toma por vez, en
+  segundo plano).
 - **Selector de carpetas moderno de Windows** y "Mostrar en el Explorador" trayendo la ventana al frente ✗.
 - **Papelera de reciclaje** para todo lo que se borra (nunca borrado definitivo) ✅: proyectos (gestor),
   tomas no usadas y exportaciones (Historial). Diferencia nativa: la nativa escribe la toma mientras graba,

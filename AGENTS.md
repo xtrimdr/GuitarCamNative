@@ -295,7 +295,8 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
   se exporta. Encuadre: cover-fit + zoom/paneo/espejo del clip. Etiqueta con el nombre de la pista abajo a la izquierda.
 - **Timeline**: clips como en la web: fondo `Hover` al 40 %, borde `Line` (acento al 60 % si está
   seleccionado), onda `Dim` (acento si está seleccionado, `Faint` si la pista no suena), sin el nombre
-  adentro; un clip sin archivo, gris con "Sin conexión…". Pista
+  adentro; un clip sin archivo, gris con "Sin conexión…". Con video y carriles de 52 px o más, la tira de
+  miniaturas (`Video/VideoThumbnails.cs`) con la onda blanca abajo sobre un degradé, como `Filmstrip` de la web. Pista
   seleccionada con barra de acento de 2 px a la izquierda del encabezado; playhead de acento con triángulo.
 
 ### Componentes (clases de estilo en `App.axaml`)

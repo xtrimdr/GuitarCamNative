@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using GuitarCam.App.Model;
+using GuitarCam.App.Video;
 using GuitarCam.Projects;
 using GuitarCam.Audio.Dsp;
 
@@ -24,6 +25,7 @@ public sealed class TimelineView : Control
     double pps = 10; // pixels per second
     double scrollX;
     double laneH = 64;
+    const double ShowThumbsAt = 52; // SHOW_THUMBS_AT: lower lanes have no room for the filmstrip
     double scrollY;
     string snapMode = "1/4";
     bool bars = true;
@@ -81,6 +83,7 @@ public sealed class TimelineView : Control
     {
         ClipToBounds = true;
         Focusable = true;
+        VideoThumbnails.Ready += InvalidateVisual;
         dragScroll = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Input, (_, _) =>
         {
             if (gesture is not ("clip" or "reorder" or "scrub")) return;
@@ -337,11 +340,13 @@ public sealed class TimelineView : Control
         var color = c.Offline ? Color.Parse("#71717a") : Palette.AccentColor;
         bool silent = t.Channel.Muted || tracks.Any(o => o.Channel.Solo) && !t.Channel.Solo;
         using var opacity = ctx.PushOpacity(!c.Offline && silent ? 0.5 : 1);
-        var fill = c.Offline ? Palette.Alpha(color, silent ? 0.05 : sel ? 0.16 : 0.10) : Palette.Alpha(Palette.HoverColor, 0.4);
+        // the web shows the filmstrip from SHOW_THUMBS_AT; audio-only media (native only) keeps the plain clip
+        bool thumbs = !c.Offline && laneH >= ShowThumbsAt && c.VideoPath != null;
+        var fill = c.Offline ? Palette.Alpha(color, silent ? 0.05 : sel ? 0.16 : 0.10) : thumbs ? null : Palette.Alpha(Palette.HoverColor, 0.4);
         var border = Palette.Pen(c.Offline ? Palette.Alpha(color, sel ? 0.9 : 0.45)
             : sel ? Palette.Alpha(Palette.AccentColor, 0.6) : Palette.Line, c.Offline && sel ? 1.5 : 1);
         ctx.DrawRectangle(fill, border, clip, 5, 5);
-        using (ctx.PushClip(clip))
+        using (ctx.PushClip(new RoundedRect(clip, 5)))
         {
             if (c.Offline)
             {
@@ -350,8 +355,26 @@ public sealed class TimelineView : Control
             }
             else
             {
-                var geo = Waveform(c, model, w, y, W);
-                var wave = silent ? Palette.Faint : sel ? Palette.Accent : Palette.Alpha(Palette.DimColor, 0.8);
+                if (thumbs)
+                {
+                    DrawFilmstrip(ctx, c, model, clip, W);
+                    // the wave sits on a dark gradient over the bottom 55 % of the clip
+                    var shade = new Rect(clip.X, clip.Bottom - clip.Height * 0.55, clip.Width, clip.Height * 0.55);
+                    ctx.DrawRectangle(new LinearGradientBrush
+                    {
+                        StartPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                        EndPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                        GradientStops =
+                        {
+                            new GradientStop(Color.FromArgb(204, 0, 0, 0), 0),
+                            new GradientStop(Color.FromArgb(128, 0, 0, 0), 0.5),
+                            new GradientStop(Color.FromArgb(0, 0, 0, 0), 1),
+                        },
+                    }, null, shade);
+                    ctx.DrawRectangle(null, border, clip.Deflate(0.5), 4.5, 4.5); // over the frames, inside the clip
+                }
+                var geo = Waveform(c, model, w, thumbs ? clip.Bottom - clip.Height * 0.55 : y + 6, y + laneH - 6, W);
+                var wave = silent ? Palette.Faint : sel ? Palette.Accent : thumbs ? Palette.Alpha(Colors.White, 0.85) : Palette.Alpha(Palette.DimColor, 0.8);
                 ctx.DrawGeometry(null, Palette.Pen(wave, 1), geo);
             }
             var f = ClipEnvelope.FitFades(model.FadeInSec, model.FadeOutSec, w.End - w.Start);
@@ -391,15 +414,46 @@ public sealed class TimelineView : Control
         }
     }
 
+    /// <summary>
+    /// The web's Filmstrip: the whole source (trims only hide its ends) split into as many 16:9 cells as fit at
+    /// the lane's height, each showing the cached frame nearest its middle, cover-fitted and mirrored like the clip.
+    /// </summary>
+    void DrawFilmstrip(DrawingContext ctx, LiveClip c, Clip model, Rect clip, double W)
+    {
+        if (VideoThumbnails.Get(c.VideoPath!, c.LengthSec) is not { Length: > 0 } frames) return;
+        double x0 = X(model.AtSec), srcW = c.LengthSec * pps;
+        double h = laneH - 12;
+        int slots = Math.Max(1, (int)Math.Round(srcW / (h * 16 / 9)));
+        double cell = srcW / slots;
+        double left = Math.Max(clip.Left, HeaderW), right = Math.Min(clip.Right, W);
+        int first = Math.Max(0, (int)Math.Floor((left - x0) / cell)), last = Math.Min(slots - 1, (int)Math.Floor((right - x0) / cell));
+        var divider = Palette.Pen(Palette.Alpha(Colors.Black, 0.4)); // border-black/40
+        for (int i = first; i <= last; i++)
+        {
+            var img = frames[Math.Min(frames.Length - 1, (int)Math.Floor((i + 0.5) / slots * frames.Length))];
+            var dest = new Rect(x0 + i * cell, clip.Top, cell, clip.Height);
+            double iw = img.Size.Width, ih = img.Size.Height;
+            double scale = Math.Max(dest.Width / iw, dest.Height / ih); // object-cover
+            double sw = dest.Width / scale, sh = dest.Height / scale;
+            var src = new Rect((iw - sw) / 2, (ih - sh) / 2, sw, sh);
+            if (model.Framing.Mirror)
+            {
+                using (ctx.PushTransform(Matrix.CreateTranslation(-dest.Center.X, 0) * Matrix.CreateScale(-1, 1) * Matrix.CreateTranslation(dest.Center.X, 0)))
+                    ctx.DrawImage(img, src, dest);
+            }
+            else ctx.DrawImage(img, src, dest);
+            if (i < slots - 1) ctx.DrawLine(divider, new Point(dest.Right - 0.5, dest.Top), new Point(dest.Right - 0.5, dest.Bottom));
+        }
+    }
+
     /// <summary>Min/max per pixel column, cached until the zoom, scroll or size changes.</summary>
-    StreamGeometry Waveform(LiveClip c, Clip model, ClipEnvelope.ClipWindow w, double y, double W)
+    StreamGeometry Waveform(LiveClip c, Clip model, ClipEnvelope.ClipWindow w, double top, double bottom, double W)
     {
         var a = c.Audio!;
-        double key = pps * 1e6 + scrollX * 7.3 + W * 0.013 + y * 0.0007 + laneH
+        double key = pps * 1e6 + scrollX * 7.3 + W * 0.013 + top * 0.0007 + bottom * 0.00011 + laneH
             + model.AtSec * 1.7e-3 + model.TrimStartSec * 3.1e-3 + model.TrimEndSec * 5.3e-3;
         if (waveCache.TryGetValue(c, out var hit) && hit.Key == key) return hit.Geo;
         var geo = new StreamGeometry();
-        double top = y + 6, bottom = y + laneH - 6;
         double mid = (top + bottom) / 2, half = (bottom - top) / 2;
         double binsPerSec = a.SampleRate / (double)MediaAudio.PeakBin;
         int xa = (int)Math.Max(HeaderW, X(w.Start));

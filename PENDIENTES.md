@@ -72,19 +72,6 @@ El relevamiento completo (qué hace cada cosa en la web, cómo funciona y en qu�
 [docs/MIGRACION.md](docs/MIGRACION.md), con el orden sugerido al final. Todo se porta igual que en la web
 ([AGENTS.md → Migrar algo de la web](AGENTS.md#migrar-algo-de-la-web)).
 
-## Entregado, falta revisar (2026-10-22)
-
-Lo hicieron los agentes y compila con 0/0 y pasa sus pruebas de `gclab`, pero el coordinador todavía no
-lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](docs/COORDINACION.md)
-("Para retomar"). Al aprobarlo, pasa a **Hecho** y se marca en MIGRACION.
-
-- A5 · transporte y tempo (`MainWindow.Transport.cs`, `Controls/TempoControl.cs`): probado a mano el
-  2026-10-22 (sin mouse, por UI Automation): play/pausa, Detener (vuelve a donde arrancó), loop prendido y
-  apagado, reloj (compases ↔ minutos), TAP, la cuenta y Esc. Se arregló que cambiar el tempo dejaba un
-  paso de deshacer vacío. Falta: el tempo con el mouse (arrastre, rueda, doble clic) y escuchar el menú
-  del click; la calibración desde Configuración con cable o tocando (necesita el cable o la guitarra)
-- B6 · el diálogo de exportación ya se abre con "Exportar MP4"; falta la captura lado a lado con la web
-
 ## Notas
 
 - Puntitos en la preview (resuelto): con la ventana permitiendo transparencia, algunos píxeles oscuros
@@ -105,6 +92,15 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
   tocar "Refrescar dispositivos".
 
 ## Hecho
+
+- 2026-10-23: miniaturas del video en los carriles (§3 y §11 de MIGRACION): `Video/VideoThumbnails.cs`, port de
+  `thumbnails.ts` (16 cuadros de 160 px por toma, en memoria, FFmpeg en segundo plano de a una toma) y la tira de
+  `Filmstrip` en `TimelineView` (celdas 16:9 a la altura del carril, cover, espejo del clip, la onda blanca abajo
+  sobre el degradé negro), desde 52 px de alto. Comparado con la web (TESTINGS). Revisado lo que habían dejado los
+  agentes: A5 (el tempo con el mouse: arrastre del entero y del decimal, rueda y doble clic para escribir, probado
+  en la ventana) y B6 (el diálogo de exportación lado a lado con la web: igual salvo la calidad, que ahora usa el
+  `Segmented` gris de la web en vez de una pastilla de acento). Falta escuchar el menú del click y la calibración
+  con cable o tocando (necesitan el cable o la guitarra).
 
 - 2026-10-23: Configuración → Entradas y salidas (§7 de MIGRACION): "Buffer" con el tamaño actual y el botón
   "Panel del driver" (`PlaybackEngine.ShowDriverPanel`); cuando el driver pide reiniciarse (nuevo buffer) el

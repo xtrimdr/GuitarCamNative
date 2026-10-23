@@ -368,7 +368,7 @@ public partial class MainWindow : Window
             return p.Tracks.Select(t => new LiveTrack(t, t.Clips.Select(c =>
             {
                 var m = p.FindMedia(c.MediaId);
-                return new LiveClip(c, m, m == null ? null : AudioOf(m));
+                return new LiveClip(c, m, m == null ? null : AudioOf(m)) { VideoPath = st.Resolve(m?.Video) };
             }).ToList(), PlaybackEngine.SampleRate)).ToList();
         });
         var previous = tracks;
