@@ -25,6 +25,7 @@ static class Program
                 "exportar" => DspCommands.Export(a),
                 "verificar" => DspCommands.Verify(a),
                 "click" => DspCommands.Click(a),
+                "espectro" => DspCommands.Spectrum(a),
                 "camara" => CameraCommands.Run(a),
                 "sistema" => SystemCommands.Run(a),
                 "proyecto" => ProjectCommands.Run(a),
@@ -66,6 +67,9 @@ static class Program
               verificar [entrada.wav]      compara el DSP portado con los worklets de la app web (necesita Node)
               click     [--salida clicks.wav] [--bpm 100]
                                            escribe todos los sonidos de click a un WAV para escucharlos
+              espectro  [entrada.wav] [--hz 1000] [--nivel -6]
+                                           el espectro en vivo del EQ (FFT de 8192 después del EQ, como la web);
+                                           sin WAV, comprueba un seno contra el AnalyserNode de Web Audio
               camara    [listar]           lista las cámaras (DirectShow) y sus formatos; * = la que elige la app
               camara grabar [--dispositivo X | --ip 192.168.1.50:4747] [--resolucion native|1080p|720p|480p]
                         [--segundos 5] [--salida camara.mp4]

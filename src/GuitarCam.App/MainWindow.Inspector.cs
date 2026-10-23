@@ -10,15 +10,22 @@ using GuitarCam.Projects;
 
 namespace GuitarCam.App;
 
-/// <summary>Port of TakeInspector.tsx. Track effects edit the channel; sync, fades and framing edit the selected
-/// native clip. Native differences: multiple clips per track, offline status, no live EQ spectrum yet;
-/// Avalonia Fluent controls and Segoe icons follow the platform. Media corrections remain immutable.</summary>
+/// <summary>Port of TakeInspector.tsx inside App.tsx's left sidebar ("Toma", folds to a column of icons and remembers
+/// it like gc.sidebarCollapsed). Track effects edit the channel; sync, fades and framing edit the selected native clip.
+/// The EQ draws the selected track's live spectrum (<see cref="SpectrumTap"/>, FFT on the UI thread). Native
+/// differences: multiple clips per track, offline status; Avalonia Fluent controls and Segoe icons follow the
+/// platform. Media corrections remain immutable.</summary>
 public partial class MainWindow
 {
     readonly List<Action> inspectorRefresh = [];
     readonly StackPanel takeSections = new() { Spacing = 0 };
-    readonly StackPanel emptySections = new() { Spacing = 12 };
-    readonly TextBlock takeNumber = new() { Classes = { "mono" }, Foreground = Palette.Accent, FontSize = 12 };
+    readonly StackPanel emptySections = new() { Spacing = 8 };
+    readonly StackPanel noSelection = new() { Margin = new Thickness(10, 32), Spacing = 4 };
+    readonly TextBlock noSelectionHint = new() { FontSize = 12, Foreground = Palette.Faint, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap };
+    readonly Grid takeHeader = new() { ColumnDefinitions = new ColumnDefinitions("24,*,Auto") };
+    readonly Border takeBadge = new() { CornerRadius = new CornerRadius(4), Height = 24, VerticalAlignment = VerticalAlignment.Center };
+    readonly TextBlock takeNumber = new() { Classes = { "mono" }, Foreground = Palette.Accent, FontSize = 12, FontWeight = FontWeight.SemiBold,
+        HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
     readonly TextBox takeName = new() { FontSize = 14, FontWeight = FontWeight.SemiBold, Background = Brushes.Transparent, BorderThickness = new Thickness(0), Padding = new Thickness(2) };
     readonly TextBlock takeInfo = new() { FontSize = 11, Foreground = Palette.Faint, Classes = { "mono" }, TextWrapping = TextWrapping.Wrap };
     readonly TextBlock GrText = new() { Classes = { "dim", "mono" }, FontSize = 11 };
@@ -32,6 +39,15 @@ public partial class MainWindow
     Button? collapseEffects;
     static readonly string[] EffectTitles = ["Saturación", "Compresor", "EQ", "Reverb", "Delay"];
     Task inspectorPrefsSaving = Task.CompletedTask;
+    const double InspectorWidth = 290;
+    const double InspectorCollapsedWidth = 44;
+    readonly DockPanel inspectorExpanded = new();
+    readonly StackPanel inspectorCollapsed = new() { Spacing = 4, Margin = new Thickness(0, 8), HorizontalAlignment = HorizontalAlignment.Center };
+    EqEditor? eqEditor;
+    readonly SpectrumTap spectrumTap = new();
+    readonly float[] spectrumBins = new float[SpectrumTap.Bins];
+    LiveTrack? spectrumTrack;
+    long spectrumFrom;
 
     void SetSectionCollapsed(string title, bool hide)
     {
@@ -56,7 +72,61 @@ public partial class MainWindow
     }
     void UpdateCollapseButton()
     {
-        if (collapseEffects != null) ToolTip.SetTip(collapseEffects, EffectTitles.All(collapsedSections.Contains) ? "Mostrar todos los efectos" : "Colapsar todos los efectos");
+        if (collapseEffects == null) return;
+        bool all = EffectTitles.All(collapsedSections.Contains);
+        ToolTip.SetTip(collapseEffects, all ? "Mostrar todos los efectos" : "Colapsar todos los efectos");
+        ((TextBlock)collapseEffects.Content!).Text = all ? "" : "";
+    }
+
+    /// <summary>App.tsx's left aside: the "Toma" header with "Ocultar panel", or the folded column of icons.</summary>
+    void InitInspectorBar()
+    {
+        var scroll = (Control)InspectorBar.Child!;
+        InspectorBar.Child = null;
+        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto"), Height = 44, Margin = new Thickness(16, 0, 6, 0) };
+        header.Children.Add(new TextBlock { Classes = { "icon" }, Text = "", FontSize = 14, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
+        var title = new TextBlock { Text = "Toma", FontSize = 13, FontWeight = FontWeight.Medium, VerticalAlignment = VerticalAlignment.Center };
+        Grid.SetColumn(title, 1); header.Children.Add(title);
+        var hide = RailButton("", "Ocultar panel", () => SetInspectorCollapsed(true));
+        hide.Foreground = Palette.Faint;
+        Grid.SetColumn(hide, 3); header.Children.Add(hide);
+        var top = new Border { BorderBrush = Palette.Line, BorderThickness = new Thickness(0, 0, 0, 1), Child = header };
+        DockPanel.SetDock(top, Dock.Top);
+        inspectorExpanded.Children.Add(top); inspectorExpanded.Children.Add(scroll);
+        foreach (var (glyph, tip) in new[] { ("", "Mostrar la toma"), ("", "Toma") })
+        {
+            var b = RailButton(glyph, tip, () => SetInspectorCollapsed(false));
+            b.Foreground = Palette.Faint; inspectorCollapsed.Children.Add(b);
+        }
+        InspectorBar.Child = new Panel { Children = { inspectorExpanded, inspectorCollapsed } };
+        SetInspectorCollapsed(AppConfig.Get("sidebarCollapsed") == "1", save: false);
+    }
+
+    void SetInspectorCollapsed(bool collapsed, bool save = true)
+    {
+        InspectorBar.Width = collapsed ? InspectorCollapsedWidth : InspectorWidth;
+        inspectorExpanded.IsVisible = !collapsed;
+        inspectorCollapsed.IsVisible = collapsed;
+        if (save) SaveViewPref("sidebarCollapsed", collapsed ? "1" : "2");
+    }
+
+    /// <summary>EqEditor's draw loop fed from the selected track: the tap hangs on that track's chain only while its EQ
+    /// is on screen, and the spectrum counts as live (the web's readSpectrum ok) while the transport plays.</summary>
+    void TickInspectorSpectrum()
+    {
+        var want = eqEditor is { IsEffectivelyVisible: true } && SelectedInspectorClip != null ? sel : null;
+        if (spectrumTrack != want)
+        {
+            if (spectrumTrack != null) spectrumTrack.Chain.Spectrum = null;
+            spectrumTrack = want;
+            spectrumTap.ResetSmoothing();
+            spectrumFrom = spectrumTap.Written;
+            if (want != null) want.Chain.Spectrum = spectrumTap;
+        }
+        if (eqEditor == null) return;
+        bool live = want != null && engine.Playing && spectrumTap.Written > spectrumFrom;
+        if (live) spectrumTap.Read(spectrumBins);
+        eqEditor.PushSpectrum(live ? spectrumBins : null, Audio.PlaybackEngine.SampleRate);
     }
     LiveClip? SelectedInspectorClip => sel?.Clips.FirstOrDefault(c => c.Clip.Id == Timeline.SelectedClipId)
         ?? sel?.ShownClip ?? sel?.Clips.FirstOrDefault();
@@ -162,8 +232,9 @@ public partial class MainWindow
             foreach (var title in System.Text.Json.JsonSerializer.Deserialize<string[]>(AppConfig.Get("collapsed.inspector") ?? "[]") ?? []) collapsedSections.Add(title);
         }
         catch (System.Text.Json.JsonException) { }
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("24,*,Auto") };
-        header.Children.Add(new Border { Background = Palette.Alpha(Palette.AccentColor, 0.14), CornerRadius = new CornerRadius(4), Child = takeNumber, Height = 24, VerticalAlignment = VerticalAlignment.Center });
+        InitInspectorBar();
+        var header = takeHeader;
+        takeBadge.Child = takeNumber; header.Children.Add(takeBadge);
         Grid.SetColumn(takeName, 1); header.Children.Add(takeName);
         takeName.TextChanged += (_, _) => Edit(t => t.Track.Name = takeName.Text ?? "", "name");
         collapseEffects = InspectorIcon("\uE70E", "Colapsar todos los efectos", () =>
@@ -173,10 +244,17 @@ public partial class MainWindow
             SaveCollapsedSections();
         });
         Grid.SetColumn(collapseEffects, 2); header.Children.Add(collapseEffects); UpdateCollapseButton();
+        noSelection.Children.Add(new TextBlock { Text = "Seleccioná una toma", FontSize = 14, Foreground = Palette.Dim, TextAlignment = TextAlignment.Center });
+        noSelection.Children.Add(noSelectionHint);
+        Inspector.Children.Add(noSelection);
         Inspector.Children.Add(header); Inspector.Children.Add(takeInfo);
-        emptySections.Children.Add(Help("Con esta pista seleccionada, apretá R (o el botón de grabar) y la toma nueva queda en este lugar del timeline."));
-        emptySections.Children.Add(Help("También podés agregar acá una toma del historial desde «Nueva pista»."));
-        var removeEmpty = new Button { Content = "Quitar pista", Classes = { "chip" }, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var recordHint = new TextBlock { FontSize = 12, Foreground = Palette.Dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
+        recordHint.Inlines!.Add(new Avalonia.Controls.Documents.Run("Con esta pista seleccionada, apretá "));
+        recordHint.Inlines.Add(new Avalonia.Controls.Documents.Run("R") { FontFamily = Palette.Mono.FontFamily, Foreground = Palette.Fg });
+        recordHint.Inlines.Add(new Avalonia.Controls.Documents.Run(" (o el botón de grabar) y la toma nueva queda en este lugar del timeline."));
+        emptySections.Children.Add(recordHint);
+        emptySections.Children.Add(new TextBlock { Text = "También podés agregar acá una toma del historial desde «Nueva pista».", FontSize = 12, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap });
+        var removeEmpty = RemoveButton("Quitar pista"); removeEmpty.Margin = new Thickness(0, 12, 0, 0);
         removeEmpty.Click += async (_, _) => await DeleteTimelineSelection(); emptySections.Children.Add(removeEmpty);
         Inspector.Children.Add(emptySections); Inspector.Children.Add(takeSections);
         var mix = Section("Mezcla", "\uE9E9", action: InspectorIcon("\uE74F", "Silenciar toma", () => Edit(t => t.Channel.Muted = !t.Channel.Muted, "mute")));
@@ -252,7 +330,7 @@ public partial class MainWindow
         fineControls.Children.Add(Help("Al mover estos valores el compresor pasa a «Manual». Elegí un estilo para volver al control simple."));
         GrTrack.Child = GrBar;
         var eqHost = Section("EQ", "\uE9D9", () => sel!.Channel.Eq.On, on => Edit(t => t.Channel.Eq.On = on, "eq.on"));
-        var eq = new EqEditor(); eq.Changed += value => Edit(t => t.Channel.Eq = value, "eq"); eqHost.Children.Add(eq);
+        var eq = eqEditor = new EqEditor(); eq.Changed += value => Edit(t => t.Channel.Eq = value, "eq"); eqHost.Children.Add(eq);
         inspectorRefresh.Add(() => eq.Set(sel!.Channel.Eq));
         var reverb = Section("Reverb", "\uE767", () => sel!.Channel.ReverbOn, on => Edit(t => t.Channel.ReverbOn = on, "reverb.on"));
         Slider(reverb, "Envío a reverb", 0, 1, .01, 0, () => sel!.Channel.ReverbSend, v => Edit(t => t.Channel.ReverbSend = v, "reverb.send"), v => $"{v * 100:0}%", "Cuánto de esta pista va al bus de reverb (después del fader)");
@@ -310,9 +388,18 @@ public partial class MainWindow
         inspectorRefresh.Add(() => mirror.Foreground = C().Framing.Mirror ? Palette.Accent : Palette.Dim);
         Slider(frame, "Zoom", 1, 2.5, .01, 1, () => C().Framing.Zoom, v => ClipEdit((c, _) => InspectorEditing.Frame(c, zoom: v), "framing"), v => $"{v:0.00}×");
         frame.Children.Add(Help("Arrastrá el panel en el video para mover el encuadre; la rueda del mouse hace zoom."));
-        var remove = new Button { Content = "Quitar del timeline", Classes = { "chip" }, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var remove = RemoveButton("Quitar del timeline"); remove.Margin = new Thickness(0, 16, 0, 0);
         remove.Click += async (_, _) => await DeleteTimelineSelection(); takeSections.Children.Add(remove);
         takeSections.Children.Add(Help("El archivo queda guardado; la volvés a usar desde Historial."));
+    }
+
+    /// <summary>The web's full-width "Quitar pista" / "Quitar del timeline" button with its MinusCircle icon.</summary>
+    static Button RemoveButton(string text)
+    {
+        var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
+        content.Children.Add(new TextBlock { Classes = { "icon" }, Text = "", FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
+        content.Children.Add(new TextBlock { Text = text, FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
+        return new Button { Content = content, Classes = { "chip" }, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center, MinHeight = 32 };
     }
 
     void ShowTrack(LiveTrack? t)
@@ -331,11 +418,16 @@ public partial class MainWindow
         syncing = true;
         try
         {
-            takeName.Text = sel?.Track.Name ?? "Seleccioná una toma";
+            takeName.Text = sel?.Track.Name ?? "";
             takeNumber.Text = sel == null ? "" : (tracks.IndexOf(sel) + 1).ToString();
             var c = SelectedInspectorClip;
-            takeInfo.Text = sel == null ? (tracks.Count == 0 ? "Todavía no hay tomas grabadas." : "Hacé click en una pista o en su panel del video.")
-                : c == null ? "Pista vacía" : c.Offline ? "Sin conexión: falta el archivo de audio"
+            noSelection.IsVisible = sel == null;
+            noSelectionHint.Text = tracks.Any(t => t.Clips.Count > 0) ? "Hacé click en una pista o en su panel del video." : "Todavía no hay tomas grabadas.";
+            takeHeader.IsVisible = takeInfo.IsVisible = sel != null;
+            takeBadge.Background = c != null ? Palette.AccentSoft : Palette.Hover;
+            takeNumber.Foreground = c != null ? Palette.Accent : Palette.Dim;
+            takeInfo.Classes.Set("mono", c != null);
+            takeInfo.Text = sel == null ? "" : c == null ? "Pista vacía" : c.Offline ? "Sin conexión: falta el archivo de audio"
                 : $"{c.LengthSec:0.0} s · WAV {c.Audio!.SampleRate / 1000.0:0} kHz estéreo";
             emptySections.IsVisible = sel != null && c == null;
             takeSections.IsVisible = c != null;

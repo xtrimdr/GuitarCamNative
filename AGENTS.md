@@ -271,7 +271,10 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 - **Barra de estado** = el `StatusText` del centro de la barra de título. Ahí van los avisos, no en diálogos.
 - **Inspector**: título de la toma + una tarjeta (`Border.section`) por bloque, cada una con ícono +
   etiqueta en mayúscula y, si se puede apagar, un `ToggleSwitch` a la derecha. Apagada → clase `off`
-  (los controles quedan al 40 % de opacidad, pero se pueden seguir tocando).
+  (los controles quedan al 40 % de opacidad, pero se pueden seguir tocando). Con su encabezado "Toma"
+  se pliega a una columna de íconos de 44, como la barra del proyecto, y se recuerda. El espectro en vivo
+  del EQ sale de un `SpectrumTap` colgado solo de la pista seleccionada mientras el EQ está a la vista: el
+  hilo de audio copia a un anillo preasignado y la FFT corre en el `Tick` de la UI.
 - **Mixer** (`MainWindow.Mixer.cs`): ocupa el lugar del timeline (X o "Timeline / Mixer" abajo a la
   derecha) con su propia altura (mínimo 250). Una tira por pista, también las vacías; amplias o
   compactas ("Auto" según el ancho, como la web). Las ediciones de canal pasan por `EditTrack`, las de

@@ -522,6 +522,7 @@ public partial class MainWindow : Window
         Live.Meter.Push(m.InL, m.InR);
         TickCamera();
         TickTopBar();
+        TickInspectorSpectrum();
         if (Settings.IsVisible) Settings.Meter.Push(m.InL, m.InR);
         if (engine.IsOpen) DspText.Text = $"{engine.LoadPercent:0.0} %";
 

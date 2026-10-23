@@ -9,8 +9,8 @@ using GuitarCam.Projects;
 
 namespace GuitarCam.App.Controls;
 
-/// <summary>Port of EqEditor.tsx: presets, interactive log graph, six band chips and selected band controls.
-/// Live spectrum is pending in the native version; the graph uses the shared DSP response formulas.</summary>
+/// <summary>Port of EqEditor.tsx: presets, interactive log graph with the track's live spectrum behind it, six band
+/// chips and selected band controls. The graph uses the shared DSP response formulas.</summary>
 public sealed class EqEditor : StackPanel
 {
     EqSettings eq = new();
@@ -82,9 +82,11 @@ public sealed class EqEditor : StackPanel
         }
         Children.Add(slope);
         Children.Add(new TextBlock { Text = "Arrastrá los puntos en el gráfico. Mientras suena, atrás ves el espectro de esta pista.",
-            FontSize = 11, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap, IsEnabled = false });
-        ToolTip.SetTip(Children[^1], "El espectro en vivo todavía no está en la versión nativa");
+            FontSize = 11, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap });
     }
+    /// <summary>One frame of the live spectrum (dB per bin, as <see cref="SpectrumTap.Read"/> gives it), or null while
+    /// the track isn't playing, so the last one falls away.</summary>
+    public void PushSpectrum(float[]? bins, int sampleRate) => graph.PushSpectrum(bins, sampleRate);
     /// <summary>eqPresetOf: the factory preset these bands are exactly, or -1 ("Personalizado").</summary>
     public static int PresetIndex(EqSettings eq) => Array.FindIndex(TrackEq.Presets, p => p.Bands.Select((x, i) =>
         x.On == eq.Bands[i].On && BiquadSpec.TypeToString(x.Type) == eq.Bands[i].Type && x.Freq == eq.Bands[i].Freq
@@ -151,6 +153,8 @@ sealed class EqGraph : Control
     public event Action<int>? Selected;
     public event Action<int, Action<EqBand>>? Edited;
     readonly bool interactive;
+    float[] smooth = [];
+    bool hadSpectrum;
     public EqGraph(bool interactive = true, double height = 150)
     {
         this.interactive = interactive;
@@ -208,6 +212,42 @@ sealed class EqGraph : Control
         g.LineTo(new Point(Bounds.Width, Y(0))); g.EndFigure(true);
         return geo;
     }
+    /// <summary>EqGraph's draw loop: max per 2 px column, +3 dB/oct tilt so a guitar reads flat-ish, slow fall;
+    /// without a spectrum the last one falls 2 dB per frame until it is gone.</summary>
+    public void PushSpectrum(float[]? bins, int sampleRate)
+    {
+        double w = Bounds.Width;
+        if (w <= 0) return;
+        int cols = (int)Math.Ceiling(w / 2) + 1;
+        if (smooth.Length != cols) { smooth = new float[cols]; Array.Fill(smooth, -120f); }
+        if (bins != null)
+        {
+            double binHz = sampleRate / 2.0 / bins.Length;
+            for (int i = 0; i < cols; i++)
+            {
+                double f0 = Hz(i * 2, w), f1 = Hz(i * 2 + 2, w);
+                int b0 = (int)Math.Floor(f0 / binHz);
+                int b1 = Math.Max(b0, (int)Math.Floor(f1 / binHz));
+                float m = -200;
+                for (; b0 <= b1 && b0 < bins.Length; b0++) if (bins[b0] > m) m = bins[b0];
+                float db = m + 3 * (float)Math.Log2(Math.Max(20, f0) / 1000);
+                smooth[i] = db > smooth[i] ? db : smooth[i] - 1.2f;
+            }
+            hadSpectrum = true;
+        }
+        else if (hadSpectrum)
+        {
+            bool any = false;
+            for (int i = 0; i < cols; i++) { smooth[i] -= 2; if (smooth[i] > -110) any = true; }
+            hadSpectrum = any;
+        }
+        else return;
+        InvalidateVisual();
+    }
+    static double Hz(double x, double w) => 20 * Math.Pow(1000, x / w);
+    static readonly IBrush SpectrumFill = Palette.Alpha(Colors.White, 0.07);
+    static readonly IPen SpectrumLine = Palette.Pen(Palette.Alpha(Colors.White, 0.18));
+
     public override void Render(DrawingContext ctx)
     {
         ctx.DrawRectangle(Palette.App, Palette.Pen(Palette.Line), new Rect(Bounds.Size), 6, 6);
@@ -220,6 +260,19 @@ sealed class EqGraph : Control
         {
             ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, Y(db)), new Point(Bounds.Width, Y(db)));
             if (interactive && db != 0) ctx.DrawText($"{db:+0;-0}", 9, Palette.Faint, new Point(3, Y(db) - 10));
+        }
+        if (hadSpectrum)
+        {
+            double h = Height;
+            var spectrum = new StreamGeometry();
+            using (var g = spectrum.Open())
+            {
+                g.BeginFigure(new Point(0, h), true);
+                for (int i = 0; i < smooth.Length; i++) g.LineTo(new Point(i * 2, h - Math.Clamp((smooth[i] + 96) / 84, 0, 1) * h));
+                g.LineTo(new Point(Bounds.Width, h));
+                g.EndFigure(true);
+            }
+            ctx.DrawGeometry(SpectrumFill, SpectrumLine, spectrum);
         }
         if (interactive) ctx.DrawGeometry(Palette.Alpha(Palette.AccentColor, .16), null, selectedFill);
         ctx.DrawGeometry(Palette.Alpha(Palette.AccentColor, eq.On ? .1 : .04), null, totalFill);
