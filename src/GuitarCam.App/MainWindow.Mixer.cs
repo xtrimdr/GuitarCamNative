@@ -18,12 +18,21 @@ namespace GuitarCam.App;
 /// knobs; the reverb and delay returns with their presets; the master with its LIM light; pan templates for the whole
 /// mix. Every change is an undo step (same keys as the inspector), saved and heard live. Same as the web except: the
 /// toggle sits in the bottom transport bar (where the native transport is), the EQ summary has no live spectrum yet
-/// (like the inspector), and empty strips edit their channel without the take analysis (as in the web).
+/// (like the inspector), and empty strips edit their channel without the take analysis (as in the web). Also unlike
+/// the web (asked by the user): every strip is a card, all strips share the same rows so every meter has the same
+/// height, and narrow effect panels rearrange instead of cutting their controls.
 /// </summary>
 public partial class MainWindow
 {
-    // Strip widths (px), as in the web. "Amplio" strips grow to share the free width.
-    const double CompactW = 92, WideMin = 200, WideMax = 400, ReturnCompactW = 176, ReturnWideW = 230, MasterW = 76;
+    // Strip widths (px), as in the web (compact a bit wider for the card's border). "Amplio" strips grow to share the free width.
+    const double CompactW = 96, WideMin = 200, WideMax = 400, ReturnCompactW = 176, ReturnWideW = 230, MasterW = 76;
+    /// <summary>Rows every strip shares (takes, returns and master), so all faders and meters start and end at the same
+    /// height: head, controls (compact strips only: in wide ones they sit beside the fader), fader, foot.</summary>
+    const double StripHeadH = 38, StripTopH = 124, StripFootH = 22;
+    /// <summary>Space between strip cards.</summary>
+    const double StripGap = 6;
+    /// <summary>Below this width an effect panel drops its ON/OFF text and icon, and puts its knob over its other controls.</summary>
+    const double FxNarrowW = 150;
     /// <summary>The mixer keeps its own height: wide strips want more room than the timeline.</summary>
     const double MixerDefaultH = 340, MixerMinH = 250;
 
@@ -203,7 +212,7 @@ public partial class MainWindow
         if (!mixerView) return;
         double areaW = mixerScroll.Viewport.Width > 0 ? mixerScroll.Viewport.Width : MixerHost.Bounds.Width;
         int n = Math.Max(1, tracks.Count);
-        double freeWide = (areaW - 2 * ReturnWideW - MasterW) / n;
+        double freeWide = (areaW - 2 * ReturnWideW - MasterW - 3 * StripGap) / n - StripGap;
         bool wide = mixerWidth == "wide" || (mixerWidth == "auto" && freeWide >= WideMin);
         double stripW = wide ? Math.Max(WideMin, Math.Min(WideMax, Math.Floor(freeWide))) : CompactW;
         string key = $"{wide}|{stripW}|{string.Join(",", tracks.Select(t => t.Track.Id + ":" + t.Clips.Count))}";
@@ -264,12 +273,60 @@ public partial class MainWindow
 
         var reverb = ReverbReturn(wide); Grid.SetColumn(reverb, 2); mixerStrips.Children.Add(reverb);
         var delay = DelayReturn(wide); Grid.SetColumn(delay, 3); mixerStrips.Children.Add(delay);
-        var master = Master(); Grid.SetColumn(master, 4); mixerStrips.Children.Add(master);
+        var master = Master(wide); Grid.SetColumn(master, 4); mixerStrips.Children.Add(master);
+    }
+
+    /// <summary>A strip as a card on the mixer's background, so each channel reads apart from its neighbours.</summary>
+    static Border StripCard(double width) => new()
+    {
+        Width = width, Margin = new Thickness(StripGap / 2, StripGap), Background = Palette.Panel, BorderBrush = Palette.Line,
+        BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), ClipToBounds = true,
+    };
+
+    /// <summary>Puts a strip's parts on the rows every strip shares (<see cref="StripHeadH"/>…), so all faders and meters
+    /// start and end at the same height whatever the name, the strip type or its controls: compact strips stack the
+    /// controls over the fader, wide ones put them beside it. Without controls (the master) the meter is centred.</summary>
+    static Grid StripLayout(bool wide, Control head, Control? controls, Control faders, Control foot)
+    {
+        var g = new Grid { Margin = new Thickness(wide ? 8 : 6, 8, wide ? 8 : 6, 6) };
+        g.RowDefinitions.Add(new RowDefinition(StripHeadH, GridUnitType.Pixel));
+        if (!wide) g.RowDefinitions.Add(new RowDefinition(StripTopH, GridUnitType.Pixel));
+        g.RowDefinitions.Add(new RowDefinition(1, GridUnitType.Star));
+        g.RowDefinitions.Add(new RowDefinition(StripFootH, GridUnitType.Pixel));
+        void Put(Control c, int row, int col = 0, int span = 1, int rowSpan = 1)
+        {
+            Grid.SetRow(c, row); Grid.SetColumn(c, col); Grid.SetColumnSpan(c, span); Grid.SetRowSpan(c, rowSpan);
+            g.Children.Add(c);
+        }
+        head.VerticalAlignment = VerticalAlignment.Top;
+        foot.VerticalAlignment = VerticalAlignment.Bottom;
+        foot.HorizontalAlignment = HorizontalAlignment.Center;
+        if (wide && controls != null)
+        {
+            g.ColumnDefinitions = new ColumnDefinitions("*,Auto");
+            Put(head, 0, 0, 2);
+            controls.Margin = new Thickness(0, 0, 8, 0);
+            Put(controls, 1, rowSpan: 2);
+            Put(faders, 1, 1);
+            Put(foot, 2, 1);
+        }
+        else
+        {
+            int row = wide ? 1 : 2;
+            Put(head, 0);
+            if (controls != null) { controls.VerticalAlignment = VerticalAlignment.Top; Put(controls, 1); }
+            faders.HorizontalAlignment = HorizontalAlignment.Center;
+            faders.Margin = new Thickness(0, wide ? 0 : 6, 0, 0);
+            Put(faders, row);
+            Put(foot, row + 1);
+        }
+        return g;
     }
 
     Control Strip(LiveTrack t, int index, bool wide, double width)
     {
-        var box = new Border { Width = width, BorderBrush = Palette.Line, BorderThickness = new Thickness(0, 0, 1, 0), Background = Brushes.Transparent, Cursor = new Cursor(StandardCursorType.Hand) };
+        var box = StripCard(width);
+        box.Cursor = new Cursor(StandardCursorType.Hand);
         var top = new Border { Height = 2, VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false };
         bool hover = false;
         box.PointerEntered += (_, _) => { hover = true; Paint(); };
@@ -283,7 +340,8 @@ public partial class MainWindow
         void Paint()
         {
             bool selected = sel == t;
-            box.Background = selected ? Palette.Raised : hover ? Palette.Alpha(Palette.RaisedColor, 0.5) : Brushes.Transparent;
+            box.Background = selected ? Palette.Raised : hover ? Palette.Alpha(Palette.RaisedColor, 0.6) : Palette.Panel;
+            box.BorderBrush = selected ? Palette.Alpha(Palette.AccentColor, 0.4) : Palette.Line;
             top.Background = selected ? Palette.Accent : Brushes.Transparent;
         }
         mixerRefresh.Add(Paint);
@@ -307,46 +365,38 @@ public partial class MainWindow
         var solo = StripToggle("S", "Solo (S)", btn, () => t.Channel.Solo, true, () => EditTrack(t, x => x.Channel.Solo = !x.Channel.Solo, "solo"));
         var fader = new Fader();
         fader.Changed += v => EditTrack(t, x => x.Channel.Volume = v, "volume");
-        var db = new TextBlock { Classes = { "mono" }, FontSize = wide ? 11 : 10, Foreground = Palette.Dim, HorizontalAlignment = HorizontalAlignment.Center };
+        var db = new TextBlock { Classes = { "mono" }, FontSize = wide ? 11 : 10, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center };
         mixerRefresh.Add(() => { fader.Value = t.Channel.Volume; db.Text = $"{Fader.Db(t.Channel.Volume)} dB"; });
-        var meter = new MixerMeter(wide);
-        var faderRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        faderRow.Children.Add(fader); faderRow.Children.Add(meter);
+        var meter = new MixerMeter();
+        var faders = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        faders.Children.Add(fader); faders.Children.Add(meter);
 
-        var content = new Grid();
-        content.Children.Add(top);
-        box.Child = content;
-
+        Control head, controls, foot;
         if (wide)
         {
-            var body = new DockPanel { Margin = new Thickness(10) };
-            var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto,Auto"), Margin = new Thickness(0, 0, 0, 8) };
-            head.Children.Add(badge);
-            name.Margin = new Thickness(8, 0); Grid.SetColumn(name, 1); head.Children.Add(name);
-            emptyHint.Margin = new Thickness(0, 0, 8, 0); Grid.SetColumn(emptyHint, 2); head.Children.Add(emptyHint);
-            Grid.SetColumn(mute, 3); head.Children.Add(mute);
-            solo.Margin = new Thickness(4, 0, 0, 0); Grid.SetColumn(solo, 4); head.Children.Add(solo);
-            DockPanel.SetDock(head, Dock.Top); body.Children.Add(head);
-
-            var right = new DockPanel { Margin = new Thickness(12, 0, 0, 0) };
-            DockPanel.SetDock(db, Dock.Bottom); db.Margin = new Thickness(0, 4, 0, 0); right.Children.Add(db);
-            right.Children.Add(faderRow);
-            DockPanel.SetDock(right, Dock.Right); body.Children.Add(right);
-
+            var h = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto,Auto"), Height = 28 };
+            h.Children.Add(badge);
+            name.Margin = new Thickness(8, 0); Grid.SetColumn(name, 1); h.Children.Add(name);
+            emptyHint.Margin = new Thickness(0, 0, 8, 0); Grid.SetColumn(emptyHint, 2); h.Children.Add(emptyHint);
+            Grid.SetColumn(mute, 3); h.Children.Add(mute);
+            solo.Margin = new Thickness(4, 0, 0, 0); Grid.SetColumn(solo, 4); h.Children.Add(solo);
+            head = h;
             var fx = new StackPanel { Spacing = 6 };
-            body.Children.Add(new ScrollViewer { Content = fx, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
             WideFx(fx, t);
-            content.Children.Add(body);
+            controls = new ScrollViewer { Content = fx, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            foot = db;
             stripMeters[t.Track.Id] = (meter, wideGr ?? (_ => { }));
             wideGr = null;
         }
         else
         {
-            var body = new DockPanel { Margin = new Thickness(6, 8) };
+            // the name on one line and "VACÍA" under it, in a head of fixed height: a long name never pushes the fader down
+            var h = new StackPanel { Spacing = 2 };
+            name.HorizontalAlignment = HorizontalAlignment.Center; name.TextAlignment = TextAlignment.Center; name.Margin = new Thickness(0, 4, 0, 0);
+            h.Children.Add(name);
+            emptyHint.HorizontalAlignment = HorizontalAlignment.Center; h.Children.Add(emptyHint);
+            head = h;
             var stack = new StackPanel { Spacing = 6 };
-            name.HorizontalAlignment = HorizontalAlignment.Center; name.TextAlignment = TextAlignment.Center;
-            stack.Children.Add(name);
-            emptyHint.HorizontalAlignment = HorizontalAlignment.Center; stack.Children.Add(emptyHint);
             var knobs = new UniformGrid { Columns = 2 };
             knobs.Children.Add(MiniKnob("Pan", -1, 1, 0, () => t.Channel.Pan, () => FmtPan(t.Channel.Pan),
                 v => EditTrack(t, x => x.Channel.Pan = Math.Abs(v) < 0.04 ? 0 : v, "pan"), () => $"Paneo {FmtPan(t.Channel.Pan)} (doble click: centro)"));
@@ -379,15 +429,16 @@ public partial class MainWindow
             });
             toggles.Children.Add(c);
             stack.Children.Add(toggles);
-            DockPanel.SetDock(stack, Dock.Top); body.Children.Add(stack);
-            var foot = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Center };
-            foot.Children.Add(badge); db.VerticalAlignment = VerticalAlignment.Center; foot.Children.Add(db);
-            DockPanel.SetDock(foot, Dock.Bottom); body.Children.Add(foot);
-            faderRow.HorizontalAlignment = HorizontalAlignment.Center; faderRow.Margin = new Thickness(0, 6);
-            body.Children.Add(faderRow);
-            content.Children.Add(body);
+            controls = stack;
+            var f = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+            f.Children.Add(badge); f.Children.Add(db);
+            foot = f;
             stripMeters[t.Track.Id] = (meter, gr => grBar.Width = 22 * Math.Clamp(-gr / 24, 0, 1));
         }
+        var content = new Grid();
+        content.Children.Add(StripLayout(wide, head, controls, faders, foot));
+        content.Children.Add(top);
+        box.Child = content;
         return box;
     }
 
@@ -429,7 +480,7 @@ public partial class MainWindow
         sat.Body.Children.Add(Row(satKnob, satSide));
 
         // Comp
-        var lim = new Button { Content = "LIM", Classes = { "mono" }, FontSize = 10, FontWeight = FontWeight.Bold, Height = 24, MinHeight = 24, Padding = new Thickness(8, 0), CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1) };
+        var lim = new Button { Content = "LIM", Classes = { "mono" }, FontSize = 10, FontWeight = FontWeight.Bold, Height = 24, MinHeight = 24, Padding = new Thickness(5, 0), CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1) };
         lim.Click += (_, _) => StripComp(t, c => c.Limit = !c.Limit, "limit");
         mixerRefresh.Add(() =>
         {
@@ -467,10 +518,10 @@ public partial class MainWindow
         });
         compSide.Children.Add(preset); compSide.Children.Add(compLabel);
         comp.Body.Children.Add(Row(compKnob, compSide));
-        // gain reduction: 0..12 dB with ticks every 3 dB
-        var grRow = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,48"), Margin = new Thickness(0, 8, 0, 0) };
+        // gain reduction: 0..12 dB with ticks every 3 dB; label and readout on one line, the bar under them, so it fits any width
+        var grRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), RowDefinitions = new RowDefinitions("Auto,Auto"), Margin = new Thickness(0, 8, 0, 0) };
         ToolTip.SetTip(grRow, "Cuánto está bajando el compresor (y el limitador) el volumen ahora");
-        grRow.Children.Add(new TextBlock { Text = "COMPRIME", FontSize = 9, LetterSpacing = 0.8, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
+        grRow.Children.Add(new TextBlock { Text = "COMPRIME", FontSize = 9, LetterSpacing = 0.8, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 4) });
         var grFill = new Border { Background = Palette.Accent, HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
         var grTrack = new Grid { Height = 10, ClipToBounds = true, VerticalAlignment = VerticalAlignment.Center };
         grTrack.Children.Add(new Border { Background = Palette.Line, CornerRadius = new CornerRadius(2) });
@@ -481,9 +532,9 @@ public partial class MainWindow
             grTrack.SizeChanged += (_, e) => tick.Margin = new Thickness(Math.Round(e.NewSize.Width * x), 0, 0, 0);
             grTrack.Children.Add(tick);
         }
-        Grid.SetColumn(grTrack, 1); grRow.Children.Add(grTrack);
-        var grText = new TextBlock { Classes = { "mono" }, FontSize = 10, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-        Grid.SetColumn(grText, 2); grRow.Children.Add(grText);
+        Grid.SetRow(grTrack, 1); Grid.SetColumnSpan(grTrack, 2); grRow.Children.Add(grTrack);
+        var grText = new TextBlock { Classes = { "mono" }, FontSize = 10, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 4) };
+        Grid.SetColumn(grText, 1); grRow.Children.Add(grText);
         comp.Body.Children.Add(grRow);
         wideGr = gr =>
         {
@@ -555,30 +606,38 @@ public partial class MainWindow
         panel.Body.Children.Add(Row(knob, side));
     }
 
-    /// <summary>Port of FxPanel: power, icon and name over the effect's controls, which grey out while it is off.</summary>
+    /// <summary>Port of FxPanel: power, icon and name over the effect's controls, which grey out while it is off.
+    /// Narrower than <see cref="FxNarrowW"/> the power button keeps only its glyph and the icon goes, so the name fits.</summary>
     (Border Box, StackPanel Body) FxPanel(StackPanel host, string title, string icon, Func<bool> on, Action toggle, Func<bool, string> tip, Control? extra = null)
     {
-        var power = new Button { Classes = { "chip" }, Height = 24, MinHeight = 24, Padding = new Thickness(6, 0, 8, 0), CornerRadius = new CornerRadius(4) };
+        var glyph = new TextBlock { Classes = { "icon" }, Text = "", FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+        var state = new TextBlock { FontSize = 10, FontWeight = FontWeight.Bold, VerticalAlignment = VerticalAlignment.Center };
+        var power = new Button { Classes = { "chip" }, Height = 24, MinHeight = 24, Padding = new Thickness(6, 0), CornerRadius = new CornerRadius(4),
+            Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Children = { glyph, state } } };
         power.Click += (_, _) => toggle();
-        var iconText = new TextBlock { Classes = { "icon" }, Text = icon, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 4, 0) };
-        var name = new TextBlock { Text = title.ToUpperInvariant(), FontSize = 10, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.8, VerticalAlignment = VerticalAlignment.Center };
-        var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*,Auto"), Height = 32, Margin = new Thickness(6, 0) };
+        var iconText = new TextBlock { Classes = { "icon" }, Text = icon, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
+        var name = new TextBlock { Text = title.ToUpperInvariant(), FontSize = 10, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.8, VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(6, 0, 4, 0) };
+        var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto"), Height = 32, Margin = new Thickness(6, 0) };
         head.Children.Add(power);
         Grid.SetColumn(iconText, 1); head.Children.Add(iconText);
         Grid.SetColumn(name, 2); head.Children.Add(name);
-        if (extra != null) { extra.VerticalAlignment = VerticalAlignment.Center; Grid.SetColumn(extra, 4); head.Children.Add(extra); }
+        if (extra != null) { extra.VerticalAlignment = VerticalAlignment.Center; Grid.SetColumn(extra, 3); head.Children.Add(extra); }
         var body = new StackPanel { Margin = new Thickness(8) };
         var stack = new StackPanel();
         stack.Children.Add(new Border { Child = head, BorderBrush = Palette.Alpha(Palette.LineColor, 0.7), BorderThickness = new Thickness(0, 0, 0, 1) });
         stack.Children.Add(body);
         var box = new Border { CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1), Child = stack };
+        box.SizeChanged += (_, e) =>
+        {
+            bool narrow = e.NewSize.Width < FxNarrowW;
+            state.IsVisible = iconText.IsVisible = !narrow;
+        };
         mixerRefresh.Add(() =>
         {
             bool lit = on();
-            var label = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-            label.Children.Add(new TextBlock { Classes = { "icon" }, Text = "", FontSize = 11, Foreground = lit ? Palette.App : Palette.Faint, VerticalAlignment = VerticalAlignment.Center });
-            label.Children.Add(new TextBlock { Text = lit ? "ON" : "OFF", FontSize = 10, FontWeight = FontWeight.Bold, Foreground = lit ? Palette.App : Palette.Faint, VerticalAlignment = VerticalAlignment.Center });
-            power.Content = label;
+            glyph.Foreground = state.Foreground = lit ? Palette.App : Palette.Faint;
+            state.Text = lit ? "ON" : "OFF";
             power.Background = lit ? Palette.Accent : Brushes.Transparent;
             power.BorderBrush = lit ? Palette.Accent : Palette.Line;
             ToolTip.SetTip(power, tip(lit));
@@ -603,12 +662,26 @@ public partial class MainWindow
         return col;
     }
 
+    /// <summary>A knob beside its other controls; in a panel narrower than <see cref="FxNarrowW"/> the knob goes on top,
+    /// centred, so the controls keep the whole width instead of being cut.</summary>
     static Grid Row(Control left, Control right)
     {
-        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
-        g.Children.Add(left);
-        right.Margin = new Thickness(8, 0, 0, 0);
-        Grid.SetColumn(right, 1); g.Children.Add(right);
+        var g = new Grid();
+        g.Children.Add(left); g.Children.Add(right);
+        bool? stacked = null;
+        void Arrange(bool s)
+        {
+            if (s == stacked) return;
+            stacked = s;
+            g.ColumnDefinitions = new ColumnDefinitions(s ? "*" : "Auto,*");
+            g.RowDefinitions = new RowDefinitions(s ? "Auto,Auto" : "Auto");
+            Grid.SetColumn(right, s ? 0 : 1); Grid.SetRow(right, s ? 1 : 0);
+            left.HorizontalAlignment = s ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+            right.Margin = s ? new Thickness(0, 6, 0, 0) : new Thickness(8, 0, 0, 0);
+        }
+        Arrange(false);
+        // the panel's body has 8 px of margin on each side and a 1 px border
+        g.SizeChanged += (_, e) => Arrange(e.NewSize.Width + 18 < FxNarrowW);
         return g;
     }
 
@@ -671,34 +744,32 @@ public partial class MainWindow
     Control ReturnBox(bool wide, string title, string icon, SelectButton presets, Func<bool> muted, Action toggleMute, Control? extraRow,
         IEnumerable<Control> knobs, Func<double> gain, Action<double> setGain, out MixerMeter meter)
     {
-        var box = new Border { Width = wide ? ReturnWideW : ReturnCompactW, Background = Palette.Panel, BorderBrush = Palette.Line, BorderThickness = new Thickness(1, 0, 0, 0), Padding = new Thickness(8) };
-        var dock = new DockPanel();
-        var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), Margin = new Thickness(0, 0, 0, 6) };
+        var box = StripCard(wide ? ReturnWideW : ReturnCompactW);
+        var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), Height = 28 };
         var name = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
         name.Children.Add(new TextBlock { Classes = { "icon" }, Text = icon, FontSize = 13, Foreground = Palette.Accent, VerticalAlignment = VerticalAlignment.Center });
         name.Children.Add(new TextBlock { Text = title, FontSize = 11, FontWeight = FontWeight.SemiBold, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center });
         head.Children.Add(name);
-        presets.Margin = new Thickness(6, 0); Grid.SetColumn(presets, 1); head.Children.Add(presets);
+        presets.Margin = new Thickness(6, 0); presets.VerticalAlignment = VerticalAlignment.Center; Grid.SetColumn(presets, 1); head.Children.Add(presets);
         var mute = StripToggle("M", "Mute del retorno", 24, muted, false, toggleMute);
+        mute.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(mute, 2); head.Children.Add(mute);
-        DockPanel.SetDock(head, Dock.Top); dock.Children.Add(head);
-        if (extraRow != null) { extraRow.Margin = new Thickness(0, 0, 0, 6); DockPanel.SetDock(extraRow, Dock.Top); dock.Children.Add(extraRow); }
 
-        var right = new DockPanel { Margin = new Thickness(8, 0, 0, 0) };
         var fader = new Fader();
         fader.Changed += setGain;
-        var db = new TextBlock { Classes = { "mono" }, FontSize = 10, Foreground = Palette.Dim, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 0) };
+        var db = new TextBlock { Classes = { "mono" }, FontSize = wide ? 11 : 10, Foreground = Palette.Dim };
         mixerRefresh.Add(() => { fader.Value = gain(); db.Text = $"{Fader.Db(gain())} dB"; });
         meter = new MixerMeter();
-        var faderRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        faderRow.Children.Add(fader); faderRow.Children.Add(meter);
-        DockPanel.SetDock(db, Dock.Bottom); right.Children.Add(db); right.Children.Add(faderRow);
-        DockPanel.SetDock(right, Dock.Right); dock.Children.Add(right);
+        var faders = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        faders.Children.Add(fader); faders.Children.Add(meter);
 
-        var grid = new UniformGrid { Columns = wide ? 3 : 2, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, wide ? 4 : 0, 0, 0) };
+        var controls = new StackPanel { Spacing = 6 };
+        if (extraRow != null) controls.Children.Add(extraRow);
+        var grid = new UniformGrid { Columns = 3 };
         foreach (var k in knobs) grid.Children.Add(k);
-        dock.Children.Add(new ScrollViewer { Content = grid, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-        box.Child = dock;
+        controls.Children.Add(grid);
+        box.Child = StripLayout(wide, head, new ScrollViewer { Content = controls, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto },
+            faders, db);
         return box;
     }
 
@@ -770,8 +841,9 @@ public partial class MainWindow
             presets.SelectedIndex = p == "" ? 0 : Array.FindIndex(DelayBus.Presets, x => x.Label == p);
         });
 
-        // mode + note value (or "Libre (ms)")
-        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+        // mode + note value (or "Libre (ms)"): side by side in a compact return, one under the other in a wide one,
+        // where the fader takes part of the width
+        var row = new Grid { ColumnDefinitions = new ColumnDefinitions(wide ? "*" : "Auto,*"), RowDefinitions = new RowDefinitions(wide ? "Auto,Auto" : "Auto") };
         var modes = new StackPanel { Orientation = Orientation.Horizontal };
         foreach (var (id, label, tip) in new[]
         {
@@ -785,9 +857,9 @@ public partial class MainWindow
             mixerRefresh.Add(() => b.IsChecked = Delay.Mode == id);
             modes.Children.Add(b);
         }
-        row.Children.Add(new Border { Classes = { "seg" }, Child = modes, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(new Border { Classes = { "seg" }, Child = modes, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left });
         var division = StripSelect(DelayBus.Divisions.Select(d => d.Label).Append("Libre (ms)").ToArray());
-        division.Margin = new Thickness(4, 0, 0, 0);
+        division.Margin = wide ? new Thickness(0, 6, 0, 0) : new Thickness(4, 0, 0, 0);
         division.Selected += i =>
         {
             if (i == DelayBus.Divisions.Length)
@@ -805,7 +877,8 @@ public partial class MainWindow
             double bpm = store?.Project.Settings.Bpm ?? 110;
             ToolTip.SetTip(division, $"Tiempo de las repeticiones: {Math.Round(DelayBus.DelayTimeSec(ToParams(d), bpm) * 1000):0} ms{(d.Sync ? $" a {bpm:0.##} BPM" : "")}");
         });
-        Grid.SetColumn(division, 1); row.Children.Add(division);
+        if (wide) Grid.SetRow(division, 1); else Grid.SetColumn(division, 1);
+        row.Children.Add(division);
 
         var time = BusKnob(wide, "Tiempo", DelayMsMap.To(defaults.TimeMs), () => DelayMsMap.To(Delay.TimeMs), () => $"{Math.Round(Delay.TimeMs):0} ms",
             p => BusEdit(s => s.Delay.TimeMs = Math.Round(DelayMsMap.From(p)), "delay:timeMs"), "Tiempo entre repeticiones");
@@ -830,19 +903,18 @@ public partial class MainWindow
         return box;
     }
 
-    Control Master()
+    Control Master(bool wide)
     {
-        var dock = new DockPanel { Margin = new Thickness(0, 8) };
-        var title = new TextBlock { Text = "Master", FontSize = 11, FontWeight = FontWeight.SemiBold, Foreground = Palette.Dim, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 6) };
-        DockPanel.SetDock(title, Dock.Top); dock.Children.Add(title);
-        var output = new TextBlock { Text = "Salida", FontSize = 10, Foreground = Palette.Faint, HorizontalAlignment = HorizontalAlignment.Center };
-        DockPanel.SetDock(output, Dock.Bottom); dock.Children.Add(output);
+        var box = StripCard(MasterW);
+        var head = new StackPanel { Spacing = 4 };
+        head.Children.Add(new TextBlock { Text = "Master", FontSize = 11, FontWeight = FontWeight.SemiBold, Foreground = Palette.Dim, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 5, 0, 0) });
         limLight = new TextBlock { Text = "LIM", Classes = { "mono" }, FontSize = 9, FontWeight = FontWeight.Bold, LetterSpacing = 0.8, Foreground = Palette.Accent, Opacity = 0.25,
-            HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 6) };
+            HorizontalAlignment = HorizontalAlignment.Center };
         ToolTip.SetTip(limLight, "Limitador del master (-0.3 dB): se ilumina cuando está actuando");
-        DockPanel.SetDock(limLight, Dock.Bottom); dock.Children.Add(limLight);
-        masterMeter = new MixerMeter(wide: true) { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4) };
-        dock.Children.Add(masterMeter);
-        return new Border { Width = MasterW, Background = Palette.Panel, BorderBrush = Palette.Line, BorderThickness = new Thickness(1, 0, 0, 0), Child = dock };
+        head.Children.Add(limLight);
+        masterMeter = new MixerMeter(wide: true);
+        var output = new TextBlock { Text = "Salida", FontSize = 10, Foreground = Palette.Faint };
+        box.Child = StripLayout(wide, head, null, masterMeter, output);
+        return box;
     }
 }

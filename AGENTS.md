@@ -291,6 +291,10 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
   compactas ("Auto" según el ancho, como la web). Las ediciones de canal pasan por `EditTrack`, las de
   los buses por `BusEdit`. Los medidores del mixer usan el degradé de la web (verde → amarillo → rojo,
   `Palette.Meter*`), distinto del `StereoMeter`. Los desplegables son `SelectButton`, no `ComboBox`.
+  Cada canal es una tarjeta (`StripCard`) y todos (pistas, retornos, master) se arman con `StripLayout`,
+  que les da las mismas filas: así los faders y medidores tienen siempre la misma altura. Lo que vaya en
+  la cabecera o en los controles tiene que entrar en su fila fija, no estirarla. Los paneles de efecto
+  angostos se reacomodan (`FxNarrowW`) en vez de recortar controles.
 - **Barra del proyecto** (derecha, `MainWindow.Color.cs`): lo que es del proyecto, como en la web
   (lo de la pista va al inspector). Ocupa la altura de la preview y el timeline, se pliega a una columna
   de íconos y recuerda pestaña y secciones plegadas. Las ediciones de Color pasan por `ColorEdit(...)`.
