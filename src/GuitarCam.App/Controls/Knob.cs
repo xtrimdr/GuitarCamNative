@@ -10,9 +10,15 @@ namespace GuitarCam.App.Controls;
 /// Port of Knob in GuitarCam/src/components/ui.tsx (the mixer's knobs): a 270° arc lit from the reset value to the
 /// current one, drag up/down (relative, Shift = fine), wheel (50 steps over the range, Shift = fine) and double-click
 /// to reset. Big knobs (≥ 32 px) get a filled cap and a thicker pointer, like the web.
+/// Avalonia only hit-tests what is painted (the web's svg takes its whole box), so the knob paints a transparent
+/// square <see cref="HitPad"/> px bigger than itself to catch the pointer anywhere around it, and its track lights up
+/// while hovered or dragged.
 /// </summary>
 public sealed class Knob : Control
 {
+    /// <summary>Extra px around the knob that still grab it: small knobs are hard to hit with the guitar on.</summary>
+    const double HitPad = 6;
+
     double value, dragValue, dragY;
     IPointer? pointer;
 
@@ -67,8 +73,10 @@ public sealed class Knob : Control
 
         double angle = -135 + (value - Min) / (Max - Min) * 270;
         double origin = -135 + (ResetTo - Min) / (Max - Min) * 270;
-        if (Big) ctx.DrawEllipse(Palette.Raised, Palette.Pen(Palette.Line), new Point(c, c), r - stroke * 1.1, r - stroke * 1.1);
-        ctx.DrawGeometry(null, Round(Palette.Line, stroke), Arc(-135, 135));
+        bool hot = IsPointerOver || pointer != null;
+        ctx.DrawRectangle(Brushes.Transparent, null, new Rect(Bounds.Size).Inflate(HitPad));
+        if (Big) ctx.DrawEllipse(Palette.Raised, Palette.Pen(hot ? Palette.Faint : Palette.Line), new Point(c, c), r - stroke * 1.1, r - stroke * 1.1);
+        ctx.DrawGeometry(null, Round(hot ? Palette.Faint : Palette.Line, stroke), Arc(-135, 135));
         if (Math.Abs(angle - origin) > 0.5)
             ctx.DrawGeometry(null, Round(Palette.Accent, stroke), Arc(Math.Min(origin, angle), Math.Max(origin, angle)));
         ctx.DrawLine(Round(Palette.Fg, Big ? 2.5 : 1.5), Polar(angle, Big ? r * 0.35 : 0), Polar(angle, Big ? r - stroke * 1.6 : r));
@@ -97,8 +105,14 @@ public sealed class Knob : Control
         Changed?.Invoke(Round(next));
     }
 
-    protected override void OnPointerReleased(PointerReleasedEventArgs e) { pointer?.Capture(null); pointer = null; e.Handled = true; }
-    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e) => pointer = null;
+    protected override void OnPointerReleased(PointerReleasedEventArgs e) { pointer?.Capture(null); pointer = null; e.Handled = true; InvalidateVisual(); }
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e) { pointer = null; InvalidateVisual(); }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == IsPointerOverProperty) InvalidateVisual();
+    }
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
