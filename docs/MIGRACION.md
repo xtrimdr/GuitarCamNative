@@ -168,11 +168,11 @@ proyecto); guardar con el mismo nombre reemplaza; se borran desde el formulario 
   recuperar una toma) y oculta las ediciones de clips. Como en la web, "salió / volvió al timeline" se
   registra al guardar comparando con el guardado anterior (`ProjectStore.LogTimelineChanges`).
 
-### 2.4 Guardado ◐
+### 2.4 Guardado ✅
 - Web: autoguardado con demora; cada toma se sube apenas se graba y, si falla, queda pendiente para
   reintentar; aviso al cerrar si hay algo sin guardar. Las tomas nunca se borran desde la interfaz.
-- Nativa: autoguardado a 1,5 s, Ctrl+S, historial de versiones, recuperación de grabaciones ✅. Falta el
-  indicador de guardado de la barra (§1.1).
+- Nativa: autoguardado a 1,5 s, Ctrl+S, historial de versiones, recuperación de grabaciones e indicador
+  de guardado en el chip del proyecto (§1.1) ✅.
 
 ---
 
@@ -236,7 +236,7 @@ LIM del master con la reducción del limitador, `MasterLimiter.TakeReductionDb`)
 
 ### 4.5 Tempo (`TempoControl`)
 BPM tipo FL Studio: arrastrar arriba/abajo la parte entera o la decimal, rueda (Shift = fino), doble
-clic para escribirlo, botón **TAP** y tecla **T** (tap tempo) ✗.
+clic para escribirlo, botón **TAP** y tecla **T** (tap tempo) ✅ (`Controls/TempoControl.cs`).
 
 ---
 
@@ -259,8 +259,8 @@ tanh con ADAA sobre el residuo (la señal limpia pasa intacta; Vida 0% es transp
 curva con bias (pares); Cinta = simétrica con corte de agudos que cierra con el drive y +1,5 dB en
 90 Hz. "Vida" fija el drive según el nivel medido de la toma.
 
-### 5.3 Compresor ◐ (presets y EQ del preset portados y verificados; falta la UI y enchufarlos)
-Port del worklet ✅ con limitador de pista ✅. Falta: **presets** Rasgueo / Arpegio / Punteo + cantidad,
+### 5.3 Compresor ✅ (presets, EQ del preset y su UI en el inspector, enchufados y verificados)
+Port del worklet ✅ con limitador de pista ✅. **Presets** Rasgueo / Arpegio / Punteo + cantidad,
 que calculan umbral, ratio, tiempos, knee y make-up a partir del nivel de la toma (`compPresets.ts`;
 editar un valor pasa a "Manual"); la **EQ del preset** (`CompEq`: HPF, barro, presencia, aire); el
 compresor **prendido por defecto** en tomas nuevas (Punteo en la segunda pista, Rasgueo en las demás).
@@ -272,21 +272,21 @@ una de 2 biquads (24 dB/oct = dos etapas Butterworth). Editor gráfico (`EqEdito
 Ganancia / Ancho (Q) / Pendiente (Corte suave / Corte firme); presets Plano, Rítmica, Punteo, Acústica,
 Al frente ("Personalizado" si se tocó).
 
-### 5.5 Reverb ◐ (bus y presets portados y verificados; falta enchufarlo y su UI)
+### 5.5 Reverb ✅ (bus y presets verificados; envío en el inspector, retorno en el mixer)
 Bus: pasa-altos → pre-delay → convolución con impulso sintético con semilla (decay / tono / ancho) →
 retorno → master. Igual en vivo y en la exportación.
 
-### 5.6 Delay ◐ (bus, ducker y presets portados y verificados; falta enchufarlo y su UI)
+### 5.6 Delay ✅ (bus, ducker y presets verificados; envío en el inspector, retorno en el mixer)
 Dos líneas con pasa-altos y pasa-bajos dentro de la realimentación (cada repetición más oscura).
 Estéreo: cada lado repite sobre sí mismo, R hasta 12 ms después (× ancho). Ping-pong: entra en mono a L
 y rebota L → R → L. Tiempo como nota del BPM o libre en ms; los cambios en vivo se deslizan. Después,
 matriz de ancho → **ducker** (baja las repeticiones hasta 24 dB × "duck" mientras suena la señal
 directa) → retorno → master.
 
-### 5.7 Entrada y monitoreo ◐
+### 5.7 Entrada y monitoreo ✅
 - Ganancia de entrada (+12 dB por defecto), modo de canales Estéreo / Mono 1 / Mono 2, limitador suave
-  en la captura ✅ (motor, verificado); medidor de entrada con pico retenido y luz de clip ◐ (medidor sí).
-- **Monitoreo por software** opcional (para interfaces sin monitoreo directo) ◐ (motor sí; falta la opción en Configuración).
+  en la captura ✅ (motor, verificado); medidor de entrada con pico retenido y luz de clip ✅ (`StereoMeter`).
+- **Monitoreo por software** opcional (para interfaces sin monitoreo directo) ✅ (Configuración → Salida).
 
 ### 5.8 Grabación ✅
 Todo programado sobre un mismo reloj de audio: pistas de fondo, click, cuenta de 4 y el comienzo de la
@@ -316,7 +316,8 @@ detecta tus ataques). Guarda mediana y dispersión por par entrada + salida, con
 el sample rate de ese momento, para avisar si el equipo cambió. "Descartar la medición y usar lo que
 informa el navegador" (en nativo: lo que informa el driver ASIO).
 - Nativa: la medición (con cable y tocando), el guardado y el aviso de equipo cambiado ✅
-  (`LatencyCalibration.cs`, `gclab latencia`); falta la pantalla de Configuración ✗.
+  (`LatencyCalibration.cs`, `gclab latencia`) y la pantalla de Configuración → Sincronización ✅ (falta probarla
+  con el cable o tocando).
 
 ---
 
