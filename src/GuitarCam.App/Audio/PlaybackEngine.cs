@@ -67,6 +67,8 @@ public sealed class PlaybackEngine : IDisposable
     public string Status { get; private set; } = "Audio apagado";
     public string? DriverName => io?.Driver;
     public bool IsOpen => io != null;
+    /// <summary>The driver's buffer size in samples (0 with no audio).</summary>
+    public int BufferFrames => io?.FramesPerBuffer ?? 0;
     public int InputOffset { get; private set; }
     public int OutputOffset { get; private set; }
     /// <summary>Output channels of the open driver (the Configuración "Dispositivo" lists them in pairs).</summary>
@@ -167,6 +169,16 @@ public sealed class PlaybackEngine : IDisposable
 
     public bool IsCountingIn => CountdownBeat != null;
 
+    /// <summary>The open driver asked to be reopened (new buffer size from its panel). Raised on the driver's thread.</summary>
+    public event Action? DriverResetRequested;
+
+    /// <summary>Opens the driver's control panel; with no driver open, the one <see cref="Open"/> would pick.</summary>
+    public void ShowDriverPanel()
+    {
+        if (io != null) io.ShowControlPanel();
+        else AsioDuplex.ShowControlPanel(AsioDuplex.PickDriver(null));
+    }
+
     public void Open(string? wantedDriver = null, int inputOffset = 0, int outputOffset = 0)
     {
         try
@@ -175,6 +187,7 @@ public sealed class PlaybackEngine : IDisposable
             io = null;
             string driver = AsioDuplex.PickDriver(wantedDriver);
             io = new AsioDuplex(driver, SampleRate, inputOffset, 2, outputOffset, Process);
+            io.ResetRequested += () => DriverResetRequested?.Invoke();
             InputOffset = inputOffset;
             OutputOffset = outputOffset;
             io.Start();

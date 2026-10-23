@@ -209,13 +209,14 @@ public sealed class VideoTakeWriter : IDisposable
         return new VideoTakeResult(Path, written / Fps, written, duplicated, Interlocked.Read(ref dropped), error);
     }
 
-    /// <summary>Stops and removes the file ("Parar sin guardar", or a take too short to keep).</summary>
-    public void Discard()
+    /// <summary>Stops and removes the file: to the Recycle Bin for "Parar sin guardar", deleted for a take too short to keep.</summary>
+    public void Discard(bool toRecycleBin = false)
     {
         if (!Close()) return;
         Kill();
         proc.WaitForExit(5000);
-        TryDelete(Path);
+        if (toRecycleBin) TakeRecorder.TryRecycleFile(Path);
+        else TryDelete(Path);
     }
 
     /// <summary>

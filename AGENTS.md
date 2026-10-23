@@ -388,7 +388,8 @@ Escribí como el código que ya está:
 
 1. `dotnet build` desde la raíz (`GuitarCamNative.slnx`) tiene que compilar sin warnings nuevos.
 2. Probá el motor/proyecto con `gclab` y la ventana con
-   `src\GuitarCam.App\bin\Debug\net10.0-windows\GuitarCam.exe` (abre el último proyecto).
+   `src\GuitarCam.App\bin\Debug\net10.0-windows\GuitarCam.exe` (arranca en el gestor de proyectos, como la web;
+   con una carpeta de proyecto como argumento la abre directo).
 3. Hacen falta una interfaz ASIO y un proyecto con tomas para probar de verdad. Si no los tenés, decí qué no pudiste probar.
 4. Al revisar capturas de pantalla: las de GDI dan alfa 0 en píxeles negros y algunos visores los pintan
    blancos. Mirá el RGB, no el alfa.

@@ -80,11 +80,22 @@ public sealed class AsioDuplex : IDisposable
         asio.ChannelOffset = outputOffset;
         asio.InitRecordAndPlayback(new SilenceProvider(WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, 2)), inputChannels, sampleRate);
         asio.AudioAvailable += OnAudio;
+        asio.DriverResetRequest += OnResetRequest;
     }
 
     public int DriverInputChannels => asio.DriverInputChannelCount;
     public int DriverOutputChannels => asio.DriverOutputChannelCount;
     public int ReportedOutputLatency => asio.PlaybackLatency;
+
+    /// <summary>
+    /// The driver asks to be reopened (kAsioResetRequest), typically after its buffer size changed in its own
+    /// control panel. Raised on whatever thread the driver uses: hand it to another thread and reopen there.
+    /// </summary>
+    public event Action? ResetRequested;
+    void OnResetRequest(object? sender, EventArgs e) => ResetRequested?.Invoke();
+
+    /// <summary>Opens the driver's own settings window (buffer size, clock…) on the open instance.</summary>
+    public void ShowControlPanel() => asio.ShowControlPanel();
 
     public void Start() => asio.Play();
 
@@ -189,6 +200,7 @@ public sealed class AsioDuplex : IDisposable
     public void Dispose()
     {
         asio.AudioAvailable -= OnAudio;
+        asio.DriverResetRequest -= OnResetRequest;
         asio.Stop();
         asio.Dispose();
     }

@@ -307,7 +307,9 @@ public sealed class TakeRecorder : IDisposable
         double durationSec = totalFrames / (double)SampleRate;
         if (discard || durationSec <= MinTakeDurationSec)
         {
-            TryDeleteFile(Path);
+            // "Parar sin guardar" may be a slip: that take goes to the Recycle Bin; a too-short one is just noise.
+            if (discard && durationSec > MinTakeDurationSec) TryRecycleFile(Path);
+            else TryDeleteFile(Path);
             return null;
         }
 
@@ -352,6 +354,21 @@ public sealed class TakeRecorder : IDisposable
     /// Port of <c>App.tsx:1027</c>: the second lane defaults to <c>"lead"</c> (Punteo), all other lanes to <c>"rhythm"</c> (Rasgueo).
     /// </summary>
     public static string DefaultCompPreset(int slot) => slot == 1 ? "lead" : "rhythm";
+
+    /// <summary>Sends a file to the Windows Recycle Bin; if that fails the file stays where it is.</summary>
+    public static void TryRecycleFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(path, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                    Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or OperationCanceledException)
+        {
+            // left in media/: nothing points at it and it is the user's take
+        }
+    }
 
     static void TryDeleteFile(string path)
     {

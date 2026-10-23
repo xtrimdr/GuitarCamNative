@@ -337,7 +337,7 @@ Pestaña **Color** de la barra derecha, secciones Plantillas / Filtro / Ajustes 
 
 ---
 
-## 7. Configuración (`SettingsDialog`) ✅ (falta el botón del panel del driver)
+## 7. Configuración (`SettingsDialog`) ✅
 
 Diálogo de ajustes del programa (no del proyecto), con los atajos apagados mientras está abierto.
 - **Entradas y salidas**: interfaz (refrescar dispositivos), canales (Estéreo: Input 1 → L, Input 2 → R;
@@ -354,7 +354,9 @@ Diálogo de ajustes del programa (no del proyecto), con los atajos apagados mien
   recuerdan (`audio.driver`, `audio.outputOffset` en `config.json`), el resto vive en memoria como en la
   web. Cámara: la lista es la de DirectShow por FFmpeg (`Video/LiveCamera.cs`); como en la web, la cámara,
   la resolución, la IP, el espejo y la latencia de cámara viven en memoria y al abrir se vuelve a elegir
-  la cámara por la preferencia de la web. Falta el botón del panel del driver (tamaño de buffer, hoy `gclab panel`).
+  la cámara por la preferencia de la web. Debajo del medidor de entrada, "Buffer" muestra el tamaño actual y
+  "Panel del driver" abre el panel del fabricante (como `gclab panel`); cuando el driver avisa que cambió
+  (kAsioResetRequest) la app reabre el audio sola, y si está grabando o calibrando espera a que termine.
 
 ---
 
@@ -424,7 +426,10 @@ Los atajos no corren mientras se escribe en un campo ni con Configuración abier
 - **Video al reproducir y al mover el cabezal**: cada toma sigue al cabezal ✅ (decodificador FFmpeg).
 - **Miniaturas** de la tira de video, generadas y cacheadas por toma ✗.
 - **Selector de carpetas moderno de Windows** y "Mostrar en el Explorador" trayendo la ventana al frente ✗.
-- **Papelera de reciclaje** para todo lo que se borra (nunca borrado definitivo) ✗.
+- **Papelera de reciclaje** para todo lo que se borra (nunca borrado definitivo) ✅: proyectos (gestor),
+  tomas no usadas y exportaciones (Historial). Diferencia nativa: la nativa escribe la toma mientras graba,
+  así que "Parar sin guardar" la manda a la Papelera (WAV y video) en vez de borrarla; lo que se tira sin
+  preguntar son solo las tomas de menos de medio segundo, los temporales y las copias viejas del historial.
 - **Lanzador**: acceso directo con ícono que levanta la app y la cierra con la ventana. En nativo es
   directamente el `.exe`; falta el ícono y el acceso directo ✗.
 

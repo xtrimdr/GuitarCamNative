@@ -106,6 +106,13 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
 
 ## Hecho
 
+- 2026-10-23: Configuración → Entradas y salidas (§7 de MIGRACION): "Buffer" con el tamaño actual y el botón
+  "Panel del driver" (`PlaybackEngine.ShowDriverPanel`); cuando el driver pide reiniciarse (nuevo buffer) el
+  audio se reabre solo, esperando si está grabando o calibrando (`AsioDuplex.ResetRequested`). Papelera (§11): lo
+  que se borraba ya iba a la Papelera; ahora también la toma de "Parar sin guardar" (WAV y video), con un aviso en
+  la barra de estado. F2 en el gestor ya estaba. Probado: abrir y cerrar el panel de la Scarlett y descartar una
+  toma en la copia de prueba. Sin probar: cambiar el buffer desde el panel (no toqué la configuración de la interfaz).
+
 - 2026-10-23: timeline (§3 y §1.7 de MIGRACION): la esquina de la regla quedó como la de la web (modo de regla
   en un recuadro con el activo resaltado, imán con su ícono, "Ver todo" deshabilitado si ya está ajustado,
   altura de pistas de a 2 px con el slider chico de la web) y la altura de la timeline se recuerda

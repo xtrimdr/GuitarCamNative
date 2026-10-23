@@ -43,6 +43,9 @@ public sealed partial class SettingsDialog : UserControl
     readonly List<ToggleButton> modeButtons = [];
     readonly InspectorSlider gain;
     readonly TextBlock outputHelp = Help("");
+    readonly TextBlock bufferText = new() { FontSize = 12, Foreground = Palette.Dim, Classes = { "mono" }, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+    readonly Button panelButton = new() { Classes = { "btn", "outline" }, Height = 28, Padding = new Thickness(10, 0), FontSize = 12, Content = "Panel del driver" };
+    DispatcherTimer? resetRetry;
     readonly ToggleSwitch monitorSwitch = new() { VerticalAlignment = VerticalAlignment.Center };
     readonly TextBlock pairText = new() { FontSize = 11, Foreground = Palette.Faint, TextTrimming = TextTrimming.CharacterEllipsis };
     readonly StackPanel readout = new() { Spacing = 4 };
@@ -85,6 +88,10 @@ public sealed partial class SettingsDialog : UserControl
         };
         input.Children.Add(Field("Interfaz", driverBox));
         input.Children.Add(Meter);
+        // native only: the buffer size lives in the driver's own panel (the web had the browser's fixed buffer)
+        ToolTip.SetTip(panelButton, "Abrí el panel del driver para cambiar el tamaño del buffer. Cuando el driver lo cambia, reabro el audio solo.");
+        panelButton.Click += (_, _) => ShowDriverPanel();
+        input.Children.Add(Field("Buffer", Row(bufferText, panelButton)));
         var modes = new UniformGrid { Columns = 3 };
         foreach (var (mode, text, tip) in new[]
         {
@@ -198,6 +205,31 @@ public sealed partial class SettingsDialog : UserControl
         cam = camera;
         busy = recordingBusy;
         camera.Changed += () => Dispatcher.UIThread.Post(Refresh);
+        e.DriverResetRequested += () => Dispatcher.UIThread.Post(DriverReset);
+    }
+
+    void ShowDriverPanel()
+    {
+        if (engine == null) return;
+        try { engine.ShowDriverPanel(); }
+        catch (Exception x) { bufferText.Text = $"No pude abrir el panel del driver: {x.Message}"; }
+    }
+
+    /// <summary>
+    /// The driver asked to be reopened (its buffer changed). While recording or calibrating it waits and tries
+    /// again every second, so a take is never cut by a click in the driver's panel.
+    /// </summary>
+    void DriverReset()
+    {
+        if (engine is not { IsOpen: true } e) return;
+        if (busy() || e.Calibrating || reopening)
+        {
+            resetRetry ??= new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => DriverReset());
+            resetRetry.Start();
+            return;
+        }
+        resetRetry?.Stop();
+        _ = Reopen(e.DriverName, e.OutputOffset);
     }
 
     public void Show(string startTab = "audio")
@@ -326,6 +358,9 @@ public sealed partial class SettingsDialog : UserControl
             driverBox.ItemsSource = drivers.Length > 0 ? drivers : ["Sin dispositivos"];
             driverBox.SelectedItem = drivers.Length > 0 ? e.DriverName : "Sin dispositivos";
             driverBox.IsEnabled = drivers.Length > 0 && !locked;
+            bufferText.Text = reopening ? "Reabriendo el audio…" : e.BufferFrames > 0
+                ? $"{e.BufferFrames} muestras · {1000.0 * e.BufferFrames / PlaybackEngine.SampleRate:0.0} ms" : "Sin audio";
+            panelButton.IsEnabled = drivers.Length > 0 && !locked;
             foreach (var b in modeButtons) b.IsChecked = (InputChannelMode)b.Tag! == e.InputChannelMode;
             gain.Set(e.InputGainDb);
 

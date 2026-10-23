@@ -115,6 +115,7 @@ public partial class MainWindow
     {
         if (recJournal is not { } j || recStopping || store == null) return;
         recStopping = true;
+        bool wasCountingIn = engine.IsCountingIn;
         var st = store;
         bool first = recFirstTake;
         var video = recVideo;
@@ -129,7 +130,7 @@ public partial class MainWindow
             {
                 var r = engine.StopRecording(discard, OverdubOffsetMs, first);
                 if (video == null) return (r, null);
-                if (r == null) video.Discard();
+                if (r == null) video.Discard(toRecycleBin: discard);
                 var v = r == null ? null : video.Finish(r.DurationSec);
                 video.Dispose();
                 return (r, v);
@@ -161,6 +162,7 @@ public partial class MainWindow
             {
                 st.EndRecording(j.MediaId);
                 if (problem != null) Status(problem);
+                else if (discard && !wasCountingIn) Status("Descarté la toma: el archivo quedó en la Papelera por si lo necesitás.");
                 return;
             }
             j.SyncMs = res.SyncMs;
