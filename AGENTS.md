@@ -211,7 +211,10 @@ borde 0,45 / 0,9). El hover del acento es `#4fdcf1`. El tema es siempre oscuro (
 
 - UI: **Segoe UI Variable Text** (fallback Segoe UI). Números y tiempos: **Cascadia Mono** (fallback Consolas).
   Íconos: **Segoe Fluent Icons** (fallback Segoe MDL2 Assets), como `TextBlock` con clase `icon` y el
-  glifo en `Text` (`&#xE768;`). No agregues paquetes de íconos ni imágenes para íconos.
+  glifo en `Text` (`&#xE768;`). No agregues paquetes de íconos ni imágenes para íconos. Excepción: los
+  íconos de los efectos (Vida/saturación, compresor, EQ, reverb, delay) salen siempre de `FxIcon`
+  (`FxIcon.Sat`…), que dibuja los trazos de lucide de la web (`fxIcons.ts`). Usalo en todo lugar que
+  muestre un efecto, para que el inspector y el mixer no vuelvan a tener íconos distintos.
 - Escala usada (no inventes tamaños intermedios):
 
 | Tamaño | Uso |

@@ -189,7 +189,7 @@ public partial class MainWindow
         header.SetTrailing(action, powerButton);
         outer.Children.Add(header); outer.Children.Add(content);
         takeSections.Children.Add(border);
-        inspectorRefresh.Add(() => { bool enabled = on == null || on(); content.Opacity = enabled ? 1 : 0.4; sectionIcon.Foreground = enabled ? Palette.Accent : Palette.Faint; });
+        inspectorRefresh.Add(() => { bool enabled = on == null || on(); content.Opacity = enabled ? 1 : 0.4; FxIcon.SetColor(sectionIcon, enabled ? Palette.Accent : Palette.Faint); });
         SetSectionCollapsed(title, collapsedSections.Contains(title));
         return content;
     }
@@ -314,7 +314,7 @@ public partial class MainWindow
         var mix = Section("Mezcla", "\uE9E9", action: InspectorIcon("\uE74F", "Silenciar toma", () => Edit(t => t.Channel.Muted = !t.Channel.Muted, "mute")));
         Slider(mix, "Volumen", 0, 1.5, 0.01, 1, () => sel!.Channel.Volume, v => Edit(t => t.Channel.Volume = v, "volume"), v => $"{v * 100:0}%");
         Slider(mix, "Paneo", -1, 1, 0.05, 0, () => sel!.Channel.Pan, v => Edit(t => t.Channel.Pan = Math.Abs(v) < 0.04 ? 0 : v, "pan"), v => v == 0 ? "C" : $"{(v < 0 ? "L" : "R")} {Math.Abs(v) * 100:0}");
-        var sat = Section("Saturación", "\uE945", () => sel!.Channel.Sat.On, on => Edit(t => t.Channel.Sat.On = on, "sat.on"));
+        var sat = Section("Saturación", FxIcon.Sat, () => sel!.Channel.Sat.On, on => Edit(t => t.Channel.Sat.On = on, "sat.on"));
         var modes = new StackPanel { Orientation = Orientation.Horizontal };
         sat.Children.Add(new Border { Classes = { "seg" }, HorizontalAlignment = HorizontalAlignment.Left, Child = modes });
         foreach (var (id, text) in new[] { ("tube", "Válvula"), ("tape", "Cinta") })
@@ -328,7 +328,7 @@ public partial class MainWindow
             "Cuánto empuja la toma contra la válvula o la cinta. Se calibra con el nivel de la toma");
         var satHint = Help(""); sat.Children.Add(satHint);
         inspectorRefresh.Add(() => satHint.Text = sel!.Channel.Sat.Mode == "tape" ? "Compacta los golpes, suaviza los agudos ásperos y suma un poco de cuerpo en los graves." : "Armónicos pares: más cálido y redondo, los picos se ablandan sin perder brillo.");
-        var comp = Section("Compresor", "\uE9D9", () => sel!.Channel.Comp.On, on => CompEdit(c => c.On = on, "on", recalculate: true),
+        var comp = Section("Compresor", FxIcon.Comp, () => sel!.Channel.Comp.On, on => CompEdit(c => c.On = on, "on", recalculate: true),
             InspectorIcon("\uE777", "Volver al estilo por defecto", () => Edit(t =>
             {
                 bool on = t.Channel.Comp.On;
@@ -377,13 +377,13 @@ public partial class MainWindow
         inspectorRefresh.Add(() => limit.IsChecked = sel!.Channel.Comp.Limit); fineControls.Children.Add(limit);
         fineControls.Children.Add(Help("Al mover estos valores el compresor pasa a «Manual». Elegí un estilo para volver al control simple."));
         GrTrack.Child = GrBar;
-        var eqHost = Section("EQ", "\uE9D9", () => sel!.Channel.Eq.On, on => Edit(t => t.Channel.Eq.On = on, "eq.on"));
+        var eqHost = Section("EQ", FxIcon.Eq, () => sel!.Channel.Eq.On, on => Edit(t => t.Channel.Eq.On = on, "eq.on"));
         var eq = eqEditor = new EqEditor(); eq.Changed += value => Edit(t => t.Channel.Eq = value, "eq"); eqHost.Children.Add(eq);
         inspectorRefresh.Add(() => eq.Set(sel!.Channel.Eq));
-        var reverb = Section("Reverb", "\uE767", () => sel!.Channel.ReverbOn, on => Edit(t => t.Channel.ReverbOn = on, "reverb.on"));
+        var reverb = Section("Reverb", FxIcon.Reverb, () => sel!.Channel.ReverbOn, on => Edit(t => t.Channel.ReverbOn = on, "reverb.on"));
         EffectKnob(reverb, "Envío a reverb", 0, () => sel!.Channel.ReverbSend, v => Edit(t => t.Channel.ReverbSend = v, "reverb.send"), v => $"{v * 100:0}%", SendDb,
             "Cuánto de esta pista va al bus de reverb (después del fader)");
-        var delay = Section("Delay", "\uE823", () => sel!.Channel.DelayOn, on => Edit(t => t.Channel.DelayOn = on, "delay.on"));
+        var delay = Section("Delay", FxIcon.Delay, () => sel!.Channel.DelayOn, on => Edit(t => t.Channel.DelayOn = on, "delay.on"));
         EffectKnob(delay, "Envío a delay", 0, () => sel!.Channel.DelaySend, v => Edit(t => { t.Channel.DelaySend = v; t.Channel.DelayOn = true; }, "delay.send"), v => $"{v * 100:0}%", SendDb,
             "Cuánto de esta pista va al bus de delay (después del fader)");
         InitClipInspector();

@@ -18,12 +18,16 @@ public sealed class SectionHeader : Border
     readonly TextBlock chevron = new() { Classes = { "icon" }, Text = "", Foreground = Palette.Faint, FontSize = 10, Width = 16, VerticalAlignment = VerticalAlignment.Center };
     readonly TextBlock label;
     bool hover;
-    public TextBlock Icon { get; }
+    /// <summary>A Segoe glyph or an effect's <see cref="FxIcon"/>; paint it with <see cref="FxIcon.SetColor"/>.</summary>
+    public Control Icon { get; }
     public event Action? Toggled;
 
     public SectionHeader(string title, string icon)
     {
-        Icon = new TextBlock { Text = icon, Classes = { "icon" }, Foreground = Palette.Accent, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+        Icon = FxIcon.Create(icon, 12);
+        FxIcon.SetColor(Icon, Palette.Accent);
+        Icon.VerticalAlignment = VerticalAlignment.Center;
+        Icon.Margin = new Thickness(0, 0, 8, 0);
         label = new TextBlock { Text = title.ToUpperInvariant(), Classes = { "label" }, VerticalAlignment = VerticalAlignment.Center };
         Background = Brushes.Transparent;
         Padding = new Thickness(16, 14);

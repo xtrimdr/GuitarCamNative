@@ -171,7 +171,7 @@ public partial class MainWindow
                 power.BorderBrush = lit ? Palette.Accent : Palette.Line;
                 ToolTip.SetTip(power, powerTip?.Invoke(lit));
                 content.Opacity = lit ? 1 : 0.4;
-                sectionIcon.Foreground = lit ? Palette.Accent : Palette.Faint;
+                FxIcon.SetColor(sectionIcon, lit ? Palette.Accent : Palette.Faint);
             });
         }
         header.SetTrailing(action, powerButton);

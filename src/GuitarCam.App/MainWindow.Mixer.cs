@@ -457,7 +457,7 @@ public partial class MainWindow
         fx.Children.Add(pan);
 
         // Sat
-        var sat = FxPanel(fx, "Sat", "", () => t.Channel.Sat.On, () => EditTrack(t, x => x.Channel.Sat.On = !x.Channel.Sat.On, "sat.on"),
+        var sat = FxPanel(fx, "Sat", FxIcon.Sat, () => t.Channel.Sat.On, () => EditTrack(t, x => x.Channel.Sat.On = !x.Channel.Sat.On, "sat.on"),
             on => on ? "Apagar la saturación" : "Prender la saturación");
         var satKnob = FxKnob(sat, "vida", 0.3, () => t.Channel.Sat.Amount, v => EditTrack(t, x => { x.Channel.Sat.Amount = v; x.Channel.Sat.On = true; }, "sat.amount"),
             () => "Vida: cuánto empuja la toma contra la válvula o la cinta (doble click: 30%)");
@@ -490,7 +490,7 @@ public partial class MainWindow
             lim.BorderBrush = c.Limit && c.On ? Palette.Alpha(Palette.AccentColor, 0.6) : c.Limit ? Palette.Alpha(Palette.FaintColor, 0.6) : Palette.Line;
             ToolTip.SetTip(lim, $"Limitador de picos {(c.Limit ? "activado" : "apagado")}: frena golpes de púa y notas fuertes" + (c.On ? "" : " (actúa cuando el compresor está prendido)"));
         });
-        var comp = FxPanel(fx, "Comp", "", () => t.Channel.Comp.On, () => StripComp(t, c => c.On = !c.On, "on"),
+        var comp = FxPanel(fx, "Comp", FxIcon.Comp, () => t.Channel.Comp.On, () => StripComp(t, c => c.On = !c.On, "on"),
             on => on ? "Apagar el compresor" : "Prender el compresor", lim);
         var compKnob = FxKnob(comp, "cantidad", 0.5, () => t.Channel.Comp.Amount, v => StripComp(t, c => { c.Amount = v; c.On = true; }, "amount"),
             () => t.Channel.Comp.Preset == "custom" ? "Compresor en Manual: elegí un estilo para usar este knob" : "Cantidad de compresión (rueda o arrastre · doble click: media)");
@@ -543,7 +543,7 @@ public partial class MainWindow
         };
 
         // EQ: a summary; the bands are edited in the Toma tab
-        var eq = FxPanel(fx, "EQ", "", () => t.Channel.Eq.On, () => EditTrack(t, x => x.Channel.Eq.On = !x.Channel.Eq.On, "eq.on"),
+        var eq = FxPanel(fx, "EQ", FxIcon.Eq, () => t.Channel.Eq.On, () => EditTrack(t, x => x.Channel.Eq.On = !x.Channel.Eq.On, "eq.on"),
             on => on ? "Apagar el EQ" : "Prender el EQ");
         var graph = new EqGraph(interactive: false, height: 54);
         ToolTip.SetTip(graph, "Editá las bandas en la pestaña Toma (izquierda)");
@@ -566,8 +566,8 @@ public partial class MainWindow
         eq.Body.Children.Add(graph); eq.Body.Children.Add(eqPreset);
 
         // Reverb and delay sends
-        SendPanel(fx, t, "Reverb", "", true);
-        SendPanel(fx, t, "Delay", "", false);
+        SendPanel(fx, t, "Reverb", FxIcon.Reverb, true);
+        SendPanel(fx, t, "Delay", FxIcon.Delay, false);
     }
 
     void SendPanel(StackPanel fx, LiveTrack t, string title, string icon, bool reverb)
@@ -615,7 +615,8 @@ public partial class MainWindow
         var power = new Button { Classes = { "chip" }, Height = 24, MinHeight = 24, Padding = new Thickness(6, 0), CornerRadius = new CornerRadius(4),
             Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Children = { glyph, state } } };
         power.Click += (_, _) => toggle();
-        var iconText = new TextBlock { Classes = { "icon" }, Text = icon, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
+        var iconText = FxIcon.Create(icon, 12);
+        iconText.VerticalAlignment = VerticalAlignment.Center; iconText.Margin = new Thickness(8, 0, 0, 0);
         var name = new TextBlock { Text = title.ToUpperInvariant(), FontSize = 10, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.8, VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(6, 0, 4, 0) };
         var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto"), Height = 32, Margin = new Thickness(6, 0) };
@@ -641,7 +642,7 @@ public partial class MainWindow
             power.Background = lit ? Palette.Accent : Brushes.Transparent;
             power.BorderBrush = lit ? Palette.Accent : Palette.Line;
             ToolTip.SetTip(power, tip(lit));
-            iconText.Foreground = lit ? Palette.Accent : Palette.Faint;
+            FxIcon.SetColor(iconText, lit ? Palette.Accent : Palette.Faint);
             name.Foreground = lit ? Palette.Fg : Palette.Faint;
             body.Opacity = lit ? 1 : 0.4;
             box.Background = Palette.Alpha(Palette.AppColor, lit ? 0.6 : 0.3);
@@ -747,7 +748,9 @@ public partial class MainWindow
         var box = StripCard(wide ? ReturnWideW : ReturnCompactW);
         var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), Height = 28 };
         var name = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
-        name.Children.Add(new TextBlock { Classes = { "icon" }, Text = icon, FontSize = 13, Foreground = Palette.Accent, VerticalAlignment = VerticalAlignment.Center });
+        var iconMark = FxIcon.Create(icon, 12);
+        FxIcon.SetColor(iconMark, Palette.Accent); iconMark.VerticalAlignment = VerticalAlignment.Center;
+        name.Children.Add(iconMark);
         name.Children.Add(new TextBlock { Text = title, FontSize = 11, FontWeight = FontWeight.SemiBold, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center });
         head.Children.Add(name);
         presets.Margin = new Thickness(6, 0); presets.VerticalAlignment = VerticalAlignment.Center; Grid.SetColumn(presets, 1); head.Children.Add(presets);
@@ -809,7 +812,7 @@ public partial class MainWindow
             BusKnob(wide, "Ancho", defaults.Width, () => Reverb.Width, () => $"{Reverb.Width * 100:0}%",
                 v => BusEdit(s => s.Reverb.Width = v, "reverb:width"), "Ancho estéreo de la cola"),
         ];
-        var box = ReturnBox(wide, "Reverb", "", presets, () => Reverb.Muted, () => BusEdit(s => s.Reverb.Muted = !s.Reverb.Muted, "reverb:muted"), null,
+        var box = ReturnBox(wide, "Reverb", FxIcon.Reverb, presets, () => Reverb.Muted, () => BusEdit(s => s.Reverb.Muted = !s.Reverb.Muted, "reverb:muted"), null,
             knobs, () => Reverb.ReturnGain, v => BusEdit(s => s.Reverb.ReturnGain = v, "reverb:returnGain"), out var meter);
         reverbMeter = meter;
         return box;
@@ -897,7 +900,7 @@ public partial class MainWindow
             BusKnob(wide, "Ducking", defaults.Duck, () => Delay.Duck, () => $"{Delay.Duck * 100:0}%",
                 v => BusEdit(s => s.Delay.Duck = v, "delay:duck"), "Baja las repeticiones mientras tocás y las deja sonar en los silencios"),
         ];
-        var box = ReturnBox(wide, "Delay", "", presets, () => Delay.Muted, () => BusEdit(s => s.Delay.Muted = !s.Delay.Muted, "delay:muted"), row,
+        var box = ReturnBox(wide, "Delay", FxIcon.Delay, presets, () => Delay.Muted, () => BusEdit(s => s.Delay.Muted = !s.Delay.Muted, "delay:muted"), row,
             knobs, () => Delay.ReturnGain, v => BusEdit(s => s.Delay.ReturnGain = v, "delay:returnGain"), out var meter);
         delayMeter = meter;
         return box;
