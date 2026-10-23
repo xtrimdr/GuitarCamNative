@@ -1,4 +1,4 @@
-# Pruebas a mano — GuitarCam Native
+# Pruebas a mano — GuitarCam Studio Native
 
 Lo que está programado y compila pero todavía nadie probó en la ventana, porque hace falta el equipo
 (interfaz, guitarra, cable, celular) o escuchar. Está agrupado según lo que necesitás tener a mano, así

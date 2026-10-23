@@ -1,4 +1,4 @@
-# Guía para agentes — GuitarCam Native
+# Guía para agentes — GuitarCam Studio Native
 
 Instrucciones para cualquier agente de IA (Claude, Codex, Copilot, Cursor…) que siga con este proyecto.
 Leela entera antes de tocar código. Describe cómo está hecha la app hoy: si algo de acá deja de ser
@@ -13,7 +13,9 @@ y la captura de referencia de la interfaz, en [docs/captura.png](docs/captura.pn
 
 - **GuitarCam Studio** sirve para hacer **videos de guitarra**: grabar tomas con cámara y audio,
   mezclarlas y exportar un video con un panel por toma. Esta carpeta es el **port a .NET nativo** de la
-  app web (`..\GuitarCam`, React + Web Audio). Corre al lado de la web, no la reemplaza.
+  app web (`..\GuitarCam`, React + Web Audio) y se llama **GuitarCam Studio Native** (en la barra de
+  título, "GuitarCam Studio" + el badge "NATIVE"; el exe sigue siendo `GuitarCam.exe` y los ajustes,
+  `%APPDATA%\GuitarCam Studio`). Corre al lado de la web, no la reemplaza.
 - **El foco manda.** Las funciones de DAW (clips, plugins, MIDI…) tienen que servir para el video y no
   pueden complicar el camino de **"grabo, mezclo y exporto"**. Si una función nueva agrega pasos o
   pantallas a ese camino, replanteala o preguntá.
@@ -193,7 +195,7 @@ usá siempre el pincel (`Palette.Accent`, `{StaticResource Accent}`) y no un col
 | `Dim` | `#a1a1aa` | texto secundario, valores, íconos |
 | `Faint` | `#6b6b74` | etiquetas en mayúscula, ayudas, deshabilitado |
 | `Accent` | `#22d3ee` | **el** color: activo, seleccionado, play, playhead, ondas, medidores |
-| `AccentSoft` | `#2422d3ee` | fondo de chips activados y del badge "NATIVO" |
+| `AccentSoft` | `#2422d3ee` | fondo de chips activados y del badge "NATIVE" de la barra de título |
 | `Rec` | `#ef4444` | grabar y clip/saturación de nivel. Nada más |
 | `RecSoft` | `#24ef4444` | fondo suave asociado a grabación |
 | `Composition` | `#09090b` | fondo del cuadro del video |

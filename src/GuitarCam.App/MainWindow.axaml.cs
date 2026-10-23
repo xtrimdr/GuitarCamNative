@@ -378,7 +378,7 @@ public partial class MainWindow : Window
         if (!preserveView) dirty = false;
         engine.SetTracks(list, p.Settings);
         SessionName.Text = p.Name;
-        Title = $"{p.Name} — GuitarCam Studio";
+        Title = $"{p.Name} — GuitarCam Studio Native";
         Tempo.Set(p.Settings.Bpm);
         Timeline.Bpm = p.Settings.Bpm;
         Timeline.LengthSec = engine.LengthSec;

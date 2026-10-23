@@ -7,6 +7,9 @@
     <Nullable>enable</Nullable>
     <PlatformTarget>x64</PlatformTarget>
     <AssemblyName>GuitarCam</AssemblyName>
+    <!-- what Windows shows for the exe (Task Manager, "Open with", file properties) -->
+    <Product>GuitarCam Studio Native</Product>
+    <AssemblyTitle>GuitarCam Studio Native</AssemblyTitle>
     <!-- Drawn by tools/make-icon.ps1 -->
     <ApplicationIcon>Assets\GuitarCam.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>

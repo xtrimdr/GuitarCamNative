@@ -1,4 +1,4 @@
-# Pendientes — GuitarCam Native
+# Pendientes — GuitarCam Studio Native
 
 Ideas y cosas para implementar en la versión nativa. Cada ítem: qué es, por qué, y notas si hay.
 Al terminar uno, pasarlo a **Hecho** con la fecha.
@@ -94,6 +94,9 @@ mano está en [docs/PRUEBAS.md](docs/PRUEBAS.md).
 
 ## Hecho
 
+- 2026-10-23: la app se llama **GuitarCam Studio Native**: título de la ventana, badge "NATIVE" en la barra
+  de título (`MainWindow.axaml`), nombre y descripción del exe (`GuitarCam.App.csproj`), acceso directo del
+  escritorio (`tools/make-shortcut.ps1`, borra el viejo "(nativa)") y docs.
 - 2026-10-23: lo último que faltaba de MIGRACION (§1.4 y §11): la cuenta grande 1-2-3-4 sobre el escenario
   (`PreviewView.CountdownBeat`, como el overlay de `SplitScreenCanvas`), "Mostrar en el Explorador" al frente
   (`Explorer.cs`, port de `openInExplorer` + `ForegroundWindow.cs`, en el gestor, el Historial y la

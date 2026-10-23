@@ -3,7 +3,7 @@
         xmlns:c="using:GuitarCam.App.Controls"
         xmlns:d="using:GuitarCam.App.Dialogs"
         x:Class="GuitarCam.App.MainWindow"
-        Title="GuitarCam Studio"
+        Title="GuitarCam Studio Native"
         Icon="/Assets/GuitarCam.ico"
         Width="1440" Height="900" MinWidth="1000" MinHeight="640"
         WindowStartupLocation="CenterScreen"
@@ -40,7 +40,7 @@
           </Border>
           <TextBlock Text="GuitarCam Studio" FontWeight="SemiBold" FontSize="13.5" VerticalAlignment="Center" />
           <Border Background="{StaticResource AccentSoft}" CornerRadius="4" Padding="5,1" VerticalAlignment="Center">
-            <TextBlock Text="NATIVO" FontSize="9.5" FontWeight="Bold" LetterSpacing="0.8" Foreground="{StaticResource Accent}" />
+            <TextBlock Text="NATIVE" FontSize="9.5" FontWeight="Bold" LetterSpacing="0.8" Foreground="{StaticResource Accent}" />
           </Border>
         </StackPanel>
 

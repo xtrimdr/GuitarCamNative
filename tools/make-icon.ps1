@@ -1,4 +1,4 @@
-# Draws the GuitarCam Native icon and writes a multi-size .ico (plus a 256 px PNG to preview it).
+# Draws the GuitarCam Studio Native icon and writes a multi-size .ico (plus a 256 px PNG to preview it).
 # A camera aperture whose blades are guitar picks, with the rec light in the opening: the pick and the
 # camera as a single object, in the spirit of the GarageBand / Logic Pro icons.
 # Small sizes (<= 32 px) skip the fine detail so they stay readable.
