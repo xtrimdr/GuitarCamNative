@@ -278,7 +278,9 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
   (`Hover`, mono) y un botón que pliega o despliega **todas** las secciones (pedido del usuario; en la web
   solo los efectos). Después, una tarjeta (`Border.section`) por bloque, cada una con ícono +
   etiqueta en mayúscula y, si se puede apagar, un ON/OFF a la derecha. Apagada → los controles quedan al
-  40 % de opacidad, pero se pueden seguir tocando. Todo encabezado plegable de la app (inspector, Color,
+  40 % de opacidad, pero se pueden seguir tocando. La cantidad principal de cada efecto va en el knob
+  grande del compresor (`EffectKnob`: Vida, envío a reverb, envío a delay; pedido del usuario, en la web
+  son sliders); los ajustes finos siguen en sliders. Todo encabezado plegable de la app (inspector, Color,
   Historial) es un `Controls/SectionHeader`: la franja entera reacciona al hover y se pliega con un clic
   en cualquier parte fuera de sus botones (pedido del usuario). Con su encabezado "Toma"
   se pliega a una columna de íconos de 44, como la barra del proyecto, y se recuerda. El espectro en vivo

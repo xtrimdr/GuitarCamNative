@@ -193,6 +193,39 @@ public partial class MainWindow
         SetSectionCollapsed(title, collapsedSections.Contains(title));
         return content;
     }
+    /// <summary>CompControl.tsx's amount row: the big knob, then the uppercase label, the value in words and a mono detail.</summary>
+    static (InspectorKnob Knob, TextBlock Value, TextBlock Detail) KnobRow(StackPanel host, string label)
+    {
+        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("64,*"), Margin = new Thickness(0, 2) };
+        var knob = new InspectorKnob(); row.Children.Add(knob);
+        var info = new StackPanel { Spacing = 3, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        info.Children.Add(new TextBlock { Text = label.ToUpperInvariant(), Classes = { "label" } });
+        var value = new TextBlock { FontSize = 14, FontWeight = FontWeight.SemiBold };
+        var detail = new TextBlock { Classes = { "dim", "mono" }, FontSize = 10.5, TextTrimming = TextTrimming.CharacterEllipsis };
+        info.Children.Add(value); info.Children.Add(detail); Grid.SetColumn(info, 1); row.Children.Add(info);
+        host.Children.Add(row);
+        return (knob, value, detail);
+    }
+
+    /// <summary>A 0–1 effect amount on the big knob instead of a slider (asked by the user, like the compressor's).</summary>
+    void EffectKnob(StackPanel host, string label, double reset, Func<double> get, Action<double> set,
+        Func<double, string> value, Func<double, string> detail, string hint)
+    {
+        var (knob, valueText, detailText) = KnobRow(host, label);
+        knob.ResetValue = reset;
+        knob.Changed += v => { if (!syncing) set(v); };
+        host.Children.Add(Help(hint));
+        inspectorRefresh.Add(() =>
+        {
+            double v = get();
+            knob.Set(v); valueText.Text = value(v); detailText.Text = detail(v);
+            ToolTip.SetTip(knob, $"{label}: {value(v)} (arrastrá o usá la rueda · doble click: {value(reset)})");
+        });
+    }
+
+    /// <summary>A send level as the gain it applies, so 100% reads 0,0 dB.</summary>
+    static string SendDb(double v) => v <= 0 ? "-∞ dB" : Db(20 * Math.Log10(v));
+
     InspectorSlider Slider(StackPanel host, string label, double min, double max, double step, double reset,
         Func<double> get, Action<double> set, Func<double, string> format, string? hint = null, Func<double>? maximum = null)
     {
@@ -290,8 +323,8 @@ public partial class MainWindow
             b.Click += (_, _) => Edit(t => { t.Channel.Sat.Mode = id; t.Channel.Sat.On = true; }, "sat.mode");
             inspectorRefresh.Add(() => b.IsChecked = sel!.Channel.Sat.Mode == id); modes.Children.Add(b);
         }
-        Slider(sat, "Vida", 0, 1, 0.01, 0.3, () => sel!.Channel.Sat.Amount, v => Edit(t => { t.Channel.Sat.Amount = v; t.Channel.Sat.On = true; }, "sat.amount"),
-            v => $"{(v < .2 ? "Apenas" : v < .45 ? "Sutil" : v < .7 ? "Con vida" : v < .9 ? "Caliente" : "Al palo")} · {v * 100:0}%",
+        EffectKnob(sat, "Vida", 0.3, () => sel!.Channel.Sat.Amount, v => Edit(t => { t.Channel.Sat.Amount = v; t.Channel.Sat.On = true; }, "sat.amount"),
+            v => v < .2 ? "Apenas" : v < .45 ? "Sutil" : v < .7 ? "Con vida" : v < .9 ? "Caliente" : "Al palo", v => $"{v * 100:0}%",
             "Cuánto empuja la toma contra la válvula o la cinta. Se calibra con el nivel de la toma");
         var satHint = Help(""); sat.Children.Add(satHint);
         inspectorRefresh.Add(() => satHint.Text = sel!.Channel.Sat.Mode == "tape" ? "Compacta los golpes, suaviza los agudos ásperos y suma un poco de cuerpo en los graves." : "Armónicos pares: más cálido y redondo, los picos se ablandan sin perder brillo.");
@@ -311,14 +344,8 @@ public partial class MainWindow
             inspectorRefresh.Add(() => b.IsChecked = sel!.Channel.Comp.Preset == id); presets.Children.Add(b);
         }
         comp.Children.Add(new Border { Classes = { "seg" }, Child = presets });
-        var amountRow = new Grid { ColumnDefinitions = new ColumnDefinitions("64,*"), Margin = new Thickness(0, 2) };
-        var knob = new InspectorKnob(); knob.Changed += v => CompEdit(c => { c.Amount = v; c.On = true; }, "amount", recalculate: true);
-        amountRow.Children.Add(knob);
-        var amountInfo = new StackPanel { Spacing = 3, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-        amountInfo.Children.Add(new TextBlock { Text = "CANTIDAD", Classes = { "label" } });
-        var amountText = new TextBlock { FontSize = 14, FontWeight = FontWeight.SemiBold };
-        var summary = new TextBlock { Classes = { "dim", "mono" }, FontSize = 10.5, TextTrimming = TextTrimming.CharacterEllipsis };
-        amountInfo.Children.Add(amountText); amountInfo.Children.Add(summary); Grid.SetColumn(amountInfo, 1); amountRow.Children.Add(amountInfo); comp.Children.Add(amountRow);
+        var (knob, amountText, summary) = KnobRow(comp, "Cantidad");
+        knob.Changed += v => CompEdit(c => { c.Amount = v; c.On = true; }, "amount", recalculate: true);
         var compHint = Help(""); comp.Children.Add(compHint);
         inspectorRefresh.Add(() =>
         {
@@ -354,9 +381,11 @@ public partial class MainWindow
         var eq = eqEditor = new EqEditor(); eq.Changed += value => Edit(t => t.Channel.Eq = value, "eq"); eqHost.Children.Add(eq);
         inspectorRefresh.Add(() => eq.Set(sel!.Channel.Eq));
         var reverb = Section("Reverb", "\uE767", () => sel!.Channel.ReverbOn, on => Edit(t => t.Channel.ReverbOn = on, "reverb.on"));
-        Slider(reverb, "Envío a reverb", 0, 1, .01, 0, () => sel!.Channel.ReverbSend, v => Edit(t => t.Channel.ReverbSend = v, "reverb.send"), v => $"{v * 100:0}%", "Cuánto de esta pista va al bus de reverb (después del fader)");
+        EffectKnob(reverb, "Envío a reverb", 0, () => sel!.Channel.ReverbSend, v => Edit(t => t.Channel.ReverbSend = v, "reverb.send"), v => $"{v * 100:0}%", SendDb,
+            "Cuánto de esta pista va al bus de reverb (después del fader)");
         var delay = Section("Delay", "\uE823", () => sel!.Channel.DelayOn, on => Edit(t => t.Channel.DelayOn = on, "delay.on"));
-        Slider(delay, "Envío a delay", 0, 1, .01, 0, () => sel!.Channel.DelaySend, v => Edit(t => { t.Channel.DelaySend = v; t.Channel.DelayOn = true; }, "delay.send"), v => $"{v * 100:0}%", "Cuánto de esta pista va al bus de delay (después del fader)");
+        EffectKnob(delay, "Envío a delay", 0, () => sel!.Channel.DelaySend, v => Edit(t => { t.Channel.DelaySend = v; t.Channel.DelayOn = true; }, "delay.send"), v => $"{v * 100:0}%", SendDb,
+            "Cuánto de esta pista va al bus de delay (después del fader)");
         InitClipInspector();
         UpdateCollapseButton();
     }

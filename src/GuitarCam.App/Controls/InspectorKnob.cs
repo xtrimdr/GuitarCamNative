@@ -5,13 +5,16 @@ using Avalonia.Media;
 
 namespace GuitarCam.App.Controls;
 
-/// <summary>CompControl.tsx amount knob; ui.tsx drag, wheel, fine adjustment and reset behavior.</summary>
+/// <summary>CompControl.tsx amount knob; ui.tsx drag, wheel, fine adjustment and reset behavior. Also the big knob of
+/// the other effects (Vida, reverb and delay sends: asked by the user), each with its own double-click value.</summary>
 public sealed class InspectorKnob : Control
 {
     double value, initial;
     Point down;
     IPointer? pointer;
     public event Action<double>? Changed;
+    /// <summary>Where a double click sends the knob (the compressor's "media").</summary>
+    public double ResetValue { get; set; } = 0.5;
     public InspectorKnob() { Width = Height = 64; Focusable = true; }
     public void Set(double v) { value = v; InvalidateVisual(); }
     void Change(double v) => Changed?.Invoke(Math.Round(Math.Clamp(v, 0, 1), 3));
@@ -38,7 +41,7 @@ public sealed class InspectorKnob : Control
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
-        if (e.ClickCount == 2) { Change(0.5); return; }
+        if (e.ClickCount == 2) { Change(ResetValue); return; }
         down = e.GetPosition(this); initial = value; pointer = e.Pointer; pointer.Capture(this); e.Handled = true;
     }
     protected override void OnPointerMoved(PointerEventArgs e)
@@ -54,5 +57,11 @@ public sealed class InspectorKnob : Control
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
         Change(value + Math.Sign(e.Delta.Y) / 50.0 * (e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? 0.2 : 1)); e.Handled = true;
+    }
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        int dir = e.Key is Key.Up or Key.Right ? 1 : e.Key is Key.Down or Key.Left ? -1 : 0;
+        if (dir == 0) { base.OnKeyDown(e); return; }
+        Change(value + dir / 50.0 * (e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? 0.2 : 1)); e.Handled = true;
     }
 }
