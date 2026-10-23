@@ -68,9 +68,10 @@ _Ideas que surgieron charlando. Todas apuntan al video._
 
 ## Falta portar de la app web
 
-El relevamiento completo (qué hace cada cosa en la web, cómo funciona y en qué estado está acá) está en
-[docs/MIGRACION.md](docs/MIGRACION.md), con el orden sugerido al final. Todo se porta igual que en la web
-([AGENTS.md → Migrar algo de la web](AGENTS.md#migrar-algo-de-la-web)).
+Nada: al 2026-10-23 está todo portado. El relevamiento (qué hace cada cosa en la web, cómo funciona y
+cómo quedó acá) sigue en [docs/MIGRACION.md](docs/MIGRACION.md); si la web suma algo, se anota ahí y se
+porta igual ([AGENTS.md → Migrar algo de la web](AGENTS.md#migrar-algo-de-la-web)). Lo que falta probar a
+mano está en [docs/PRUEBAS.md](docs/PRUEBAS.md).
 
 ## Notas
 
@@ -79,14 +80,14 @@ El relevamiento completo (qué hace cada cosa en la web, cómo funciona y en qu�
   decodificado quedan solo unos pocos píxeles negros sobre casi negro, invisibles. Ojo al revisar
   capturas: las de GDI (CopyFromScreen/PrintWindow) dan alfa 0 en los píxeles negros y los visores los
   pintan blancos, aunque en pantalla se vean bien. Mirar el RGB, no el alfa.
-- "Volver a una versión guardada" no tiene dónde tocarse en la ventana: el menú provisorio del chip se
-  fue con el gestor y su lugar es la pestaña Historial (§2.3 de MIGRACION). Mientras tanto,
-  `gclab proyecto versiones` / `volver`.
+- "Volver a una versión guardada" (solo nativa: la web no tiene historial de versiones) no tiene dónde
+  tocarse en la ventana: el menú provisorio del chip se fue con el gestor y la pestaña Historial de la web
+  no lo trae. Hoy solo con `gclab proyecto versiones` / `volver`. Falta decidir dónde va.
 - `gclab verificar` corre los `.ts` reales de la web, pero los nodos nativos de Web Audio (Biquad,
   Delay, Convolver) y el ruteo de los buses son una emulación en JS (`tools/worklet-ref.mjs`). Falta
   una pasada contra un `OfflineAudioContext` de verdad en Chromium para confirmarlos.
-- Sin probar todavía: saltos para atrás en el video mientras reproduce (reinicia FFmpeg en ese punto)
-  y cuántos cuadros por segundo llegan de verdad con muchas tomas.
+- Lo que falta probar a mano (saltos del video mientras reproduce, fps con muchas tomas, calibración,
+  medidores con sonido…) está todo en [docs/PRUEBAS.md](docs/PRUEBAS.md).
 - Cámara: mientras la app está abierta, la cámara queda tomada (como en la web), así que otro programa no
   la puede usar. Si se desconecta, el monitor dice "Sin señal de cámara" y no se reconecta sola: hay que
   tocar "Refrescar dispositivos".

@@ -5,8 +5,8 @@ nativa. Cada ítem dice **qué hace y cómo funciona en la web**, y en qué esta
 
 - ✅ portado · ◐ a medias (se dice qué falta) · ✗ falta
 
-Al 2026-10-22, lo entregado por los agentes que todavía no se revisó (A3, encuadre de A4, B2–B5) no
-está marcado acá: figura en [PENDIENTES → Entregado, falta revisar](../PENDIENTES.md). Se marca al aprobarlo.
+Al 2026-10-23 está todo portado. Lo que todavía no se probó a mano (porque hace falta la interfaz, la
+guitarra, un cable o un celular) está juntado en [PRUEBAS.md](PRUEBAS.md).
 
 Regla: todo se porta **igual que en la web** (diseño, textos, flujo). Ver
 [AGENTS.md → Migrar algo de la web](../AGENTS.md#migrar-algo-de-la-web). Las únicas diferencias que ya
