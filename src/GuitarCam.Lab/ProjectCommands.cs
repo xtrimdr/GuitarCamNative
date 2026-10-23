@@ -26,6 +26,7 @@ static class ProjectCommands
             "editar" => EditClips(dir, a),
             "encuadre" => Frame(dir, a),
             "sincronia" => Sync(dir, a),
+            "formato" => Format(dir, a),
             "cortar" => Crash(dir, a.Double("segundos", 3), a.Flag("camara")),
             "toma" => RecordTake(dir, a.Double("segundos", 3), a.Get("pista"), a.Flag("camara")),
             _ => throw new ArgumentException("proyecto importar|abrir|versiones|volver|cortar <carpeta>"),
@@ -138,6 +139,21 @@ static class ProjectCommands
         store.Project.AddLog("clip-framed");
         store.Save();
         Console.WriteLine("Encuadre actualizado; la grabación quedó intacta.");
+        return 0;
+    }
+
+    static int Format(string dir, Args a)
+    {
+        using var store = ProjectStore.Open(dir);
+        if (store.ReadOnly) throw new IOException(store.ReadOnlyReason);
+        var s = store.Project.Settings;
+        // like the window: the aspect first (it may change the layout), then an explicit layout wins
+        if (a.Get("relacion") is { } aspect) s.SetAspect(aspect);
+        if (a.Get("disposicion") is { } layout)
+            s.SetLayout(layout switch { "lado-a-lado" => "side-by-side", "apilado" => "top-to-bottom", _ => layout });
+        store.Project.AddLog("format-changed");
+        store.Save();
+        Console.WriteLine($"Formato: {s.Aspect} · {(s.Layout == "top-to-bottom" ? "Apilado" : "Lado a lado")}");
         return 0;
     }
 

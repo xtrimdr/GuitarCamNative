@@ -81,6 +81,8 @@ static class Program
               proyecto clips carpeta       lista los IDs de pistas y clips para editar desde la consola
               proyecto encuadre carpeta clip [--zoom 1.5] [--panx 0.2] [--pany -0.3] [--espejar] [--restaurar]
               proyecto sincronia carpeta clip [--audio-ms -30] [--camara-ms 80] [--heredar]
+              proyecto formato  carpeta [--relacion 16:9|9:16|1:1] [--disposicion lado-a-lado|apilado]
+                                           como la ventana: 9:16 pasa a apilado y 16:9 a lado a lado
               proyecto editar carpeta mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos
                         [--libre] [--iman 1/4] [--pps 100] [--cabezal 0]
               proyecto editar carpeta a-pista clip pista [--intercambiar clip] | reordenar desde hasta

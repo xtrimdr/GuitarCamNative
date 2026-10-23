@@ -13,10 +13,12 @@ namespace GuitarCam.App.Controls;
 /// <summary>
 /// The composition: one panel per video track (shared layout math with the export), showing the clip
 /// under the playhead, cover-fit with its framing. Each clip's decoder fills its Frame; the window
-/// redraws this when one changes. Audio-only and empty tracks get no panel.
+/// redraws this when one changes. Audio-only and empty tracks, and tracks whose first clip has no
+/// video (the export skips them), get no panel.
 /// Selection, pan and wheel zoom are ports of SplitScreenCanvas.tsx; the window owns the clip edits.
 /// The color grade and grain come already applied in each clip's Frame; vignette and letterbox are
-/// drawn here per panel (<see cref="PreviewVideoFx"/>).
+/// drawn here per panel (<see cref="PreviewVideoFx"/>). Like the web, the video fades only apply while
+/// playing or recording (<see cref="Timed"/>); the gap between panels is the export's border.
 /// </summary>
 public sealed class PreviewView : Control
 {
@@ -29,6 +31,10 @@ public sealed class PreviewView : Control
     double panX, panY;
     IPointer? pointer;
     public double Playhead { get; set; }
+    /// <summary>The web's isPlaying || isRecording: panels follow their video fades.</summary>
+    public bool Timed { get; set; }
+    /// <summary>The selected track, whose panel gets the accent border.</summary>
+    public Func<LiveTrack?>? SelectedTrack { get; set; }
     public event Action<LiveTrack, LiveClip>? ClipSelected;
     public event Action<LiveClip, double?, double?, double?>? FramingRequested;
 
@@ -38,12 +44,16 @@ public sealed class PreviewView : Control
         ToolTip.SetTip(this, "Arrastrá el panel en el video para mover el encuadre; la rueda del mouse hace zoom.");
     }
 
+    /// <summary>ExportJobSpec.BorderSize: the gap the export leaves around each panel, in output pixels.</summary>
+    const int ExportBorder = 4;
+
     static readonly RenderOptions Smooth = new() { BitmapInterpolationMode = Avalonia.Media.Imaging.BitmapInterpolationMode.MediumQuality };
 
     public void SetProject(IReadOnlyList<LiveTrack> list, ProjectSettings s)
     {
         CancelGesture();
-        tracks = list.Where(t => t.HasPanel).ToList();
+        // same takes as ExportDialog.ExtractVideoTakes: a video track whose first clip has a picture
+        tracks = list.Where(t => t.HasPanel && !string.IsNullOrEmpty(t.Clips[0].Media?.Video)).ToList();
         settings = s;
         layout = s.Layout;
         (aspectW, aspectH) = s.AspectWH();
@@ -136,15 +146,25 @@ public sealed class PreviewView : Control
         var frame = CompositionRect();
         if (frame.Width <= 0 || frame.Height <= 0) return;
         ctx.DrawRectangle(Palette.Composition, Palette.Pen(Palette.Line), frame.Inflate(1));
+        if (tracks.Count == 0)
+        {
+            var title = Palette.Text("La composición aparece cuando termines la primera toma", 12.5, Palette.Dim, Palette.UiBold);
+            var hint = Palette.Text("Mientras grabás, la cámara se ve en el monitor \"En vivo\"", 11, Palette.Faint);
+            ctx.DrawText(title, new Point(frame.Center.X - title.Width / 2, frame.Center.Y - title.Height - 2));
+            ctx.DrawText(hint, new Point(frame.Center.X - hint.Width / 2, frame.Center.Y + 4));
+            return;
+        }
 
         // panels in a 1080-high canvas, like the export, then scaled to the frame
         int W = (int)Math.Round(1080 * aspectW / aspectH), H = 1080;
         var rects = PanelLayout.Compute(tracks.Count, layout, W, H);
         double k = frame.Width / W;
+        double pad = rects.Count > 1 ? ExportBorder * frame.Width / Mp4Exporter.ExportSize(settings?.Aspect).Width : 0;
+        var selected = SelectedTrack?.Invoke();
         for (int i = 0; i < rects.Count; i++)
         {
             var (x, y, w, h) = rects[i];
-            var dest = new Rect(frame.X + x * k, frame.Y + y * k, w * k, h * k);
+            var dest = new Rect(frame.X + x * k, frame.Y + y * k, w * k, h * k).Deflate(pad);
             var t = tracks[i];
             var clip = t.ShownClip;
             var bmp = clip?.Frame;
@@ -160,7 +180,8 @@ public sealed class PreviewView : Control
                 var c = clip.Clip;
                 var window = ClipEditing.Window(c, clip.Media, clip.LengthSec);
                 var fades = ClipEnvelope.Fades(window, c.FadeInSec, c.FadeOutSec, c.LinkVideoFades, c.VideoFadeInSec, c.VideoFadeOutSec).Video;
-                using var opacity = ctx.PushOpacity(ClipEnvelope.GainAt(Playhead, window.Start, window.End, fades.FadeIn, fades.FadeOut));
+                // the fade goes towards the composition background, like the export's fade=color
+                using var opacity = ctx.PushOpacity(Timed ? ClipEnvelope.GainAt(Playhead, window.Start, window.End, fades.FadeIn, fades.FadeOut) : 1);
                 using (ctx.PushClip(dest))
                 {
                     if (fr.Mirror)
@@ -175,12 +196,19 @@ public sealed class PreviewView : Control
             }
             else if (clip is { Video: not null })
             {
-                var msg = Palette.Text("Cargando video…", 11, Palette.Faint);
+                ctx.FillRectangle(Palette.Panel, dest);
+                var msg = Palette.Text("Cargando video…", 12.5, Palette.Dim, Palette.UiBold);
                 ctx.DrawText(msg, new Point(dest.Center.X - msg.Width / 2, dest.Center.Y - msg.Height / 2));
+            }
+            if (t == selected)
+            {
+                // 3 px of the web's 720-high canvas
+                double bw = Math.Max(1.5, 4.5 * k);
+                ctx.DrawRectangle(new Pen(Palette.Accent, bw), dest.Deflate(bw / 2));
             }
             var label = Palette.Text(t.Track.Name, 10.5, Palette.Fg, Palette.UiBold);
             var lr = new Rect(dest.X + 8, dest.Bottom - label.Height - 14, label.Width + 12, label.Height + 6);
-            ctx.DrawRectangle(Palette.Alpha(Colors.Black, 0.55), null, lr, 4, 4);
+            ctx.DrawRectangle(Palette.Alpha(Palette.AppColor, 0.75), null, lr, 6, 6);
             ctx.DrawText(label, new Point(lr.X + 6, lr.Y + 3));
         }
     }

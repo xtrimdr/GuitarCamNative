@@ -83,6 +83,7 @@ src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe
 | `proyecto editar carpeta a-pista clip pista [--intercambiar clip]`, `reordenar desde hasta`, `inicio\|fijar-corte\|restaurar\|quitar-clip clip`, `quitar-pista pista`, `nueva-pista`, `agregar-toma medio [--pista p]` | el resto de las operaciones del timeline |
 | `proyecto encuadre carpeta clip [--zoom 1.5] [--panx 0.2] [--pany -0.3] [--espejar] [--restaurar]` | encuadre del clip en su panel |
 | `proyecto sincronia carpeta clip [--audio-ms -30] [--camara-ms 80] [--heredar]` | ajuste de sincronía y de latencia de cámara de un clip (`--heredar` vuelve a los de la grabación) |
+| `proyecto formato carpeta [--relacion 16:9\|9:16\|1:1] [--disposicion lado-a-lado\|apilado]` | formato del video, como en la ventana (9:16 pasa a apilado y 16:9 a lado a lado) |
 | `exportar [proyecto] [--salida nombre] [--carpeta destino] [--calidad alta\|estandar\|borrador] [--reemplazar] [--prueba]` | exporta el MP4 (mezcla offline + FFmpeg); `--prueba` arma un proyecto de prueba y prueba colisión y cancelación |
 | `proyectos lista` / `proyectos plantillas` | la lista del gestor (carpeta de proyectos + recientes) / las plantillas |
 | `proyectos nuevo "Nombre" [--plantilla id] [--carpeta vacía]` | crea un proyecto (nombre limpio para Windows y "(2)" si ya existe) |
