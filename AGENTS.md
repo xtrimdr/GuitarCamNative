@@ -69,6 +69,7 @@ src/
   GuitarCam.App        la ventana (Avalonia 11.3). Depende de Audio y Projects.
   GuitarCam.Lab        gclab.exe: consola para probar audio, DSP y proyectos sin la ventana.
 tools/worklet-ref.mjs  corre los worklets originales de la web en Node para comparar.
+tools/make-icon.ps1    dibuja el ícono (Assets/GuitarCam.ico: exe, ventana y barra de tareas).
 ```
 
 Reglas:

@@ -46,6 +46,7 @@ Laboratorio para ver si GuitarCam Studio se puede pasar a .NET nativo. Corre al 
   Supr = quitar clip (otra vez: quitar la pista vacía), Esc = cancelar el arrastre.
   En el gestor: F2 = renombrar la fila, Esc = cierra el formulario y después el gestor (si hay un
   proyecto abierto)
+- `tools/make-icon.ps1`: dibuja el ícono de la app (`src/GuitarCam.App/Assets/GuitarCam.ico`, vista previa en `docs/icon-256.png`)
 - `tools/worklet-ref.mjs`: corre los worklets originales en Node para comparar muestra a muestra
 
 Lo que queda por hacer está en [PENDIENTES.md](PENDIENTES.md).

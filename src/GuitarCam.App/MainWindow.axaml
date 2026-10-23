@@ -4,6 +4,7 @@
         xmlns:d="using:GuitarCam.App.Dialogs"
         x:Class="GuitarCam.App.MainWindow"
         Title="GuitarCam Studio"
+        Icon="/Assets/GuitarCam.ico"
         Width="1440" Height="900" MinWidth="1000" MinHeight="640"
         WindowStartupLocation="CenterScreen"
         TransparencyLevelHint="None"
