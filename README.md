@@ -46,7 +46,7 @@
   Supr = quitar clip (otra vez: quitar la pista vacía), Esc = cancelar el arrastre.
   En el gestor: F2 = renombrar la fila, Esc = cierra el formulario y después el gestor (si hay un
   proyecto abierto)
-- `tools/make-icon.ps1`: dibuja el ícono de la app (`src/GuitarCam.App/Assets/GuitarCam.ico`, vista previa en `docs/icon-256.png`)
+- `tools/make-icon.ps1`: dibuja el ícono de la app (`src/GuitarCam.App/Assets/GuitarCam.ico` y el logo de la barra de título `GuitarCam-64.png`, vista previa en `docs/icon-256.png`)
 - `tools/make-shortcut.ps1`: crea el acceso directo "GuitarCam Studio Native" en el escritorio, con el ícono (y borra el viejo "GuitarCam Studio (nativa)") (`-Configuration Release` para el build de Release)
 - `tools/worklet-ref.mjs`: corre los worklets originales en Node para comparar muestra a muestra
 

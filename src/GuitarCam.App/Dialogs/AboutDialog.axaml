@@ -1,0 +1,79 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GuitarCam.App.Dialogs.AboutDialog"
+             AutomationProperties.Name="Acerca de"
+             Background="#B3000000" KeyboardNavigation.TabNavigation="Cycle" Focusable="True">
+
+  <!-- native only: the web app has no about box; same frame as SettingsDialog -->
+  <UserControl.Styles>
+    <Style Selector="Button.act">
+      <Setter Property="Width" Value="32" />
+      <Setter Property="Height" Value="32" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Faint}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.act:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Border Width="440" HorizontalAlignment="Center" VerticalAlignment="Center"
+          Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12" ClipToBounds="True">
+    <Grid RowDefinitions="Auto,Auto">
+      <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="20,10,12,10">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="Acerca de" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <Button Grid.Column="1" x:Name="CloseButton" Classes="act" ToolTip.Tip="Cerrar" AutomationProperties.Name="Cerrar">
+            <TextBlock Classes="icon" Text="&#xE711;" FontSize="13" />
+          </Button>
+        </Grid>
+      </Border>
+
+      <StackPanel Grid.Row="1" Margin="24,24,24,20" Spacing="16">
+        <StackPanel Orientation="Horizontal" Spacing="16">
+          <Image Source="/Assets/GuitarCam-64.png" Width="64" Height="64" RenderOptions.BitmapInterpolationMode="HighQuality" />
+          <StackPanel VerticalAlignment="Center" Spacing="4">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="GuitarCam Studio" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+              <Border Background="{StaticResource AccentSoft}" CornerRadius="4" Padding="5,1" VerticalAlignment="Center">
+                <TextBlock Text="NATIVE" FontSize="9.5" FontWeight="Bold" LetterSpacing="0.8" Foreground="{StaticResource Accent}" />
+              </Border>
+            </StackPanel>
+            <TextBlock x:Name="VersionText" Classes="dim mono" />
+          </StackPanel>
+        </StackPanel>
+
+        <TextBlock Classes="dim" TextWrapping="Wrap" LineHeight="18"
+                   Text="Para hacer videos de guitarra: grabás tomas con cámara y audio, las mezclás y exportás un video con un panel por toma. Es la versión nativa de la app web GuitarCam Studio." />
+
+        <Border Classes="section" Padding="12,10">
+          <Grid x:Name="Info" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="16">
+            <TextBlock Classes="label" Text="AUDIO" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" x:Name="AudioText" Classes="dim mono" HorizontalAlignment="Right" />
+            <TextBlock Grid.Row="1" Classes="label" Text="INTERFAZ" VerticalAlignment="Center" />
+            <TextBlock Grid.Row="1" Grid.Column="1" x:Name="UiText" Classes="dim mono" HorizontalAlignment="Right" />
+            <TextBlock Grid.Row="2" Classes="label" Text="VIDEO" VerticalAlignment="Center" />
+            <TextBlock Grid.Row="2" Grid.Column="1" Classes="dim mono" Text="FFmpeg (del PATH)" HorizontalAlignment="Right" />
+          </Grid>
+        </Border>
+
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Classes="dim" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap"
+                     Text="Tus ajustes, proyectos recientes y plantillas están en tu carpeta de usuario." />
+          <Button Grid.Column="1" x:Name="SettingsFolderButton" Classes="chip" Margin="12,0,0,0" ToolTip.Tip="Mostrar la carpeta de ajustes en el Explorador">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Classes="icon" Text="&#xE838;" FontSize="13" />
+              <TextBlock Text="Abrir carpeta" />
+            </StackPanel>
+          </Button>
+        </Grid>
+      </StackPanel>
+    </Grid>
+  </Border>
+</UserControl>

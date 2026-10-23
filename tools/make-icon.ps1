@@ -1,6 +1,7 @@
 # Draws the GuitarCam Studio Native icon and writes a multi-size .ico (plus a 256 px PNG to preview it).
 # A camera aperture whose blades are guitar picks, with the rec light in the opening: the pick and the
 # camera as a single object, in the spirit of the GarageBand / Logic Pro icons.
+# Also writes the 64 px PNG the title bar shows as the logo.
 # Small sizes (<= 32 px) skip the fine detail so they stay readable.
 Add-Type -AssemblyName System.Drawing
 $root = Split-Path -Parent $PSScriptRoot
@@ -136,4 +137,6 @@ foreach ($img in $images) { $w.Write($img) }
 $w.Close()
 [System.IO.File]::WriteAllBytes((Join-Path $root 'docs\icon-256.png'), $images[-1])
 [System.IO.File]::WriteAllBytes((Join-Path $root 'docs\icon-32.png'), $images[3])
+# The title bar's logo (24 px, sharp up to 250 % display scaling)
+[System.IO.File]::WriteAllBytes((Join-Path $assets 'GuitarCam-64.png'), $images[6])
 Write-Output "OK $out"

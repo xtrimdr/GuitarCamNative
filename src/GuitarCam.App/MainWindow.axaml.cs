@@ -66,6 +66,12 @@ public partial class MainWindow : Window
             if (Projects.IsVisible || Export.IsVisible || RecordingBusy) return;
             Settings.Show();
         };
+        About.Dismissed += () => Timeline.Focus();
+        LogoButton.Click += (_, _) =>
+        {
+            if (Projects.IsVisible || Export.IsVisible || Settings.IsVisible || RecordingBusy) return;
+            About.Show();
+        };
         Live.OpenInputs += () =>
         {
             if (Projects.IsVisible || Export.IsVisible || RecordingBusy) return;
@@ -425,6 +431,11 @@ public partial class MainWindow : Window
         if (Settings.IsVisible)
         {
             Settings.HandleKey(e);
+            return;
+        }
+        if (About.IsVisible)
+        {
+            About.HandleKey(e);
             return;
         }
         // shortcuts are off while the manager is open; Esc goes to it

@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\GuitarCam.ico" />
+    <AvaloniaResource Include="Assets\GuitarCam-64.png" />
   </ItemGroup>
 
   <ItemGroup>

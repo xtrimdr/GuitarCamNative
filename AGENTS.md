@@ -71,7 +71,7 @@ src/
   GuitarCam.App        la ventana (Avalonia 11.3). Depende de Audio y Projects.
   GuitarCam.Lab        gclab.exe: consola para probar audio, DSP y proyectos sin la ventana.
 tools/worklet-ref.mjs  corre los worklets originales de la web en Node para comparar.
-tools/make-icon.ps1    dibuja el ícono (Assets/GuitarCam.ico: exe, ventana y barra de tareas).
+tools/make-icon.ps1    dibuja el ícono (Assets/GuitarCam.ico: exe, ventana y barra de tareas; Assets/GuitarCam-64.png: logo de la barra de título).
 tools/make-shortcut.ps1  crea el acceso directo del escritorio al exe.
 ```
 
@@ -266,7 +266,8 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
   separados por `Border.vsep`. Ese recuadro queda **siempre centrado en la ventana**: columnas `*,Auto,*`;
   si falta lugar, el texto del audio de la izquierda se recorta antes de que el recuadro se mueva.
 
-- La barra de título es la de la app (`ExtendClientAreaToDecorationsHint`), arrastrable, doble clic
+- El logo de la barra de título es el ícono de la app y abre "Acerca de" (`Dialogs/AboutDialog`, solo de la
+  nativa: la web no tiene). La barra de título es la de la app (`ExtendClientAreaToDecorationsHint`), arrastrable, doble clic
   maximiza; los botones del sistema quedan a la derecha (margen 150). `TransparencyLevelHint="None"` no se
   toca: con transparencia, píxeles oscuros del video dejan ver lo que hay detrás.
 - Maximizada, Windows corre la ventana 8 px afuera de cada borde de la pantalla (por la barra de título
