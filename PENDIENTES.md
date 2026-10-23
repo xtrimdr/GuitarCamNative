@@ -106,6 +106,17 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
 
 ## Hecho
 
+- 2026-10-22: lo que faltaba del inspector (§1.2 de MIGRACION): el panel "Toma" se pliega a una columna
+  de íconos ("Ocultar panel" / "Mostrar la toma") y se recuerda (`sidebarCollapsed`); estados vacíos
+  como la web ("Seleccioná una toma" + "Todavía no hay tomas grabadas." / "Hacé click en una pista o en su
+  panel del video.", y "Pista vacía" con el número gris, el texto de grabar y "Quitar pista" con ícono);
+  el ícono de "Mostrar / Colapsar todos los efectos" cambia según el estado; y el **espectro en vivo** del
+  EQ (`GuitarCam.Audio/Dsp/SpectrumTap.cs`: port del AnalyserNode de la web, FFT de 8192 con Blackman y
+  suavizado 0,75; el hilo de audio solo copia a un anillo preasignado y la FFT corre en el `Tick`; el
+  gráfico dibuja igual que `EqGraph` de la web). `gclab espectro` lo comprueba contra la fórmula del
+  AnalyserNode (bien a 0,05 dB). Probado en la ventana: plegar y desplegar, proyecto sin tomas, pista
+  vacía y el espectro de una toma sonando. Las plantillas de paneo y el canal de la pista vacía no van en
+  el inspector: en la web están en el mixer, que ya los tiene.
 - 2026-10-22: mixer (§4 y §1.7 de MIGRACION): `MainWindow.Mixer.cs`, port de `Mixer.tsx` y
   `MiniTimeline.tsx`. Se alterna con el timeline (X o el botón de abajo) y tiene su propia altura
   (recordada). Tiras amplias (paneo y un panel por efecto: Sat, Comp con LIM y "Comprime", EQ con el
@@ -168,7 +179,7 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
   cantidad, ajuste fino y EQ del preset, EQ de 6 bandas con editor gráfico y plantillas, envíos de reverb
   y delay, sincronización por clip, encuadre y clip (recortes y fades de audio y video), secciones
   plegables recordadas (`MainWindow.Inspector.cs`, `Controls/EqEditor.cs`, `Controls/Inspector*.cs`).
-  Todo con deshacer. Falta el espectro en vivo del EQ.
+  Todo con deshacer. (El espectro en vivo del EQ se sumó después, ver arriba.)
 
 - 2026-10-22: render offline de la mezcla (parte de audio de §8; tarea B2, Antigravity):
   `Dsp/MixRenderer.cs` (la cadena por pista y los buses, los mismos que usa la reproducción, sin la

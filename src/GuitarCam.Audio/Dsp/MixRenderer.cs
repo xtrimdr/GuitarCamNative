@@ -73,6 +73,9 @@ public sealed class TrackDspChain
     public double ReverbSend { get; set; }
     public bool DelayOn { get; set; } = true;
     public double DelaySend { get; set; }
+    volatile SpectrumTap? spectrum;
+    /// <summary>Post-EQ, pre-fader tap for the EQ editor's live spectrum (the web's per-track analyser); null when nobody reads it.</summary>
+    public SpectrumTap? Spectrum { get => spectrum; set => spectrum = value; }
 
     public TrackDspChain(int sampleRate)
     {
@@ -204,6 +207,7 @@ public sealed class TrackDspChain
         CompEq.ProcessWith(Comp, bl, br);
         grDb = Comp.TakeMeter();
         Eq.Process(bl, br);
+        spectrum?.Write(bl, br);
 
         bool mute = Muted || (anySolo && !Solo);
         float vol = mute ? 0f : (float)Volume;

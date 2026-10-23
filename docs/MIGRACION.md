@@ -33,20 +33,23 @@ están decididas son las del formato de proyecto propio (ver §2).
 - **Engranaje** → Configuración (§7) ✗.
 - **Exportar MP4** (botón de acento) → diálogo de exportación (§8) ✗.
 
-### 1.2 Barra lateral izquierda: "Toma" (inspector de la pista seleccionada) ◐ (secciones ✅; faltan plegar el panel y las plantillas de paneo)
+### 1.2 Barra lateral izquierda: "Toma" (inspector de la pista seleccionada) ✅
 Se puede plegar a una tira de íconos (se recuerda). Las secciones se pliegan por título y eso también se
-recuerda. Arriba, "Mostrar / Colapsar todos los efectos".
+recuerda. Arriba, "Mostrar / Colapsar todos los efectos" ✅ (nativa: plegado en `config.json`,
+`sidebarCollapsed`, como `gc.sidebarCollapsed` de la web).
 - **Sin selección**: "Seleccioná una toma" + "Hacé click en una pista o en su panel del video", o
-  "Todavía no hay tomas grabadas." ◐
-- **Pista vacía**: "Pista vacía" + "También podés agregar acá una toma del historial desde «Nueva pista»".
-  El canal se puede editar igual y lo hereda la próxima toma que se grabe ahí ✗.
-- **Mezcla**: mute, Volumen, Paneo; plantillas de paneo para todas las pistas (§4.3) ◐ (volumen y paneo sí).
+  "Todavía no hay tomas grabadas." ✅
+- **Pista vacía**: nombre editable, "Pista vacía", "Con esta pista seleccionada, apretá R…", "También podés
+  agregar acá una toma del historial desde «Nueva pista»" y "Quitar pista" ✅. El canal de la pista vacía
+  no se edita acá sino en el mixer (§4), y lo hereda la próxima toma que se grabe ahí (§5.8) ✅.
+- **Mezcla**: mute, Volumen, Paneo ✅. (Las plantillas de paneo para todas las pistas están en el
+  encabezado del mixer, §4.3, no en el inspector.)
 - **Saturación** (§5.2): switch, Válvula / Cinta, "Vida" con su ayuda ✅.
 - **Compresor** (§5.3): switch, "¿Qué estás tocando?" (Rasgueo / Arpegio / Punteo), Cantidad, medidor
   "Comprime"; "Ajuste fino a mano" con Umbral, Ratio, Ataque, Release, Knee, Ganancia; EQ del preset
   (Corte de graves, Barro 280 Hz, Presencia, Brillo 9 kHz); "Limitar picos"; "Volver al estilo por
   defecto" ✅.
-- **EQ** (§5.4): switch + editor gráfico ✅ (falta el espectro en vivo).
+- **EQ** (§5.4): switch + editor gráfico + espectro en vivo ✅ (`SpectrumTap`, `gclab espectro`).
 - **Reverb**: switch + "Envío a reverb" ✅. **Delay**: switch + "Envío a delay" ✅.
 - **Sincronización**: "Offset de audio" (mueve la toma con su anclaje) y "Latencia de cámara" ✅ (en la
   nativa, por clip).
@@ -243,7 +246,7 @@ que calculan umbral, ratio, tiempos, knee y make-up a partir del nivel de la tom
 editar un valor pasa a "Manual"); la **EQ del preset** (`CompEq`: HPF, barro, presencia, aire); el
 compresor **prendido por defecto** en tomas nuevas (Punteo en la segunda pista, Rasgueo en las demás).
 
-### 5.4 EQ de pista ◐ (DSP y presets portados y verificados; falta el editor y enchufarlo)
+### 5.4 EQ de pista ✅ (DSP y presets verificados; editor en el inspector, gráfico chico en el mixer, espectro en vivo)
 6 bandas siempre (corte de graves, 4 campanas, corte de agudos; cualquier banda cambia de tipo), cada
 una de 2 biquads (24 dB/oct = dos etapas Butterworth). Editor gráfico (`EqEditor`): curva arrastrable,
 **espectro en vivo** detrás (FFT de 8192 después del EQ), por banda tipo / on / reset / Frecuencia /

@@ -78,9 +78,9 @@
       </Grid>
     </Border>
 
-    <!-- inspector + preview -->
-    <Grid Grid.Row="1" ColumnDefinitions="290,*">
-      <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+    <!-- inspector ("Toma"; folds to a column of icons in MainWindow.Inspector.cs) + preview -->
+    <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
+      <Border x:Name="InspectorBar" Width="290" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
         <ScrollViewer>
           <StackPanel x:Name="Inspector" Margin="14,16" Spacing="12" />
         </ScrollViewer>

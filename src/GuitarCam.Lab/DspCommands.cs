@@ -175,6 +175,59 @@ static class DspCommands
         return 0;
     }
 
+    /// <summary>
+    /// Feeds the EQ editor's spectrum tap through a real track chain (flat, as the window hangs it after the EQ)
+    /// and reads it every 16 ms like the window does. Without a WAV it checks a bin-centred sine against the Web
+    /// Audio AnalyserNode spec: Blackman coherent gain 0.42, |X|/N gives 20·log10(A·0.42/2) once smoothing settles.
+    /// </summary>
+    public static int Spectrum(Args a)
+    {
+        const int sr = 48000, tickFrames = sr * 16 / 1000;
+        float[] l, r;
+        double hz = 0, amp = 0;
+        if (a.Positional.Count > 0)
+        {
+            var (ch, wsr) = Wav.Read(a.Positional[0]);
+            if (wsr != sr) Console.WriteLine($"Aviso: el WAV es de {wsr} Hz; lo leo como si fuera de {sr} Hz.");
+            l = ch[0]; r = ch.Length > 1 ? ch[1] : ch[0];
+        }
+        else
+        {
+            double binHz = (double)sr / SpectrumTap.FftSize;
+            hz = Math.Round(a.Double("hz", 1000) / binHz) * binHz;
+            amp = Math.Pow(10, a.Double("nivel", -6) / 20);
+            l = new float[sr * 2];
+            for (int i = 0; i < l.Length; i++) l[i] = (float)(amp * Math.Sin(2 * Math.PI * hz * i / sr));
+            r = l;
+        }
+
+        var chain = new TrackDspChain(sr);
+        var tap = new SpectrumTap();
+        chain.Spectrum = tap;
+        var bins = new float[SpectrumTap.Bins];
+        var sink = new float[Block];
+        int sinceRead = 0, reads = 0;
+        for (int pos = 0; pos + Block <= l.Length; pos += Block)
+        {
+            l.AsSpan(pos, Block).CopyTo(chain.BufferL(Block));
+            r.AsSpan(pos, Block).CopyTo(chain.BufferR(Block));
+            chain.ProcessFilledBuffer(Block, false, sink, sink, sink, sink, sink, sink, out _, out _, out _);
+            if ((sinceRead += Block) >= tickFrames) { sinceRead = 0; tap.Read(bins); reads++; }
+        }
+
+        var top = Enumerable.Range(1, bins.Length - 2).Where(k => bins[k] >= bins[k - 1] && bins[k] > bins[k + 1])
+            .OrderByDescending(k => bins[k]).Take(5).ToArray();
+        Console.WriteLine($"{reads} lecturas de {SpectrumTap.FftSize} muestras (suavizado {SpectrumTap.Smoothing}), picos:");
+        foreach (int k in top) Console.WriteLine($"  {k * (double)sr / SpectrumTap.FftSize,8:0.0} Hz  {bins[k],7:0.00} dB");
+        if (amp == 0) return 0;
+
+        int bin = (int)Math.Round(hz * SpectrumTap.FftSize / sr);
+        double expected = 20 * Math.Log10(amp * 0.42 / 2);
+        bool ok = top.Length > 0 && top[0] == bin && Math.Abs(bins[bin] - expected) < 0.05;
+        Console.WriteLine($"Seno de {hz:0.0} Hz: {bins[bin]:0.00} dB en su bin, esperado {expected:0.00} dB (AnalyserNode) → {(ok ? "bien" : "MAL")}");
+        return ok ? 0 : 1;
+    }
+
     public static int Click(Args a)
     {
         int sr = 48000;
