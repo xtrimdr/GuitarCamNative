@@ -47,6 +47,7 @@ Laboratorio para ver si GuitarCam Studio se puede pasar a .NET nativo. Corre al 
   En el gestor: F2 = renombrar la fila, Esc = cierra el formulario y después el gestor (si hay un
   proyecto abierto)
 - `tools/make-icon.ps1`: dibuja el ícono de la app (`src/GuitarCam.App/Assets/GuitarCam.ico`, vista previa en `docs/icon-256.png`)
+- `tools/make-shortcut.ps1`: crea el acceso directo "GuitarCam Studio (nativa)" en el escritorio, con el ícono (`-Configuration Release` para el build de Release)
 - `tools/worklet-ref.mjs`: corre los worklets originales en Node para comparar muestra a muestra
 
 Lo que queda por hacer está en [PENDIENTES.md](PENDIENTES.md).

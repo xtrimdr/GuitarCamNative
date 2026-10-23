@@ -524,9 +524,9 @@ public partial class MainWindow
         if (path == null) return;
         try
         {
-            if (file != null && File.Exists(path)) Process.Start("explorer.exe", $"/select,\"{path}\"");
-            else if (Directory.Exists(file == null ? path : Path.GetDirectoryName(path)))
-                Process.Start("explorer.exe", $"\"{(file == null ? path : Path.GetDirectoryName(path))}\"");
+            if (file != null && File.Exists(path)) Explorer.Select(path);
+            else if ((file == null ? path : Path.GetDirectoryName(path)) is { } folder && Directory.Exists(folder))
+                Explorer.Open(folder);
             else Status("No encontré el archivo: ¿se movió o se borró?");
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or IOException)

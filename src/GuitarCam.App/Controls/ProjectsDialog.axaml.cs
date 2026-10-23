@@ -460,7 +460,7 @@ public sealed partial class ProjectsDialog : UserControl
     static void Reveal(string dir)
     {
         if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return;
-        System.Diagnostics.Process.Start("explorer.exe", $"\"{dir}\"");
+        Explorer.Open(dir);
     }
 
     // --- rendering --------------------------------------------------------------------------------

@@ -233,6 +233,11 @@ public partial class MainWindow
         CountCancelButton.IsVisible = beat != null;
         RecStopButton.IsVisible = RecDiscardButton.IsVisible = recording && beat == null;
         if (beat != null) CountBeatText.Text = $"{beat}/4";
+        if (Preview.CountdownBeat != beat)
+        {
+            Preview.CountdownBeat = beat;
+            Preview.InvalidateVisual();
+        }
         if (recShown == recording) return;
         recShown = recording;
         TimeText.Foreground = recording ? Palette.Rec : Palette.Fg;

@@ -85,7 +85,8 @@ lo que es del proyecto, a la derecha.
   dibujados, porque Segoe no los tiene; la separación entre paneles es la de la exportación (4 px de
   salida) y no los 3 px del lienzo de la web; los textos usan la escala de la nativa en vez de tamaños del
   lienzo; una pista cuyo primer clip no tiene video no ocupa panel (así lo hace la exportación nativa).
-  Falta la cuenta grande (1-2-3-4) sobre el escenario: hoy la cuenta se ve en el monitor "En vivo".
+- **Cuenta grande** (1-2-3-4) sobre el escenario mientras cuenta antes de grabar: negro al 60 %, el número
+  a 120 px y cuatro puntos de acento ✅ (`PreviewView.CountdownBeat`).
 
 ### 1.5 Monitor en vivo ✅
 Al lado del escenario: la cámara cruda (sin composición), el dispositivo de entrada y el medidor
@@ -430,13 +431,16 @@ Los atajos no corren mientras se escribe en un campo ni con Configuración abier
 - **Miniaturas** de la tira de video, generadas y cacheadas por toma ✅ (16 cuadros de 160 px por archivo, en
   memoria durante la sesión como la web; FFmpeg los saca de a uno con búsqueda rápida, una toma por vez, en
   segundo plano).
-- **Selector de carpetas moderno de Windows** y "Mostrar en el Explorador" trayendo la ventana al frente ✗.
+- **Selector de carpetas moderno de Windows** ✅ (el de Avalonia ya es `IFileOpenDialog` con
+  `FOS_PICKFOLDERS`, el mismo que arma `FolderPicker.cs` de la web) y "Mostrar en el Explorador" trayendo la
+  ventana al frente ✅ (`Explorer.cs`, port de `openInExplorer` + `ForegroundWindow.cs`; lo usan el gestor, el
+  Historial y la exportación).
 - **Papelera de reciclaje** para todo lo que se borra (nunca borrado definitivo) ✅: proyectos (gestor),
   tomas no usadas y exportaciones (Historial). Diferencia nativa: la nativa escribe la toma mientras graba,
   así que "Parar sin guardar" la manda a la Papelera (WAV y video) en vez de borrarla; lo que se tira sin
   preguntar son solo las tomas de menos de medio segundo, los temporales y las copias viejas del historial.
 - **Lanzador**: acceso directo con ícono que levanta la app y la cierra con la ventana. En nativo es
-  directamente el `.exe`; falta el ícono y el acceso directo ✗.
+  directamente el `.exe`, con su ícono, y el acceso directo del escritorio lo crea `tools/make-shortcut.ps1` ✅.
 
 ---
 

@@ -35,6 +35,8 @@ public sealed class PreviewView : Control
     public bool Timed { get; set; }
     /// <summary>The selected track, whose panel gets the accent border.</summary>
     public Func<LiveTrack?>? SelectedTrack { get; set; }
+    /// <summary>The count-in beat (1..4) before a take, drawn big over the whole stage; null otherwise.</summary>
+    public int? CountdownBeat { get; set; }
     public event Action<LiveTrack, LiveClip>? ClipSelected;
     public event Action<LiveClip, double?, double?, double?>? FramingRequested;
 
@@ -139,6 +141,29 @@ public sealed class PreviewView : Control
     }
 
     public override void Render(DrawingContext ctx)
+    {
+        DrawComposition(ctx);
+        if (CountdownBeat is { } beat) DrawCountdown(ctx, beat);
+    }
+
+    static readonly Typeface MonoBold = new("Cascadia Mono, Consolas", FontStyle.Normal, FontWeight.SemiBold);
+
+    /// <summary>SplitScreenCanvas.tsx's countdown overlay: black at 60 % over the stage, the beat at 120 px and four dots.</summary>
+    void DrawCountdown(DrawingContext ctx, int beat)
+    {
+        var b = Bounds;
+        ctx.FillRectangle(new SolidColorBrush(Color.FromArgb(153, 0, 0, 0)), new Rect(0, 0, b.Width, b.Height));
+        const double size = 120, gap = 12, dot = 10, dotGap = 8;
+        var num = Palette.Text(beat.ToString(), size, Palette.Fg, MonoBold);
+        double top = (b.Height - size - gap - dot) / 2;
+        // leading-none: the digit's box is the font size, centered in the text's line height
+        ctx.DrawText(num, new Point((b.Width - num.Width) / 2, top - (num.Height - size) / 2));
+        double x = (b.Width - (4 * dot + 3 * dotGap)) / 2, y = top + size + gap;
+        for (int i = 1; i <= 4; i++, x += dot + dotGap)
+            ctx.DrawEllipse(i <= beat ? Palette.Accent : Palette.Hover, null, new Rect(x, y, dot, dot));
+    }
+
+    void DrawComposition(DrawingContext ctx)
     {
         var b = Bounds;
         using var _ = ctx.PushRenderOptions(Smooth);

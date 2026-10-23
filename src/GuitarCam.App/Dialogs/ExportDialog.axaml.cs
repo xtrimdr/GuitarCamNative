@@ -867,7 +867,7 @@ public sealed partial class ExportDialog : UserControl
         }
         try
         {
-            Process.Start("explorer.exe", $"/select,\"{doneVideo.FullPath}\"");
+            Explorer.Select(doneVideo.FullPath);
         }
         catch
         {
