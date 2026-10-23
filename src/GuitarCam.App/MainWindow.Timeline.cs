@@ -21,14 +21,23 @@ public partial class MainWindow
     void SetRulerMode(bool bars)
     {
         Timeline.RulerInBars = bars;
-        BarsRulerButton.Foreground = bars ? Palette.Accent : Palette.Faint;
-        TimeRulerButton.Foreground = bars ? Palette.Faint : Palette.Accent;
+        ShowRulerMode();
         timelinePrefs?.Stop(); timelinePrefs?.Start();
+    }
+
+    /// <summary>The web's two-button ruler switch: the active mode on AccentSoft, the other one Faint.</summary>
+    void ShowRulerMode()
+    {
+        bool bars = Timeline.RulerInBars;
+        BarsRulerButton.Foreground = bars ? Palette.Accent : Palette.Faint;
+        BarsRulerButton.Background = bars ? Palette.AccentSoft : Avalonia.Media.Brushes.Transparent;
+        TimeRulerButton.Foreground = bars ? Palette.Faint : Palette.Accent;
+        TimeRulerButton.Background = bars ? Avalonia.Media.Brushes.Transparent : Palette.AccentSoft;
     }
 
     void InitTimelineEditing()
     {
-        SnapBox.ItemsSource = new[] { "No", "Compás", "1/2", "1/4", "1/8", "1/8T", "1/16" };
+        SnapBox.SetItems(["No", "Compás", "1/2", "1/4", "1/8", "1/8T", "1/16"]);
         string snap = AppConfig.Get("timelineSnap") ?? "1/4";
         SnapBox.SelectedIndex = Math.Max(0, Array.IndexOf(SnapIds, snap));
         Timeline.SnapMode = SnapIds[SnapBox.SelectedIndex];
@@ -60,14 +69,18 @@ public partial class MainWindow
         void Prefs() { timelinePrefs.Stop(); timelinePrefs.Start(); }
         BarsRulerButton.Click += (_, _) => SetRulerMode(true);
         TimeRulerButton.Click += (_, _) => SetRulerMode(false);
-        BarsRulerButton.Foreground = Timeline.RulerInBars ? Palette.Accent : Palette.Faint;
-        TimeRulerButton.Foreground = Timeline.RulerInBars ? Palette.Faint : Palette.Accent;
-        SnapBox.SelectionChanged += (_, _) =>
+        ShowRulerMode();
+        SnapIcon.Foreground = Timeline.SnapMode == "off" ? Palette.Faint : Palette.Accent;
+        SnapBox.Selected += i =>
         {
-            Timeline.SnapMode = SnapIds[Math.Clamp(SnapBox.SelectedIndex, 0, SnapIds.Length - 1)];
+            SnapBox.SelectedIndex = i;
+            Timeline.SnapMode = SnapIds[Math.Clamp(i, 0, SnapIds.Length - 1)];
+            SnapIcon.Foreground = Timeline.SnapMode == "off" ? Palette.Faint : Palette.Accent;
             Prefs();
         };
         TimelineFitButton.Click += (_, _) => Timeline.FitAll();
+        TimelineFitButton.IsEnabled = !Timeline.FitMode;
+        Timeline.FitModeChanged += fit => TimelineFitButton.IsEnabled = !fit;
         TrackHeightSlider.ValueChanged += (_, e) => { if (!timelineSyncing) Timeline.SetTrackHeight(e.NewValue); };
         Timeline.TrackHeightChanged += value =>
         {

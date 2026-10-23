@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 using GuitarCam.App.Controls;
 using GuitarCam.App.Model;
 using GuitarCam.Audio.Dsp;
@@ -37,7 +38,8 @@ public partial class MainWindow
     string mixerKey = "";
     string mixerWidth = "auto";
     double panWidth = 0.6;
-    double timelineH = 280, mixerH = MixerDefaultH;
+    const double TimelineDefaultH = 280, TimelineMinH = 110; // web: TIMELINE_MIN_H (its default is 240; the native layout keeps 280)
+    double timelineH = TimelineDefaultH, mixerH = MixerDefaultH;
     float masterShow, reverbShow, delayShow;
     bool mixerView;
 
@@ -61,6 +63,18 @@ public partial class MainWindow
         mixerWidth = AppConfig.Get("mixerWidth") is "compact" or "wide" ? AppConfig.Get("mixerWidth")! : "auto";
         if (double.TryParse(AppConfig.Get("mixerHeight"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double h))
             mixerH = Math.Max(MixerMinH, h);
+        if (double.TryParse(AppConfig.Get("timelineHeight"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double th))
+            timelineH = Math.Max(TimelineMinH, th);
+        var bottom = Root.RowDefinitions[3];
+        bottom.MinHeight = TimelineMinH;
+        bottom.Height = new GridLength(timelineH);
+        // Like the web's resize handle: the bottom view keeps its height, double click goes back to the default.
+        BottomSplitter.DragCompleted += (_, _) => SaveBottomHeight();
+        BottomSplitter.DoubleTapped += (_, _) =>
+        {
+            bottom.Height = new GridLength(mixerView ? MixerDefaultH : TimelineDefaultH);
+            Dispatcher.UIThread.Post(SaveBottomHeight, DispatcherPriority.Background);
+        };
 
         miniTimeline.SeekRequested += sec => engine.Seek(sec);
         var header = BuildMixerHeader();
@@ -82,14 +96,23 @@ public partial class MainWindow
         var row = Root.RowDefinitions[3];
         if (mixerView) mixerH = row.ActualHeight; else timelineH = row.ActualHeight;
         mixerView = mixer;
-        row.MinHeight = mixer ? MixerMinH : 0;
+        row.MinHeight = mixer ? MixerMinH : TimelineMinH;
         row.Height = new GridLength(mixer ? mixerH : timelineH);
         TimelineHost.IsVisible = !mixer;
         MixerHost.IsVisible = mixer;
+        ToolTip.SetTip(BottomSplitter, $"Arrastrá para cambiar la altura {(mixer ? "del mixer" : "de la timeline")}");
         TimelineViewButton.Classes.Set("on", !mixer);
         MixerViewButton.Classes.Set("on", mixer);
-        if (!mixer) SaveViewPref("mixerHeight", mixerH.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        SaveViewPref(mixer ? "timelineHeight" : "mixerHeight", (mixer ? timelineH : mixerH).ToString(System.Globalization.CultureInfo.InvariantCulture));
         RefreshMixer();
+    }
+
+    /// <summary>Remembers the height of the view on screen (gc.timelineHeight / gc.mixerHeight in the web).</summary>
+    void SaveBottomHeight()
+    {
+        double h = Root.RowDefinitions[3].ActualHeight;
+        if (mixerView) mixerH = h; else timelineH = h;
+        SaveViewPref(mixerView ? "mixerHeight" : "timelineHeight", h.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
     Control BuildMixerHeader()

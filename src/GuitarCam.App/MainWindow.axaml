@@ -140,27 +140,52 @@
     <!-- project bar (Color / Historial): the web's right sidebar, beside the stage and the timeline; filled in MainWindow.Color.cs -->
     <Border Grid.Row="1" Grid.RowSpan="3" Grid.Column="1" x:Name="ProjectBar" Width="290" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0" />
 
-    <GridSplitter Grid.Row="2" Background="{StaticResource Line}" ResizeDirection="Rows" />
+    <GridSplitter x:Name="BottomSplitter" Grid.Row="2" ToolTip.Tip="Arrastrá para cambiar la altura de la timeline" Background="{StaticResource Line}" ResizeDirection="Rows" />
 
     <!-- timeline, or the mixer in its place (X) -->
     <DockPanel Grid.Row="3" x:Name="MixerHost" IsVisible="False" Background="{StaticResource App}" />
     <Grid Grid.Row="3" x:Name="TimelineHost">
       <c:TimelineView x:Name="Timeline" />
+      <!-- the corner above the track headers, like the web: ruler mode, snap, fit and track height -->
       <Grid x:Name="TimelineToolbar" Width="264" Height="32" HorizontalAlignment="Left" VerticalAlignment="Top"
-            Background="{StaticResource Panel}" ColumnDefinitions="26,26,84,26,*" Margin="0">
-        <Button x:Name="BarsRulerButton" Classes="ghost" Padding="2" MinWidth="0" ToolTip.Tip="Regla en compases y tiempos (4/4, al tempo del click)">
-          <TextBlock Classes="icon" Text="&#xE8D6;" FontSize="13" />
+            Background="{StaticResource Panel}" ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="0">
+        <Border BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="4" Padding="1" Margin="12,0,6,0" VerticalAlignment="Center">
+          <StackPanel Orientation="Horizontal">
+            <Button x:Name="BarsRulerButton" Classes="ghost" Width="24" Height="20" Padding="0" MinWidth="0" CornerRadius="3"
+                    ToolTip.Tip="Regla en compases y tiempos (4/4, al tempo del click)">
+              <TextBlock Classes="icon" Text="&#xEC4F;" FontSize="12" />
+            </Button>
+            <Button x:Name="TimeRulerButton" Classes="ghost" Width="24" Height="20" Padding="0" MinWidth="0" CornerRadius="3"
+                    ToolTip.Tip="Regla en minutos y segundos">
+              <TextBlock Classes="icon" Text="&#xE823;" FontSize="12" />
+            </Button>
+          </StackPanel>
+        </Border>
+        <Panel Grid.Column="1" Width="78" Height="24" VerticalAlignment="Center"
+               ToolTip.Tip="Imán a la grilla: cabezal, mover clips, recortes y fades (Alt: sin imán)">
+          <c:SelectButton x:Name="SnapBox" Width="78" Padding="22,0,6,0" AutomationProperties.Name="Imán a la grilla" />
+          <PathIcon x:Name="SnapIcon" Data="{StaticResource MagnetIcon}" Width="11" Height="11" Margin="7,0,0,0"
+                    HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False" />
+        </Panel>
+        <Button Grid.Column="3" x:Name="TimelineFitButton" Classes="ghost" Width="24" Height="24" Padding="0" MinWidth="0"
+                ToolTip.Tip="Ver todo (ajustar el zoom al ancho)">
+          <TextBlock Classes="icon" Text="&#xE9A6;" FontSize="12" />
         </Button>
-        <Button Grid.Column="1" x:Name="TimeRulerButton" Classes="ghost" Padding="2" MinWidth="0" ToolTip.Tip="Regla en minutos y segundos">
-          <TextBlock Classes="icon" Text="&#xE823;" FontSize="13" />
-        </Button>
-        <ComboBox Grid.Column="2" x:Name="SnapBox" FontSize="11" MinHeight="24" Height="26" Padding="4,0" VerticalAlignment="Center"
-                  ToolTip.Tip="Imán a la grilla: cabezal, mover clips, recortes y fades (Alt: sin imán)" AutomationProperties.Name="Imán a la grilla" />
-        <Button Grid.Column="3" x:Name="TimelineFitButton" Classes="ghost" Padding="2" MinWidth="0" ToolTip.Tip="Ver todo (ajustar el zoom al ancho)">
-          <TextBlock Classes="icon" Text="&#xE9A6;" FontSize="13" />
-        </Button>
-        <Slider Grid.Column="4" x:Name="TrackHeightSlider" Minimum="40" Maximum="160" Value="64" Margin="6,0,8,0" VerticalAlignment="Center"
-                ToolTip.Tip="Altura de las pistas" AutomationProperties.Name="Altura de las pistas" />
+        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="5" Margin="4,0,8,0" VerticalAlignment="Center" ToolTip.Tip="Altura de las pistas">
+          <TextBlock Classes="icon" Text="&#xE8FD;" FontSize="12" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
+          <!-- the web's .slider: 4 px track and a 14 px light thumb -->
+          <Slider x:Name="TrackHeightSlider" Width="56" Minimum="40" Maximum="160" Value="64" TickFrequency="2" IsSnapToTickEnabled="True"
+                  VerticalAlignment="Center" AutomationProperties.Name="Altura de las pistas">
+            <Slider.Resources>
+              <x:Double x:Key="SliderHorizontalThumbWidth">14</x:Double>
+              <x:Double x:Key="SliderHorizontalThumbHeight">14</x:Double>
+              <x:Double x:Key="SliderTrackThemeHeight">4</x:Double>
+              <SolidColorBrush x:Key="SliderThumbBackground" Color="#f4f4f5" />
+              <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#ffffff" />
+              <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="#ffffff" />
+            </Slider.Resources>
+          </Slider>
+        </StackPanel>
       </Grid>
     </Grid>
 

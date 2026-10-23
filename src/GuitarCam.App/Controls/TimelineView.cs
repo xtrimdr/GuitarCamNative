@@ -103,7 +103,7 @@ public sealed class TimelineView : Control
     {
         tracks = list;
         waveCache.Clear();
-        if (!preserveView) fitMode = true;
+        if (!preserveView) SetFit(true);
         Selected = list.Count > 0 ? 0 : -1;
         if (!list.Any(t => t.Clips.Any(c => c.Clip.Id == SelectedClipId))) SelectedClipId = null;
         ClampScroll();
@@ -128,11 +128,21 @@ public sealed class TimelineView : Control
         InvalidateVisual();
     }
 
+    /// <summary>True while the zoom follows the width ("Ver todo"); the toolbar disables its button then, like the web.</summary>
+    public bool FitMode => fitMode;
+    public event Action<bool>? FitModeChanged;
+    void SetFit(bool on)
+    {
+        if (fitMode == on) return;
+        fitMode = on;
+        FitModeChanged?.Invoke(on);
+    }
+
     public void FitAll()
     {
         double w = Bounds.Width - HeaderW - 24;
         if (w <= 0 || LengthSec <= 0) return;
-        fitMode = true;
+        SetFit(true);
         pps = w / Math.Max(8, LengthSec);
         scrollX = 0;
         InvalidateVisual();
@@ -158,7 +168,7 @@ public sealed class TimelineView : Control
     void ClampScroll() => scrollY = Math.Clamp(scrollY, 0, Math.Max(0, (tracks.Count + ExtraRows) * laneH + 44 - (Bounds.Height - RulerH)));
     public void SetTrackHeight(double height)
     {
-        double next = Math.Clamp(height, 40, 160);
+        double next = Math.Clamp(Math.Round(height / 2) * 2, 40, 160); // the web's slider steps by 2 px
         if (Math.Abs(next - laneH) < 0.001) return;
         laneH = next;
         ClampScroll();
@@ -782,7 +792,7 @@ public sealed class TimelineView : Control
             if (px < 0 || px > Bounds.Width - HeaderW) px = (Bounds.Width - HeaderW) / 2;
             pps = Math.Clamp(pps * Math.Pow(1.18, e.Delta.Y), MinPps, 600);
             double fit = (Bounds.Width - HeaderW - 24) / Math.Max(8, LengthSec);
-            fitMode = Math.Abs(pps / fit - 1) < 0.02;
+            SetFit(Math.Abs(pps / fit - 1) < 0.02);
             scrollX = Math.Max(0, Playhead * pps - px);
         }
         else if ((e.KeyModifiers & KeyModifiers.Alt) != 0)

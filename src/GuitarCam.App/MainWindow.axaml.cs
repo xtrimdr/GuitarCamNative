@@ -178,11 +178,8 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             timer.Stop();
-            if (mixerView)
-            {
-                try { AppConfig.Set("mixerHeight", Root.RowDefinitions[3].ActualHeight.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* View preference only. */ }
-            }
+            try { AppConfig.Set(mixerView ? "mixerHeight" : "timelineHeight", Root.RowDefinitions[3].ActualHeight.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* View preference only. */ }
             engine.Dispose();
             camera.Dispose();
         };

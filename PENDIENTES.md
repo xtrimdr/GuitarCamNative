@@ -87,9 +87,6 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
 
 ## Notas
 
-- Al abrir un proyecto queda un paso de deshacer vacío "track:…:name": el `TextChanged` del nombre en el
-  inspector (`MainWindow.Inspector.cs`, `InitInspector`) se dispara al llenarlo fuera de `syncing`. El
-  primer Ctrl+Z "deshace" sin cambiar nada.
 - Puntitos en la preview (resuelto): con la ventana permitiendo transparencia, algunos píxeles oscuros
   del video dejaban ver la ventana de atrás. `TransparencyLevelHint="None"` lo corta, y con el video
   decodificado quedan solo unos pocos píxeles negros sobre casi negro, invisibles. Ojo al revisar
@@ -108,6 +105,15 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
   tocar "Refrescar dispositivos".
 
 ## Hecho
+
+- 2026-10-23: timeline (§3 y §1.7 de MIGRACION): la esquina de la regla quedó como la de la web (modo de regla
+  en un recuadro con el activo resaltado, imán con su ícono, "Ver todo" deshabilitado si ya está ajustado,
+  altura de pistas de a 2 px con el slider chico de la web) y la altura de la timeline se recuerda
+  (`timelineHeight`; mínimo 110, doble clic en el separador vuelve a la de por defecto). La regla en minutos,
+  el reloj que la alterna, el botón del medio y deseleccionar con un clic en blanco ya estaban. De paso:
+  abrir un proyecto ya no deja un paso de deshacer vacío "track:…:name" (`InitInspector`: Avalonia avisa el
+  `TextChanged` después, fuera de `syncing`). Probado en la ventana: arrastrar y doble clic en el separador,
+  cerrar y abrir.
 
 - 2026-10-23: pestaña Historial (§2.3 de MIGRACION): `MainWindow.History.cs`, port de `HistoryPanel.tsx`, con la
   lógica en `GuitarCam.Projects/ProjectHistory.cs` (`gclab proyecto historial` y `verificar-historial`). Tomas con

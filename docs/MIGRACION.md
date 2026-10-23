@@ -96,25 +96,25 @@ Configuración"; botón "Configurar entradas".
   animaciones decorativas; quedan los colores y el borde), y el medidor de entrada sigue también en la
   barra de transporte (en la web, en pantallas anchas, solo está en el monitor).
 
-### 1.6 Barra de transporte ◐
+### 1.6 Barra de transporte ✅ (`MainWindow.Transport.cs`; falta probar el tempo con el mouse y escuchar el menú del click)
 - **Grabar** (R): botón con destino "→ Nombre de la pista" o "→ pista nueva". Durante la cuenta:
   "Cancelar n/4" (Esc). Grabando: "Detener y guardar la toma" (Espacio / R) y "Parar sin guardar esta toma" ✅
   (`MainWindow.Recording.cs`; el reloj y el cabezal se ponen rojos, el timeline muestra "Grabando…").
-- **Al inicio** (Inicio) ✅. **Detener**: vuelve a donde arrancó; si ya estaba detenido, al inicio ✗.
-  **Play / Pausa** (Espacio) desde el cabezal ◐ (hoy play/stop). **Loop** ("Repetir en loop", prendido
-  por defecto) ✗.
+- **Al inicio** (Inicio) ✅. **Detener**: vuelve a donde arrancó; si ya estaba detenido, al inicio ✅.
+  **Play / Pausa** (Espacio) desde el cabezal ✅. **Loop** ("Repetir en loop", prendido por defecto) ✅.
 - **Reloj**: posición / total, en compases.tiempos.semicorcheas o en minutos:segundos (clic alterna;
-  compartido con la regla) ◐ (hoy fijo).
-- **Tempo** (§4.5) ◐ (solo se muestra).
-- **Cuenta** (Shift+C, cuenta de 4 antes de grabar, prendida por defecto) ✗.
+  compartido con la regla) ✅.
+- **Tempo** (§4.5) ✅ (TAP y teclado probados; falta probar arrastre, rueda y doble clic con el mouse).
+- **Cuenta** (Shift+C, cuenta de 4 antes de grabar, prendida por defecto) ✅.
 - **Click** (C) ✅ y su menú: sonido (Bip, Madera, Clave, Aguja, Cencerro, Batería: clic para elegirlo y
   escucharlo) y **volumen** (-24 a +9 dB). Se recuerda entre sesiones ◐ (todo implementado, también la
   escucha con `PlaybackEngine.PreviewClick`; falta probarlo a mano).
 - **Timeline / Mixer** (X) ✅.
 
-### 1.7 Panel inferior ◐
-- **Altura** con separador arrastrable, una para la timeline y otra para el mixer, recordadas ◐ (la del
-  mixer se recuerda; la del timeline vuelve a 280 al abrir).
+### 1.7 Panel inferior ✅
+- **Altura** con separador arrastrable, una para la timeline y otra para el mixer, recordadas ✅
+  (`timelineHeight` / `mixerHeight`; mínimo 110 / 250, doble clic vuelve a la altura por defecto, como la
+  web; la de la timeline arranca en 280 y no en 240 porque así está armada la ventana nativa).
 - Con el mixer visible, arriba va una **mini timeline** (clic o arrastre mueve el cabezal) ✅.
 
 ---
@@ -176,12 +176,13 @@ proyecto); guardar con el mismo nombre reemplaza; se borran desde el formulario 
 
 ---
 
-## 3. Timeline ◐ (edición de clips ✅; faltan miniaturas, regla en minutos y botón del medio)
+## 3. Timeline ◐ (todo menos las miniaturas)
 
-- **Regla** en compases y tiempos (4/4 al tempo) o en minutos y segundos ◐ (solo compases). Clic o
-  arrastre mueve el cabezal con imán; Alt sin imán ◐ (clic sí).
-- **Barra de herramientas**: modo de regla, **imán a la grilla** (cabezal, mover clips, recortes y
-  fades), **Ver todo**, **altura de pistas** ◐ (Ver todo sí).
+- **Regla** en compases y tiempos (4/4 al tempo) o en minutos y segundos ✅. Clic o arrastre mueve el
+  cabezal con imán; Alt sin imán ✅.
+- **Barra de herramientas**: modo de regla (dos botones en un recuadro), **imán a la grilla** (cabezal,
+  mover clips, recortes y fades; ícono del imán dibujado, Segoe no tiene), **Ver todo** (deshabilitado si
+  ya está ajustado), **altura de pistas** (de a 2 px) ✅, como la esquina de la regla de la web.
 - **Encabezado de pista**: agarre para reordenar, número, nombre, M, S, quitar, volumen, perilla de
   paneo, medidor ✅. Las pistas vacías dicen "Pista vacía · seleccionala para grabar acá" /
   "Apretá R para grabar en esta pista"; mientras graba, "Grabando…".
@@ -196,11 +197,12 @@ proyecto); guardar con el mismo nombre reemplaza; se borran desde el formulario 
 - **"+ Nueva pista"**: pista vacía o una toma sin usar del historial ✅.
 - **Reordenar pistas** arrastrando el agarre (las otras se corren; el orden define los paneles) ✅.
 - **Selección**: clic en un encabezado o carril vacío lo selecciona; clic en un lugar en blanco
-  deselecciona ◐.
+  deselecciona ✅.
 - **Zoom y desplazamiento**: rueda = horizontal; Shift = zoom anclado al cabezal; Alt = alto de pista;
   botón del medio arrastra en ambos ejes; alejar hasta 10 min u 8× el proyecto; sigue al cabezal
-  mientras reproduce ◐ (rueda, zoom y alto sí, con anclaje al puntero; falta el botón del medio).
-- Altura de la timeline y de las pistas se recuerdan ✗.
+  mientras reproduce ✅ (el zoom se ancla al cabezal o, si no está a la vista, al centro).
+- Altura de la timeline y de las pistas se recuerdan ✅ (`timelineHeight`, `trackHeight`), junto con el
+  modo de regla y el imán (`rulerMode`, `timelineSnap`).
 
 ---
 
@@ -393,17 +395,17 @@ paso. Se vacía al cambiar de proyecto y después de borrar no usadas.
 
 | Tecla | Acción | Nativa |
 |---|---|---|
-| Espacio | play / pausa (grabando: detener y guardar) | ◐ |
+| Espacio | play / pausa (grabando: detener y guardar) | ✅ |
 | R | grabar / detener; durante la cuenta, cancela | ✅ |
 | Esc | cancelar la cuenta | ✅ |
-| T | tap tempo | ✗ |
-| C / Shift+C | click / cuenta | ◐ (C sí) |
+| T | tap tempo | ✅ |
+| C / Shift+C | click / cuenta | ✅ |
 | M / S | mute / solo de la pista seleccionada | ✅ |
-| Supr | quitar el clip (la pista queda vacía); en una pista vacía, quitar la pista | ✗ |
+| Supr | quitar el clip (la pista queda vacía); en una pista vacía, quitar la pista | ✅ |
 | X | timeline / mixer | ✅ |
 | Inicio | al principio | ✅ |
 | Ctrl+Z / Ctrl+Y | deshacer / rehacer | ✅ |
-| F2 | renombrar (en el gestor) | ✗ |
+| F2 | renombrar (en el gestor) | ✅ |
 
 Los atajos no corren mientras se escribe en un campo ni con Configuración abierta.
 

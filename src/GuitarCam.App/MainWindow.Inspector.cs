@@ -236,7 +236,8 @@ public partial class MainWindow
         var header = takeHeader;
         takeBadge.Child = takeNumber; header.Children.Add(takeBadge);
         Grid.SetColumn(takeName, 1); header.Children.Add(takeName);
-        takeName.TextChanged += (_, _) => Edit(t => t.Track.Name = takeName.Text ?? "", "name");
+        // Avalonia raises TextChanged after the fact (outside syncing), so filling the box must not count as an edit.
+        takeName.TextChanged += (_, _) => { if (sel != null && (takeName.Text ?? "") != sel.Track.Name) Edit(t => t.Track.Name = takeName.Text ?? "", "name"); };
         collapseEffects = InspectorIcon("\uE70E", "Colapsar todos los efectos", () =>
         {
             bool hide = !EffectTitles.All(collapsedSections.Contains);
