@@ -24,7 +24,7 @@ public partial class MainWindow
 
     readonly List<Action> colorRefresh = [];
     readonly HashSet<string> collapsedColor = [], collapsedHistory = [];
-    readonly Dictionary<string, (StackPanel Body, Control? Action, Button Heading, TextBlock Chevron, HashSet<string> Collapsed)> colorSections = [];
+    readonly Dictionary<string, (StackPanel Body, Control? Action, SectionHeader Header, HashSet<string> Collapsed)> colorSections = [];
     readonly StackPanel colorPanel = new();
     readonly ScrollViewer projectBarBody = new();
     readonly DockPanel projectBarExpanded = new();
@@ -143,34 +143,23 @@ public partial class MainWindow
         StackPanel? host = null, string scope = "color")
     {
         var collapsed = scope == "color" ? collapsedColor : collapsedHistory;
-        var content = new StackPanel { Spacing = 14 };
-        var outer = new StackPanel { Spacing = 12 };
-        (host ?? colorPanel).Children.Add(new Border { Child = outer, BorderBrush = Palette.Line, BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(16) });
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto") };
-        var chevron = new TextBlock { Classes = { "icon" }, Text = "", Foreground = Palette.Faint, FontSize = 10, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
-        header.Children.Add(chevron);
-        var sectionIcon = new TextBlock { Text = icon, Classes = { "icon" }, Foreground = Palette.Accent, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
-        var headingContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        headingContent.Children.Add(sectionIcon);
-        headingContent.Children.Add(new TextBlock { Text = title.ToUpperInvariant(), Classes = { "label" }, VerticalAlignment = VerticalAlignment.Center });
-        var heading = new Button { Classes = { "ghost" }, Content = headingContent, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(0) };
-        Avalonia.Automation.AutomationProperties.SetName(heading, title.ToUpperInvariant());
-        colorSections[title] = (content, action, heading, chevron, collapsed);
-        void Flip()
+        var content = new StackPanel { Spacing = 14, Margin = new Thickness(16, 2, 16, 16) };
+        var outer = new StackPanel();
+        (host ?? colorPanel).Children.Add(new Border { Child = outer, BorderBrush = Palette.Line, BorderThickness = new Thickness(0, 0, 0, 1) });
+        var header = new SectionHeader(title, icon);
+        var sectionIcon = header.Icon;
+        colorSections[title] = (content, action, header, collapsed);
+        header.Toggled += () =>
         {
             SetColorSectionCollapsed(title, !collapsed.Contains(title));
             string json = System.Text.Json.JsonSerializer.Serialize(collapsed);
             SaveViewPref("collapsed." + scope, json);
-        }
-        heading.Click += (_, _) => Flip();
-        chevron.PointerPressed += (_, e) => { Flip(); e.Handled = true; };
-        Grid.SetColumn(heading, 1); header.Children.Add(heading);
-        if (action != null) { Grid.SetColumn(action, 2); header.Children.Add(action); }
+        };
+        Button? powerButton = null;
         if (on != null && toggle != null)
         {
-            var power = new Button { Classes = { "chip" }, MinHeight = 24, Height = 24, Padding = new Thickness(6, 0, 8, 0), Margin = new Thickness(6, 0, 0, 0) };
+            var power = powerButton = new Button { Classes = { "chip" }, MinHeight = 24, Height = 24, Padding = new Thickness(6, 0, 8, 0), Margin = new Thickness(6, 0, 0, 0) };
             power.Click += (_, _) => toggle();
-            Grid.SetColumn(power, 3); header.Children.Add(power);
             colorRefresh.Add(() =>
             {
                 bool lit = on();
@@ -185,6 +174,7 @@ public partial class MainWindow
                 sectionIcon.Foreground = lit ? Palette.Accent : Palette.Faint;
             });
         }
+        header.SetTrailing(action, powerButton);
         outer.Children.Add(header); outer.Children.Add(content);
         SetColorSectionCollapsed(title, collapsed.Contains(title));
         return content;
@@ -196,8 +186,7 @@ public partial class MainWindow
         if (hide) s.Collapsed.Add(title); else s.Collapsed.Remove(title);
         s.Body.IsVisible = !hide;
         if (s.Action != null) s.Action.IsVisible = !hide && s.Action.Tag is not false;
-        s.Chevron.Text = hide ? "" : "";
-        ToolTip.SetTip(s.Heading, hide ? "Mostrar" : "Ocultar");
+        s.Header.SetCollapsed(hide);
     }
 
     /// <summary>A header action that also hides itself when it has nothing to do (Tag = false).</summary>

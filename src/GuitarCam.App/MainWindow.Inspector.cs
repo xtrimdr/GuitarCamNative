@@ -26,18 +26,24 @@ public partial class MainWindow
     readonly Border takeBadge = new() { CornerRadius = new CornerRadius(4), Height = 24, VerticalAlignment = VerticalAlignment.Center };
     readonly TextBlock takeNumber = new() { Classes = { "mono" }, Foreground = Palette.Accent, FontSize = 12, FontWeight = FontWeight.SemiBold,
         HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-    readonly TextBox takeName = new() { FontSize = 14, FontWeight = FontWeight.SemiBold, Background = Brushes.Transparent, BorderThickness = new Thickness(0), Padding = new Thickness(2) };
-    readonly TextBlock takeInfo = new() { FontSize = 11, Foreground = Palette.Faint, Classes = { "mono" }, TextWrapping = TextWrapping.Wrap };
+    readonly TextBox takeName = new() { Classes = { "title" } };
+    readonly TextBlock takeNamePencil = new() { Classes = { "icon" }, Text = "\uE70F", FontSize = 11, Foreground = Palette.Faint, Margin = new Thickness(0, 0, 8, 0),
+        VerticalAlignment = VerticalAlignment.Center, Opacity = 0, IsHitTestVisible = false };
+    readonly Border takeHead = new() { BorderBrush = Palette.Line, BorderThickness = new Thickness(0, 0, 0, 1), Margin = new Thickness(-14, 0, -14, -12), Padding = new Thickness(14, 0, 14, 12) };
+    readonly TextBlock takeInfo = new() { FontSize = 11, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(34, 6, 0, 0) };
+    readonly WrapPanel takeFacts = new() { Margin = new Thickness(34, 6, 0, 0) };
+    readonly TextBlock takeLength = new(), takeFormat = new(), takeChannels = new();
     readonly TextBlock GrText = new() { Classes = { "dim", "mono" }, FontSize = 11 };
     readonly Border GrBar = new() { Width = 0, HorizontalAlignment = HorizontalAlignment.Right, Background = Palette.Accent, CornerRadius = new CornerRadius(3) };
     readonly Border GrTrack = new() { Height = 6, Background = Palette.App, CornerRadius = new CornerRadius(3) };
     readonly StackPanel fineControls = new() { Spacing = 14, IsVisible = false };
-    readonly Button fineButton = new() { Content = "▸ Ajuste fino", Classes = { "ghost" }, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Left };
+    readonly Button fineButton = new() { Content = "▸ Ajuste fino", Classes = { "ghost" }, FontSize = 11, Padding = new Thickness(8, 6),
+        HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, Margin = new Thickness(-8, 0) };
     string? inspectorTrack;
-    readonly Dictionary<string, (StackPanel Body, Control? Action, Button Heading, TextBlock Chevron)> inspectorSections = [];
+    readonly Dictionary<string, (StackPanel Body, Control? Action, SectionHeader Header)> inspectorSections = [];
     readonly HashSet<string> collapsedSections = [];
-    Button? collapseEffects;
-    static readonly string[] EffectTitles = ["Saturación", "Compresor", "EQ", "Reverb", "Delay"];
+    Button? collapseAll;
+    readonly PathIcon collapseAllIcon = new() { Width = 14, Height = 14 };
     Task inspectorPrefsSaving = Task.CompletedTask;
     const double InspectorWidth = 290;
     const double InspectorCollapsedWidth = 44;
@@ -56,8 +62,7 @@ public partial class MainWindow
         {
             section.Body.IsVisible = !hide;
             if (section.Action != null) section.Action.IsVisible = !hide;
-            section.Chevron.Text = hide ? "\uE76C" : "\uE70D";
-            ToolTip.SetTip(section.Heading, hide ? "Mostrar" : "Ocultar");
+            section.Header.SetCollapsed(hide);
         }
     }
     void SaveCollapsedSections()
@@ -70,12 +75,24 @@ public partial class MainWindow
         }, TaskScheduler.Default);
         UpdateCollapseButton();
     }
+    /// <summary>TakeInspector.tsx's CollapseFxButton (ChevronsDownUp / ChevronsUpDown), but it folds every section of
+    /// the take, not only the effects: the user asked for "colapsar todo".</summary>
     void UpdateCollapseButton()
     {
-        if (collapseEffects == null) return;
-        bool all = EffectTitles.All(collapsedSections.Contains);
-        ToolTip.SetTip(collapseEffects, all ? "Mostrar todos los efectos" : "Colapsar todos los efectos");
-        ((TextBlock)collapseEffects.Content!).Text = all ? "" : "";
+        if (collapseAll == null) return;
+        bool all = inspectorSections.Keys.All(collapsedSections.Contains);
+        ToolTip.SetTip(collapseAll, all ? "Mostrar todas las secciones" : "Colapsar todas las secciones");
+        collapseAllIcon.Data = (Geometry)Application.Current!.FindResource(all ? "ExpandAllIcon" : "CollapseAllIcon")!;
+    }
+
+    /// <summary>A quiet chip under the take name (duration, format…): Hover fill, Dim mono text.</summary>
+    static Border FactBadge(string glyph, TextBlock text)
+    {
+        text.Classes.Add("mono"); text.FontSize = 11; text.Foreground = Palette.Dim; text.VerticalAlignment = VerticalAlignment.Center;
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5 };
+        if (glyph != "") row.Children.Add(new TextBlock { Classes = { "icon" }, Text = glyph, FontSize = 10, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(text);
+        return new Border { Background = Palette.Hover, CornerRadius = new CornerRadius(5), Padding = new Thickness(6, 2), Margin = new Thickness(0, 0, 4, 4), Child = row };
     }
 
     /// <summary>App.tsx's left aside: the "Toma" header with "Ocultar panel", or the folded column of icons.</summary>
@@ -143,30 +160,20 @@ public partial class MainWindow
     }
     StackPanel Section(string title, string icon, Func<bool>? on = null, Action<bool>? power = null, Control? action = null)
     {
-        var content = new StackPanel { Spacing = 14 };
-        var outer = new StackPanel { Spacing = 12 };
+        var content = new StackPanel { Spacing = 14, Margin = new Thickness(16, 2, 16, 16) };
+        var outer = new StackPanel();
         var border = new Border { Classes = { "section" }, Child = outer, Background = Palette.Panel,
             BorderThickness = new Thickness(0, 0, 0, 1), CornerRadius = new CornerRadius(0),
-            Padding = new Thickness(16), Margin = new Thickness(-14, 0) };
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto") };
-        var chevron = new TextBlock { Classes = { "icon" }, Text = "\uE70D", Foreground = Palette.Faint, FontSize = 10, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
-        header.Children.Add(chevron);
-        var sectionIcon = new TextBlock { Text = icon, Classes = { "icon" }, Foreground = Palette.Accent, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
-        var label = new TextBlock { Text = title.ToUpperInvariant(), Classes = { "label" }, VerticalAlignment = VerticalAlignment.Center };
-        var headingContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        headingContent.Children.Add(sectionIcon); headingContent.Children.Add(label);
-        var heading = new Button { Classes = { "ghost" }, Content = headingContent, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(0) };
-        Avalonia.Automation.AutomationProperties.SetName(heading, title.ToUpperInvariant());
-        inspectorSections[title] = (content, action, heading, chevron);
-        heading.Click += (_, _) => { SetSectionCollapsed(title, !collapsedSections.Contains(title)); SaveCollapsedSections(); };
-        chevron.PointerPressed += (_, e) => { SetSectionCollapsed(title, !collapsedSections.Contains(title)); SaveCollapsedSections(); e.Handled = true; };
-        Grid.SetColumn(heading, 1); header.Children.Add(heading);
-        if (action != null) { Grid.SetColumn(action, 2); header.Children.Add(action); }
+            Padding = new Thickness(0), Margin = new Thickness(-14, 0) };
+        var header = new SectionHeader(title, icon);
+        var sectionIcon = header.Icon;
+        inspectorSections[title] = (content, action, header);
+        header.Toggled += () => { SetSectionCollapsed(title, !collapsedSections.Contains(title)); SaveCollapsedSections(); };
+        ToggleButton? powerButton = null;
         if (on != null && power != null)
         {
-            var toggle = new ToggleButton { Classes = { "chip", "inspector-power" }, MinHeight = 24, Padding = new Thickness(6, 2), FontSize = 10.5 };
+            var toggle = powerButton = new ToggleButton { Classes = { "chip", "inspector-power" }, MinHeight = 24, Padding = new Thickness(6, 2), FontSize = 10.5, Margin = new Thickness(6, 0, 0, 0) };
             toggle.IsCheckedChanged += (_, _) => { if (!syncing) power(toggle.IsChecked == true); };
-            Grid.SetColumn(toggle, 3); header.Children.Add(toggle);
             inspectorRefresh.Add(() =>
             {
                 toggle.IsChecked = on();
@@ -179,6 +186,7 @@ public partial class MainWindow
                 ToolTip.SetTip(toggle, (on() ? "Apagar " : "Prender ") + (title == "EQ" ? "el EQ" : title == "Saturación" ? "la saturación" : title == "Compresor" ? "el compresor" : title == "Reverb" ? "el envío a la reverb" : "el envío al delay"));
             });
         }
+        header.SetTrailing(action, powerButton);
         outer.Children.Add(header); outer.Children.Add(content);
         takeSections.Children.Add(border);
         inspectorRefresh.Add(() => { bool enabled = on == null || on(); content.Opacity = enabled ? 1 : 0.4; sectionIcon.Foreground = enabled ? Palette.Accent : Palette.Faint; });
@@ -235,20 +243,32 @@ public partial class MainWindow
         InitInspectorBar();
         var header = takeHeader;
         takeBadge.Child = takeNumber; header.Children.Add(takeBadge);
+        takeName.InnerRightContent = takeNamePencil;
+        takeName.PointerEntered += (_, _) => takeNamePencil.Opacity = takeName.IsFocused ? 0 : 1;
+        takeName.PointerExited += (_, _) => takeNamePencil.Opacity = 0;
+        takeName.GotFocus += (_, _) => takeNamePencil.Opacity = 0;
+        ToolTip.SetTip(takeName, "Nombre de la toma (clic para cambiarlo)");
+        takeName.Margin = new Thickness(4, 0, 0, 0);
         Grid.SetColumn(takeName, 1); header.Children.Add(takeName);
         // Avalonia raises TextChanged after the fact (outside syncing), so filling the box must not count as an edit.
         takeName.TextChanged += (_, _) => { if (sel != null && (takeName.Text ?? "") != sel.Track.Name) Edit(t => t.Track.Name = takeName.Text ?? "", "name"); };
-        collapseEffects = InspectorIcon("\uE70E", "Colapsar todos los efectos", () =>
+        collapseAll = new Button { Classes = { "ghost" }, Content = collapseAllIcon, Width = 28, Height = 28, Padding = new Thickness(0), Margin = new Thickness(4, 0, 0, 0),
+            HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
+        collapseAll.Click += (_, _) =>
         {
-            bool hide = !EffectTitles.All(collapsedSections.Contains);
-            foreach (string title in EffectTitles) SetSectionCollapsed(title, hide);
+            bool hide = !inspectorSections.Keys.All(collapsedSections.Contains);
+            foreach (string title in inspectorSections.Keys) SetSectionCollapsed(title, hide);
             SaveCollapsedSections();
-        });
-        Grid.SetColumn(collapseEffects, 2); header.Children.Add(collapseEffects); UpdateCollapseButton();
+        };
+        Grid.SetColumn(collapseAll, 2); header.Children.Add(collapseAll);
+        takeFacts.Children.Add(FactBadge("\uE916", takeLength));
+        takeFacts.Children.Add(FactBadge("\uE8D6", takeFormat));
+        takeFacts.Children.Add(FactBadge("", takeChannels));
         noSelection.Children.Add(new TextBlock { Text = "Seleccioná una toma", FontSize = 14, Foreground = Palette.Dim, TextAlignment = TextAlignment.Center });
         noSelection.Children.Add(noSelectionHint);
         Inspector.Children.Add(noSelection);
-        Inspector.Children.Add(header); Inspector.Children.Add(takeInfo);
+        takeHead.Child = new StackPanel { Children = { header, takeInfo, takeFacts } };
+        Inspector.Children.Add(takeHead);
         var recordHint = new TextBlock { FontSize = 12, Foreground = Palette.Dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
         recordHint.Inlines!.Add(new Avalonia.Controls.Documents.Run("Con esta pista seleccionada, apretá "));
         recordHint.Inlines.Add(new Avalonia.Controls.Documents.Run("R") { FontFamily = Palette.Mono.FontFamily, Foreground = Palette.Fg });
@@ -338,6 +358,7 @@ public partial class MainWindow
         var delay = Section("Delay", "\uE823", () => sel!.Channel.DelayOn, on => Edit(t => t.Channel.DelayOn = on, "delay.on"));
         Slider(delay, "Envío a delay", 0, 1, .01, 0, () => sel!.Channel.DelaySend, v => Edit(t => { t.Channel.DelaySend = v; t.Channel.DelayOn = true; }, "delay.send"), v => $"{v * 100:0}%", "Cuánto de esta pista va al bus de delay (después del fader)");
         InitClipInspector();
+        UpdateCollapseButton();
     }
 
     void InitClipInspector()
@@ -424,15 +445,21 @@ public partial class MainWindow
             var c = SelectedInspectorClip;
             noSelection.IsVisible = sel == null;
             noSelectionHint.Text = tracks.Any(t => t.Clips.Count > 0) ? "Hacé click en una pista o en su panel del video." : "Todavía no hay tomas grabadas.";
-            takeHeader.IsVisible = takeInfo.IsVisible = sel != null;
+            takeHead.IsVisible = sel != null;
             takeBadge.Background = c != null ? Palette.AccentSoft : Palette.Hover;
             takeNumber.Foreground = c != null ? Palette.Accent : Palette.Dim;
-            takeInfo.Classes.Set("mono", c != null);
-            takeInfo.Text = sel == null ? "" : c == null ? "Pista vacía" : c.Offline ? "Sin conexión: falta el archivo de audio"
-                : $"{c.LengthSec:0.0} s · WAV {c.Audio!.SampleRate / 1000.0:0} kHz estéreo";
+            takeInfo.Text = sel == null ? "" : c == null ? "Pista vacía" : c.Offline ? "Sin conexión: falta el archivo de audio" : "";
+            takeInfo.IsVisible = takeInfo.Text != "";
+            takeFacts.IsVisible = c is { Offline: false };
+            if (c is { Offline: false })
+            {
+                takeLength.Text = $"{c.LengthSec:0.0} s";
+                takeFormat.Text = $"WAV {c.Audio!.SampleRate / 1000.0:0} kHz";
+                takeChannels.Text = "estéreo";
+            }
             emptySections.IsVisible = sel != null && c == null;
             takeSections.IsVisible = c != null;
-            if (collapseEffects != null) collapseEffects.IsVisible = c != null;
+            if (collapseAll != null) collapseAll.IsVisible = c != null;
             if (sel != null && c != null) foreach (var refresh in inspectorRefresh) refresh();
         }
         finally { syncing = false; }

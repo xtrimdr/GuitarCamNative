@@ -271,9 +271,13 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
   propia). La grilla raíz lleva `Margin="{Binding $parent[Window].OffScreenMargin}"` para compensarlo; no
   lo saques o se cortan los costados y la barra de transporte.
 - **Barra de estado** = el `StatusText` del centro de la barra de título. Ahí van los avisos, no en diálogos.
-- **Inspector**: título de la toma + una tarjeta (`Border.section`) por bloque, cada una con ícono +
-  etiqueta en mayúscula y, si se puede apagar, un `ToggleSwitch` a la derecha. Apagada → clase `off`
-  (los controles quedan al 40 % de opacidad, pero se pueden seguir tocando). Con su encabezado "Toma"
+- **Inspector**: número + nombre editable de la toma (`TextBox.title`), los datos del archivo como badges
+  (`Hover`, mono) y un botón que pliega o despliega **todas** las secciones (pedido del usuario; en la web
+  solo los efectos). Después, una tarjeta (`Border.section`) por bloque, cada una con ícono +
+  etiqueta en mayúscula y, si se puede apagar, un ON/OFF a la derecha. Apagada → los controles quedan al
+  40 % de opacidad, pero se pueden seguir tocando. Todo encabezado plegable de la app (inspector, Color,
+  Historial) es un `Controls/SectionHeader`: la franja entera reacciona al hover y se pliega con un clic
+  en cualquier parte fuera de sus botones (pedido del usuario). Con su encabezado "Toma"
   se pliega a una columna de íconos de 44, como la barra del proyecto, y se recuerda. El espectro en vivo
   del EQ sale de un `SpectrumTap` colgado solo de la pista seleccionada mientras el EQ está a la vista: el
   hilo de audio copia a un anillo preasignado y la FFT corre en el `Tick` de la UI.

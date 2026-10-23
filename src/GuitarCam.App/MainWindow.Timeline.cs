@@ -17,6 +17,10 @@ public partial class MainWindow
     DispatcherTimer? timelinePrefs;
     ContextMenu? timelineMenu;
     static readonly string[] SnapIds = ["off", "bar", "1/2", "1/4", "1/8", "1/8T", "1/16"];
+    static readonly string[] SnapLabels = ["Sin imán", "Compás", "1/2", "1/4", "1/8", "1/8T", "1/16"];
+    /// <summary>What each grid snaps to, in musician's words: the snap box's tooltip and the hint of each option.</summary>
+    static readonly string[] SnapHints = ["Todo se mueve libre, sin pegarse a nada", "Se pega al principio de cada compás", "Se pega cada blanca (medio compás)",
+        "Se pega cada negra (cada tiempo)", "Se pega cada corchea", "Se pega cada corchea de tresillo", "Se pega cada semicorchea"];
 
     void SetRulerMode(bool bars)
     {
@@ -25,19 +29,32 @@ public partial class MainWindow
         timelinePrefs?.Stop(); timelinePrefs?.Start();
     }
 
-    /// <summary>The web's two-button ruler switch: the active mode on AccentSoft, the other one Faint.</summary>
+    /// <summary>The web's two-button ruler switch: the active mode on AccentSoft (Button.ghost.on).</summary>
     void ShowRulerMode()
     {
         bool bars = Timeline.RulerInBars;
-        BarsRulerButton.Foreground = bars ? Palette.Accent : Palette.Faint;
-        BarsRulerButton.Background = bars ? Palette.AccentSoft : Avalonia.Media.Brushes.Transparent;
-        TimeRulerButton.Foreground = bars ? Palette.Faint : Palette.Accent;
-        TimeRulerButton.Background = bars ? Avalonia.Media.Brushes.Transparent : Palette.AccentSoft;
+        BarsRulerButton.Classes.Set("on", bars);
+        TimeRulerButton.Classes.Set("on", !bars);
+    }
+
+    /// <summary>The snap box reads as a toggle: lit with the accent (magnet, text and outline) while the grid is on,
+    /// plain with "Sin imán" when it is off; the tooltip says what it snaps to right now.</summary>
+    void ShowSnap()
+    {
+        int i = Math.Max(0, Array.IndexOf(SnapIds, Timeline.SnapMode));
+        bool on = i > 0;
+        SnapIcon.Foreground = on ? Palette.Accent : Palette.Faint;
+        SnapBox.Foreground = on ? Palette.Accent : Palette.Dim;
+        SnapBox.Background = on ? Palette.AccentSoft : Palette.Raised;
+        SnapBox.BorderBrush = on ? (Avalonia.Media.IBrush)this.FindResource("Accent40")! : Palette.Line;
+        ToolTip.SetTip(SnapPanel, on
+            ? $"Imán a la grilla ({SnapLabels[i]}): {SnapHints[i].ToLowerInvariant()}. Lo usan el cabezal, mover clips, recortes y fades (Alt: sin imán)"
+            : "Imán apagado: todo se mueve libre. Elegí una grilla para que el cabezal, los clips, los recortes y los fades se peguen a los tiempos");
     }
 
     void InitTimelineEditing()
     {
-        SnapBox.SetItems(["No", "Compás", "1/2", "1/4", "1/8", "1/8T", "1/16"]);
+        SnapBox.SetItems(SnapLabels, SnapHints);
         string snap = AppConfig.Get("timelineSnap") ?? "1/4";
         SnapBox.SelectedIndex = Math.Max(0, Array.IndexOf(SnapIds, snap));
         Timeline.SnapMode = SnapIds[SnapBox.SelectedIndex];
@@ -70,12 +87,12 @@ public partial class MainWindow
         BarsRulerButton.Click += (_, _) => SetRulerMode(true);
         TimeRulerButton.Click += (_, _) => SetRulerMode(false);
         ShowRulerMode();
-        SnapIcon.Foreground = Timeline.SnapMode == "off" ? Palette.Faint : Palette.Accent;
+        ShowSnap();
         SnapBox.Selected += i =>
         {
             SnapBox.SelectedIndex = i;
             Timeline.SnapMode = SnapIds[Math.Clamp(i, 0, SnapIds.Length - 1)];
-            SnapIcon.Foreground = Timeline.SnapMode == "off" ? Palette.Faint : Palette.Accent;
+            ShowSnap();
             Prefs();
         };
         TimelineFitButton.Click += (_, _) => Timeline.FitAll();
