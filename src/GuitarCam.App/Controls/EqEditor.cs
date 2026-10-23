@@ -38,9 +38,7 @@ public sealed class EqEditor : StackPanel
         {
             int index = preset.SelectedIndex - (customPreset ? 1 : 0);
             if (filling || index < 0) return;
-            var p = TrackEq.Presets[index];
-            Publish(new EqSettings { On = true, Bands = p.Bands.Select(b => new EqBand { On = b.On,
-                Type = BiquadSpec.TypeToString(b.Type), Freq = b.Freq, Gain = b.Gain, Q = b.Q, Slope = b.Slope }).ToList(), Extra = eq.Extra });
+            Publish(FromPreset(index, eq));
         };
         Children.Add(graph);
         graph.Selected += i => { selected = i; Set(eq); };
@@ -87,6 +85,19 @@ public sealed class EqEditor : StackPanel
             FontSize = 11, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap, IsEnabled = false });
         ToolTip.SetTip(Children[^1], "El espectro en vivo todavía no está en la versión nativa");
     }
+    /// <summary>eqPresetOf: the factory preset these bands are exactly, or -1 ("Personalizado").</summary>
+    public static int PresetIndex(EqSettings eq) => Array.FindIndex(TrackEq.Presets, p => p.Bands.Select((x, i) =>
+        x.On == eq.Bands[i].On && BiquadSpec.TypeToString(x.Type) == eq.Bands[i].Type && x.Freq == eq.Bands[i].Freq
+        && x.Gain == eq.Bands[i].Gain && x.Q == eq.Bands[i].Q && x.Slope == eq.Bands[i].Slope).All(x => x));
+
+    /// <summary>applyEqPreset: the preset's bands, switched on; unknown fields of the current EQ survive.</summary>
+    public static EqSettings FromPreset(int index, EqSettings current)
+    {
+        var p = TrackEq.Presets[index];
+        return new EqSettings { On = true, Bands = p.Bands.Select(b => new EqBand { On = b.On,
+            Type = BiquadSpec.TypeToString(b.Type), Freq = b.Freq, Gain = b.Gain, Q = b.Q, Slope = b.Slope }).ToList(), Extra = current.Extra };
+    }
+
     internal static double ToPos(double hz) => Math.Round(Math.Log(Math.Clamp(hz, 20, 20000) / 20) / Math.Log(1000) * 1000);
     internal static double FromPos(double pos) => Math.Round(20 * Math.Exp(pos / 1000 * Math.Log(1000)));
     void Publish(EqSettings value) { Changed?.Invoke(value); }
@@ -99,9 +110,7 @@ public sealed class EqEditor : StackPanel
     {
         filling = true; eq = value;
         var b = eq.Bands[selected];
-        int p = Array.FindIndex(TrackEq.Presets, p => p.Bands.Select((x, i) =>
-            x.On == eq.Bands[i].On && BiquadSpec.TypeToString(x.Type) == eq.Bands[i].Type && x.Freq == eq.Bands[i].Freq
-            && x.Gain == eq.Bands[i].Gain && x.Q == eq.Bands[i].Q && x.Slope == eq.Bands[i].Slope).All(x => x));
+        int p = PresetIndex(eq);
         customPreset = p < 0;
         preset.ItemsSource = (customPreset ? new[] { "Personalizado" } : Array.Empty<string>()).Concat(TrackEq.Presets.Select(x => x.Label)).ToArray();
         preset.SelectedIndex = customPreset ? 0 : p;
@@ -126,7 +135,8 @@ public sealed class EqEditor : StackPanel
     }
 }
 
-/// <summary>EqEditor.tsx EqGraph: logarithmic response, captured point drags, wheel Q/slope and double-click bands.</summary>
+/// <summary>EqEditor.tsx EqGraph: logarithmic response, captured point drags, wheel Q/slope and double-click bands.
+/// With <see cref="Interactive"/> off (the mixer's summary) it only draws: no labels, small dots for the bands that are on.</summary>
 sealed class EqGraph : Control
 {
     EqSettings eq = new();
@@ -140,10 +150,13 @@ sealed class EqGraph : Control
     EqBandSpec[] currentBands = [];
     public event Action<int>? Selected;
     public event Action<int, Action<EqBand>>? Edited;
-    public EqGraph()
+    readonly bool interactive;
+    public EqGraph(bool interactive = true, double height = 150)
     {
-        Height = 150; ClipToBounds = true;
-        ToolTip.SetTip(this, "Arrastrá un punto (Shift = fino) · rueda: ancho de la campana / pendiente del corte · doble click en un punto: prender/apagar · doble click en otro lado: banda nueva");
+        this.interactive = interactive;
+        Height = height; ClipToBounds = true;
+        if (interactive)
+            ToolTip.SetTip(this, "Arrastrá un punto (Shift = fino) · rueda: ancho de la campana / pendiente del corte · doble click en un punto: prender/apagar · doble click en otro lado: banda nueva");
     }
     double X(double hz) => Math.Log(Math.Clamp(hz, 20, 20000) / 20) / Math.Log(1000) * Bounds.Width;
     double F(double x) => EqEditor.FromPos(x / Math.Max(1, Bounds.Width) * 1000);
@@ -201,16 +214,22 @@ sealed class EqGraph : Control
         foreach (double f in new double[] { 50, 100, 200, 500, 1000, 2000, 5000, 10000 })
         {
             ctx.DrawLine(Palette.Pen(Palette.Line), new Point(X(f), 0), new Point(X(f), Height));
-            ctx.DrawText(f >= 1000 ? $"{f / 1000:0}k" : $"{f:0}", 9, Palette.Faint, new Point(X(f) + 2, Height - 12));
+            if (interactive) ctx.DrawText(f >= 1000 ? $"{f / 1000:0}k" : $"{f:0}", 9, Palette.Faint, new Point(X(f) + 2, Height - 12));
         }
         foreach (int db in new[] { -12, -6, 0, 6, 12 })
         {
             ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, Y(db)), new Point(Bounds.Width, Y(db)));
-            if (db != 0) ctx.DrawText($"{db:+0;-0}", 9, Palette.Faint, new Point(3, Y(db) - 10));
+            if (interactive && db != 0) ctx.DrawText($"{db:+0;-0}", 9, Palette.Faint, new Point(3, Y(db) - 10));
         }
-        ctx.DrawGeometry(Palette.Alpha(Palette.AccentColor, .16), null, selectedFill);
+        if (interactive) ctx.DrawGeometry(Palette.Alpha(Palette.AccentColor, .16), null, selectedFill);
         ctx.DrawGeometry(Palette.Alpha(Palette.AccentColor, eq.On ? .1 : .04), null, totalFill);
-        ctx.DrawGeometry(null, Palette.Pen(eq.On ? Palette.Accent : Palette.Dim, 2), curve);
+        ctx.DrawGeometry(null, Palette.Pen(eq.On ? Palette.Accent : Palette.Dim, interactive ? 2 : 1.5), curve);
+        if (!interactive)
+        {
+            foreach (var b in eq.Bands.Where(b => b.On))
+                ctx.DrawEllipse(Palette.Alpha(Palette.AccentColor, 0.75), null, new Point(X(b.Freq), Y(Handle(b))), 2.5, 2.5);
+            return;
+        }
         for (int i = 0; i < 6; i++)
         {
             var b = eq.Bands[i]; var p = new Point(X(b.Freq), Y(Handle(b))); double r = i == selected ? 8 : 7;
@@ -221,6 +240,7 @@ sealed class EqGraph : Control
     }
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
+        if (!interactive) return;
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
         var p = e.GetPosition(this); int i = Hit(p);
         if (e.ClickCount == 2)
@@ -240,6 +260,7 @@ sealed class EqGraph : Control
     }
     protected override void OnPointerMoved(PointerEventArgs e)
     {
+        if (!interactive) return;
         var p = e.GetPosition(this); hover = Hit(p);
         if (dragging < 0) return;
         double k = e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? 0.25 : 1;
@@ -253,6 +274,7 @@ sealed class EqGraph : Control
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e) { pointer = null; dragging = -1; }
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
+        if (!interactive) return;
         int i = hover >= 0 ? hover : selected; bool up = e.Delta.Y > 0, fine = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         Selected?.Invoke(i); Edited?.Invoke(i, b =>
         {

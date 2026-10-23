@@ -461,8 +461,31 @@ static class LibraryCommands
                 ProjectTemplates.DeleteUser(Need(arg1));
                 Console.WriteLine("Plantilla borrada.");
                 return 0;
+            case "plantillas-video":
+                foreach (var t in VideoTemplates.List())
+                    Console.WriteLine($"  {t.Id,-20} {t.Name,-30} filtro {t.Color.Look} {t.Color.Amount:0}% · viñeta {t.Fx.Vignette:0} · grano {t.Fx.Grain:0} · barras {t.Fx.Letterbox}");
+                return 0;
+            case "guardar-plantilla-video":
+                using (var store = ProjectStore.Open(Path.GetFullPath(Need(arg1))))
+                    VideoTemplates.Save(Need(arg2), store.Project.Settings.Color, store.Project.Settings.VideoFx);
+                Console.WriteLine("Plantilla de video guardada.");
+                return 0;
+            case "aplicar-plantilla-video":
+                var vt = VideoTemplates.List().FirstOrDefault(t => t.Id == arg2 || string.Equals(t.Name, arg2, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new ArgumentException($"No hay una plantilla de video \"{arg2}\".");
+                using (var store = ProjectStore.Open(Path.GetFullPath(Need(arg1))))
+                {
+                    VideoTemplates.ApplyTo(vt, store.Project.Settings);
+                    store.Save();
+                }
+                Console.WriteLine($"Apliqué \"{vt.Name}\".");
+                return 0;
+            case "borrar-plantilla-video":
+                VideoTemplates.Delete(Need(arg1));
+                Console.WriteLine("Plantilla de video borrada.");
+                return 0;
             default:
-                throw new ArgumentException("proyectos lista|nuevo|previsualizar|renombrar|duplicar|borrar|olvidar|carpeta|plantillas|guardar-plantilla|borrar-plantilla");
+                throw new ArgumentException("proyectos lista|nuevo|previsualizar|renombrar|duplicar|borrar|olvidar|carpeta|plantillas|guardar-plantilla|borrar-plantilla|plantillas-video|guardar-plantilla-video|aplicar-plantilla-video|borrar-plantilla-video");
         }
     }
 

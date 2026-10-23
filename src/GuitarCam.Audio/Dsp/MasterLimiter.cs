@@ -22,6 +22,16 @@ public sealed class MasterLimiter
 
     public int Latency => N;
 
+    /// <summary>Lowest gain applied since the UI last read it (1 = not limiting); written once per block.</summary>
+    float minGain = 1;
+
+    /// <summary>For the master's LIM light: the deepest reduction since the last call, in dB (≤ 0).</summary>
+    public double TakeReductionDb()
+    {
+        float m = Interlocked.Exchange(ref minGain, 1f);
+        return m < 1 ? 20 * Math.Log10(Math.Max(1e-6, m)) : 0;
+    }
+
     public MasterLimiter(double sampleRate, int lookahead, double ceilingDb = CeilingDb)
     {
         N = Math.Max(1, lookahead);
@@ -48,6 +58,7 @@ public sealed class MasterLimiter
     public void Process(Span<float> left, Span<float> right)
     {
         double c = ceiling;
+        double lowest = 1;
         for (int i = 0; i < left.Length; i++)
         {
             double l = left[i];
@@ -82,8 +93,10 @@ public sealed class MasterLimiter
             double target = minReq;
             g = target < g ? aA * g + (1 - aA) * target : aR * g + (1 - aR) * target;
             double gg = Math.Min(g, reqOut);
+            if (gg < lowest) lowest = gg;
             left[i] = (float)(outL * gg);
             right[i] = (float)(outR * gg);
         }
+        if (lowest < minGain) minGain = (float)lowest;
     }
 }

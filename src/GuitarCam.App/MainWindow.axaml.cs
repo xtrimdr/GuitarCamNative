@@ -105,6 +105,8 @@ public partial class MainWindow : Window
         InitTransport();
 
         InitInspector();
+        InitProjectBar();
+        InitMixer();
 
         AddHandler(KeyDownEvent, OnKey, RoutingStrategies.Tunnel);
 
@@ -174,6 +176,11 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             timer.Stop();
+            if (mixerView)
+            {
+                try { AppConfig.Set("mixerHeight", Root.RowDefinitions[3].ActualHeight.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* View preference only. */ }
+            }
             engine.Dispose();
             camera.Dispose();
         };
@@ -273,6 +280,7 @@ public partial class MainWindow : Window
         foreach (var t in tracks) t.CloseVideo();
         store?.Dispose();
         store = null;
+        RefreshColorPanel();
         if (clearUndo) undo.Clear();
         UpdateUndoButtons();
     }
@@ -372,6 +380,7 @@ public partial class MainWindow : Window
         Timeline.LengthSec = engine.LengthSec;
         Timeline.SetTracks(list, preserveView);
         Preview.SetProject(list, p.Settings);
+        RefreshColorPanel();
         ShowTrack(list.FirstOrDefault());
 
         var notes = new List<string>();
@@ -459,6 +468,9 @@ public partial class MainWindow : Window
             case Key.F:
                 Timeline.FitAll();
                 break;
+            case Key.X:
+                SetMixerView(!mixerView);
+                break;
             case Key.C:
                 if (e.KeyModifiers.HasFlag(KeyModifiers.Shift)) CountInToggle.IsChecked = CountInToggle.IsChecked != true;
                 else ClickToggle.IsChecked = ClickToggle.IsChecked != true;
@@ -489,6 +501,10 @@ public partial class MainWindow : Window
             t.ShowL = Math.Max(t.MeterL, t.ShowL * 0.82f);
             t.ShowR = Math.Max(t.MeterR, t.ShowR * 0.82f);
             t.MeterL = t.MeterR = 0;
+            double gr = t.GrDb;
+            t.GrDb = 0;
+            t.GrPeak = gr;
+            t.GrShow = gr < t.GrShow ? gr : t.GrShow + (gr - t.GrShow) * 0.12;
         }
         Timeline.SetPlayhead(pos, engine.Playing);
         bool newFrame = false;
@@ -500,6 +516,7 @@ public partial class MainWindow : Window
         RefreshTransport(pos);
         if (RecordingBusy) RefreshRecording();
         var m = engine.TakeMeters();
+        TickMixer(pos, m.OutL, m.OutR);
         InputMeter.Push(m.InL, m.InR);
         Live.Meter.Push(m.InL, m.InR);
         TickCamera();
@@ -508,8 +525,7 @@ public partial class MainWindow : Window
 
         if (sel != null)
         {
-            grShown = Math.Min(sel.GrDb, grShown * 0.85);
-            sel.GrDb = 0;
+            grShown = Math.Min(sel.GrPeak, grShown * 0.85);
             GrText.Text = sel.Channel.Comp.On ? $"{grShown:0.0} dB" : "—";
             GrBar.Width = GrTrack.Bounds.Width * Math.Clamp(-grShown / 24, 0, 1);
         }
@@ -578,6 +594,7 @@ public partial class MainWindow : Window
                 Timeline.Bpm = st.Project.Settings.Bpm;
                 Timeline.InvalidateVisual();
                 Preview.SetProject(tracks, st.Project.Settings);
+                RefreshColorPanel();
             }
             else await ShowProject(st, audio, true);
             int index = tracks.FindIndex(t => t.Track.Id == selected);
@@ -594,6 +611,8 @@ public partial class MainWindow : Window
             restoring = false;
             Timeline.IsEnabled = TimelineToolbar.IsEnabled = SessionChip.IsEnabled = true;
             Inspector.IsEnabled = sel != null;
+            RefreshColorPanel();
+            RefreshMixer();
             MarkDirty();
             UpdateUndoButtons();
         }

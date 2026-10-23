@@ -97,6 +97,9 @@ static class Program
               proyectos borrar carpeta | guardar-plantilla carpeta "Nombre"
               proyectos previsualizar "Nombre" | olvidar carpeta | carpeta ruta
               proyectos borrar-plantilla id
+              proyectos plantillas-video | guardar-plantilla-video carpeta "Nombre"
+              proyectos aplicar-plantilla-video carpeta id|"Nombre" | borrar-plantilla-video id
+                                           las plantillas de video (filtro, ajustes y efectos) de la pestaña Color
               proyectos nuevo "Nombre" [--plantilla id] [--carpeta vacía]
                                            el gestor de proyectos sin la ventana (--raiz: otra carpeta de proyectos)
                                            --datos X: configuración, recientes y plantillas aislados para pruebas

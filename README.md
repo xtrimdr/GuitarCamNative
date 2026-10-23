@@ -33,13 +33,15 @@ Laboratorio para ver si GuitarCam Studio se puede pasar a .NET nativo. Corre al 
   de la web: lista, buscador, nuevo con plantilla, renombrar, duplicar, Papelera, abrir carpeta,
   importar de la web), salvo que reciba una carpeta por línea de comandos; el chip del proyecto lo
   vuelve a abrir. Timeline, preview con el monitor "En vivo" al lado (la cámara cruda y la entrada),
-  inspector, reproducción por ASIO, autoguardado. Las tomas se graban con el video de la cámara. El ⚙
+  inspector, barra derecha con la pestaña Color (filtro, ajustes, efectos y plantillas de video),
+  mixer en lugar del timeline (X: tiras amplias o compactas, retornos de reverb y delay, master,
+  plantillas de paneo y mini timeline), reproducción por ASIO, autoguardado. Las tomas se graban con el video de la cámara. El ⚙
   abre Configuración: driver ASIO y salida (se recuerdan), canales, ganancia, monitoreo, cámara
   (dispositivo, resolución, IP DroidCam, espejo), calibración de latencia, ajuste fino de sincronía y
   latencia de cámara.
   R = grabar (grabando: detener y guardar; en la cuenta: cancelar), Esc = cancelar la cuenta,
   Espacio = play/pausa (grabando: detener y guardar), Inicio = al principio, C = click,
-  Shift+C = cuenta, T = tap tempo, M/S = mute/solo, F = ver todo,
+  Shift+C = cuenta, T = tap tempo, M/S = mute/solo, F = ver todo, X = timeline / mixer,
   Shift+rueda = zoom, Alt+rueda = alto de pista, Ctrl+Z = deshacer, Ctrl+Y o Ctrl+Shift+Z = rehacer,
   Supr = quitar clip (otra vez: quitar la pista vacía), Esc = cancelar el arrastre.
   En el gestor: F2 = renombrar la fila, Esc = cierra el formulario y después el gestor (si hay un
@@ -89,6 +91,8 @@ src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe
 | `proyectos borrar carpeta` / `proyectos olvidar carpeta` | a la Papelera / lo saca de la lista |
 | `proyectos carpeta ruta` | cambia la carpeta de proyectos |
 | `proyectos guardar-plantilla carpeta "Nombre"` / `proyectos borrar-plantilla id` | plantillas del usuario |
+| `proyectos plantillas-video` / `guardar-plantilla-video carpeta "Nombre"` | plantillas de video (filtro, ajustes y efectos) de la pestaña Color |
+| `proyectos aplicar-plantilla-video carpeta id\|"Nombre"` / `borrar-plantilla-video id` | aplica una plantilla de video a un proyecto / la borra |
 
 En `proyecto` y `proyectos`, `--datos X` usa otra carpeta para la configuración, los recientes y las
 plantillas (para probar sin tocar los tuyos), y `--raiz X` otra carpeta de proyectos.

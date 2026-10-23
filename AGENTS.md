@@ -241,10 +241,10 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 
 ```
 ┌ barra de título propia (44) ─ logo · chip del proyecto ▾ · deshacer/rehacer · estado ·························· ⚙ · [Exportar MP4] ┐
-├ inspector (290) ─┬─ preview (el cuadro del video con un panel por pista con video) ──────────────────┬─ "En vivo" (256) ───┤
-│ TOMA + secciones │                                                                                  │ cámara + entrada    │
-├──────────────────┴─ separador arrastrable ──────────────────────────────────────────────────────────────────────────────────┤
-│ timeline (280): regla de compases (32) · encabezados fijos (264) · un carril por pista (64, 40–160)                         │
+├ inspector (290) ─┬─ preview (un panel por pista con video) ────────┬─ "En vivo" (256) ─┬─ proyecto (290, plegable a 44) ┤
+│ TOMA + secciones │                                                 │ cámara + entrada  │ pestañas Color / Historial     │
+├──────────────────┴─ separador arrastrable ─────────────────────────┴───────────────────┤                                │
+│ timeline (280): regla (32) · encabezados fijos (264) · un carril por pista (64, 40–160) │                                │
 ├ transporte, siempre abajo (~52) ────────────────────────────────────────────────────────────────────────────────────────────┤
 │ DSP % · formato/driver · ENTRADA 1-2 ··· [ reloj │ ⏮ ■ ▶ Grabar loop │ Compás Tempo TAP Cuenta Click ▾ ] ··· Timeline/Mixer · Ver todo │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -267,6 +267,14 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 - **Inspector**: título de la toma + una tarjeta (`Border.section`) por bloque, cada una con ícono +
   etiqueta en mayúscula y, si se puede apagar, un `ToggleSwitch` a la derecha. Apagada → clase `off`
   (los controles quedan al 40 % de opacidad, pero se pueden seguir tocando).
+- **Mixer** (`MainWindow.Mixer.cs`): ocupa el lugar del timeline (X o "Timeline / Mixer" abajo a la
+  derecha) con su propia altura (mínimo 250). Una tira por pista, también las vacías; amplias o
+  compactas ("Auto" según el ancho, como la web). Las ediciones de canal pasan por `EditTrack`, las de
+  los buses por `BusEdit`. Los medidores del mixer usan el degradé de la web (verde → amarillo → rojo,
+  `Palette.Meter*`), distinto del `StereoMeter`. Los desplegables son `SelectButton`, no `ComboBox`.
+- **Barra del proyecto** (derecha, `MainWindow.Color.cs`): lo que es del proyecto, como en la web
+  (lo de la pista va al inspector). Ocupa la altura de la preview y el timeline, se pliega a una columna
+  de íconos y recuerda pestaña y secciones plegadas. Las ediciones de Color pasan por `ColorEdit(...)`.
 - **Monitor "En vivo"** (`Controls/LiveMonitor.cs`), a la derecha de la preview: la cámara cruda, nunca
   la composición. La cámara la abre `Video/LiveCamera.cs` (un solo FFmpeg, `CameraCapture`), que también
   alimenta el video de la toma (`VideoTakeWriter`).
@@ -320,6 +328,7 @@ Mismo comportamiento que el `StereoMeter` de la web: ataque instantáneo, caída
 | C | click on/off |
 | M / S | mute / solo de la pista seleccionada |
 | F | ver todo |
+| X | timeline / mixer |
 | Ctrl+S | guardar ya |
 | Ctrl+Z / Ctrl+Y o Ctrl+Shift+Z | deshacer / rehacer |
 | Supr | quitar el clip (la pista queda vacía); en una pista vacía, quitar la pista |

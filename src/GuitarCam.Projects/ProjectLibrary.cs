@@ -375,7 +375,8 @@ public static partial class ProjectLibrary
         },
     };
 
-    internal static T Clone<T>(T v) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(v, ProjectStore.Json), ProjectStore.Json)!;
+    /// <summary>Deep copy through the project's JSON, so Extra and unknown fields come along.</summary>
+    public static T Clone<T>(T v) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(v, ProjectStore.Json), ProjectStore.Json)!;
 }
 
 /// <summary>The program's own settings (not a project's), in %APPDATA%\GuitarCam Studio\config.json.</summary>

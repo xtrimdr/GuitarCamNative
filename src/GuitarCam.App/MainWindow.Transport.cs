@@ -11,8 +11,8 @@ using GuitarCam.Projects;
 
 namespace GuitarCam.App;
 
-/// <summary>Port of TransportBar.tsx and App.tsx transport actions. Native difference: Mixer remains
-/// pending. The click menu auditions through <see cref="PlaybackEngine.PreviewClick"/>. View preferences and
+/// <summary>Port of TransportBar.tsx and App.tsx transport actions (the Timeline / Mixer toggle is in
+/// MainWindow.Mixer.cs). The click menu auditions through <see cref="PlaybackEngine.PreviewClick"/>. View preferences and
 /// click settings belong to the app, while tempo belongs to the project (outside undo, like the web).</summary>
 public partial class MainWindow
 {

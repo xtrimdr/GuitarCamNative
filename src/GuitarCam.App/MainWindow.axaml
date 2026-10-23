@@ -28,10 +28,10 @@
 
   <!-- maximized, Windows pushes a window with our own title bar 8 px past each screen edge: OffScreenMargin
        says how much, so the content stays on screen -->
-  <Grid RowDefinitions="44,*,4,280,Auto" Margin="{Binding $parent[Window].OffScreenMargin}">
+  <Grid x:Name="Root" RowDefinitions="44,*,4,280,Auto" ColumnDefinitions="*,Auto" Margin="{Binding $parent[Window].OffScreenMargin}">
 
     <!-- top bar (also the window's title bar) -->
-    <Border x:Name="TitleBar" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
+    <Border x:Name="TitleBar" Grid.ColumnSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
       <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="12,0,150,0">
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <Border Width="24" Height="24" CornerRadius="6" Background="{StaticResource Accent}">
@@ -92,10 +92,14 @@
       </Grid>
     </Grid>
 
+    <!-- project bar (Color / Historial): the web's right sidebar, beside the stage and the timeline; filled in MainWindow.Color.cs -->
+    <Border Grid.Row="1" Grid.RowSpan="3" Grid.Column="1" x:Name="ProjectBar" Width="290" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0" />
+
     <GridSplitter Grid.Row="2" Background="{StaticResource Line}" ResizeDirection="Rows" />
 
-    <!-- timeline -->
-    <Grid Grid.Row="3">
+    <!-- timeline, or the mixer in its place (X) -->
+    <DockPanel Grid.Row="3" x:Name="MixerHost" IsVisible="False" Background="{StaticResource App}" />
+    <Grid Grid.Row="3" x:Name="TimelineHost">
       <c:TimelineView x:Name="Timeline" />
       <Grid x:Name="TimelineToolbar" Width="264" Height="32" HorizontalAlignment="Left" VerticalAlignment="Top"
             Background="{StaticResource Panel}" ColumnDefinitions="26,26,84,26,*" Margin="0">
@@ -118,7 +122,7 @@
     <!-- transport bar, always at the bottom (Fender Studio Pro style, asked by the user). The clock, the
          transport and the metronome share one dark box that stays centered on the window: the side columns
          are equal stars, the audio status on the left trims its text before the box moves. -->
-    <Border Grid.Row="4" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="14,6">
+    <Border Grid.Row="4" Grid.ColumnSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="14,6">
       <Grid ColumnDefinitions="*,Auto,*">
         <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,16,0" VerticalAlignment="Center" ClipToBounds="True">
           <StackPanel Classes="bar-cell" Width="44" Margin="0,0,16,0" ToolTip.Tip="Carga del callback de audio">
@@ -212,8 +216,8 @@
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="16,0,0,0">
           <Border Classes="seg" ToolTip.Tip="Alternar timeline / mixer (X)">
             <StackPanel Orientation="Horizontal">
-              <Button Classes="seg on" Height="32" Padding="12,0" Content="Timeline" />
-              <Button Classes="seg" Height="32" Padding="12,0" Content="Mixer" IsEnabled="False" ToolTip.Tip="Todavía no está en la versión nativa" />
+              <Button x:Name="TimelineViewButton" Classes="seg on" Height="32" Padding="12,0" Content="Timeline" />
+              <Button x:Name="MixerViewButton" Classes="seg" Height="32" Padding="12,0" Content="Mixer" />
             </StackPanel>
           </Border>
           <Button x:Name="FitButton" Classes="tbtn" ToolTip.Tip="Ver todo (F)">

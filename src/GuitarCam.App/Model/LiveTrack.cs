@@ -202,6 +202,7 @@ public sealed class LiveTrack
     public float MeterL, MeterR;
     public double GrDb;
     public float ShowL, ShowR; // UI side, with fall-off
+    public double GrPeak, GrShow; // UI side: this tick's reduction, and the mixer's (instant attack, slow release)
 
     public LiveTrack(Track track, IReadOnlyList<LiveClip> clips, int sampleRate)
     {

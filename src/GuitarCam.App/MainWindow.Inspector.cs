@@ -343,6 +343,7 @@ public partial class MainWindow
             if (sel != null && c != null) foreach (var refresh in inspectorRefresh) refresh();
         }
         finally { syncing = false; }
+        RefreshMixer();
     }
 }
 

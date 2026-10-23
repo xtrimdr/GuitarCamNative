@@ -54,10 +54,12 @@ recuerda. Arriba, "Mostrar / Colapsar todos los efectos".
 - **Clip**: Recorte inicio/final, Fade in/out de audio, "El video sigue los fades del audio" o fades de
   video propios, "Restaurar clip" ✅.
 
-### 1.3 Barra lateral derecha: proyecto (pestañas Color / Historial) ✗
+### 1.3 Barra lateral derecha: proyecto (pestañas Color / Historial) ◐ (falta el contenido de Historial)
 Se pliega igual que la izquierda; la pestaña elegida se recuerda. Lo que es por pista va a la izquierda y
 lo que es del proyecto, a la derecha.
-- **Color** → §6. **Historial** → §2.3.
+- **Color** → §6 ✅. **Historial** → §2.3 ✗ (la pestaña está y dice que todavía no está en la nativa).
+- Nativa: plegar (a una columna de íconos), pestaña y secciones plegadas se recuerdan en `config.json`
+  (`MainWindow.Color.cs`). Termina arriba de la barra de transporte, que acá va abajo de lado a lado.
 
 ### 1.4 Escenario (preview) ◐
 - **Formato**: "Lado a lado" / "Apilado" y relación de aspecto: Horizontal (YouTube) 16:9, Vertical
@@ -94,11 +96,12 @@ Configuración"; botón "Configurar entradas".
 - **Click** (C) ✅ y su menú: sonido (Bip, Madera, Clave, Aguja, Cencerro, Batería: clic para elegirlo y
   escucharlo) y **volumen** (-24 a +9 dB). Se recuerda entre sesiones ◐ (todo implementado, también la
   escucha con `PlaybackEngine.PreviewClick`; falta probarlo a mano).
-- **Timeline / Mixer** (X) ✗.
+- **Timeline / Mixer** (X) ✅.
 
 ### 1.7 Panel inferior ◐
-- **Altura** con separador arrastrable, una para la timeline y otra para el mixer, recordadas ◐.
-- Con el mixer visible, arriba va una **mini timeline** (clic o arrastre mueve el cabezal) ✗.
+- **Altura** con separador arrastrable, una para la timeline y otra para el mixer, recordadas ◐ (la del
+  mixer se recuerda; la del timeline vuelve a 280 al abrir).
+- Con el mixer visible, arriba va una **mini timeline** (clic o arrastre mueve el cabezal) ✅.
 
 ---
 
@@ -182,7 +185,7 @@ proyecto); guardar con el mismo nombre reemplaza; se borran desde el formulario 
 
 ---
 
-## 4. Mixer ✗
+## 4. Mixer ✅ (`MainWindow.Mixer.cs`; falta probar los medidores con audio de verdad)
 
 ### 4.1 Tiras de canal
 Una por pista, también las vacías ("vacía"; lo que se edita lo hereda la próxima toma). Ancho Auto /
@@ -206,7 +209,8 @@ En el encabezado: Abanico, Alternado L/R, Distribuido L→R, Centro, con "Apertu
 las pistas.
 
 ### 4.4 Medidores
-Los mismos de la web, con escala en dB y lectura de picos ◐ (los de pista del timeline sí).
+Los mismos de la web, con escala en dB y lectura de picos ✅ (degradé verde/amarillo/rojo, -48 a +3 dB;
+LIM del master con la reducción del limitador, `MasterLimiter.TakeReductionDb`).
 
 ### 4.5 Tempo (`TempoControl`)
 BPM tipo FL Studio: arrastrar arriba/abajo la parte entera o la decimal, rueda (Shift = fino), doble
@@ -294,7 +298,7 @@ informa el navegador" (en nativo: lo que informa el driver ASIO).
 
 ---
 
-## 6. Color y efectos de video ◐ (preview y exportación ✅, con la misma LUT; falta la pestaña Color, A6)
+## 6. Color y efectos de video ✅ (pestaña Color, preview y exportación con la misma LUT)
 
 Pestaña **Color** de la barra derecha, secciones Plantillas / Filtro / Ajustes / Efectos, todo deshacible.
 - **Filtro (look)**: Ninguno, Brujo, Sepia, B/N, Noir, Cálido, Frío, Cine, Vintage, Película,
@@ -306,7 +310,8 @@ Pestaña **Color** de la barra derecha, secciones Plantillas / Filtro / Ajustes 
 - **Efectos**: Viñeta y Tamaño (la misma máscara en preview y export), Grano (ruido de luma, nuevo por
   cuadro; iguales en intensidad, no grano por grano), Barras de cine (Sin barras / 1.85 / 2.00 / 2.39);
   "Ver sin efectos / Aplicar efectos".
-- **Plantillas de video** (filtro + ajustes + efectos), del programa; mismo nombre = actualizar.
+- **Plantillas de video** (filtro + ajustes + efectos), del programa; mismo nombre = actualizar. Nativa:
+  `%APPDATA%\GuitarCam Studio\plantillas-video.json` (`VideoTemplates.cs`), `gclab proyectos plantillas-video…`.
 - Orden por toma: LUT → grano → espejo → escala/recorte → viñeta → barras → padding → fades.
 
 ---
@@ -376,7 +381,7 @@ paso. Se vacía al cambiar de proyecto y después de borrar no usadas.
 | C / Shift+C | click / cuenta | ◐ (C sí) |
 | M / S | mute / solo de la pista seleccionada | ✅ |
 | Supr | quitar el clip (la pista queda vacía); en una pista vacía, quitar la pista | ✗ |
-| X | timeline / mixer | ✗ |
+| X | timeline / mixer | ✅ |
 | Inicio | al principio | ✅ |
 | Ctrl+Z / Ctrl+Y | deshacer / rehacer | ✅ |
 | F2 | renombrar (en el gestor) | ✗ |

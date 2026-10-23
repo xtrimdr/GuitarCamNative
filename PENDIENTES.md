@@ -106,6 +106,30 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
 
 ## Hecho
 
+- 2026-10-22: mixer (§4 y §1.7 de MIGRACION): `MainWindow.Mixer.cs`, port de `Mixer.tsx` y
+  `MiniTimeline.tsx`. Se alterna con el timeline (X o el botón de abajo) y tiene su propia altura
+  (recordada). Tiras amplias (paneo y un panel por efecto: Sat, Comp con LIM y "Comprime", EQ con el
+  gráfico chico y su plantilla, envíos de reverb y delay) o compactas (Pan / Comp / Rev / Delay, M S C),
+  "Auto / Compacto / Amplio" recordado; pistas vacías con "vacía". Retornos de reverb y delay con sus
+  presets, nota o "Libre (ms)", estéreo / ping-pong, mute y fader; master con la luz LIM. Plantillas de
+  paneo con "Apertura". Controles nuevos: `Knob`, `Fader`, `MixerMeter`, `MiniTimeline`, `SelectButton`;
+  el limitador del master ahora informa su reducción. Todo con deshacer (mismas claves que el inspector) y
+  en vivo. Probado en la ventana: cambiar de vista, los tres anchos, paneo con la rueda, "Alternado L/R"
+  y deshacer, reproducir con la mini timeline. Sin probar: los medidores con una toma con sonido (el
+  proyecto de prueba tiene tomas en silencio), los presets de los buses de oído, y la captura lado a lado
+  con la web.
+
+- 2026-10-22: barra derecha y pestaña Color (§1.3 y §6 de MIGRACION; A6): `MainWindow.Color.cs`, port de
+  `ColorPanel.tsx` con Plantillas (guardar actual, aplicar, borrar; mismo nombre = actualizar), Filtro con
+  las muestras de cada look e Intensidad, Ajustes con Restablecer, Efectos (viñeta y tamaño, grano, barras
+  de cine) y los ON/OFF "Ver sin color" / "Ver sin efectos". Cada cambio es un paso de deshacer (misma
+  clave que la web), se guarda solo y se ve en vivo en la preview. La barra se pliega a una columna de
+  íconos y recuerda pestaña y secciones. Plantillas en `VideoTemplates.cs` (`plantillas-video.json`),
+  `gclab proyectos plantillas-video | guardar-plantilla-video | aplicar-plantilla-video |
+  borrar-plantilla-video`. `ColorGrade` y `VideoFx` ahora se normalizan al abrir (mismos rangos que la
+  web). Probado en la ventana: elegir un look, deshacer, guardar y borrar una plantilla, plegar y
+  desplegar. La pestaña Historial está pero vacía (§2.3). Falta la captura lado a lado con la web.
+
 - 2026-10-22: cámara (§11 de MIGRACION) y monitor "En vivo" (§1.5): `CameraCapture.cs` (DirectShow por
   FFmpeg, la elección de cámara de la web, resolución con sus alternativas, DroidCam por IP) y
   `VideoTakeWriter.cs` (H.264 8 Mbps, keyframe cada 1 s, 30 fps contados desde la primera muestra de

@@ -80,8 +80,8 @@ public sealed class ProjectSettings
         Aspect ??= "16:9";
         Reverb ??= new();
         Delay ??= new();
-        Color ??= new();
-        VideoFx ??= new();
+        (Color ??= new()).Normalize();
+        (VideoFx ??= new()).Normalize();
         Export ??= new();
     }
 }
@@ -130,6 +130,19 @@ public sealed class ColorGrade
     public double Tint { get; set; }
     public double Fade { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+
+    /// <summary>Same ranges as normalizeGrade (colorGrade.js): unknown looks become "none".</summary>
+    public void Normalize()
+    {
+        static double N(double v, double lo, double d) => double.IsFinite(v) ? Math.Clamp(v, lo, 100) : d;
+        Look = GuitarCam.Audio.VideoColorProcessor.IsKnownLook(Look) ? Look : "none";
+        Amount = N(Amount, 0, 100);
+        Exposure = N(Exposure, -100, 0); Contrast = N(Contrast, -100, 0);
+        Highlights = N(Highlights, -100, 0); Shadows = N(Shadows, -100, 0);
+        Saturation = N(Saturation, -100, 0); Vibrance = N(Vibrance, -100, 0);
+        Temperature = N(Temperature, -100, 0); Tint = N(Tint, -100, 0);
+        Fade = N(Fade, 0, 0);
+    }
 }
 
 public sealed class VideoFx
@@ -140,6 +153,14 @@ public sealed class VideoFx
     public double Grain { get; set; }
     public string Letterbox { get; set; } = "off";
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+
+    /// <summary>Same ranges as normalizeVideoFx (videoFx.js).</summary>
+    public void Normalize()
+    {
+        static double N(double v, double d) => double.IsFinite(v) ? Math.Clamp(v, 0, 100) : d;
+        Vignette = N(Vignette, 0); VignetteSize = N(VignetteSize, 50); Grain = N(Grain, 0);
+        if (!GuitarCam.Audio.VideoColorProcessor.LetterboxOptions.Any(l => l.Id == Letterbox)) Letterbox = "off";
+    }
 }
 
 public sealed class ExportSettings
