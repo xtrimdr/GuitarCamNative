@@ -69,17 +69,23 @@ lo que es del proyecto, a la derecha.
 - Nativa: plegar (a una columna de íconos), pestaña y secciones plegadas se recuerdan en `config.json`
   (`MainWindow.Color.cs`). Termina arriba de la barra de transporte, que acá va abajo de lado a lado.
 
-### 1.4 Escenario (preview) ◐
+### 1.4 Escenario (preview) ✅
 - **Formato**: "Lado a lado" / "Apilado" y relación de aspecto: Horizontal (YouTube) 16:9, Vertical
-  (Reels / Shorts / TikTok) 9:16, Cuadrado 1:1. Elegir 9:16 pasa a apilado y 16:9 a lado a lado ✗
-  (hoy se respeta lo que trae el proyecto, pero no se puede cambiar).
+  (Reels / Shorts / TikTok) 9:16, Cuadrado 1:1. Elegir 9:16 pasa a apilado y 16:9 a lado a lado ✅
+  (`MainWindow.Preview.cs`; un paso de deshacer por cambio, como `checkpoint()` sin clave).
 - **Composición**: un panel por toma con la grilla compartida con la exportación ✅; encuadre por toma
   (cover + zoom + paneo + espejo) ✅; color, viñeta, grano y barras de cine (§6) ✅; fades de video a
-  negro ✗; panel vacío fuera del clip ✅.
-- **Arrastrar un panel** mueve el encuadre (panX/panY), **rueda** = zoom, **clic** selecciona la toma ✗.
+  negro ✅ (solo mientras suena o graba, como la web); panel vacío fuera del clip ✅; borde de acento en la
+  toma elegida ✅.
+- **Arrastrar un panel** mueve el encuadre (panX/panY), **rueda** = zoom, **clic** selecciona la toma ✅.
 - Textos de estado: "La composición aparece cuando termines la primera toma", "Mientras grabás, la cámara
-  se ve en el monitor "En vivo"", "Cargando video…" ✗.
+  se ve en el monitor "En vivo"", "Cargando video…" ✅.
 - La cámara en vivo **nunca** entra en la composición: va al monitor.
+- Nativa, diferencias: los íconos de "Lado a lado" / "Apilado" (Columns2 / Rows2 de lucide) están
+  dibujados, porque Segoe no los tiene; la separación entre paneles es la de la exportación (4 px de
+  salida) y no los 3 px del lienzo de la web; los textos usan la escala de la nativa en vez de tamaños del
+  lienzo; una pista cuyo primer clip no tiene video no ocupa panel (así lo hace la exportación nativa).
+  Falta la cuenta grande (1-2-3-4) sobre el escenario: hoy la cuenta se ve en el monitor "En vivo".
 
 ### 1.5 Monitor en vivo ✅
 Al lado del escenario: la cámara cruda (sin composición), el dispositivo de entrada y el medidor

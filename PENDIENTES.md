@@ -87,6 +87,9 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
 
 ## Notas
 
+- Al abrir un proyecto queda un paso de deshacer vacío "track:…:name": el `TextChanged` del nombre en el
+  inspector (`MainWindow.Inspector.cs`, `InitInspector`) se dispara al llenarlo fuera de `syncing`. El
+  primer Ctrl+Z "deshace" sin cambiar nada.
 - Puntitos en la preview (resuelto): con la ventana permitiendo transparencia, algunos píxeles oscuros
   del video dejaban ver la ventana de atrás. `TransparencyLevelHint="None"` lo corta, y con el video
   decodificado quedan solo unos pocos píxeles negros sobre casi negro, invisibles. Ojo al revisar
@@ -128,6 +131,17 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
   AnalyserNode (bien a 0,05 dB). Probado en la ventana: plegar y desplegar, proyecto sin tomas, pista
   vacía y el espectro de una toma sonando. Las plantillas de paneo y el canal de la pista vacía no van en
   el inspector: en la web están en el mixer, que ya los tiene.
+- 2026-10-22: preview (§1.4 de MIGRACION): elegir el formato desde la ventana, arriba del escenario como en
+  la web ("Lado a lado" / "Apilado" y 16:9 · 9:16 · 1:1, `MainWindow.Preview.cs`); 9:16 pasa a apilado y
+  16:9 a lado a lado, cada cambio es un paso de deshacer y se guarda solo (`ProjectSettings.SetAspect` /
+  `SetLayout`, también `gclab proyecto formato`). En `PreviewView`: borde de acento en el panel de la pista
+  elegida, la separación entre paneles de la exportación (4 px de salida), los textos de estado de la web
+  ("La composición aparece…", "Mientras grabás…", "Cargando video…") y los fades de video solo mientras
+  suena o graba (como la web). La preview ya no le da panel a una pista cuyo primer clip no tiene video,
+  igual que la exportación. Arrastre, rueda y clic ya estaban. Probado en la ventana: los dos selectores,
+  9:16 → apilado, 1:1 y deshacer; comparado con un MP4 de `gclab exportar` (misma grilla y encuadre). Sin
+  probar a mano: el arrastre y la rueda en un panel y ver el fade mientras reproduce.
+
 - 2026-10-22: mixer (§4 y §1.7 de MIGRACION): `MainWindow.Mixer.cs`, port de `Mixer.tsx` y
   `MiniTimeline.tsx`. Se alterna con el timeline (X o el botón de abajo) y tiene su propia altura
   (recordada). Tiras amplias (paneo y un panel por efecto: Sat, Comp con LIM y "Comprime", EQ con el

@@ -105,9 +105,35 @@
       </Border>
 
       <!-- the stage and, beside it, the "En vivo" monitor (the web's aside next to SplitScreenCanvas) -->
-      <Grid Grid.Column="1" ColumnDefinitions="*,Auto">
-        <c:PreviewView x:Name="Preview" />
-        <c:LiveMonitor Grid.Column="1" x:Name="Live" Width="256" Margin="0,16,16,16" VerticalAlignment="Top" />
+      <Grid Grid.Column="1" ColumnDefinitions="*,Auto" RowDefinitions="Auto,*">
+        <!-- format: layout on the left, aspect ratio on the right (App.tsx, above SplitScreenCanvas) -->
+        <DockPanel Grid.ColumnSpan="2" Margin="16,12,16,0">
+          <Border Classes="seg" DockPanel.Dock="Left">
+            <StackPanel Orientation="Horizontal">
+              <ToggleButton x:Name="LayoutSideButton" Classes="seg" ToolTip.Tip="Paneles uno al lado del otro">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Path Data="M1.5,1.5 H12.5 V12.5 H1.5 Z M7,1.5 V12.5" Stroke="{Binding #LayoutSideText.Foreground}" StrokeThickness="1.3" StrokeLineCap="Round" StrokeJoin="Round" Width="14" Height="14" VerticalAlignment="Center" />
+                  <TextBlock x:Name="LayoutSideText" Text="Lado a lado" VerticalAlignment="Center" />
+                </StackPanel>
+              </ToggleButton>
+              <ToggleButton x:Name="LayoutStackButton" Classes="seg" ToolTip.Tip="Paneles uno arriba del otro">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Path Data="M1.5,1.5 H12.5 V12.5 H1.5 Z M1.5,7 H12.5" Stroke="{Binding #LayoutStackText.Foreground}" StrokeThickness="1.3" StrokeLineCap="Round" StrokeJoin="Round" Width="14" Height="14" VerticalAlignment="Center" />
+                  <TextBlock x:Name="LayoutStackText" Text="Apilado" VerticalAlignment="Center" />
+                </StackPanel>
+              </ToggleButton>
+            </StackPanel>
+          </Border>
+          <Border Classes="seg" HorizontalAlignment="Right">
+            <StackPanel Orientation="Horizontal">
+              <ToggleButton x:Name="Aspect169Button" Classes="seg" ToolTip.Tip="Horizontal (YouTube)"><TextBlock Classes="mono" Text="16:9" /></ToggleButton>
+              <ToggleButton x:Name="Aspect916Button" Classes="seg" ToolTip.Tip="Vertical (Reels / Shorts / TikTok)"><TextBlock Classes="mono" Text="9:16" /></ToggleButton>
+              <ToggleButton x:Name="Aspect11Button" Classes="seg" ToolTip.Tip="Cuadrado"><TextBlock Classes="mono" Text="1:1" /></ToggleButton>
+            </StackPanel>
+          </Border>
+        </DockPanel>
+        <c:PreviewView Grid.Row="1" x:Name="Preview" />
+        <c:LiveMonitor Grid.Row="1" Grid.Column="1" x:Name="Live" Width="256" Margin="0,16,16,16" VerticalAlignment="Top" />
       </Grid>
     </Grid>
 

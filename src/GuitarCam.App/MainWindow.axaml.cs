@@ -103,6 +103,7 @@ public partial class MainWindow : Window
         }, solo ? "solo" : "mute");
         InitTimelineEditing();
         InitTransport();
+        InitPreview();
 
         InitInspector();
         InitProjectBar();
@@ -381,6 +382,7 @@ public partial class MainWindow : Window
         Timeline.LengthSec = engine.LengthSec;
         Timeline.SetTracks(list, preserveView);
         Preview.SetProject(list, p.Settings);
+        RefreshFormat();
         RefreshColorPanel();
         ShowTrack(list.FirstOrDefault());
 
@@ -497,6 +499,9 @@ public partial class MainWindow : Window
         double pos = engine.PositionSec;
         bool videoFade = Preview.Playhead != pos && tracks.Any(t => t.Clips.Any(c => c.Clip.FadeInSec > 0 || c.Clip.FadeOutSec > 0 || c.Clip.VideoFadeInSec > 0 || c.Clip.VideoFadeOutSec > 0));
         Preview.Playhead = pos;
+        bool timed = engine.Playing || RecordingBusy;
+        videoFade |= timed != Preview.Timed;
+        Preview.Timed = timed;
         foreach (var t in tracks)
         {
             t.ShowL = Math.Max(t.MeterL, t.ShowL * 0.82f);
@@ -597,6 +602,7 @@ public partial class MainWindow : Window
                 Timeline.Bpm = st.Project.Settings.Bpm;
                 Timeline.InvalidateVisual();
                 Preview.SetProject(tracks, st.Project.Settings);
+                RefreshFormat();
                 RefreshColorPanel();
             }
             else await ShowProject(st, audio, true);
