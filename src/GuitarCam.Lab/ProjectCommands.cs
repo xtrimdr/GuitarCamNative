@@ -13,6 +13,7 @@ static class ProjectCommands
         if (sub == "verificar-deshacer") return UndoChecks.Run();
         if (sub == "verificar-clips") return ClipChecks.Run();
         if (sub == "verificar-tomas") return TakeChecks.Run();
+        if (sub == "verificar-historial") return HistoryCommands.Check();
         string? dir = a.Positional.Skip(1).FirstOrDefault();
         if (dir == null) throw new ArgumentException("Falta la carpeta del proyecto.");
         dir = Path.GetFullPath(dir);
@@ -24,6 +25,7 @@ static class ProjectCommands
             "volver" => Restore(dir, a.Positional.Skip(2).FirstOrDefault()),
             "clips" => Clips(dir),
             "editar" => EditClips(dir, a),
+            "historial" => HistoryCommands.Run(dir, a),
             "encuadre" => Frame(dir, a),
             "sincronia" => Sync(dir, a),
             "formato" => Format(dir, a),

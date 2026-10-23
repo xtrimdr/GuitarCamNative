@@ -134,6 +134,7 @@ public partial class MainWindow
             Inspector.IsEnabled = sel != null;
             MarkDirty();
             UpdateUndoButtons();
+            RefreshHistory();
         }
     }
 

@@ -236,5 +236,6 @@ public partial class MainWindow
         TimeText.Foreground = recording ? Palette.Rec : Palette.Fg;
         UpdateUndoButtons();
         SessionChip.IsEnabled = ExportButton.IsEnabled = !recording;
+        RefreshHistory();
     }
 }

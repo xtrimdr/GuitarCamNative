@@ -15,8 +15,7 @@ namespace GuitarCam.App;
 /// The right sidebar (App.tsx's project bar: Color / Historial, collapsible, the tab remembered) and the Color tab,
 /// a port of ColorPanel.tsx: templates, filter, adjustments and effects, every change undoable and live in the
 /// preview. Same as the web except: it ends above the transport bar (which runs the whole width here), the
-/// templates live in %APPDATA% instead of localStorage, and the Historial tab is still a notice, so the default
-/// tab is Color until it is ported.
+/// templates live in %APPDATA% instead of localStorage. The Historial tab is in MainWindow.History.cs.
 /// </summary>
 public partial class MainWindow
 {
@@ -24,19 +23,14 @@ public partial class MainWindow
     const double ProjectBarCollapsedWidth = 44;
 
     readonly List<Action> colorRefresh = [];
-    readonly HashSet<string> collapsedColor = [];
-    readonly Dictionary<string, (StackPanel Body, Control? Action, Button Heading, TextBlock Chevron)> colorSections = [];
+    readonly HashSet<string> collapsedColor = [], collapsedHistory = [];
+    readonly Dictionary<string, (StackPanel Body, Control? Action, Button Heading, TextBlock Chevron, HashSet<string> Collapsed)> colorSections = [];
     readonly StackPanel colorPanel = new();
-    readonly Control historyPanel = new TextBlock
-    {
-        Text = "El historial todavía no está en la versión nativa.",
-        FontSize = 11, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(16),
-    };
     readonly ScrollViewer projectBarBody = new();
     readonly DockPanel projectBarExpanded = new();
     readonly StackPanel projectBarCollapsed = new() { Spacing = 4, Margin = new Thickness(0, 8), HorizontalAlignment = HorizontalAlignment.Center };
     readonly List<(string Key, Button Tab, Button Rail)> projectTabs = [];
-    string projectTab = "color";
+    string projectTab = "history";
     List<VideoTemplate> videoTemplates = [];
     readonly StackPanel templateRows = new() { Spacing = 4 };
     readonly TextBox templateName = new() { Watermark = "Nombre de la plantilla", MaxLength = VideoTemplates.MaxName, FontSize = 12, MinHeight = 32, Height = 32, VerticalContentAlignment = VerticalAlignment.Center };
@@ -63,12 +57,13 @@ public partial class MainWindow
 
     void InitProjectBar()
     {
-        try
-        {
-            foreach (var title in System.Text.Json.JsonSerializer.Deserialize<string[]>(AppConfig.Get("collapsed.color") ?? "[]") ?? []) collapsedColor.Add(title);
-        }
-        catch (System.Text.Json.JsonException) { }
-        projectTab = AppConfig.Get("projectTab") == "history" ? "history" : "color";
+        foreach (var (scope, set) in new[] { ("color", collapsedColor), ("history", collapsedHistory) })
+            try
+            {
+                foreach (var title in System.Text.Json.JsonSerializer.Deserialize<string[]>(AppConfig.Get("collapsed." + scope) ?? "[]") ?? []) set.Add(title);
+            }
+            catch (System.Text.Json.JsonException) { }
+        projectTab = AppConfig.Get("projectTab") == "color" ? "color" : "history";
         bool collapsed = AppConfig.Get("projectBarCollapsed") == "1";
 
         var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*"), Height = 44, Margin = new Thickness(6, 0, 16, 0) };
@@ -95,6 +90,7 @@ public partial class MainWindow
         ProjectBar.Child = new Panel { Children = { projectBarExpanded, projectBarCollapsed } };
 
         BuildColorPanel();
+        BuildHistoryPanel();
         SetProjectTab(projectTab, save: false);
         SetProjectBarCollapsed(collapsed, save: false);
     }
@@ -129,6 +125,7 @@ public partial class MainWindow
             rail.Background = on ? Palette.AccentSoft : Brushes.Transparent;
         }
         projectBarBody.Content = key == "color" ? colorPanel : historyPanel;
+        if (key == "history") RefreshHistory();
         if (save) SaveViewPref("projectTab", key);
     }
 
@@ -141,12 +138,14 @@ public partial class MainWindow
         }, TaskScheduler.Default);
     }
 
-    /// <summary>ui.tsx Section inside the "color" collapse scope: chevron + icon + label, an action and a power button.</summary>
-    StackPanel ColorSection(string title, string icon, Func<bool>? on = null, Action? toggle = null, Func<bool, string>? powerTip = null, Control? action = null)
+    /// <summary>ui.tsx Section inside the "color" (or "history") collapse scope: chevron + icon + label, an action and a power button.</summary>
+    StackPanel ColorSection(string title, string icon, Func<bool>? on = null, Action? toggle = null, Func<bool, string>? powerTip = null, Control? action = null,
+        StackPanel? host = null, string scope = "color")
     {
+        var collapsed = scope == "color" ? collapsedColor : collapsedHistory;
         var content = new StackPanel { Spacing = 14 };
         var outer = new StackPanel { Spacing = 12 };
-        colorPanel.Children.Add(new Border { Child = outer, BorderBrush = Palette.Line, BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(16) });
+        (host ?? colorPanel).Children.Add(new Border { Child = outer, BorderBrush = Palette.Line, BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(16) });
         var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto") };
         var chevron = new TextBlock { Classes = { "icon" }, Text = "", Foreground = Palette.Faint, FontSize = 10, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
         header.Children.Add(chevron);
@@ -156,12 +155,12 @@ public partial class MainWindow
         headingContent.Children.Add(new TextBlock { Text = title.ToUpperInvariant(), Classes = { "label" }, VerticalAlignment = VerticalAlignment.Center });
         var heading = new Button { Classes = { "ghost" }, Content = headingContent, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(0) };
         Avalonia.Automation.AutomationProperties.SetName(heading, title.ToUpperInvariant());
-        colorSections[title] = (content, action, heading, chevron);
+        colorSections[title] = (content, action, heading, chevron, collapsed);
         void Flip()
         {
-            SetColorSectionCollapsed(title, !collapsedColor.Contains(title));
-            string json = System.Text.Json.JsonSerializer.Serialize(collapsedColor);
-            SaveViewPref("collapsed.color", json);
+            SetColorSectionCollapsed(title, !collapsed.Contains(title));
+            string json = System.Text.Json.JsonSerializer.Serialize(collapsed);
+            SaveViewPref("collapsed." + scope, json);
         }
         heading.Click += (_, _) => Flip();
         chevron.PointerPressed += (_, e) => { Flip(); e.Handled = true; };
@@ -187,14 +186,14 @@ public partial class MainWindow
             });
         }
         outer.Children.Add(header); outer.Children.Add(content);
-        SetColorSectionCollapsed(title, collapsedColor.Contains(title));
+        SetColorSectionCollapsed(title, collapsed.Contains(title));
         return content;
     }
 
     void SetColorSectionCollapsed(string title, bool hide)
     {
-        if (hide) collapsedColor.Add(title); else collapsedColor.Remove(title);
         if (!colorSections.TryGetValue(title, out var s)) return;
+        if (hide) s.Collapsed.Add(title); else s.Collapsed.Remove(title);
         s.Body.IsVisible = !hide;
         if (s.Action != null) s.Action.IsVisible = !hide && s.Action.Tag is not false;
         s.Chevron.Text = hide ? "" : "";
@@ -206,7 +205,7 @@ public partial class MainWindow
     {
         if (!colorSections.TryGetValue(title, out var s) || s.Action == null) return;
         s.Action.Tag = show;
-        s.Action.IsVisible = show && !collapsedColor.Contains(title);
+        s.Action.IsVisible = show && !s.Collapsed.Contains(title);
     }
 
     static Button HeaderAction(string glyph, string text, string tip, Action click)
@@ -354,6 +353,7 @@ public partial class MainWindow
             colorPanel.IsEnabled = store != null && !store.ReadOnly && !restoring;
             foreach (var refresh in colorRefresh) refresh();
             RefreshTemplates();
+            RefreshHistory();
         }
         finally { syncing = was; }
     }

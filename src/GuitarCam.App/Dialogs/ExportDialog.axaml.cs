@@ -1141,6 +1141,9 @@ public sealed partial class ExportDialog : UserControl
             Quality = Mp4Exporter.QualityToId(options.Quality),
             DurationSec = Math.Round(result.DurationSec, 2),
             Bytes = result.Bytes,
+            // the takes with a panel in the video, as the dialog's summary counts them
+            TakeIds = project.Tracks.Where(t => t.Video).SelectMany(t => t.Clips)
+                .Where(c => project.FindMedia(c.MediaId)?.Video != null).Select(c => c.MediaId).Distinct().ToList(),
         });
         if (project.Exports.Count > 50)
             project.Exports.RemoveRange(50, project.Exports.Count - 50);

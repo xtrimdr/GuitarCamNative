@@ -284,6 +284,9 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 - **Barra del proyecto** (derecha, `MainWindow.Color.cs`): lo que es del proyecto, como en la web
   (lo de la pista va al inspector). Ocupa la altura de la preview y el timeline, se pliega a una columna
   de íconos y recuerda pestaña y secciones plegadas. Las ediciones de Color pasan por `ColorEdit(...)`.
+  La pestaña Historial (`MainWindow.History.cs`, la de por defecto) se arma solo mientras está a la vista
+  (`RefreshHistory`); lo que hace con el proyecto y los archivos vive en `ProjectHistory` (Projects).
+  "Salió / volvió al timeline" se registra al guardar (`ProjectStore.Serialize` → `LogTimelineChanges`).
 - **Monitor "En vivo"** (`Controls/LiveMonitor.cs`), a la derecha de la preview: la cámara cruda, nunca
   la composición. La cámara la abre `Video/LiveCamera.cs` (un solo FFmpeg, `CameraCapture`), que también
   alimenta el video de la toma (`VideoTakeWriter`).
@@ -307,6 +310,8 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 | `Button.tbtn` / `ToggleButton.tbtn` | botones de la barra de transporte: planos, 36×36, ícono `Fg`; hover `Hover`. Activo (loop, o `.on` mientras suena): ícono `Accent`. `Button.clock` = el reloj plano |
 | `StackPanel.bar-cell` | celda de la barra de transporte (valor arriba, `TextBlock.metro-label` abajo) |
 | `Border.section` (+ `.off`) | tarjeta del inspector |
+| `TextBox.field`, `Button.btn` (`.sm`, `.primary`, `.outline`, `.danger`), `Button.act` (`.danger`) | campos y botones de diálogos y listas (gestor de proyectos, Historial): botón de fila 28×28, confirmación roja |
+| `Button.chip.purge` | "Borrar no usadas": contorno tenue que se pone rojo con el hover |
 | `TextBlock.label` / `.dim` / `.mono` / `.icon` | etiqueta / secundario / números / ícono |
 
 Para un control nuevo, primero reutilizá estas clases. Los controles Fluent (sliders, switches) toman el

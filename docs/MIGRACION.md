@@ -62,10 +62,10 @@ recuerda. Arriba, "Mostrar / Colapsar todos los efectos" ✅ (nativa: plegado en
 - **Clip**: Recorte inicio/final, Fade in/out de audio, "El video sigue los fades del audio" o fades de
   video propios, "Restaurar clip" ✅.
 
-### 1.3 Barra lateral derecha: proyecto (pestañas Color / Historial) ◐ (falta el contenido de Historial)
+### 1.3 Barra lateral derecha: proyecto (pestañas Color / Historial) ✅
 Se pliega igual que la izquierda; la pestaña elegida se recuerda. Lo que es por pista va a la izquierda y
 lo que es del proyecto, a la derecha.
-- **Color** → §6 ✅. **Historial** → §2.3 ✗ (la pestaña está y dice que todavía no está en la nativa).
+- **Color** → §6 ✅. **Historial** → §2.3 ✅ (la pestaña por defecto, como en la web).
 - Nativa: plegar (a una columna de íconos), pestaña y secciones plegadas se recuerdan en `config.json`
   (`MainWindow.Color.cs`). Termina arriba de la barra de transporte, que acá va abajo de lado a lado.
 
@@ -152,7 +152,7 @@ Arpegio + Punteo", "Rítmica + Punteo vertical", "Toma única". Las del usuario 
 proyecto); guardar con el mismo nombre reemplaza; se borran desde el formulario de nuevo proyecto
 ("mía"). "Guardar como plantilla" toma cada pista con mute/solo limpios y el nombre sin "Toma N — ".
 
-### 2.3 Historial (pestaña derecha, `HistoryPanel`) ✗
+### 2.3 Historial (pestaña derecha, `HistoryPanel`) ✅ (`MainWindow.History.cs`, `GuitarCam.Projects/ProjectHistory.cs`)
 - **Tomas**: todas las grabadas, filtro Todas / En uso / Sin usar, buscador, agrupadas por día ("Hoy",
   "Ayer", fecha). Por toma: escuchar el WAV crudo (sin efectos), mostrar en el Explorador, quitar del
   timeline (el archivo queda) o volver a agregarla; "No usada"; reintentar si no se pudo guardar.
@@ -161,7 +161,12 @@ proyecto); guardar con el mismo nombre reemplaza; se borran desde el formulario 
   a la Papelera (confirmación en la misma fila).
 - **Actividad**: el registro del proyecto en frases ("Creaste el proyecto", "Grabaste 3 tomas",
   "Moviste una toma"…), agrupando ráfagas de lo mismo.
-- En nativo, el registro ya se guarda (`Log`) ✅; falta mostrarlo.
+- Nativa: igual, salvo que no hay filas "Guardando / Reintentar" (la toma se escribe a disco mientras se
+  graba), "Escuchar" sale por la salida de Windows (como el `<audio>` de la web, no por ASIO), a la Papelera
+  van solo archivos de adentro de la carpeta del proyecto (un importado que quedó donde estaba es del
+  usuario), y la Actividad suma frases para lo que solo registra la nativa (importar, volver a una versión,
+  recuperar una toma) y oculta las ediciones de clips. Como en la web, "salió / volvió al timeline" se
+  registra al guardar comparando con el guardado anterior (`ProjectStore.LogTimelineChanges`).
 
 ### 2.4 Guardado ◐
 - Web: autoguardado con demora; cada toma se sube apenas se graba y, si falla, queda pendiente para
@@ -432,4 +437,4 @@ Los atajos no corren mientras se escribe en un campo ni con Configuración abier
 4. **Inspector completo** (§1.2) y **Mixer** (§4), con tempo y transporte completos (§1.6, §4.5).
 5. **Exportación** (§8) con color y efectos (§6): cierra "mezclo y exporto" para proyectos importados.
 6. **Grabación** (§5.8), calibración (§5.9), monitor en vivo (§1.5), cámara (§11) y Configuración (§7).
-7. **Historial** (§2.3) y barras laterales plegables (medidor del sistema y tema ✅).
+7. **Historial** (§2.3) ✅ y barras laterales plegables (medidor del sistema y tema ✅).

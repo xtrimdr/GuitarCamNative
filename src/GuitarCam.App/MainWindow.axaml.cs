@@ -56,7 +56,7 @@ public partial class MainWindow : Window
             if (Export.TryOpen(store, tracks, out var error)) { engine.Pause(); engine.Seek(0); }
             else if (error != null) Status(error);
         };
-        Export.ExportCompleted += _ => { MarkDirty(); SaveSoon(); };
+        Export.ExportCompleted += _ => { MarkDirty(); SaveSoon(); RefreshHistory(); };
         Export.Dismissed += () => Timeline.Focus();
         Settings.Attach(engine, camera, () => RecordingBusy);
         Settings.AudioChanged += ShowAudioStatus;
@@ -207,7 +207,9 @@ public partial class MainWindow : Window
         if (store == null || !dirty) return;
         dirty = false;
         var st = store;
+        int logged = st.Project.Log.Count;
         string json = st.Serialize();
+        if (st.Project.Log.Count != logged) RefreshHistory(); // the save logged takes that left or came back
         saving = saving.ContinueWith(_ =>
         {
             try
@@ -278,6 +280,9 @@ public partial class MainWindow : Window
     void CloseProject(bool clearUndo = true)
     {
         engine.Stop();
+        takePreview.Stop();
+        historyConfirmPurge = false;
+        historyDeletingExport = null;
         FlushSave();
         foreach (var t in tracks) t.CloseVideo();
         store?.Dispose();

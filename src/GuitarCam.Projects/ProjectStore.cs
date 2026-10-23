@@ -54,6 +54,9 @@ public sealed class ProjectStore : IDisposable
     /// <summary>What happened while opening (recovered from a backup, missing files, recovered takes…).</summary>
     public List<string> Notices { get; } = [];
 
+    /// <summary>Which takes were in the timeline at the last save, to log the ones that left or came back.</summary>
+    Dictionary<string, bool> timeline;
+
     public string FilePath => Path.Combine(Dir, FileName);
     string BakPath => FilePath + ".bak";
     string TmpPath => FilePath + ".tmp";
@@ -62,6 +65,7 @@ public sealed class ProjectStore : IDisposable
     {
         Dir = dir;
         Project = project;
+        timeline = ProjectHistory.TimelineState(project);
     }
 
     public static bool IsProject(string dir) => File.Exists(Path.Combine(dir, FileName));
@@ -157,8 +161,12 @@ public sealed class ProjectStore : IDisposable
         return p;
     }
 
+    /// <summary>Logs the takes that left or came back to the timeline since the last call (every save does it).</summary>
+    public void LogTimelineChanges() => ProjectHistory.LogTimelineChanges(Project, timeline);
+
     public string Serialize()
     {
+        LogTimelineChanges();
         Project.UpdatedAt = DateTime.UtcNow;
         return JsonSerializer.Serialize(Project, Json);
     }
@@ -297,6 +305,7 @@ public sealed class ProjectStore : IDisposable
         lock (writeLock) WriteSnapshot(Serialize());
         Migrate(old);
         Project = old;
+        timeline = ProjectHistory.TimelineState(old);
         Project.AddLog("snapshot-restored", Path.GetFileNameWithoutExtension(s.Path));
         lastSnapshot = DateTime.MinValue;
         Save();

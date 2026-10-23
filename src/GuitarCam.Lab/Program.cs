@@ -95,6 +95,9 @@ static class Program
               proyecto editar carpeta inicio|fijar-corte|restaurar|quitar-clip clip | quitar-pista pista
               proyecto editar carpeta nueva-pista | agregar-toma medio [--pista pista]
               proyecto verificar-tomas     verifica a qué pista va una toma nueva, su nombre y su canal
+              proyecto historial carpeta   tomas (en uso / no usadas), exportaciones y actividad, como la pestaña Historial
+              proyecto historial carpeta quitar|usar medio | borrar-no-usadas | borrar-exportacion n
+              proyecto verificar-historial verifica el registro de tomas, la Papelera y las frases de la actividad
               proyecto toma     carpeta [--segundos 3] [--pista id] [--camara]
                                            graba un tono como la ventana (--pista: la pista seleccionada;
                                            --camara: con el video de la cámara que elige la app)

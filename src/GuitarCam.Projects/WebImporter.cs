@@ -164,6 +164,7 @@ public static class WebImporter
                 Quality = Str(e, "quality"),
                 DurationSec = Num(e, "durationSec", 0),
                 Bytes = (long)Num(e, "bytes", 0),
+                TakeIds = Arr(e, "takeIds").Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!).ToList(),
             });
         }
         foreach (var e in Arr(root, "history"))

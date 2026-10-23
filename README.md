@@ -80,6 +80,8 @@ src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe
 | `proyecto cortar carpeta [--camara]` | graba un tono (y el video) y corta sin cerrar, para probar la recuperación |
 | `proyecto versiones carpeta` / `proyecto volver carpeta n` | las versiones guardadas en `historial/` (1 = la más nueva) / vuelve a una (lo de antes queda en el historial) |
 | `proyecto verificar-deshacer` / `proyecto verificar-clips` / `proyecto verificar-tomas` | pruebas de deshacer/rehacer, de edición de clips y de dónde cae una toma nueva, sin tocar archivos |
+| `proyecto historial carpeta [quitar\|usar medio \| borrar-no-usadas \| borrar-exportacion n]` | lo de la pestaña Historial: tomas en uso y no usadas, exportaciones y actividad; sus acciones (a la Papelera, como la ventana) |
+| `proyecto verificar-historial` | prueba el registro de tomas que salen o vuelven al timeline, la Papelera y las frases de Actividad (en una carpeta temporal) |
 | `proyecto clips carpeta` | lista pistas y clips |
 | `proyecto editar carpeta mover\|recortar-inicio\|recortar-final\|fade-in\|fade-out clip delta [--iman 1/4] [--libre]` | edita un clip como en el timeline (imán, anclaje de sincronía) |
 | `proyecto editar carpeta a-pista clip pista [--intercambiar clip]`, `reordenar desde hasta`, `inicio\|fijar-corte\|restaurar\|quitar-clip clip`, `quitar-pista pista`, `nueva-pista`, `agregar-toma medio [--pista p]` | el resto de las operaciones del timeline |

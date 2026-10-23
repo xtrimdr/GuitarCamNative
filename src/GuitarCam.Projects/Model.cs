@@ -42,6 +42,8 @@ public sealed class Project
         Tracks ??= [];
         Exports ??= [];
         Log ??= [];
+        Exports.RemoveAll(e => e == null);
+        foreach (var e in Exports) e.TakeIds ??= [];
         Media.RemoveAll(m => m == null);
         Tracks.RemoveAll(t => t == null);
         foreach (var t in Tracks) t.Normalize();
@@ -386,6 +388,8 @@ public sealed class ExportRecord
     public string? Quality { get; set; }
     public double DurationSec { get; set; }
     public long Bytes { get; set; }
+    /// <summary>The takes in the video (media ids), shown as "n tomas" in Historial.</summary>
+    public List<string> TakeIds { get; set; } = [];
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 

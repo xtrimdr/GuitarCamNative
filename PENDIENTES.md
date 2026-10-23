@@ -109,6 +109,16 @@ lo revisó. El detalle y el orden de revisión están en [docs/COORDINACION.md](
 
 ## Hecho
 
+- 2026-10-23: pestaña Historial (§2.3 de MIGRACION): `MainWindow.History.cs`, port de `HistoryPanel.tsx`, con la
+  lógica en `GuitarCam.Projects/ProjectHistory.cs` (`gclab proyecto historial` y `verificar-historial`). Tomas con
+  filtro, buscador y días, escuchar el WAV crudo (`GuitarCam.Audio/TakePreview.cs`, salida de Windows), quitar /
+  usar, "Borrar no usadas" a la Papelera (limpia el deshacer, como la web); Exportaciones (ver, mostrar, Papelera
+  con confirmación en la fila; ahora guardan sus tomas); Actividad en frases por día con "Ver más". Las tomas que
+  salen o vuelven al timeline se registran al guardar, como el `saveState` de la web. Es la pestaña por defecto.
+  Probado en la ventana con una copia de "Camino a San Francisco": quitar, usar, escuchar, borrar no usadas,
+  exportar, mandar el MP4 a la Papelera y el buscador; comparado con la web (TESTINGS). Sin probar: escuchar con
+  los parlantes (solo vi el cambio de ícono al empezar y al terminar).
+
 - 2026-10-23: más colores en el selector de tema (`UiTheme.cs`): 8 acentos nuevos (Naranja, Oro,
   Esmeralda, Menta, Celeste, Índigo, Lavanda y Fucsia) y 3 fondos oscuros (Océano, Café y Humo).
   El catálogo queda en 16 acentos y 9 fondos, con el mismo selector y tema predeterminado.
