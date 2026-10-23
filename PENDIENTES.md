@@ -97,8 +97,10 @@ El relevamiento completo (qué hace cada cosa en la web, cómo funciona y en qu�
   (`PreviewView.CountdownBeat`, como el overlay de `SplitScreenCanvas`), "Mostrar en el Explorador" al frente
   (`Explorer.cs`, port de `openInExplorer` + `ForegroundWindow.cs`, en el gestor, el Historial y la
   exportación) y `tools/make-shortcut.ps1` para el acceso directo. El selector de carpetas de Avalonia ya era el
-  moderno de Windows. Probado: la cuenta en la ventana (se ve y se va al cancelar, sin dejar archivos). Sin
-  probar: que el Explorador quede adelante (los clics automáticos chocaron con el mouse del usuario).
+  moderno de Windows. Probado: la cuenta en la ventana (se ve y se va al cancelar, sin dejar archivos) y el
+  Explorador (el usuario: abría, pero tardaba). Ahora le pide la carpeta directo al shell (ShellExecute /
+  `SHOpenFolderAndSelectItems`, ~0,3 s contra 0,8–1,5 s de arrancar explorer.exe) en segundo plano. Sin probar
+  en la ventana esa última versión (la app estaba abierta; compilada aparte).
 
 - 2026-10-23: miniaturas del video en los carriles (§3 y §11 de MIGRACION): `Video/VideoThumbnails.cs`, port de
   `thumbnails.ts` (16 cuadros de 160 px por toma, en memoria, FFmpeg en segundo plano de a una toma) y la tira de

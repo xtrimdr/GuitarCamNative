@@ -6,31 +6,46 @@ namespace GuitarCam.App;
 
 /// <summary>
 /// "Mostrar en el Explorador": opens a folder (or shows a file selected) and brings that Explorer window
-/// in front, like openInExplorer + ForegroundWindow.cs of the web server. explorer.exe hands the request
-/// to the running shell, which isn't the foreground process, so the window can open behind the app.
-/// Being the foreground process, we first let any process take the focus; then we look for the new
-/// window for a moment (on a background thread) and raise it with the same thread-input trick as the web.
+/// in front, like openInExplorer + ForegroundWindow.cs of the web server. The request goes straight to the
+/// running shell (ShellExecute / SHOpenFolderAndSelectItems, about 0.3 s) instead of starting explorer.exe,
+/// which only forwards it and takes 1 s or more. The shell isn't the foreground process, so the window can
+/// open behind the app: being the foreground process, we first let any process take the focus, then look
+/// for the new window for a moment and raise it with the same thread-input trick as the web.
+/// All of it runs on a background thread, so the window never waits for the shell.
 /// </summary>
 public static class Explorer
 {
     /// <summary>How long to wait for Explorer's window to show up.</summary>
     static readonly TimeSpan WindowWait = TimeSpan.FromSeconds(3);
 
-    public static void Open(string folder) => Launch($"\"{folder}\"");
+    public static void Open(string folder) => Launch(() =>
+        Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true, Verb = "open" })?.Dispose(),
+        $"\"{folder}\"");
 
-    public static void Select(string file) => Launch($"/select,\"{file}\"");
-
-    static void Launch(string args)
+    public static void Select(string file) => Launch(() =>
     {
-        var before = ExplorerWindows();
+        // with no child items, the shell opens the item's folder with the item selected
+        Marshal.ThrowExceptionForHR(SHParseDisplayName(file, IntPtr.Zero, out var pidl, 0, out _));
+        try { Marshal.ThrowExceptionForHR(SHOpenFolderAndSelectItems(pidl, 0, null, 0)); }
+        finally { Marshal.FreeCoTaskMem(pidl); }
+    }, $"/select,\"{file}\"");
+
+    static void Launch(Action open, string fallbackArgs)
+    {
         AllowSetForegroundWindow(AsfwAny);
-        Process.Start("explorer.exe", args);
         Task.Run(async () =>
         {
+            var before = ExplorerWindows();
+            try { open(); }
+            catch
+            {
+                try { Process.Start("explorer.exe", fallbackArgs)?.Dispose(); }
+                catch { return; }
+            }
             var deadline = DateTime.UtcNow + WindowWait;
             while (DateTime.UtcNow < deadline)
             {
-                await Task.Delay(100);
+                await Task.Delay(50);
                 // EnumWindows goes top to bottom, so the first new one is the one just opened
                 var fresh = ExplorerWindows().FirstOrDefault(h => !before.Contains(h));
                 if (fresh != IntPtr.Zero)
@@ -85,4 +100,6 @@ public static class Explorer
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr processId);
     [DllImport("user32.dll")] static extern bool AttachThreadInput(uint attach, uint attachTo, bool on);
     [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)] static extern int SHParseDisplayName(string name, IntPtr bindCtx, out IntPtr pidl, uint sfgaoIn, out uint sfgaoOut);
+    [DllImport("shell32.dll")] static extern int SHOpenFolderAndSelectItems(IntPtr pidlFolder, uint cidl, IntPtr[]? apidl, uint flags);
 }
