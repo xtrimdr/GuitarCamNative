@@ -1,6 +1,6 @@
 # Draws the GuitarCam Native icon and writes a multi-size .ico (plus a 256 px PNG to preview it).
-# Same idea as the web app's launcher icon (guitar pick + camera lens + rec dot), with more depth:
-# a shaded pick with a rim light, a lens with barrel, glass and reflections, and a glossy rec dot.
+# Same idea as the web app's launcher icon (guitar pick + camera + rec dot), with more depth:
+# a shaded classic-shape pick with a rim light and a video camera (body, lens, hood) with a rec light.
 # Small sizes (<= 32 px) skip the fine detail so they stay readable.
 Add-Type -AssemblyName System.Drawing
 $root = Split-Path -Parent $PSScriptRoot
@@ -41,62 +41,71 @@ function New-IconPng([int]$s) {
     $g.DrawPath((New-Object System.Drawing.Pen $rim, ([Math]::Max(1.5 * $k, 1))), $bg)
   }
 
-  # Guitar pick (rounded triangle, point down)
+  # Guitar pick: classic 351 shape, wide shoulders tapering to a rounded tip
   $pick = New-Object System.Drawing.Drawing2D.GraphicsPath
-  $pick.AddBezier((& $pt 128 32), (& $pt 192 32), (& $pt 228 50), (& $pt 224 96))
-  $pick.AddBezier((& $pt 224 96), (& $pt 218 152), (& $pt 160 216), (& $pt 128 228))
-  $pick.AddBezier((& $pt 128 228), (& $pt 96 216), (& $pt 38 152), (& $pt 32 96))
-  $pick.AddBezier((& $pt 32 96), (& $pt 28 50), (& $pt 64 32), (& $pt 128 32))
+  $pick.AddBezier((& $pt 128 30), (& $pt 176 30), (& $pt 214 34), (& $pt 228 58))
+  $pick.AddBezier((& $pt 228 58), (& $pt 240 80), (& $pt 214 140), (& $pt 150 214))
+  $pick.AddBezier((& $pt 150 214), (& $pt 138 228), (& $pt 118 228), (& $pt 106 214))
+  $pick.AddBezier((& $pt 106 214), (& $pt 42 140), (& $pt 16 80), (& $pt 28 58))
+  $pick.AddBezier((& $pt 28 58), (& $pt 42 34), (& $pt 80 30), (& $pt 128 30))
   $pick.CloseFigure()
   if (-not $small) {
-    # Soft shadow under the pick
     $sh = $pick.Clone(); $mx = New-Object System.Drawing.Drawing2D.Matrix; $mx.Translate(0, 6 * $k); $sh.Transform($mx)
     $g.FillPath((New-Object System.Drawing.SolidBrush (C 110 0 0 0)), $sh)
   }
-  $pb = New-Object System.Drawing.Drawing2D.LinearGradientBrush (& $pt 60 32), (& $pt 190 228), (C 255 125 238 252), (C 255 8 132 166)
+  $pb = New-Object System.Drawing.Drawing2D.LinearGradientBrush (& $pt 60 30), (& $pt 190 228), (C 255 125 238 252), (C 255 8 132 166)
   $g.FillPath($pb, $pick)
   if (-not $small) {
-    # Rim light along the top edge, darker toward the tip
-    $rl = New-Object System.Drawing.Drawing2D.LinearGradientBrush (& $pt 0 32), (& $pt 0 228), (C 200 220 252 255), (C 0 220 252 255)
+    $rl = New-Object System.Drawing.Drawing2D.LinearGradientBrush (& $pt 0 30), (& $pt 0 228), (C 200 220 252 255), (C 0 220 252 255)
     $g.DrawPath((New-Object System.Drawing.Pen $rl, (3 * $k)), $pick)
     $g.DrawPath((New-Object System.Drawing.Pen (C 90 4 60 80), (1.2 * $k)), $pick)
   }
 
-  # Camera lens
-  $cx = 128 * $k; $cy = 110 * $k
-  $g.FillPath((Radial (Circle $cx ($cy + 3 * $k) (56 * $k)) $cx ($cy + 3 * $k) (C 90 0 40 55) (C 0 0 40 55)), (Circle $cx ($cy + 3 * $k) (56 * $k)))
-  $body = Circle $cx $cy (50 * $k)
-  $g.FillPath((New-Object System.Drawing.Drawing2D.LinearGradientBrush (& $pt 0 60), (& $pt 0 160), (C 255 30 30 34), (C 255 9 9 11)), $body)
-  if ($small) {
-    $g.FillPath((New-Object System.Drawing.SolidBrush (C 255 39 39 42)), (Circle $cx $cy (28 * $k)))
-  } else {
-    # Metal barrel ring
-    $ring = Circle $cx $cy (40 * $k)
-    $g.FillPath((New-Object System.Drawing.Drawing2D.LinearGradientBrush (& $pt 0 70), (& $pt 0 150), (C 255 72 72 80), (C 255 20 20 23)), $ring)
-    $g.FillPath((New-Object System.Drawing.SolidBrush (C 255 12 12 14)), (Circle $cx $cy (35 * $k)))
-    # Glass with a cyan tint deep inside
-    $glass = Circle $cx $cy (31 * $k)
-    $g.FillPath((Radial $glass ($cx + 6 * $k) ($cy + 8 * $k) (C 255 18 70 90) (C 255 10 14 20)), $glass)
-    $g.DrawPath((New-Object System.Drawing.Pen (C 60 103 232 249), (1.2 * $k)), (Circle $cx $cy (22 * $k)))
-    $g.FillPath((New-Object System.Drawing.SolidBrush (C 255 6 8 10)), (Circle $cx $cy (11 * $k)))
-    # Reflections: a soft arc up-left, a sharp dot, a faint one down-right
-    $arc = New-Object System.Drawing.Pen (C 120 190 245 255), (4 * $k)
-    $arc.StartCap = 'Round'; $arc.EndCap = 'Round'
-    $g.DrawArc($arc, $cx - 24 * $k, $cy - 24 * $k, 48 * $k, 48 * $k, 200, 55)
+  # Video camera: a rounded body with a lens, and the wedge-shaped hood on the right
+  $dark = New-Object System.Drawing.Drawing2D.LinearGradientBrush (& $pt 0 80), (& $pt 0 156), (C 255 34 34 39), (C 255 10 10 12)
+  $bx = 50; $by = 82; $bw = 100; $bh = 68; $br = 14
+  $body = New-Object System.Drawing.Drawing2D.GraphicsPath
+  $body.AddArc(($bx * $k), ($by * $k), (2 * $br * $k), (2 * $br * $k), 180, 90)
+  $body.AddArc((($bx + $bw - 2 * $br) * $k), ($by * $k), (2 * $br * $k), (2 * $br * $k), 270, 90)
+  $body.AddArc((($bx + $bw - 2 * $br) * $k), (($by + $bh - 2 * $br) * $k), (2 * $br * $k), (2 * $br * $k), 0, 90)
+  $body.AddArc(($bx * $k), (($by + $bh - 2 * $br) * $k), (2 * $br * $k), (2 * $br * $k), 90, 90)
+  $body.CloseFigure()
+  $hood = New-Object System.Drawing.Drawing2D.GraphicsPath
+  $hood.AddPolygon([System.Drawing.PointF[]]@((& $pt 156 104), (& $pt 200 82), (& $pt 200 150), (& $pt 156 128)))
+  if (-not $small) {
+    foreach ($p in $body, $hood) {
+      $sp = $p.Clone(); $mx = New-Object System.Drawing.Drawing2D.Matrix; $mx.Translate(0, 4 * $k); $sp.Transform($mx)
+      $g.FillPath((New-Object System.Drawing.SolidBrush (C 80 0 30 45)), $sp)
+    }
   }
-  $hr = [Math]::Max(7 * $k, 1.2)
-  $g.FillPath((New-Object System.Drawing.SolidBrush (C 230 200 248 255)), (Circle ($cx - 13 * $k) ($cy - 13 * $k) $hr))
-  if (-not $small) { $g.FillPath((New-Object System.Drawing.SolidBrush (C 70 200 248 255)), (Circle ($cx + 14 * $k) ($cy + 14 * $k) (4 * $k))) }
+  $g.FillPath($dark, $body)
+  $hp = New-Object System.Drawing.Pen $dark, (8 * $k); $hp.LineJoin = 'Round'
+  $g.DrawPath($hp, $hood); $g.FillPath($dark, $hood)
 
-  # Rec dot with a dark cut-out ring
-  $rr = [Math]::Max(17 * $k, 2.5); $rx = 180 * $k; $ry = 180 * $k
-  $g.FillPath((New-Object System.Drawing.SolidBrush (C 255 11 11 13)), (Circle $rx $ry ($rr + 6 * $k)))
+  $cx = 100 * $k; $cy = 116 * $k
+  if ($small) {
+    $g.FillPath((New-Object System.Drawing.SolidBrush (C 255 34 211 238)), (Circle $cx $cy (17 * $k)))
+    $g.FillPath((New-Object System.Drawing.SolidBrush (C 255 10 10 12)), (Circle $cx $cy (9 * $k)))
+  } else {
+    $g.FillPath((New-Object System.Drawing.Drawing2D.LinearGradientBrush (& $pt 0 92), (& $pt 0 140), (C 255 80 80 88), (C 255 22 22 25)), (Circle $cx $cy (24 * $k)))
+    $glass = Circle $cx $cy (19 * $k)
+    $g.FillPath((Radial $glass ($cx + 4 * $k) ($cy + 5 * $k) (C 255 24 110 136) (C 255 8 14 20)), $glass)
+    $g.FillPath((New-Object System.Drawing.SolidBrush (C 255 6 8 10)), (Circle $cx $cy (7 * $k)))
+    $arc = New-Object System.Drawing.Pen (C 140 190 245 255), (3 * $k)
+    $arc.StartCap = 'Round'; $arc.EndCap = 'Round'
+    $g.DrawArc($arc, $cx - 14 * $k, $cy - 14 * $k, 28 * $k, 28 * $k, 200, 60)
+    $g.FillPath((New-Object System.Drawing.SolidBrush (C 230 210 250 255)), (Circle ($cx - 8 * $k) ($cy - 8 * $k) (3.5 * $k)))
+  }
+
+  # Rec dot on the camera body
+  $rr = [Math]::Max(8 * $k, 1.6); $rx = 136 * $k; $ry = 96 * $k
   $dot = Circle $rx $ry $rr
   if ($small) {
     $g.FillPath((New-Object System.Drawing.SolidBrush (C 255 239 68 68)), $dot)
   } else {
-    $g.FillPath((Radial $dot ($rx - 5 * $k) ($ry - 6 * $k) (C 255 255 130 130) (C 255 200 30 30)), $dot)
-    $g.FillPath((New-Object System.Drawing.SolidBrush (C 150 255 255 255)), (Circle ($rx - 6 * $k) ($ry - 7 * $k) (4 * $k)))
+    $g.FillPath((New-Object System.Drawing.SolidBrush (C 90 239 68 68)), (Circle $rx $ry ($rr + 4 * $k)))
+    $g.FillPath((Radial $dot ($rx - 2 * $k) ($ry - 3 * $k) (C 255 255 130 130) (C 255 210 34 34)), $dot)
+    $g.FillPath((New-Object System.Drawing.SolidBrush (C 150 255 255 255)), (Circle ($rx - 3 * $k) ($ry - 3 * $k) (2 * $k)))
   }
 
   $g.Dispose()
