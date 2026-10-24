@@ -219,7 +219,7 @@ public sealed partial class ExportDialog : UserControl
         var takes = ExtractVideoTakes(store, liveTracks);
         if (audio ? !store.Project.Tracks.Any(t => t.Clips.Count > 0) : takes.Count == 0)
         {
-            statusError = "Necesitás al menos un canal en el timeline para exportar.";
+            statusError = Loc.T("exp.needTrack");
             return false;
         }
 
@@ -443,7 +443,7 @@ public sealed partial class ExportDialog : UserControl
             var start = Directory.Exists(startPath) ? await sp.TryGetFolderFromPathAsync(startPath) : null;
             var picked = await sp.OpenFolderPickerAsync(new FolderPickerOpenOptions
             {
-                Title = audio ? "Elegí dónde guardar el audio" : "Elegí dónde guardar el video",
+                Title = audio ? Loc.T("exp.pick.audio") : Loc.T("exp.pick.video"),
                 SuggestedStartLocation = start,
             });
             if (picked.FirstOrDefault()?.TryGetLocalPath() is { } chosen)
@@ -466,20 +466,20 @@ public sealed partial class ExportDialog : UserControl
 
     void RenderSetupState()
     {
-        HeaderTitle.Text = audio ? "Exportar audio" : "Exportar MP4";
-        string takesWord = summary.Takes == 1 ? "canal" : "canales";
+        HeaderTitle.Text = audio ? Loc.T("export.audio") : Loc.T("export.mp4");
+        string takesWord = Loc.T(summary.Takes == 1 ? "exp.channel.one" : "exp.channel.many");
         int tracksWithClips = currentStore?.Project.Tracks.Count(t => t.Clips.Count > 0) ?? 0;
         HeaderSubtitle.Text = audio
-            ? $"La mezcla · {tracksWithClips} {(tracksWithClips == 1 ? "pista" : "pistas")} · 48 kHz estéreo · {Mp4Exporter.FormatTime(summary.DurationSec)}"
+            ? Loc.T("exp.sub.audio", Loc.T(tracksWithClips == 1 ? "tracks.one" : "tracks.many", tracksWithClips), Mp4Exporter.FormatTime(summary.DurationSec))
             : $"{summary.Width}×{summary.Height} · {summary.AspectRatio} · {summary.Takes} {takesWord} · {Mp4Exporter.FormatTime(summary.DurationSec)}";
         ExtText.Text = Ext;
-        FileNameBox.Watermark = audio ? "Mi tema" : "Mi video";
-        QualityLabel.Text = audio ? "Formato" : "Calidad";
+        FileNameBox.Watermark = Loc.T(audio ? "exp.mySong" : "exp.myVideo");
+        QualityLabel.Text = Loc.T(audio ? "exp.format" : "exp.quality");
         FormatSeg.IsVisible = audio;
         QualitySeg.IsVisible = !audio;
         ToolTip.SetTip(HeaderSubtitle, null);
 
-        string shownFolder = check?.Folder ?? (folder ?? "Carpeta del proyecto");
+        string shownFolder = check?.Folder ?? (folder ?? Loc.T("exp.projectFolder"));
         FolderText.Text = shownFolder;
         ToolTip.SetTip(FolderText, check?.Folder ?? folder);
         PickFolderButton.IsEnabled = !picking;
@@ -498,8 +498,8 @@ public sealed partial class ExportDialog : UserControl
             : Mp4Exporter.EstimateBytes(quality, summary.Width, summary.Height, summary.DurationSec);
         EstBytesText.Text = $"≈ {Mp4Exporter.FormatBytes(estBytes)}";
         QualityDescText.Text = !audio ? qSpec.Title
-            : audioFormat == AudioFormat.Mp3 ? "MP3 de 320 kbps: liviano, para mandar o subir."
-            : "WAV de 24 bits sin pérdida: para seguir editando o masterizar.";
+            : audioFormat == AudioFormat.Mp3 ? Loc.T("exp.mp3.note")
+            : Loc.T("exp.wav.note");
 
         bool hasError = checkError != null || (check is { FolderExists: false });
         bool hasCollision = !hasError && check is { Exists: true };
@@ -509,7 +509,7 @@ public sealed partial class ExportDialog : UserControl
             WarningBanner.BorderBrush = new SolidColorBrush(Color.Parse("#66ef4444"));
             WarningBanner.Background = Res("RecSoft");
             WarningIcon.Foreground = Res("Rec");
-            WarningText.Text = checkError ?? "Esa carpeta ya no existe. Elegí otra.";
+            WarningText.Text = checkError ?? Loc.T("exp.folderGone");
             UseSuggestedButton.IsVisible = false;
         }
         else if (hasCollision && check != null)
@@ -517,8 +517,8 @@ public sealed partial class ExportDialog : UserControl
             WarningBanner.BorderBrush = Res("Line");
             WarningBanner.Background = Res("Raised");
             WarningIcon.Foreground = Res("Accent");
-            WarningText.Text = $"Ya hay un {check.FileName}{Ext} en esa carpeta: se va a reemplazar.";
-            UseSuggestedText.Text = $"Usar «{check.Suggested}»";
+            WarningText.Text = Loc.T("exp.exists", check.FileName, Ext);
+            UseSuggestedText.Text = Loc.T("exp.useSuggested", check.Suggested);
             UseSuggestedButton.IsVisible = true;
         }
 
@@ -527,7 +527,7 @@ public sealed partial class ExportDialog : UserControl
         bool nameOk = fileName.Trim().Length > 0;
         bool ready = nameOk && check is { FolderExists: true } && checkError == null && !picking;
         SetupStartButton.IsEnabled = ready;
-        SetupStartText.Text = check is { Exists: true } ? "Reemplazar y exportar" : "Exportar";
+        SetupStartText.Text = Loc.T(check is { Exists: true } ? "exp.replaceStart" : "exp.start");
     }
 
     static void SetActiveSegment(Button btn, bool active)
@@ -615,7 +615,7 @@ public sealed partial class ExportDialog : UserControl
         }
         catch (Exception ex)
         {
-            OpenError(string.IsNullOrWhiteSpace(ex.Message) ? (audio ? "Error al exportar el audio" : "Error al exportar el video MP4") : ex.Message, null, opts);
+            OpenError(string.IsNullOrWhiteSpace(ex.Message) ? (audio ? Loc.T("exp.err.audio") : Loc.T("exp.err.video")) : ex.Message, null, opts);
         }
         finally
         {
@@ -626,7 +626,7 @@ public sealed partial class ExportDialog : UserControl
 
     void RenderRunning()
     {
-        HeaderTitle.Text = "Exportando…";
+        HeaderTitle.Text = Loc.T("exp.running");
         HeaderSubtitle.Text = runningFileName;
         ToolTip.SetTip(HeaderSubtitle, Path.Combine(runningFolder, runningFileName));
 
@@ -641,8 +641,8 @@ public sealed partial class ExportDialog : UserControl
         ProgressPctText.Text = $"{p.Percent}%";
         double? eta = p.EtaSec;
         ProgressTimeText.Text = eta is > 1
-            ? $"{Mp4Exporter.FormatTime(elapsed)} transcurrido · quedan ~{Mp4Exporter.FormatTime(eta.Value)}"
-            : $"{Mp4Exporter.FormatTime(elapsed)} transcurrido";
+            ? Loc.T("exp.elapsed.eta", Mp4Exporter.FormatTime(elapsed), Mp4Exporter.FormatTime(eta.Value))
+            : Loc.T("exp.elapsed", Mp4Exporter.FormatTime(elapsed));
 
         double trackW = ProgressBarTrack.Bounds.Width > 0 ? ProgressBarTrack.Bounds.Width : 470;
         ProgressBarFill.Width = Math.Clamp(p.Overall * trackW, 0, trackW);
@@ -658,10 +658,10 @@ public sealed partial class ExportDialog : UserControl
 
         RenderSteps(
         [
-            ("Mezclando el audio", null, true),
-            ("Enviando la mezcla", null, true),
-            ("Renderizando el video", videoDetail, true),
-            ("Guardando el archivo", null, false),
+            (Loc.T("exp.step.mixing"), null, true),
+            (Loc.T("exp.step.sending"), null, true),
+            (Loc.T("exp.step.rendering"), videoDetail, true),
+            (Loc.T("exp.step.saving"), null, false),
         ], (int)p.Stage, p.StageFraction);
     }
 
@@ -678,12 +678,12 @@ public sealed partial class ExportDialog : UserControl
             _ => 0.98,
         };
         ProgressPctText.Text = $"{(int)Math.Floor(overall * 100)}%";
-        ProgressTimeText.Text = $"{Mp4Exporter.FormatTime(elapsed)} transcurrido";
+        ProgressTimeText.Text = Loc.T("exp.elapsed", Mp4Exporter.FormatTime(elapsed));
         double trackW = ProgressBarTrack.Bounds.Width > 0 ? ProgressBarTrack.Bounds.Width : 470;
         ProgressBarFill.Width = Math.Clamp(overall * trackW, 0, trackW);
-        var steps = new List<(string, string?, bool)> { ("Mezclando el audio", null, true) };
-        if (mp3) steps.Add(("Convirtiendo a MP3", null, true));
-        steps.Add(("Guardando el archivo", null, false));
+        var steps = new List<(string, string?, bool)> { (Loc.T("exp.step.mixing"), null, true) };
+        if (mp3) steps.Add((Loc.T("exp.step.mp3"), null, true));
+        steps.Add((Loc.T("exp.step.saving"), null, false));
         int active = a.Stage == AudioExportStage.Mix ? 0 : a.Stage == AudioExportStage.Encode ? 1 : steps.Count - 1;
         RenderSteps([.. steps], active, a.Fraction);
     }
@@ -802,7 +802,7 @@ public sealed partial class ExportDialog : UserControl
 
     void RenderError()
     {
-        HeaderTitle.Text = "No se pudo exportar";
+        HeaderTitle.Text = Loc.T("exp.failed");
         HeaderSubtitle.Text = "";
         ToolTip.SetTip(HeaderSubtitle, null);
         ErrorMessageText.Text = errorMessage;
@@ -820,7 +820,7 @@ public sealed partial class ExportDialog : UserControl
     void RenderDone()
     {
         if (doneVideo == null) return;
-        HeaderTitle.Text = doneVideo.ElapsedSec != null ? (audio ? "Audio exportado" : "Video exportado") : doneVideo.FileName;
+        HeaderTitle.Text = doneVideo.ElapsedSec != null ? Loc.T(audio ? "exp.done.audio" : "exp.done.video") : doneVideo.FileName;
         HeaderSubtitle.Text = doneVideo.FullPath;
         ToolTip.SetTip(HeaderSubtitle, doneVideo.FullPath);
 
@@ -830,12 +830,12 @@ public sealed partial class ExportDialog : UserControl
         AudioDoneRow.IsVisible = audio && !doneMissing;
         AudioDoneName.Text = doneVideo.FileName;
         bool mp3 = doneVideo.FileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase);
-        AudioDoneInfo.Text = $"{Mp4Exporter.FormatTime(doneDurationSec)} · {(mp3 ? "MP3 320 kbps" : "WAV 24 bits")} · 48 kHz estéreo";
+        AudioDoneInfo.Text = Loc.T("exp.done.info", Mp4Exporter.FormatTime(doneDurationSec), mp3 ? "MP3 320 kbps" : Loc.T("exp.wav24"));
         DoneRevealButton.IsEnabled = !doneMissing;
 
         var parts = new List<string>();
         if (doneBytes is > 0) parts.Add(Mp4Exporter.FormatBytes(doneBytes.Value));
-        if (doneVideo.ElapsedSec is { } el) parts.Add($"{(audio ? "exportado" : "renderizado")} en {Mp4Exporter.FormatTime(el)}");
+        if (doneVideo.ElapsedSec is { } el) parts.Add(Loc.T("exp.done.in", Loc.T(audio ? "exp.done.exported" : "exp.done.rendered"), Mp4Exporter.FormatTime(el)));
         DoneMetaText.Text = string.Join(" · ", parts);
     }
 

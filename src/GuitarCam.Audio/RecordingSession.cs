@@ -12,13 +12,13 @@ public enum InputChannelMode
 /// <summary>
 /// Port of <c>StereoCaptureProcessor</c> (<c>GuitarCam/src/audio/audioEngine.ts</c>):
 /// routes input channels (<c>stereo</c> with automatic mono-ch0 detection when ch1 is silent,
-/// <c>ch1-mono</c>, <c>ch2-mono</c>), applies input pre-amp gain (+12 dB default), soft-limits peaks
+/// <c>ch1-mono</c>, <c>ch2-mono</c>), applies input pre-amp gain (0 dB default, user-adjustable up or down), soft-limits peaks
 /// above 0.92 with <c>tanh</c>, and reports peak levels and clipping without allocating in <see cref="Process"/>.
 /// Same as the web except that automatic mono latches instead of being decided block by block (see <see cref="Process"/>).
 /// </summary>
 public sealed class InputProcessor
 {
-    public const double DefaultInputGainDb = 12.0;
+    public const double DefaultInputGainDb = 0.0;
 
     volatile InputChannelMode mode = InputChannelMode.Stereo;
     volatile float gainLinear = (float)Math.Pow(10.0, DefaultInputGainDb / 20.0);

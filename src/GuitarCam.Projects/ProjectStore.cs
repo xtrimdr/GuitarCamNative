@@ -1,3 +1,4 @@
+using GuitarCam.Audio;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -90,9 +91,9 @@ public sealed class ProjectStore : IDisposable
         store.Notices.AddRange(notices);
         store.TakeLock();
         if (project.Format != Project.FormatId)
-            store.ReadOnlyReason = "El archivo no es un proyecto de GuitarCam";
+            store.ReadOnlyReason = Texts.T("store.notProject", "El archivo no es un proyecto de GuitarCam");
         else if (project.Version > Project.CurrentVersion)
-            store.ReadOnlyReason = "Lo guardó una versión más nueva de GuitarCam: abierto solo para ver";
+            store.ReadOnlyReason = Texts.T("store.newer", "Lo guardó una versión más nueva de GuitarCam: abierto solo para ver");
         if (!store.ReadOnly)
         {
             Directory.CreateDirectory(Path.Combine(dir, MediaDir));
@@ -140,23 +141,23 @@ public sealed class ProjectStore : IDisposable
             .Select(path => (Path: path, Project: TryParse(path)))
             .Where(c => c.Project != null)
             .MaxBy(c => c.Project!.UpdatedAt);
-        if (best.Project == null) throw first ?? new FileNotFoundException("La carpeta no tiene un proyecto de GuitarCam", main);
+        if (best.Project == null) throw first ?? new FileNotFoundException(Texts.T("store.noProject", "La carpeta no tiene un proyecto de GuitarCam"), main);
         string what = best.Path.EndsWith(".bak")
-            ? "el guardado anterior (.bak)"
-            : $"la copia del historial {Path.GetFileNameWithoutExtension(best.Path)}";
-        notices.Add($"El proyecto estaba dañado: lo abrí desde {what}");
+            ? Texts.T("store.fromBak", "el guardado anterior (.bak)")
+            : Texts.T("store.fromHistory", "la copia del historial {0}", Path.GetFileNameWithoutExtension(best.Path));
+        notices.Add(Texts.T("store.damaged", "El proyecto estaba dañado: lo abrí desde {0}", what));
         if (File.Exists(main))
         {
             string keep = Path.Combine(dir, $"guitarcam.dañado-{DateTime.Now.ToString(SnapshotStamp, CultureInfo.InvariantCulture)}.json");
             File.Move(main, keep);
-            notices.Add($"El archivo dañado quedó como {Path.GetFileName(keep)}");
+            notices.Add(Texts.T("store.damagedKept", "El archivo dañado quedó como {0}", Path.GetFileName(keep)));
         }
         return (best.Project, best.Path, notices);
     }
 
     public static Project Parse(string json)
     {
-        var p = JsonSerializer.Deserialize<Project>(json, Json) ?? throw new InvalidDataException("El proyecto está vacío");
+        var p = JsonSerializer.Deserialize<Project>(json, Json) ?? throw new InvalidDataException(Texts.T("store.empty", "El proyecto está vacío"));
         p.Normalize();
         return p;
     }
@@ -325,7 +326,7 @@ public sealed class ProjectStore : IDisposable
         }
         catch (IOException)
         {
-            ReadOnlyReason = "Está abierto en otra ventana de GuitarCam: abierto solo para ver";
+            ReadOnlyReason = Texts.T("store.locked", "Está abierto en otra ventana de GuitarCam: abierto solo para ver");
         }
     }
 
@@ -340,9 +341,9 @@ public sealed class ProjectStore : IDisposable
             .Where(m => used.Contains(m.Id) && Resolve(m.Audio) is { } a && !File.Exists(a))
             .Select(m => m.Name)
             .ToList();
-        if (missing.Count > 0) Notices.Add($"Faltan archivos de audio: {string.Join(", ", missing)} (quedan sin conexión)");
+        if (missing.Count > 0) Notices.Add(Texts.T("store.missing", "Faltan archivos de audio: {0} (quedan sin conexión)", string.Join(", ", missing)));
         var orphan = Project.Tracks.SelectMany(t => t.Clips).Count(c => Project.FindMedia(c.MediaId) == null);
-        if (orphan > 0) Notices.Add($"{orphan} clip(s) apuntan a medios que no están en el proyecto");
+        if (orphan > 0) Notices.Add(Texts.T("store.orphan", "{0} clip(s) apuntan a medios que no están en el proyecto", orphan));
     }
 
     // --- recordings in progress ------------------------------------------------------------------
@@ -415,7 +416,7 @@ public sealed class ProjectStore : IDisposable
             }
             catch (Exception e) when (e is IOException or InvalidDataException)
             {
-                Notices.Add($"No pude recuperar la grabación {j.Name}: {e.Message}");
+                Notices.Add(Texts.T("store.recoverFail", "No pude recuperar la grabación {0}: {1}", j.Name, e.Message));
                 continue;
             }
             if (info.DurationSec < 0.05)
@@ -449,7 +450,7 @@ public sealed class ProjectStore : IDisposable
             }
             track.Clips.Add(new Clip { MediaId = m.Id, AtSec = j.AtSec, Framing = new Framing { Mirror = j.Mirror && video != null } });
             Project.AddLog("recording-recovered", j.Name);
-            Notices.Add($"Recuperé la grabación interrumpida \"{j.Name}\" ({info.DurationSec:0.0} s)");
+            Notices.Add(Texts.T("store.recovered", "Recuperé la grabación interrumpida \"{0}\" ({1:0.0} s)", j.Name, info.DurationSec));
             done.Add(jf);
         }
         return done;
@@ -498,7 +499,7 @@ public sealed class ProjectStore : IDisposable
         if (names.Count > 0)
         {
             Project.AddLog("media-adopted", string.Join(", ", names));
-            Notices.Add($"Había {names.Count} archivo(s) en media/ que el proyecto no tenía: los sumé a los medios ({string.Join(", ", names)})");
+            Notices.Add(Texts.T("store.adopted", "Había {0} archivo(s) en media/ que el proyecto no tenía: los sumé a los medios ({1})", names.Count, string.Join(", ", names)));
         }
         return names.Count;
     }

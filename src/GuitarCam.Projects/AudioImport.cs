@@ -1,3 +1,4 @@
+using GuitarCam.Audio;
 using NAudio.Wave;
 
 namespace GuitarCam.Projects;
@@ -31,7 +32,7 @@ public static class AudioImport
     {
         if (!File.Exists(source)) throw new FileNotFoundException("No encuentro ese archivo.");
         if (!IsSupported(source))
-            throw new InvalidDataException($"No sé leer \"{Path.GetFileName(source)}\": probá con WAV, MP3, FLAC, OGG, M4A o AIFF.");
+            throw new InvalidDataException(Texts.T("err.import.format", "No sé leer \"{0}\": probá con WAV, MP3, FLAC, OGG, M4A o AIFF.", Path.GetFileName(source)));
         string mediaDir = Path.Combine(projectDir, ProjectStore.MediaDir);
         Directory.CreateDirectory(mediaDir);
         string ext = Path.GetExtension(source).ToLowerInvariant();

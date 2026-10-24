@@ -33,7 +33,6 @@ public sealed partial class ProjectsDialog : UserControl
     Draft? draft;
     string? confirmDelete;
     string? highlight;
-    string? pendingWebDir;
     List<ProjectTemplate> myTemplates = ProjectTemplates.User();
     string templateId = ProjectTemplates.LastId;
     /// <summary>"Video" / "Solo audio" of a new project (native only), remembered like the template.</summary>
@@ -46,9 +45,6 @@ public sealed partial class ProjectsDialog : UserControl
 
     /// <summary>Opens a project (and closes the manager). Throws to show the error here.</summary>
     public Func<string, Task>? OpenProject { get; set; }
-
-    /// <summary>Imports a web project and opens the copy.</summary>
-    public Func<string, Task>? ImportWebProject { get; set; }
 
     /// <summary>Writes what's pending of the open project (before duplicating it).</summary>
     public Func<Task>? FlushCurrent { get; set; }
@@ -72,14 +68,6 @@ public sealed partial class ProjectsDialog : UserControl
         CloseButton.Click += (_, _) => Cancel();
         NewButton.Click += (_, _) => StartNew();
         OpenFolderButton.Click += async (_, _) => await OpenFolder();
-        ImportWebButton.Click += async (_, _) =>
-        {
-            if (pendingWebDir is not { } dir) return;
-            await Run("__import", async () =>
-            {
-                if (ImportWebProject != null) await ImportWebProject(dir);
-            }, "No se pudo importar el proyecto");
-        };
         SearchBox.TextChanged += (_, _) => RenderList();
         NewCancel.Click += (_, _) => SetDraft(null);
         NewCreate.Click += async (_, _) => await SubmitDraft();
@@ -123,7 +111,6 @@ public sealed partial class ProjectsDialog : UserControl
         confirmDelete = null;
         error = notice = null;
         highlight = null;
-        pendingWebDir = null;
         SearchBox.Text = "";
         myTemplates = ProjectTemplates.User();
         Layout();
@@ -176,7 +163,7 @@ public sealed partial class ProjectsDialog : UserControl
         }
         catch (Exception e)
         {
-            error = $"No se pudo leer la carpeta de proyectos: {e.Message}";
+            error = Loc.T("proj.err.read", e.Message);
             return null;
         }
         finally
@@ -216,7 +203,7 @@ public sealed partial class ProjectsDialog : UserControl
     {
         var used = projects.Select(p => p.Name.ToLowerInvariant()).ToHashSet();
         for (int i = projects.Count + 1; ; i++)
-            if (!used.Contains($"proyecto {i}")) return $"Proyecto {i}";
+            if (!used.Contains(Loc.T("proj.defaultName", i).ToLowerInvariant())) return Loc.T("proj.defaultName", i);
     }
 
     bool NameTaken(string name, string? exceptDir = null) =>
@@ -240,7 +227,6 @@ public sealed partial class ProjectsDialog : UserControl
     void SetDraft(Draft? d)
     {
         draft = d;
-        pendingWebDir = null;
         if (d != null) confirmDelete = null;
         RenderAll();
         if (d?.Kind == DraftKind.New)
@@ -280,7 +266,7 @@ public sealed partial class ProjectsDialog : UserControl
             if (version != previewVersion || draft?.Kind != DraftKind.New || draft.Name != d.Name) return;
             NewPath.Text = result.Dir;
             NewTaken.IsVisible = result.Name != d.Name.Trim();
-            NewTaken.Text = $"Ya hay un proyecto con ese nombre: este se va a llamar \"{result.Name}\".";
+            NewTaken.Text = Loc.T("proj.taken", result.Name);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -298,7 +284,7 @@ public sealed partial class ProjectsDialog : UserControl
         await Run(p.Dir, async () =>
         {
             if (OpenProject != null) await OpenProject(p.Dir);
-        }, "No se pudo abrir el proyecto");
+        }, Loc.T("proj.err.open"));
     }
 
     async Task SubmitDraft()
@@ -321,7 +307,7 @@ public sealed partial class ProjectsDialog : UserControl
                 AppConfig.Set("newProjectMode", mode);
                 draft = null;
                 if (OpenProject != null) await OpenProject(dir);
-            }, "No se pudo crear el proyecto");
+            }, Loc.T("proj.err.create"));
             return;
         }
         if (d.Kind == DraftKind.Template)
@@ -335,8 +321,8 @@ public sealed partial class ProjectsDialog : UserControl
                 draft = null;
                 error = null;
                 notice = replaced
-                    ? $"Plantilla \"{name}\" actualizada."
-                    : $"Plantilla \"{name}\" guardada. La vas a ver al crear un proyecto nuevo.";
+                    ? Loc.T("proj.tpl.updated", name)
+                    : Loc.T("proj.tpl.saved", name);
             }
             catch (Exception e)
             {
@@ -362,7 +348,7 @@ public sealed partial class ProjectsDialog : UserControl
             {
                 var res = await Task.Run(() => ProjectLibrary.Rename(dir, name, true));
                 dir = res.Dir;
-                if (res.FolderKept) notice = "El nombre cambió, pero la carpeta no se pudo renombrar (¿hay un archivo abierto adentro?).";
+                if (res.FolderKept) notice = Loc.T("proj.renamed.keptFolder");
                 draft = null;
                 highlight = res.Dir;
                 if (isCurrent && ReopenCurrent != null)
@@ -377,7 +363,7 @@ public sealed partial class ProjectsDialog : UserControl
             {
                 if (isCurrent && !reopened && ReopenCurrent != null) await ReopenCurrent(dir);
             }
-        }, "No se pudo renombrar el proyecto");
+        }, Loc.T("proj.err.rename"));
     }
 
     async Task Duplicate(ProjectLibrary.Summary p)
@@ -394,25 +380,25 @@ public sealed partial class ProjectsDialog : UserControl
                 highlight = copy.Dir;
                 SetDraft(new Draft(DraftKind.Rename, copy.Name, copy.Dir));
             }
-        }, "No se pudo duplicar el proyecto");
+        }, Loc.T("proj.err.duplicate"));
     }
 
     async Task Remove(ProjectLibrary.Summary p) =>
         await Run($"del:{p.Dir}", async () =>
         {
-            if (Same(p.Dir, CurrentDir)) throw new IOException("Abrí otro proyecto para poder borrar este");
+            if (Same(p.Dir, CurrentDir)) throw new IOException(Loc.T("proj.deleteCurrent"));
             await Task.Run(() => ProjectLibrary.Delete(p.Dir));
             confirmDelete = null;
-            notice = $"\"{p.Name}\" se mandó a la Papelera de reciclaje.";
+            notice = Loc.T("proj.trashed", p.Name);
             await Refresh();
-        }, "No se pudo borrar el proyecto");
+        }, Loc.T("proj.err.delete"));
 
     async Task Forget(ProjectLibrary.Summary p) =>
         await Run($"forget:{p.Dir}", async () =>
         {
             await Task.Run(() => ProjectLibrary.Forget(p.Dir));
             await Refresh();
-        }, "No se pudo quitar de la lista");
+        }, Loc.T("proj.err.forget"));
 
     async Task<string?> PickFolder(string title)
     {
@@ -426,40 +412,35 @@ public sealed partial class ProjectsDialog : UserControl
     async Task OpenFolder() =>
         await Run("__pick", async () =>
         {
-            var dir = await PickFolder("Elegí la carpeta de un proyecto (o una vacía para uno nuevo)");
+            var dir = await PickFolder(Loc.T("proj.pick.project"));
             if (dir == null) return;
             if (ProjectStore.IsProject(dir))
             {
                 if (OpenProject != null) await OpenProject(dir);
             }
-            else if (WebImporter.IsWebProject(dir))
-            {
-                pendingWebDir = dir;
-                notice = "Es un proyecto de la app web: podés importarlo a una carpeta nueva. El original queda igual.";
-            }
             else
             {
                 if (await Task.Run(() => Directory.EnumerateFileSystemEntries(dir).Any()))
-                    throw new IOException("Esa carpeta no está vacía. Elegí una carpeta vacía para crear el proyecto.");
+                    throw new IOException(Loc.T("proj.pick.notEmpty"));
                 busy = null;
                 SetDraft(new Draft(DraftKind.New, System.IO.Path.GetFileName(dir.TrimEnd('\\')) is { Length: > 0 } n ? n : NextDefaultName(), dir));
             }
-        }, "No se pudo abrir el selector de carpetas");
+        }, Loc.T("proj.err.picker"));
 
     async Task PickRoot() =>
         await Run("__root", async () =>
         {
-            var dir = await PickFolder("Elegí dónde guardar los proyectos nuevos");
+            var dir = await PickFolder(Loc.T("proj.pick.root"));
             if (dir == null) return;
             await Task.Run(() => ProjectLibrary.SetRoot(dir));
             await Refresh();
-        }, "No se pudo cambiar la carpeta de proyectos");
+        }, Loc.T("proj.err.root"));
 
     void RemoveTemplate(ProjectTemplate t)
     {
         myTemplates = ProjectTemplates.DeleteUser(t.Id);
         if (templateId == t.Id) templateId = ProjectTemplates.None;
-        notice = $"Se borró la plantilla \"{t.Name}\".";
+        notice = Loc.T("proj.tpl.deleted", t.Name);
         RenderAll();
     }
 
@@ -481,15 +462,13 @@ public sealed partial class ProjectsDialog : UserControl
         bool picking = busy == "__pick";
         OpenFolderIcon.IsVisible = !picking;
         OpenFolderSpin.IsVisible = picking;
-        OpenFolderText.Text = picking ? "Esperando a Windows…" : "Abrir carpeta…";
+        OpenFolderText.Text = picking ? Loc.T("proj.waiting") : Loc.T("proj.openFolder");
         RootSpin.IsVisible = busy == "__root";
-        ImportWebButton.IsVisible = pendingWebDir != null;
-        ImportWebButton.IsEnabled = idle;
         RootText.Text = root.Length > 0 ? root : "…";
         ToolTip.SetTip(RootText, root);
         RenderNewForm(true);
         NoticeText.IsVisible = error != null || notice != null;
-        NoticePanel.IsVisible = NoticeText.IsVisible || pendingWebDir != null;
+        NoticePanel.IsVisible = NoticeText.IsVisible;
         NoticeText.Text = error ?? notice;
         NoticeText.Foreground = error != null ? (IBrush)this.FindResource("Rec")! : (IBrush)this.FindResource("Dim")!;
         RenderList();
@@ -508,11 +487,11 @@ public sealed partial class ProjectsDialog : UserControl
         NewPath.Text = d.Dir ?? (root.Length > 0 ? System.IO.Path.Combine(root, ProjectLibrary.FolderNameFor(FreeName(d.Name))) : "");
         bool taken = name.Length > 0 && NameTaken(name);
         NewTaken.IsVisible = taken;
-        if (taken) NewTaken.Text = $"Ya hay un proyecto con ese nombre: este se va a llamar \"{FreeName(d.Name)}\".";
+        if (taken) NewTaken.Text = Loc.T("proj.taken", FreeName(d.Name));
         if (!templates) return;
         TemplateGrid.Children.Clear();
         var selected = SelectedTemplate;
-        TemplateGrid.Children.Add(TemplateOption("Vacío", "Sin pistas", null, selected == null, false, () => templateId = ProjectTemplates.None, null));
+        TemplateGrid.Children.Add(TemplateOption(Loc.T("proj.tpl.empty"), Loc.T("proj.tpl.empty.detail"), null, selected == null, false, () => templateId = ProjectTemplates.None, null));
         foreach (var t in ProjectTemplates.Builtin.Concat(myTemplates))
             TemplateGrid.Children.Add(TemplateOption(t.Name, t.Summary, t.Hint, selected?.Id == t.Id, !t.Builtin, () => templateId = t.Id,
                 t.Builtin ? null : () => RemoveTemplate(t)));
@@ -530,7 +509,7 @@ public sealed partial class ProjectsDialog : UserControl
             TextTrimming = TextTrimming.CharacterEllipsis,
         });
         if (mine)
-            title.Children.Add(new TextBlock { Text = "MÍA", FontSize = 9, LetterSpacing = 0.5, Foreground = Res("Faint"), VerticalAlignment = VerticalAlignment.Center });
+            title.Children.Add(new TextBlock { Text = Loc.T("proj.tpl.mine"), FontSize = 9, LetterSpacing = 0.5, Foreground = Res("Faint"), VerticalAlignment = VerticalAlignment.Center });
         var body = new StackPanel();
         body.Children.Add(title);
         body.Children.Add(new TextBlock { Text = detail, FontSize = 10, Foreground = Res("Faint"), TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 1, 0, 0) });
@@ -557,7 +536,7 @@ public sealed partial class ProjectsDialog : UserControl
                 Margin = new Thickness(0, 0, 4, 0),
                 Content = Icon("", 11),
             };
-            ToolTip.SetTip(del, "Borrar plantilla");
+            ToolTip.SetTip(del, Loc.T("proj.tpl.delete"));
             del.Click += (_, _) => onDelete();
             grid.Children.Add(del);
         }
@@ -592,8 +571,8 @@ public sealed partial class ProjectsDialog : UserControl
             ListPanel.Children.Add(new TextBlock
             {
                 Text = projects.Count == 0
-                    ? "Todavía no tenés proyectos. Creá uno con \"Nuevo proyecto\"."
-                    : "Ningún proyecto coincide con la búsqueda.",
+                    ? Loc.T("proj.empty.none")
+                    : Loc.T("proj.empty.noMatch"),
                 FontSize = 12,
                 Foreground = Res("Faint"),
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -635,13 +614,13 @@ public sealed partial class ProjectsDialog : UserControl
                 CornerRadius = new CornerRadius(4),
                 Padding = new Thickness(6, 1),
                 VerticalAlignment = VerticalAlignment.Center,
-                Child = new TextBlock { Text = "ABIERTO", FontSize = 10, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.5, Foreground = Res("Accent") },
+                Child = new TextBlock { Text = Loc.T("proj.open"), FontSize = 10, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.5, Foreground = Res("Accent") },
             });
         var info = new StackPanel { Opacity = p.Exists ? 1 : 0.5 };
         info.Children.Add(title);
         info.Children.Add(new TextBlock
         {
-            Text = p.Exists ? Meta(p) : "No se encontró la carpeta",
+            Text = p.Exists ? Meta(p) : Loc.T("proj.folderMissing"),
             FontSize = 11,
             Foreground = Res("Faint"),
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -677,13 +656,13 @@ public sealed partial class ProjectsDialog : UserControl
             var actions = new StackPanel { Classes = { "actions" }, Orientation = Orientation.Horizontal, Spacing = 2 };
             if (p.Exists)
             {
-                actions.Children.Add(RowAction("", "Renombrar (F2)", () => SetDraft(new Draft(DraftKind.Rename, p.Name, p.Dir))));
+                actions.Children.Add(RowAction("", Loc.T("proj.rename.tip"), () => SetDraft(new Draft(DraftKind.Rename, p.Name, p.Dir))));
                 if (isCurrent && CurrentTemplate != null)
-                    actions.Children.Add(RowAction("", "Guardar como plantilla (pistas, canales, efectos, formato y color)",
+                    actions.Children.Add(RowAction("", Loc.T("proj.saveTemplate.tip"),
                         () => SetDraft(new Draft(DraftKind.Template, p.Name, p.Dir))));
-                actions.Children.Add(RowAction("", "Duplicar", async () => await Duplicate(p)));
-                actions.Children.Add(RowAction("", "Mostrar en el Explorador", () => Reveal(p.Dir)));
-                var del = RowAction("", isCurrent ? "Abrí otro proyecto para poder borrar este" : "Borrar", () =>
+                actions.Children.Add(RowAction("", Loc.T("menu.duplicate"), async () => await Duplicate(p)));
+                actions.Children.Add(RowAction("", Loc.T("proj.reveal.tip"), () => Reveal(p.Dir)));
+                var del = RowAction("", isCurrent ? Loc.T("proj.deleteCurrent") : Loc.T("hist.delete"), () =>
                 {
                     draft = null;
                     confirmDelete = p.Dir;
@@ -720,8 +699,8 @@ public sealed partial class ProjectsDialog : UserControl
         bool templateExists = savingTemplate && myTemplates.Any(t => string.Equals(t.Name, d.Name.Trim(), StringComparison.OrdinalIgnoreCase));
         bool renameTaken = d.Kind == DraftKind.Rename && d.Name.Trim() != p.Name && NameTaken(d.Name, p.Dir);
 
-        var input = new TextBox { Classes = { "field" }, Text = d.Name, MaxLength = 120, Watermark = savingTemplate ? "Nombre de la plantilla" : null };
-        AutomationProperties.SetName(input, savingTemplate ? "Nombre de la plantilla" : "Nuevo nombre");
+        var input = new TextBox { Classes = { "field" }, Text = d.Name, MaxLength = 120, Watermark = savingTemplate ? Loc.T("proj.tpl.name") : null };
+        AutomationProperties.SetName(input, savingTemplate ? Loc.T("proj.tpl.name") : Loc.T("proj.newNameField"));
         rowInput = input;
         var submit = new Button
         {
@@ -731,11 +710,11 @@ public sealed partial class ProjectsDialog : UserControl
         };
         var label = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         if (rowBusy) label.Children.Add(Spinner(14, Res("App")));
-        label.Children.Add(new TextBlock { Text = savingTemplate ? (templateExists ? "Reemplazar plantilla" : "Guardar plantilla") : "Renombrar" });
+        label.Children.Add(new TextBlock { Text = savingTemplate ? Loc.T(templateExists ? "proj.tpl.replace" : "proj.tpl.saveButton") : Loc.T("proj.rename") });
         submit.Content = label;
         submit.Click += async (_, _) => await SubmitDraft();
 
-        var error = new TextBlock { Text = "Ya hay otro proyecto con ese nombre.", FontSize = 11, Foreground = Res("Rec"), Margin = new Thickness(16, -4, 16, 10), IsVisible = renameTaken };
+        var error = new TextBlock { Text = Loc.T("proj.nameTaken"), FontSize = 11, Foreground = Res("Rec"), Margin = new Thickness(16, -4, 16, 10), IsVisible = renameTaken };
         input.TextChanged += (_, _) =>
         {
             if (draft == null) return;
@@ -746,7 +725,7 @@ public sealed partial class ProjectsDialog : UserControl
             if (savingTemplate)
             {
                 bool exists = myTemplates.Any(t => string.Equals(t.Name, draft.Name.Trim(), StringComparison.OrdinalIgnoreCase));
-                ((TextBlock)label.Children[^1]).Text = exists ? "Reemplazar plantilla" : "Guardar plantilla";
+                ((TextBlock)label.Children[^1]).Text = Loc.T(exists ? "proj.tpl.replace" : "proj.tpl.saveButton");
             }
         };
         input.KeyDown += async (_, e) =>
@@ -762,7 +741,7 @@ public sealed partial class ProjectsDialog : UserControl
         form.Children.Add(input);
         if (savingTemplate)
         {
-            var cancel = new Button { Classes = { "btn" }, Content = "Cancelar", Margin = new Thickness(8, 0, 0, 0) };
+            var cancel = new Button { Classes = { "btn" }, Content = Loc.T("transport.count.cancel"), Margin = new Thickness(8, 0, 0, 0) };
             cancel.Click += (_, _) => SetDraft(null);
             Grid.SetColumn(cancel, 1);
             form.Children.Add(cancel);
@@ -778,10 +757,10 @@ public sealed partial class ProjectsDialog : UserControl
     Control DeleteRow(ProjectLibrary.Summary p, bool rowBusy)
     {
         var text = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
-        text.Inlines!.Add(new Avalonia.Controls.Documents.Run("¿Mandar "));
+        text.Inlines!.Add(new Avalonia.Controls.Documents.Run(Loc.T("hist.trashAsk.a")));
         text.Inlines.Add(new Avalonia.Controls.Documents.Run($"\"{p.Name}\"") { FontWeight = FontWeight.SemiBold });
-        text.Inlines.Add(new Avalonia.Controls.Documents.Run(" a la Papelera? Se van todos sus canales y exports."));
-        var cancel = new Button { Classes = { "btn", "sm" }, Content = "Cancelar", Margin = new Thickness(12, 0, 0, 0) };
+        text.Inlines.Add(new Avalonia.Controls.Documents.Run(Loc.T("proj.trashAsk.b")));
+        var cancel = new Button { Classes = { "btn", "sm" }, Content = Loc.T("transport.count.cancel"), Margin = new Thickness(12, 0, 0, 0) };
         cancel.Click += (_, _) =>
         {
             confirmDelete = null;
@@ -789,7 +768,7 @@ public sealed partial class ProjectsDialog : UserControl
         };
         var label = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         label.Children.Add(rowBusy ? Spinner(14, Brushes.White) : Icon("", 12));
-        label.Children.Add(new TextBlock { Text = "Borrar" });
+        label.Children.Add(new TextBlock { Text = Loc.T("hist.delete") });
         var del = new Button { Classes = { "btn", "sm", "danger" }, Content = label, Margin = new Thickness(8, 0, 0, 0), IsEnabled = busy == null };
         del.Click += async (_, _) => await Remove(p);
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), Margin = new Thickness(16, 10) };
@@ -825,18 +804,18 @@ public sealed partial class ProjectsDialog : UserControl
 
     // --- formatting (same as the web) -------------------------------------------------------------
 
-    static readonly string[] Months = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic"];
+    static readonly string[] Months = Loc.T("proj.months").Split(',');
 
     static string TimeAgo(DateTime utc)
     {
         double min = Math.Round((DateTime.UtcNow - utc.ToUniversalTime()).TotalMinutes);
-        if (min < 1) return "recién";
-        if (min < 60) return $"hace {min} min";
+        if (min < 1) return Loc.T("hist.ago.now");
+        if (min < 60) return Loc.T("hist.ago.min", min);
         double h = Math.Round(min / 60);
-        if (h < 24) return $"hace {h} h";
+        if (h < 24) return Loc.T("hist.ago.h", h);
         double d = Math.Round(h / 24);
-        if (d == 1) return "ayer";
-        if (d < 30) return $"hace {d} días";
+        if (d == 1) return Loc.T("proj.yesterday");
+        if (d < 30) return Loc.T("proj.daysAgo", d);
         var l = utc.ToLocalTime();
         return $"{l.Day} {Months[l.Month - 1]} {l.Year}";
     }
@@ -856,12 +835,12 @@ public sealed partial class ProjectsDialog : UserControl
 
     static string Meta(ProjectLibrary.Summary p)
     {
-        if (p.TakeCount == 0) return "Vacío";
-        var parts = new List<string> { p.TrackCount == 1 ? "1 pista" : $"{p.TrackCount} pistas" };
-        if (p.TakeCount != p.TrackCount) parts.Add(p.TakeCount == 1 ? "1 canal" : $"{p.TakeCount} canales");
+        if (p.TakeCount == 0) return Loc.T("proj.tpl.empty");
+        var parts = new List<string> { p.TrackCount == 1 ? Loc.T("tracks.one") : Loc.T("tracks.many", p.TrackCount) };
+        if (p.TakeCount != p.TrackCount) parts.Add(Loc.T(p.TakeCount == 1 ? "hist.channels.one" : "hist.channels.many", p.TakeCount));
         if (p.DurationSec > 0) parts.Add(Duration(p.DurationSec));
         if (p.Bpm is { } bpm and > 0) parts.Add($"{(Math.Round(bpm * 100) / 100).ToString(System.Globalization.CultureInfo.InvariantCulture)} BPM");
-        if (p.ExportCount > 0) parts.Add(p.ExportCount == 1 ? "1 export" : $"{p.ExportCount} exports");
+        if (p.ExportCount > 0) parts.Add(Loc.T(p.ExportCount == 1 ? "proj.exports.one" : "proj.exports.many", p.ExportCount));
         if (p.Bytes > 0) parts.Add(FormatBytes(p.Bytes));
         return string.Join(" · ", parts);
     }

@@ -199,7 +199,7 @@ public sealed class VideoTakeWriter : IDisposable
         }
         if (!proc.WaitForExit(30_000)) Kill();
         proc.WaitForExit();
-        if (proc.ExitCode != 0 && error == null) error = LastLog() ?? $"FFmpeg terminó con el código {proc.ExitCode}";
+        if (proc.ExitCode != 0 && error == null) error = LastLog() ?? Texts.T("err.ffmpeg.exit", "FFmpeg terminó con el código {0}", proc.ExitCode);
         if (written == 0 || !File.Exists(Path))
         {
             TryDelete(Path);

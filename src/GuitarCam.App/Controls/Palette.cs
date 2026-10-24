@@ -1,7 +1,7 @@
-using System.Globalization;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
+using Avalonia.Media.TextFormatting;
 
 namespace GuitarCam.App.Controls;
 
@@ -13,6 +13,14 @@ namespace GuitarCam.App.Controls;
 /// </summary>
 static class Palette
 {
+    // Brushes and pens are asked for inside Render, every frame while audio runs: the same color gives back the same
+    // immutable object instead of new garbage each time (see textCache). First in the class: the brushes below use them.
+    static readonly Dictionary<string, IBrush> hexBrushes = [];
+    static readonly Dictionary<Color, IBrush> alphaBrushes = [];
+    static readonly Dictionary<(Color, double, double, PenLineCap, PenLineJoin), IPen> pens = [];
+    /// <summary>Past this many entries a cache starts over (colors computed from a value, say).</summary>
+    const int StyleCacheMax = 1024;
+
     static readonly SolidColorBrush app = new(Color.Parse("#0b0b0d")), panel = new(Color.Parse("#131316")),
         raised = new(Color.Parse("#1c1c20")), hover = new(Color.Parse("#26262b")), line = new(Color.Parse("#27272c")),
         fg = new(Color.Parse("#ececef")), dim = new(Color.Parse("#a1a1aa")), faint = new(Color.Parse("#6b6b74")),
@@ -63,26 +71,58 @@ static class Palette
     public static readonly Typeface Mono = new("Cascadia Mono, Consolas");
     public static readonly Typeface MonoBold = new("Cascadia Mono, Consolas", FontStyle.Normal, FontWeight.Bold);
 
-    public static IBrush Brush(string hex) => new ImmutableSolidColorBrush(Color.Parse(hex));
-
-    public static IBrush Alpha(Color c, double a) => new ImmutableSolidColorBrush(Color.FromArgb((byte)(a * 255), c.R, c.G, c.B));
-
-    public static IPen Pen(IBrush b, double w = 1) => new ImmutablePen(b.ToImmutable(), w);
-
-    public static FormattedText Text(string s, double size, IBrush brush, Typeface? face = null) =>
-        new(s, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, face ?? Ui, size, brush);
-
-    public static void DrawText(this DrawingContext ctx, string s, double size, IBrush brush, Point at, Typeface? face = null, double maxWidth = 0)
+    /// <summary>Stores a new entry, starting the cache over when it is full. The lookups stay inline: a lambda that
+    /// captures would be garbage of its own on every call.</summary>
+    static TValue Store<TKey, TValue>(Dictionary<TKey, TValue> cache, TKey key, TValue value) where TKey : notnull
     {
-        var t = Text(s, size, brush, face);
-        if (maxWidth > 0)
-        {
-            t.MaxTextWidth = maxWidth;
-            t.MaxLineCount = 1;
-            t.Trimming = TextTrimming.CharacterEllipsis;
-        }
-        ctx.DrawText(t, at);
+        if (cache.Count >= StyleCacheMax) cache.Clear();
+        return cache[key] = value;
     }
+
+    public static IBrush Brush(string hex) =>
+        hexBrushes.TryGetValue(hex, out var b) ? b : Store(hexBrushes, hex, new ImmutableSolidColorBrush(Color.Parse(hex)));
+
+    public static IBrush Alpha(Color c, double a)
+    {
+        var k = Color.FromArgb((byte)(a * 255), c.R, c.G, c.B);
+        return alphaBrushes.TryGetValue(k, out var b) ? b : Store(alphaBrushes, k, new ImmutableSolidColorBrush(k));
+    }
+
+    public static IPen Pen(IBrush b, double w = 1) => Pen(b, w, PenLineCap.Flat, PenLineJoin.Miter);
+
+    /// <summary>A pen frozen to the brush's current color (a theme change gives a different pen on the next frame).</summary>
+    public static IPen Pen(IBrush b, double w, PenLineCap cap, PenLineJoin join = PenLineJoin.Miter)
+    {
+        if (b is not ISolidColorBrush s) return new ImmutablePen(b.ToImmutable(), w, null, cap, join);
+        var k = (s.Color, s.Opacity, w, cap, join);
+        return pens.TryGetValue(k, out var p) ? p : Store(pens, k, new ImmutablePen(b.ToImmutable(), w, null, cap, join));
+    }
+
+    /// <summary>Laid-out texts by content and style. The drawn controls repaint every frame while audio runs, and laying
+    /// the same labels out again each time churned ~20 MB/s: enough GCs to stall the audio callback. A
+    /// <see cref="TextLayout"/>, unlike a FormattedText (which formats its lines again on every draw), is laid out once.
+    /// Callers must not change what they get back.</summary>
+    static readonly Dictionary<(string, double, IBrush, Typeface, double), TextLayout> textCache = [];
+    /// <summary>Past this many texts (a scroll through many values) the cache starts over.</summary>
+    const int TextCacheMax = 4096;
+
+    public static TextLayout Text(string s, double size, IBrush brush, Typeface? face = null) => CachedText(s, size, brush, face ?? Ui, 0);
+
+    static TextLayout CachedText(string s, double size, IBrush brush, Typeface face, double maxWidth)
+    {
+        var key = (s, size, brush, face, maxWidth);
+        if (textCache.TryGetValue(key, out var t)) return t;
+        if (textCache.Count >= TextCacheMax) textCache.Clear();
+        t = maxWidth > 0
+            ? new TextLayout(s, face, size, brush, textTrimming: TextTrimming.CharacterEllipsis, maxWidth: maxWidth, maxLines: 1)
+            : new TextLayout(s, face, size, brush);
+        return textCache[key] = t;
+    }
+
+    public static void DrawText(this DrawingContext ctx, TextLayout t, Point at) => t.Draw(ctx, at);
+
+    public static void DrawText(this DrawingContext ctx, string s, double size, IBrush brush, Point at, Typeface? face = null, double maxWidth = 0) =>
+        CachedText(s, size, brush, face ?? Ui, maxWidth).Draw(ctx, at);
 
     public static double ToDb(float x) => x > 1e-6 ? 20 * Math.Log10(x) : -120;
 }

@@ -88,7 +88,7 @@ public sealed class LiveClip
         Audio = audio;
     }
 
-    public string Name => Media?.Name ?? "Sin medio";
+    public string Name => Media?.Name ?? Loc.T("track.noMedia");
     public double LengthSec => Audio?.LengthSec ?? Media?.DurationSec ?? 0;
     public ClipEnvelope.ClipWindow Window => ClipEnvelope.Window(LengthSec, Clip.AtSec, Clip.TrimStartSec, Clip.TrimEndSec, Clip.EffectiveSyncMs(Media));
     public double OffsetSec => Window.Origin;

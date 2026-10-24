@@ -41,8 +41,8 @@ public sealed class TempoControl : Border
         readout.Children.Add(new TextBlock { Text = ".", Foreground = Palette.Faint, Classes = { "mono" }, FontSize = 14 });
         readout.Children.Add(fraction);
         var holder = new Grid(); holder.Children.Add(readout); holder.Children.Add(editor); top.Children.Add(holder);
-        ToolTip.SetTip(value, "Arrastrá arriba/abajo (entero o decimal) · rueda del mouse (Shift = fino) · doble click para escribir");
-        AutomationProperties.SetName(editor, "Tempo en BPM");
+        ToolTip.SetTip(value, Loc.T("tempo.tip"));
+        AutomationProperties.SetName(editor, Loc.T("tempo.name"));
         void Part(TextBlock part, double increment)
         {
             part.Cursor = new Cursor(StandardCursorType.SizeNorthSouth);
@@ -70,8 +70,8 @@ public sealed class TempoControl : Border
             else if (e.Key == Key.Escape) { FinishEdit(); e.Handled = true; }
         };
         var tap = new Button { Content = "TAP", Classes = { "ghost" }, FontSize = 11, FontWeight = FontWeight.SemiBold, Padding = new Thickness(10, 0), CornerRadius = new CornerRadius(0), VerticalAlignment = VerticalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Center };
-        ToolTip.SetTip(tap, Shortcuts.Tip("Tocá al ritmo para medir el tempo", "tap"));
-        Shortcuts.Changed += () => ToolTip.SetTip(tap, Shortcuts.Tip("Tocá al ritmo para medir el tempo", "tap"));
+        ToolTip.SetTip(tap, Shortcuts.Tip(Loc.T("tempo.tap"), "tap"));
+        Shortcuts.Changed += () => ToolTip.SetTip(tap, Shortcuts.Tip(Loc.T("tempo.tap"), "tap"));
         tap.Click += (_, _) => Tap();
         row.Children.Add(value); Grid.SetColumn(tap, 1); row.Children.Add(tap); Child = row;
         Set(bpm);

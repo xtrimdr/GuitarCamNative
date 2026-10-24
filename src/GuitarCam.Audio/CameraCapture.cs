@@ -198,7 +198,7 @@ public sealed class CameraCapture : IDisposable
             if (disposed) return;
             if (Start(args, out var stdout, out double fps))
             {
-                Resolution = source.IsIp ? $"{Width}×{Height} (IP Directa)" : $"{Width}×{Height}{(fps > 0 ? $" @ {Math.Round(fps)}fps" : "")}";
+                Resolution = source.IsIp ? Texts.T("camera.resIp", "{0}×{1} (IP Directa)", Width, Height) : $"{Width}×{Height}{(fps > 0 ? $" @ {Math.Round(fps)}fps" : "")}";
                 Opening = false;
                 Pump(stdout);
                 return;
@@ -207,8 +207,8 @@ public sealed class CameraCapture : IDisposable
         Opening = false;
         if (!disposed)
             Error = source.IsIp
-                ? $"No pudimos conectar al stream directo de DroidCam en {source.IpHost}. Verificá que la IP y puerto (4747) sean los que muestra la app en el celu y que el cliente DroidCam de PC esté detenido."
-                : "DroidCam Video está seleccionado pero no entrega imagen. Asegurate de que el programa DroidCam Client en Windows esté abierto y con el video corriendo (\"Start\"), o cambiá al botón \"Modo IP DroidCam\" arriba.";
+                ? Texts.T("camera.errIp", "No pudimos conectar al stream directo de DroidCam en {0}. Verificá que la IP y puerto (4747) sean los que muestra la app en el celu y que el cliente DroidCam de PC esté detenido.", source.IpHost)
+                : Texts.T("camera.errDroid", "DroidCam Video está seleccionado pero no entrega imagen. Asegurate de que el programa DroidCam Client en Windows esté abierto y con el video corriendo (\"Start\"), o cambiá al botón \"Modo IP DroidCam\" arriba.");
     }
 
     /// <summary>Starts FFmpeg and waits for the output stream's size, which FFmpeg prints before the first frame.</summary>

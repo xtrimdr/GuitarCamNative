@@ -1,7 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:GuitarCam.App"
              x:Class="GuitarCam.App.Dialogs.ExportDialog"
-             AutomationProperties.Name="Exportar video"
+             AutomationProperties.Name="{loc:T export.name}"
              Background="#B3000000" KeyboardNavigation.TabNavigation="Cycle" Focusable="True">
 
   <!-- Port of ExportSetupDialog, ExportProgressDialog, ExportErrorDialog and ExportDialog
@@ -127,7 +128,7 @@
   </UserControl.Styles>
 
   <Border x:Name="Card" HorizontalAlignment="Center" VerticalAlignment="Center" Width="512" Margin="16"
-          AutomationProperties.Name="Exportar video"
+          AutomationProperties.Name="{loc:T export.name}"
           Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12"
           BoxShadow="0 25 50 -12 #80000000" ClipToBounds="True">
     <StackPanel>
@@ -136,16 +137,16 @@
       <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="20,14">
         <Grid ColumnDefinitions="*,Auto">
           <StackPanel Spacing="2" VerticalAlignment="Center">
-            <TextBlock x:Name="HeaderTitle" Text="Exportar MP4" FontSize="14" FontWeight="SemiBold" />
+            <TextBlock x:Name="HeaderTitle" Text="{loc:T export.mp4}" FontSize="14" FontWeight="SemiBold" />
             <StackPanel Orientation="Horizontal" Spacing="8">
               <TextBlock x:Name="HeaderSubtitle" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}" TextWrapping="Wrap" />
-              <Button x:Name="CopyPathButton" Classes="link" ToolTip.Tip="Copiar la ruta" IsVisible="False" VerticalAlignment="Center">
+              <Button x:Name="CopyPathButton" Classes="link" ToolTip.Tip="{loc:T exp.copyPath}" IsVisible="False" VerticalAlignment="Center">
                 <TextBlock x:Name="CopyPathIcon" Classes="icon" Text="&#xE8C8;" FontSize="12" />
               </Button>
             </StackPanel>
           </StackPanel>
           <Button Grid.Column="1" x:Name="CloseButton" Classes="act" Margin="8,-2,-6,0" VerticalAlignment="Top"
-                  ToolTip.Tip="Cerrar" AutomationProperties.Name="Cerrar">
+                  ToolTip.Tip="{loc:T settings.close}" AutomationProperties.Name="Cerrar">
             <TextBlock Classes="icon" Text="&#xE711;" FontSize="13" />
           </Button>
         </Grid>
@@ -157,9 +158,9 @@
 
           <!-- Nombre del archivo -->
           <StackPanel Spacing="6">
-            <TextBlock Text="Nombre del archivo" FontSize="11" FontWeight="Medium" Foreground="{StaticResource Dim}" />
+            <TextBlock Text="{loc:T exp.fileName}" FontSize="11" FontWeight="Medium" Foreground="{StaticResource Dim}" />
             <Grid ColumnDefinitions="*,Auto">
-              <TextBox x:Name="FileNameBox" Classes="field" Watermark="Mi video" MaxLength="180" />
+              <TextBox x:Name="FileNameBox" Classes="field" Watermark="{loc:T exp.myVideo}" MaxLength="180" />
               <TextBlock Grid.Column="1" x:Name="ExtText" Classes="mono" Text=".mp4" FontSize="14" Foreground="{StaticResource Faint}"
                          VerticalAlignment="Center" Margin="8,0,0,0" />
             </Grid>
@@ -167,7 +168,7 @@
 
           <!-- Carpeta -->
           <StackPanel Spacing="6">
-            <TextBlock Text="Carpeta" FontSize="11" FontWeight="Medium" Foreground="{StaticResource Dim}" />
+            <TextBlock Text="{loc:T exp.folder}" FontSize="11" FontWeight="Medium" Foreground="{StaticResource Dim}" />
             <Grid ColumnDefinitions="*,Auto">
               <Border Height="36" Padding="12,0" CornerRadius="6" Background="{StaticResource Raised}"
                       BorderBrush="{StaticResource Line}" BorderThickness="1">
@@ -180,16 +181,16 @@
               <Button Grid.Column="1" x:Name="PickFolderButton" Classes="btn outline" Margin="8,0,0,0">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <Arc x:Name="PickFolderSpin" Classes="spin" Width="14" Height="14" Stroke="{StaticResource Dim}" IsVisible="False" />
-                  <TextBlock Text="Cambiar…" />
+                  <TextBlock Text="{loc:T proj.change}" />
                 </StackPanel>
               </Button>
             </Grid>
             <Panel MinHeight="16">
-              <TextBlock x:Name="DefaultFolderHint" Text="Carpeta exports del proyecto." FontSize="11" Foreground="{StaticResource Faint}" />
-              <Button x:Name="ResetFolderButton" Classes="link" ToolTip.Tip="Volver a la carpeta exports del proyecto" IsVisible="False">
+              <TextBlock x:Name="DefaultFolderHint" Text="{loc:T exp.folder.default}" FontSize="11" Foreground="{StaticResource Faint}" />
+              <Button x:Name="ResetFolderButton" Classes="link" ToolTip.Tip="{loc:T exp.folder.reset.tip}" IsVisible="False">
                 <StackPanel Orientation="Horizontal" Spacing="5">
                   <TextBlock Classes="icon" Text="&#xE777;" FontSize="11" />
-                  <TextBlock Text="Usar la carpeta del proyecto" />
+                  <TextBlock Text="{loc:T exp.folder.reset}" />
                 </StackPanel>
               </Button>
             </Panel>
@@ -197,23 +198,23 @@
 
           <!-- Calidad -->
           <StackPanel Spacing="6">
-            <TextBlock x:Name="QualityLabel" Text="Calidad" FontSize="11" FontWeight="Medium" Foreground="{StaticResource Dim}" />
+            <TextBlock x:Name="QualityLabel" Text="{loc:T exp.quality}" FontSize="11" FontWeight="Medium" Foreground="{StaticResource Dim}" />
             <Grid ColumnDefinitions="Auto,Auto,*">
               <!-- solo audio (native only): the format instead of the video quality -->
               <Border x:Name="FormatSeg" Classes="seg" IsVisible="False">
                 <StackPanel Orientation="Horizontal" Spacing="2">
-                  <Button x:Name="FormatWavBtn" Classes="seg on" Content="WAV" ToolTip.Tip="Sin pérdida (24 bits, 48 kHz)." />
-                  <Button x:Name="FormatMp3Btn" Classes="seg" Content="MP3" ToolTip.Tip="320 kbps: liviano, para mandar o subir." />
+                  <Button x:Name="FormatWavBtn" Classes="seg on" Content="WAV" ToolTip.Tip="{loc:T exp.wav.tip}" />
+                  <Button x:Name="FormatMp3Btn" Classes="seg" Content="MP3" ToolTip.Tip="{loc:T exp.mp3.tip}" />
                 </StackPanel>
               </Border>
               <Border Grid.Column="1" x:Name="QualitySeg" Classes="seg">
                 <StackPanel Orientation="Horizontal" Spacing="2">
-                  <Button x:Name="QualityAltaBtn" Classes="seg on" Content="Alta"
-                          ToolTip.Tip="Máxima calidad (CRF 18). Para publicar." />
-                  <Button x:Name="QualityEstandarBtn" Classes="seg" Content="Estándar"
-                          ToolTip.Tip="Muy buena calidad y archivo más liviano (CRF 22)." />
-                  <Button x:Name="QualityBorradorBtn" Classes="seg" Content="Borrador"
-                          ToolTip.Tip="Rápido y liviano, para revisar (CRF 28)." />
+                  <Button x:Name="QualityAltaBtn" Classes="seg on" Content="{loc:T exp.q.high}"
+                          ToolTip.Tip="{loc:T exp.q.high.tip}" />
+                  <Button x:Name="QualityEstandarBtn" Classes="seg" Content="{loc:T exp.q.std}"
+                          ToolTip.Tip="{loc:T exp.q.std.tip}" />
+                  <Button x:Name="QualityBorradorBtn" Classes="seg" Content="{loc:T exp.q.draft}"
+                          ToolTip.Tip="{loc:T exp.q.draft.tip}" />
                 </StackPanel>
               </Border>
               <TextBlock Grid.Column="2" x:Name="EstBytesText" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}"
@@ -243,11 +244,11 @@
         <!-- Setup Footer -->
         <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="20,14">
           <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-            <Button x:Name="SetupCancelButton" Classes="btn" Content="Cancelar" />
+            <Button x:Name="SetupCancelButton" Classes="btn" Content="{loc:T transport.count.cancel}" />
             <Button x:Name="SetupStartButton" Classes="btn primary">
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBlock Classes="icon" Text="&#xE896;" FontSize="13" Foreground="{StaticResource AccentFg}" />
-                <TextBlock x:Name="SetupStartText" Text="Exportar" />
+                <TextBlock x:Name="SetupStartText" Text="{loc:T exp.start}" />
               </StackPanel>
             </Button>
           </StackPanel>
@@ -275,11 +276,11 @@
         <!-- Running Footer -->
         <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="20,14">
           <Panel>
-            <Button x:Name="RunningCancelButton" Classes="btn" Content="Cancelar" HorizontalAlignment="Right" />
+            <Button x:Name="RunningCancelButton" Classes="btn" Content="{loc:T transport.count.cancel}" HorizontalAlignment="Right" />
             <Grid x:Name="ConfirmCancelRow" ColumnDefinitions="*,Auto,Auto" IsVisible="False">
-              <TextBlock Text="¿Cancelar la exportación?" FontSize="12" Foreground="{StaticResource Dim}" VerticalAlignment="Center" />
-              <Button Grid.Column="1" x:Name="KeepRunningButton" Classes="btn" Content="Seguir" />
-              <Button Grid.Column="2" x:Name="AbortExportButton" Classes="btn danger" Content="Cancelar exportación" Margin="8,0,0,0" />
+              <TextBlock Text="{loc:T exp.cancelAsk}" FontSize="12" Foreground="{StaticResource Dim}" VerticalAlignment="Center" />
+              <Button Grid.Column="1" x:Name="KeepRunningButton" Classes="btn" Content="{loc:T exp.keep}" />
+              <Button Grid.Column="2" x:Name="AbortExportButton" Classes="btn danger" Content="{loc:T exp.abort}" Margin="8,0,0,0" />
             </Grid>
           </Panel>
         </Border>
@@ -299,7 +300,7 @@
             <Button x:Name="ToggleDetailsButton" Classes="link">
               <StackPanel Orientation="Horizontal" Spacing="4">
                 <TextBlock x:Name="DetailsChevron" Classes="icon" Text="&#xE76C;" FontSize="10" />
-                <TextBlock Text="Detalles de FFmpeg" />
+                <TextBlock Text="{loc:T exp.details}" />
               </StackPanel>
             </Button>
             <Border x:Name="ErrorDetailsBox" Background="{StaticResource App}" BorderBrush="{StaticResource Line}"
@@ -314,8 +315,8 @@
         <!-- Error Footer -->
         <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="20,14">
           <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-            <Button x:Name="ErrorCloseButton" Classes="btn" Content="Cerrar" />
-            <Button x:Name="ErrorRetryButton" Classes="btn primary" Content="Volver a intentar" />
+            <Button x:Name="ErrorCloseButton" Classes="btn" Content="{loc:T settings.close}" />
+            <Button x:Name="ErrorRetryButton" Classes="btn primary" Content="{loc:T exp.retry}" />
           </StackPanel>
         </Border>
       </StackPanel>
@@ -335,7 +336,7 @@
         <Border x:Name="DoneStage" Background="Black" MinHeight="220">
           <Panel>
             <TextBlock x:Name="MissingVideoText"
-                       Text="El archivo ya no está en esa ubicación (lo movieron o lo borraron)."
+                       Text="{loc:T exp.fileGone}"
                        FontSize="14" Foreground="{StaticResource Dim}" Margin="24,64"
                        HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
                        TextWrapping="Wrap" IsVisible="False" />
@@ -343,7 +344,7 @@
               <Image x:Name="DoneVideoImage" MaxHeight="440" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
               <Border Grid.Row="1" Background="#CC09090b" Padding="12,6">
                 <Grid ColumnDefinitions="Auto,*,Auto">
-                  <Button x:Name="DonePlayPauseButton" Classes="act" Width="28" Height="28" ToolTip.Tip="Reproducir / pausar vista previa">
+                  <Button x:Name="DonePlayPauseButton" Classes="act" Width="28" Height="28" ToolTip.Tip="{loc:T exp.preview.tip}">
                     <TextBlock x:Name="DonePlayPauseIcon" Classes="icon" Text="&#xE768;" FontSize="12" />
                   </Button>
                   <Slider Grid.Column="1" x:Name="DoneVideoSlider" Minimum="0" Maximum="1" Value="0" Margin="10,0" VerticalAlignment="Center" />
@@ -358,11 +359,11 @@
         <Border Padding="20,14">
           <Grid ColumnDefinitions="*,Auto,Auto">
             <TextBlock x:Name="DoneMetaText" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
-            <Button Grid.Column="1" x:Name="DoneCloseButton" Classes="btn" Content="Cerrar" />
+            <Button Grid.Column="1" x:Name="DoneCloseButton" Classes="btn" Content="{loc:T settings.close}" />
             <Button Grid.Column="2" x:Name="DoneRevealButton" Classes="btn primary" Margin="8,0,0,0">
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBlock Classes="icon" Text="&#xE8DA;" FontSize="14" Foreground="{StaticResource AccentFg}" />
-                <TextBlock Text="Mostrar en la carpeta" />
+                <TextBlock Text="{loc:T exp.showFolder}" />
               </StackPanel>
             </Button>
           </Grid>

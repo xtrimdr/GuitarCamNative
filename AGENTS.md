@@ -12,40 +12,16 @@ y la captura de referencia de la interfaz, en [docs/captura.png](docs/captura.pn
 ## 1. Qué es y qué no es
 
 - **GuitarCam Studio** sirve para hacer **videos de guitarra**: grabar tomas con cámara y audio,
-  mezclarlas y exportar un video con un panel por toma. Esta carpeta es el **port a .NET nativo** de la
-  app web (`..\GuitarCam`, React + Web Audio) y se llama **GuitarCam Studio Native** (en la barra de
-  título, "GuitarCam Studio" + el badge "NATIVE"; el exe sigue siendo `GuitarCam.exe` y los ajustes,
-  `%APPDATA%\GuitarCam Studio`). Corre al lado de la web, no la reemplaza.
+  mezclarlas y exportar un video con un panel por toma. Esta carpeta es la app **.NET nativa**
+  y se llama **GuitarCam Studio Native** (en la barra de título, "GuitarCam Studio" + el badge "NATIVE"; el
+  exe sigue siendo `GuitarCam.exe` y los ajustes, `%APPDATA%\GuitarCam Studio`).
 - **El foco manda.** Las funciones de DAW (clips, plugins, MIDI…) tienen que servir para el video y no
   pueden complicar el camino de **"grabo, mezclo y exporto"**. Si una función nueva agrega pasos o
   pantallas a ese camino, replanteala o preguntá.
-- **La app web es la referencia.** Cuando algo ya existe en la web, se porta con el mismo comportamiento
-  (y el mismo sonido, muestra a muestra en el DSP) antes de "mejorarlo". Para la interfaz esto es una
-  regla dura: ver [Migrar algo de la web](#migrar-algo-de-la-web).
-
-### Migrar algo de la web
-
-**Todo lo que se migra tiene que quedar lo más parecido posible a como está en la app web**: el mismo
-diseño, la misma disposición, los mismos textos y el mismo flujo. El usuario ya pulió esa interfaz y le
-gusta como quedó; la nativa no es una oportunidad para rediseñarla.
-
-- **Antes de escribir código, leé el componente de la web** (`..\GuitarCam\src\components\…`, `App.tsx`,
-  `index.css`) y, si se puede, miralo andando (`npm run dev` en `..\GuitarCam`). Anotá qué pantallas,
-  secciones, columnas, botones, menús y atajos tiene.
-- **Misma estructura**: si en la web es un diálogo con una lista y acciones por fila (por ejemplo el
-  gestor "Proyectos" de `SessionPicker`), en la nativa también. No lo reemplaces por algo más simple
-  (un menú, un selector de carpetas, un mensaje en la barra de estado) porque sea más rápido de hacer.
-- **Mismos textos**, palabra por palabra (títulos, botones, tooltips, mensajes, estados vacíos), mismos
-  íconos (el equivalente en Segoe Fluent Icons), mismo orden, mismos atajos, mismos valores por defecto.
-- **Mismos comportamientos de detalle**: confirmaciones en línea, nombres únicos "(2)", qué se recuerda
-  entre sesiones, qué pasa con el teclado mientras está abierto, etc.
-- **Diferencias permitidas, solo si hacen falta**: lo que impone la plataforma (Avalonia en vez de
-  HTML) o el formato de proyecto nativo (por ejemplo, la web listaba `session.json` y la nativa lista
-  `guitarcam.json`, más "Importar de la app web"). Cada diferencia se avisa al usuario antes y se anota
-  en el `<summary>` del componente ("Igual que SessionPicker de la web salvo…").
-- **Si todavía no se puede portar entero**, se porta la pantalla con la misma forma y lo que falta queda
-  deshabilitado con un tooltip ("Todavía no está en la versión nativa"). No se inventa un reemplazo provisorio.
-- **Al terminar**, compará la nativa con la web lado a lado (captura de las dos) y decí qué quedó distinto.
+- **La app web ya no es referencia.** Nació como port de la web (`..\GuitarCam`), pero hoy la nativa
+  decide sola: sus decisiones de diseño, comportamiento y formato las toma el usuario con este proyecto, y
+  lo que haga o no la web no cuenta. Las menciones a la web que quedan en el código y en las notas son
+  historia (de dónde salió algo), no reglas. Ante la duda, mirá cómo está hecho en la nativa y preguntá.
 
 ## 2. Idioma
 
@@ -56,14 +32,18 @@ gusta como quedó; la nativa no es una oportunidad para rediseñarla.
 | README, PENDIENTES, esta guía | Español |
 | Identificadores, comentarios y `<summary>` en el código | Inglés |
 | Mensajes de commit | Inglés, en imperativo, una línea descriptiva ("Decode real video in the preview with FFmpeg") |
-| Valores que se guardan en el JSON | Inglés, iguales a la web (`"tube"`, `"tape"`, `"side-by-side"`, `"rhythm"`…) |
+| Valores que se guardan en el JSON | Inglés (`"tube"`, `"tape"`, `"side-by-side"`, `"rhythm"`…) |
 
-**Multilenguaje** (solo nativa, pedido del usuario; en curso): los textos de la interfaz salen de `Loc`
+**Multilenguaje** (solo nativa, pedido del usuario; hecho): los textos de la interfaz salen de `Loc`
 (`Loc.T("clave")`, o `{loc:T clave}` en XAML) y viven en `Assets/Lang/<código>.json`; **es.json es la
 referencia** (lo que falta en otro idioma cae al español). El idioma se elige en Configuración → "Idioma",
-se guarda en `config.json` (`language`) y se aplica al reiniciar. Ya usan claves Configuración, la
-barra de título, el transporte, el inspector, el timeline (con su menú), Color y Historial; el resto (mixer,
-diálogos, `Shortcuts`) sigue en español dentro del código y se migra de a una pantalla. Los títulos de
+se guarda en `config.json` (`language`) y se aplica al reiniciar. Toda la ventana (`GuitarCam.App`) usa
+claves, diálogos y atajos incluidos. Las capas `Audio` y `Projects` no conocen `Loc`: sus mensajes de error y de aviso
+(FFmpeg, cámara, guardado, exportación, recuperación) pasan por `Texts.T(clave, español, args...)`, que vive en `GuitarCam.Audio`
+y que `Loc.Load` conecta; sin esa conexión (gclab) sale el español de siempre. Con prefijos `err.`, `store.`, `camera.`.
+Siguen en español, a propósito, las plantillas que el usuario ya guardó, los nombres que se crean ("Canal 1") y los textos de `gclab`. Los nombres que vienen del
+motor en español (estilos del compresor, presets de EQ, reverb y delay, divisiones) se traducen al mostrarlos
+con `Loc.Or(clave, texto del motor)`: `Audio` no conoce `Loc`. Los títulos de
 sección del inspector, de Color y de Historial son ids estables en español (`SectionTitle` y
 `bar.section.*` los traducen solo al mostrarlos), porque con ellos se recuerda qué secciones están
 plegadas. `Projects` no conoce `Loc`: sus frases (Actividad, días, "hace 5 min") pasan por `Texts.T(clave,
@@ -80,10 +60,9 @@ El vocabulario de la interfaz es de músico, no de programador: **canal**, **pis
 ```
 src/
   GuitarCam.Audio      motor de audio: DSP portado, ASIO dúplex, click, grabación a disco. Sin UI.
-  GuitarCam.Projects   modelo del proyecto, guardado atómico, historial, importador de la web. Sin UI.
+  GuitarCam.Projects   modelo del proyecto, guardado atómico, historial. Sin UI.
   GuitarCam.App        la ventana (Avalonia 11.3). Depende de Audio y Projects.
   GuitarCam.Lab        gclab.exe: consola para probar audio, DSP y proyectos sin la ventana.
-tools/worklet-ref.mjs  corre los worklets originales de la web en Node para comparar.
 tools/make-icon.ps1    dibuja el ícono (Assets/GuitarCam.ico: exe, ventana y barra de tareas; Assets/GuitarCam-64.png: logo de la barra de título).
 tools/make-shortcut.ps1  crea el acceso directo del escritorio al exe.
 ```
@@ -101,7 +80,7 @@ Reglas:
 
 ### Modelo del proyecto (`GuitarCam.Projects`)
 
-Tres capas, igual que en la web:
+Tres capas:
 
 - **Media**: grabaciones y archivos importados. **Nunca se reescriben.**
 - **Track**: el canal (volumen, paneo, mute/solo, saturación, compresor…) y si lleva panel de video.
@@ -134,8 +113,6 @@ exports/
   proyecto se serializa en el hilo de la UI y se escribe en segundo plano, en orden. Ctrl+S fuerza.
   Antes de cerrar o cambiar de proyecto, `FlushSave()`.
 - Toda edición del usuario pasa por `MarkDirty()`. No hay botón de "guardar" que el usuario tenga que acordarse de tocar.
-- El importador de la web **solo lee** el proyecto web y crea uno nuevo "Nombre (nativa)" al lado
-  (hard links si es la misma unidad, copia si no).
 - Perder una toma es el peor error posible. `RecordingWriter` escribe la grabación mientras ocurre y
   reescribe el encabezado cada ~2 s para que un corte no la pierda. Cualquier cosa nueva que toque
   archivos del usuario tiene que pensar en qué pasa si el programa muere a la mitad.
@@ -152,6 +129,10 @@ El callback de ASIO (`AsioDuplex.ProcessBlock`, `PlaybackEngine.Process`) corre 
 - Los medidores son picos que escribe el hilo de audio y lee/resetea la UI en su `Tick` (16 ms). La
   caída visual (×0,82 por tick en pistas, 24 dB/s en el medidor estéreo) se hace del lado de la UI.
 - Lo que va a disco sale del callback por otro hilo (ver `RecordingWriter`).
+- **La basura de la UI también corta el audio**: el callback es código .NET, así que cada GC lo frena. Los gen0
+  no se notan, pero un gen1 deja huecos de 10–15 ms (con buffers de 4 ms, un corte). En lo que corre en cada `Tick`
+  o en cada `Render` no se asigna: nada de reconstruir controles (el mixer arma sus dos vistas una vez y alterna),
+  ni de `new Pen`/`FormattedText`/pinceles por cuadro (ver [Controles dibujados a mano](#controles-dibujados-a-mano)).
 - Sample rate del motor: 48 kHz (`PlaybackEngine.SampleRate`).
 - `PlaybackEngine` muestra la carga del callback ("DSP x %" con su barrita, arriba junto a CPU / GPU / RAM; roja desde el 80 %): si un cambio la sube mucho, decilo.
 
@@ -163,13 +144,11 @@ fuera del limitador, atrasado la misma latencia. La cadena (`TrackDspChain`) y l
 viven en `GuitarCam.Audio/Dsp/MixRenderer.cs` y los usan igual la reproducción y el render offline de la
 exportación: no los dupliques. Los medios se cargan y remuestrean a 48 kHz con `AudioLoader`.
 
-### Ports de la web
+### DSP
 
-- Cada port dice de dónde viene en su `<summary>`: *"Port of gc-saturator (GuitarCam/src/audio/fxWorklet.ts)"*.
-- Mismos nombres de parámetros y mismas fórmulas, aunque haya una forma "más linda". Si la web tiene un
-  bug, se porta igual y se anota; arreglarlo es otro cambio, acordado.
-- Verificá contra el original con `gclab verificar [toma.wav]` (usa `tools/worklet-ref.mjs`, necesita Node).
-  Un port de DSP no está terminado hasta que esa comparación da bien.
+- El DSP nació como port de los worklets de la web; cada clase dice de dónde viene en su `<summary>`, pero
+  eso es historia: hoy el código de la nativa es la referencia y se puede cambiar de común acuerdo con el usuario.
+- `gclab comprobar-dsp` corre comprobaciones propias del DSP (remuestreo, tomas, reinicio de la cadena y los buses).
 
 ## 5. Diseño de la interfaz
 
@@ -177,14 +156,13 @@ exportación: no los dupliques. Los medios se cargan y remuestrean a 48 kHz con 
 
 - **Oscura, sobria, de estudio.** Fondo casi negro, superficies apenas más claras, un solo color de acento.
   El contenido (el video y las ondas) es lo que tiene que resaltar, no los controles.
-- **Igual a la web.** Los tokens, tamaños y comportamientos salen de la app web (`index.css` y sus
-  componentes). Ante la duda, mirá cómo lo hace la web.
+- **Coherente consigo misma.** Los tokens, tamaños y comportamientos son los de esta guía. Ante la duda,
+  mirá cómo lo hace el resto de la nativa.
 - **Se usa con la guitarra colgada**: atajos de una tecla, objetivos de clic cómodos, nada que exija
   precisión ni varios pasos para grabar o reproducir.
 - **Siempre se ve el estado**: qué está sonando, si hay audio, si un archivo falta, si se guardó.
-- Lo que todavía no está portado **se muestra igual que en la web** (para que el layout no cambie),
-  deshabilitado o con un mensaje en la barra de estado ("Exportar todavía no está en la versión nativa").
-  Nunca un botón que no hace nada y no dice nada.
+- Lo que todavía no está hecho se muestra deshabilitado o con un aviso ("Exportar todavía no está en la
+  versión nativa"). Nunca un botón que no hace nada y no dice nada.
 
 ### Colores (tokens)
 
@@ -314,11 +292,13 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
   Cada canal es una tarjeta (`StripCard`) y todos (pistas, retornos, master) se arman con `StripLayout`,
   que les da las mismas filas: así los faders y medidores tienen siempre la misma altura. Lo que vaya en
   la cabecera o en los controles tiene que entrar en su fila fija, no estirarla. Los paneles de efecto
-  angostos se reacomodan (`FxNarrowW`) en vez de recortar controles.
+  angostos se reacomodan (`FxNarrowW`) en vez de recortar controles. En las tiras amplias la cabecera (● M S) y el paneo quedan
+  fijos y solo scrollean los efectos, cada uno en su panel (pedido del usuario); en las compactas el ● va debajo del
+  nombre, porque ● M S C no entran en una fila.
 - **Barra del proyecto** (derecha, `MainWindow.Color.cs`): lo que es del proyecto, como en la web
   (lo de la pista va al inspector). Ocupa la altura de la preview y el timeline, se pliega a una columna
   de íconos y recuerda pestaña y secciones plegadas. Las ediciones de Color pasan por `ColorEdit(...)`.
-  La pestaña Historial (`MainWindow.History.cs`, la de por defecto) se arma solo mientras está a la vista
+  Las pestañas Color / Biblioteca / Historial: Biblioteca (las tomas, usadas o no, importadas o grabadas, y "Borrar no usadas") e Historial (exportaciones y actividad) viven en `MainWindow.History.cs` (Historial es la de por defecto) y se arman solo mientras alguna está a la vista
   (`RefreshHistory`); lo que hace con el proyecto y los archivos vive en `ProjectHistory` (Projects).
   "Salió / volvió al timeline" se registra al guardar (`ProjectStore.Serialize` → `LogTimelineChanges`).
 - **Monitor "En vivo"** (`Controls/LiveMonitor.cs`), a la derecha de la preview: la cámara cruda, nunca
@@ -394,14 +374,20 @@ acento de `SystemAccentColor*`; no les pongas colores a mano.
 `TimelineView`, `PreviewView` y `StereoMeter` heredan de `Control` y dibujan en `Render`:
 
 - Todo color, pluma y texto sale de `Palette` (`Palette.Text`, `ctx.DrawText(...)`, `Palette.Pen`, `Palette.Alpha`).
-- Cacheá lo caro (ver el caché de ondas por clip) y redibujá con `InvalidateVisual()` solo cuando algo cambió.
+- Cacheá lo caro (ver el caché de ondas por clip) y redibujá con `InvalidateVisual()` solo cuando algo cambió
+  (un medidor quieto o un cabezal parado no redibujan: ver `TimelineView.SetPlayhead`, `StereoMeter.Push`).
+  Lo que se mueve en cada cuadro va en una capa aparte: el cabezal y los medidores de los encabezados del timeline
+  se dibujan en `TimelineView.Layer`, y mientras suena solo se redibuja esa capa, no el timeline entero.
+- Texto, pinceles y plumas siempre de `Palette` (`Palette.Text`/`DrawText`, `Palette.Alpha`, `Palette.Pen`): los
+  cachea por contenido y color. `Palette.Text` da un `TextLayout` (se arma una vez; un `FormattedText` se vuelve a
+  armar en cada dibujo) que no se modifica.
 - Las líneas de 1 px van en medio píxel (`y + laneH - 0.5`) para que queden nítidas.
 - Interacción: el control expone eventos (`SeekRequested`, `SelectionChanged`, `TrackToggled`) y la
   ventana decide qué hacer. El control no toca el motor ni el guardado.
 
 ### Medidores
 
-Mismo comportamiento que el `StereoMeter` de la web: ataque instantáneo, caída de 24 dB/s, pico retenido
+Comportamiento del `StereoMeter`: ataque instantáneo, caída de 24 dB/s, pico retenido
 1,5 s, rango −60 dB (−48 en los de pista). Acento hasta −6 dB, ámbar de −6 a 0, rojo arriba de −1 dB
 (pico) o −0,3 dB (luz de clip). La luz de clip queda prendida hasta que se hace clic en el medidor.
 
@@ -419,6 +405,7 @@ Mismo comportamiento que el `StereoMeter` de la web: ataque instantáneo, caída
 | Ctrl+Z / Ctrl+Y o Ctrl+Shift+Z | deshacer / rehacer |
 | Supr | quitar el clip; en una pista vacía, quitar la pista |
 | Alt+X / D | dividir el clip en el cabezal / duplicar el clip |
+| Ctrl+Shift+N | nueva pista (en video pregunta audio + video o solo audio) |
 | Esc | cancelar la cuenta antes de grabar; cancelar el gesto en curso en el timeline; en el gestor, cerrar el formulario y después el gestor |
 | Shift+R o Num * | grabar; grabando, detener y guardar la toma; durante la cuenta, cancelarla (Espacio hace lo mismo mientras graba) |
 | R | armar / desarmar la pista seleccionada (pedido del usuario; en la web R graba) |
@@ -443,7 +430,7 @@ Mismo comportamiento que el `StereoMeter` de la web: ataque instantáneo, caída
 
 - En la campanita de avisos, en primera persona y en criollo: **qué pasó + qué hago ahora o qué podés hacer**.
   - "No pude guardar: {motivo}. Lo vuelvo a intentar…"
-  - "Es un proyecto de la app web: usá \"Importar proyecto de la app web…\""
+  - "No pude abrir el proyecto: {motivo}"
   - "Volví a la versión de hace 5 min (lo que había antes también quedó en el historial)"
 - Nada de diálogos modales para errores, ni stack traces, ni jerga ("excepción", "null").
 - Un archivo que falta no rompe nada: el clip queda **offline** (gris, "Sin conexión: falta el archivo de
@@ -469,7 +456,7 @@ Escribí como el código que ya está:
 
 1. `dotnet build` desde la raíz (`GuitarCamNative.slnx`) tiene que compilar sin warnings nuevos.
 2. Probá el motor/proyecto con `gclab` y la ventana con
-   `src\GuitarCam.App\bin\Debug\net10.0-windows\GuitarCam.exe` (arranca en el gestor de proyectos, como la web;
+   `src\GuitarCam.App\bin\Debug\net10.0-windows\GuitarCam.exe` (arranca en el gestor de proyectos;
    con una carpeta de proyecto como argumento la abre directo).
 3. Hacen falta una interfaz ASIO y un proyecto con tomas para probar de verdad. Si no los tenés, decí qué no pudiste probar.
 4. Al revisar capturas de pantalla: las de GDI dan alfa 0 en píxeles negros y algunos visores los pintan

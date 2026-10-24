@@ -59,6 +59,3 @@ Antes de empezar: trabajá sobre una **copia** de un proyecto ("Duplicar" en el 
 
 ## Sin la ventana
 
-- [ ] **`gclab verificar` contra Chromium de verdad**: hoy los nodos nativos de Web Audio (Biquad, Delay,
-  Convolver) y el ruteo de los buses se comparan contra una emulación en JS (`tools/worklet-ref.mjs`).
-  Falta una pasada contra un `OfflineAudioContext` real en Chromium para confirmarlos.

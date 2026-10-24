@@ -307,7 +307,7 @@ public static partial class Mp4Exporter
         string dir = Path.GetFullPath(projectDir);
         string rawOut = (outDir ?? "").Trim();
         if (rawOut.Length > 0 && !Path.IsPathRooted(rawOut))
-            throw new ExportException("La carpeta de destino no es válida.");
+            throw new ExportException(Texts.T("err.export.badDir", "La carpeta de destino no es válida."));
 
         bool isDefault = rawOut.Length == 0;
         string folder = isDefault ? Path.Combine(dir, "exports") : Path.GetFullPath(rawOut);
@@ -564,7 +564,7 @@ public static partial class Mp4Exporter
         CancellationToken ct = default)
     {
         if (job.Takes.Count == 0)
-            throw new ExportException("Necesitás al menos un canal en el timeline para exportar.");
+            throw new ExportException(Texts.T("err.export.noTracks", "Necesitás al menos un canal en el timeline para exportar."));
 
         var target = CheckDestination(job.ProjectDir, job.OutDir, string.IsNullOrWhiteSpace(job.FileName) ? job.ProjectName : job.FileName);
         if (target.Exists && !job.Overwrite)
@@ -633,14 +633,14 @@ public static partial class Mp4Exporter
             try
             {
                 if (!proc.Start())
-                    throw new ExportException("No se pudo iniciar FFmpeg.");
+                    throw new ExportException(Texts.T("err.ffmpeg.start0", "No se pudo iniciar FFmpeg."));
             }
             catch (Win32Exception ex)
             {
                 throw new ExportException(
                     ex.NativeErrorCode == 2
-                        ? "No se encontró FFmpeg en el PATH."
-                        : $"No se pudo iniciar FFmpeg: {ex.Message}");
+                        ? Texts.T("err.ffmpeg.missing", "No se encontró FFmpeg en el PATH.")
+                        : Texts.T("err.ffmpeg.start", "No se pudo iniciar FFmpeg: {0}", ex.Message));
             }
 
             var stderrBuilder = new StringBuilder();
@@ -738,7 +738,7 @@ public static partial class Mp4Exporter
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
                 throw new ExportException(
-                    $"No se pudo reemplazar {outFilename}: puede que esté abierto en otro programa.");
+                    Texts.T("err.export.replace", "No se pudo reemplazar {0}: puede que esté abierto en otro programa.", outFilename));
             }
 
             long bytes = File.Exists(target.FullPath) ? new FileInfo(target.FullPath).Length : 0;

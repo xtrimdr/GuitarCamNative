@@ -69,7 +69,7 @@ public sealed class Knob : Control
             s.EndFigure(false);
             return g;
         }
-        IPen Round(IBrush b, double w) => new Pen(b, w) { LineCap = PenLineCap.Round };
+        IPen Round(IBrush b, double w) => Palette.Pen(b, w, PenLineCap.Round);
 
         double angle = -135 + (value - Min) / (Max - Min) * 270;
         double origin = -135 + (ResetTo - Min) / (Max - Min) * 270;

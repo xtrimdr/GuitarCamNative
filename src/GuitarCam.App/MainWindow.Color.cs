@@ -12,10 +12,10 @@ using GuitarCam.Projects;
 namespace GuitarCam.App;
 
 /// <summary>
-/// The right sidebar (App.tsx's project bar: Color / Historial, collapsible, the tab remembered) and the Color tab,
+/// The right sidebar (the project bar: Color / Biblioteca / Historial, collapsible, the tab remembered) and the Color tab,
 /// a port of ColorPanel.tsx: templates, filter, adjustments and effects, every change undoable and live in the
 /// preview. Same as the web except: it ends above the transport bar (which runs the whole width here), the
-/// templates live in %APPDATA% instead of localStorage. The Historial tab is in MainWindow.History.cs.
+/// templates live in %APPDATA% instead of localStorage. The Biblioteca and Historial tabs are in MainWindow.History.cs.
 /// </summary>
 public partial class MainWindow
 {
@@ -63,7 +63,7 @@ public partial class MainWindow
                 foreach (var title in System.Text.Json.JsonSerializer.Deserialize<string[]>(AppConfig.Get("collapsed." + scope) ?? "[]") ?? []) set.Add(title);
             }
             catch (System.Text.Json.JsonException) { }
-        projectTab = AppConfig.Get("projectTab") == "color" ? "color" : "history";
+        projectTab = AppConfig.Get("projectTab") is "color" or "library" ? AppConfig.Get("projectTab")! : "history";
         bool collapsed = AppConfig.Get("projectBarCollapsed") == "1";
 
         var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*"), Height = 44, Margin = new Thickness(6, 0, 16, 0) };
@@ -75,7 +75,7 @@ public partial class MainWindow
         shortcutTips.Add((rail, Loc.T("bar.show"), "rightPanel"));
         projectBarCollapsed.Children.Add(rail);
         int col = 1;
-        foreach (var (key, label, glyph) in new[] { ("color", Loc.T("bar.tab.color"), ""), ("history", Loc.T("bar.tab.history"), "") })
+        foreach (var (key, label, glyph) in new[] { ("color", Loc.T("bar.tab.color"), ""), ("library", Loc.T("bar.tab.library"), ""), ("history", Loc.T("bar.tab.history"), "") })
         {
             var tab = new Button { Classes = { "ghost" }, Content = label, FontSize = 13, FontWeight = FontWeight.Medium, Padding = new Thickness(0),
                 Margin = new Thickness(0, 0, 20, 0), CornerRadius = new CornerRadius(0), BorderThickness = new Thickness(0, 0, 0, 2), VerticalAlignment = VerticalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Center };
@@ -134,8 +134,8 @@ public partial class MainWindow
             rail.Foreground = on ? Palette.Accent : Palette.Faint;
             rail.Background = on ? Palette.AccentSoft : Brushes.Transparent;
         }
-        projectBarBody.Content = key == "color" ? colorPanel : historyPanel;
-        if (key == "history") RefreshHistory();
+        projectBarBody.Content = key == "color" ? colorPanel : key == "library" ? libraryPanel : historyPanel;
+        if (key != "color") RefreshHistory();
         if (save) SaveViewPref("projectTab", key);
     }
 

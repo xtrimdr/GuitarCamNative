@@ -20,7 +20,6 @@ static class ProjectCommands
         dir = Path.GetFullPath(dir);
         return sub switch
         {
-            "importar" => Import(dir, a.Get("destino")),
             "abrir" => Open(dir),
             "versiones" => Versions(dir),
             "volver" => Restore(dir, a.Positional.Skip(2).FirstOrDefault()),
@@ -34,20 +33,8 @@ static class ProjectCommands
             "modo" => Mode(dir, a),
             "cortar" => Crash(dir, a.Double("segundos", 3), a.Flag("camara")),
             "toma" => RecordTake(dir, a.Double("segundos", 3), a.Get("pista"), a.Flag("camara")),
-            _ => throw new ArgumentException("proyecto importar|importar-audio|abrir|versiones|volver|cortar <carpeta>"),
+            _ => throw new ArgumentException("proyecto importar-audio|abrir|versiones|volver|cortar <carpeta>"),
         };
-    }
-
-    static int Import(string webDir, string? target)
-    {
-        target = Path.GetFullPath(target ?? WebImporter.SuggestTarget(webDir));
-        Console.WriteLine($"Importando {webDir}\n       en {target}");
-        var r = WebImporter.Import(webDir, target);
-        using var store = r.Store;
-        Console.WriteLine($"Listo: {r.Linked} archivos enlazados, {r.Copied} copiados.");
-        foreach (var m in r.Missing) Console.WriteLine($"  falta: {m}");
-        Summary(store);
-        return 0;
     }
 
     static int Open(string dir)

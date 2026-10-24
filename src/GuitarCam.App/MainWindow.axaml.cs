@@ -130,12 +130,6 @@ public partial class MainWindow : Window
             await OpenProject(d);
             Projects.Hide();
         };
-        Projects.ImportWebProject = async d =>
-        {
-            string msg = await ImportWebProject(d);
-            Projects.Hide();
-            Status(msg);
-        };
         Projects.FlushCurrent = FlushProjectOperation;
         Projects.CloseCurrent = async () =>
         {
@@ -157,10 +151,12 @@ public partial class MainWindow : Window
 
         Opened += async (_, _) =>
         {
-            Status("Abriendo el audio…");
+            Status(Loc.T("main.audioOpening"));
             await Task.Delay(50);
             string? driver = AppConfig.Get("audio.driver");
             int.TryParse(AppConfig.Get("audio.outputOffset"), out int outputOffset);
+            if (double.TryParse(AppConfig.Get("audio.inputGainDb"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double gainDb))
+                engine.InputGainDb = Math.Clamp(gainDb, -24, 24);
             engine.Open(driver, 0, Math.Max(0, outputOffset));
             ShowAudioStatus();
             _ = camera.Refresh();
@@ -183,7 +179,7 @@ public partial class MainWindow : Window
             if (Export.IsRunning)
             {
                 e.Cancel = true;
-                Status("Estoy exportando: esperá a que termine o cancelá la exportación antes de cerrar.");
+                Status(Loc.T("main.exportBusy"));
                 return;
             }
             CloseProject();
@@ -235,7 +231,7 @@ public partial class MainWindow : Window
                 Dispatcher.UIThread.Post(() =>
                 {
                     if (st != store) return;
-                    Status($"No pude guardar: {e.Message}. Lo vuelvo a intentar…");
+                    Status(Loc.T("main.saveRetry", e.Message));
                     MarkDirty();
                 });
             }
@@ -264,7 +260,7 @@ public partial class MainWindow : Window
             saving = Task.CompletedTask;
             saveFailure = e;
             MarkDirty();
-            throw new IOException($"No pude guardar: {e.Message}. Lo vuelvo a intentar…", e);
+            throw new IOException(Loc.T("main.saveRetry", e.Message), e);
         }
     }
 
@@ -284,7 +280,7 @@ public partial class MainWindow : Window
             }
             catch (Exception e)
             {
-                Status($"No pude guardar: {e.Message}");
+                Status(Loc.T("main.saveFail", e.Message));
             }
         }
     }
@@ -316,22 +312,6 @@ public partial class MainWindow : Window
         await Projects.Show(store?.Dir);
     }
 
-    /// <summary>Copies the web project into "Name (nativa)" next to it and opens the copy. Returns what to tell the user.</summary>
-    async Task<string> ImportWebProject(string webDir)
-    {
-        string target = WebImporter.SuggestTarget(webDir);
-        var r = await Task.Run(() =>
-        {
-            var res = WebImporter.Import(webDir, target);
-            res.Store.Dispose();
-            return res;
-        });
-        await OpenProject(target);
-        string how = r.Copied == 0 ? "" : $" · {r.Copied} archivo(s) copiados (otra unidad)";
-        string miss = r.Missing.Count == 0 ? "" : $" · faltaban {r.Missing.Count} archivo(s) en la web";
-        return $"Importado en \"{Path.GetFileName(target)}\"; el de la web quedó igual{how}{miss}";
-    }
-
     async Task LoadProject(string dir)
     {
         try
@@ -340,7 +320,7 @@ public partial class MainWindow : Window
         }
         catch (Exception e)
         {
-            Status($"No pude abrir el proyecto: {e.Message}");
+            Status(Loc.T("main.openFail", e.Message));
             await ShowProjects();
         }
     }
@@ -349,7 +329,7 @@ public partial class MainWindow : Window
     async Task OpenProject(string dir, bool preserveUndo = false)
     {
         await FlushProjectOperation();
-        Status("Cargando el proyecto…");
+        Status(Loc.T("main.loading"));
         var next = await Task.Run(() => ProjectStore.Open(dir));
         CloseProject(clearUndo: !preserveUndo);
         store = next;
@@ -372,7 +352,7 @@ public partial class MainWindow : Window
             {
                 if (audio.TryGetValue(m.Id, out var a)) return a;
                 int index = audio.Count + 1;
-                Dispatcher.UIThread.Post(() => Projects.ReportProgress($"Cargando canales… {index}/{total} · {m.Name}"));
+                Dispatcher.UIThread.Post(() => Projects.ReportProgress(Loc.T("main.loadingChannels", index, total, m.Name)));
                 try
                 {
                     a = st.Resolve(m.Audio) is { } path && File.Exists(path) ? new MediaAudio(path) : null;
@@ -411,16 +391,16 @@ public partial class MainWindow : Window
         var notes = new List<string>();
         if (st.ReadOnlyReason != null) notes.Add(st.ReadOnlyReason);
         notes.AddRange(st.Notices);
-        if (failed.Count > 0) notes.Add($"no pude leer: {string.Join(", ", failed)}");
+        if (failed.Count > 0) notes.Add(Loc.T("main.cantRead", string.Join(", ", failed)));
         Status(notes.Count > 0
             ? string.Join(" · ", notes)
-            : $"{list.Count} pistas · {engine.LengthSec / 60:0}:{engine.LengthSec % 60:00} · {p.Settings.Aspect}");
+            : Loc.T("main.summary", list.Count, $"{engine.LengthSec / 60:0}:{engine.LengthSec % 60:00}", p.Settings.Aspect));
 
         if (p.Settings.AudioOnly) return;
         var clips = list.Where(t => t.Track.Video).SelectMany(t => t.Clips).ToList();
         await Task.WhenAll(clips.Select(c => Task.Run(() => c.OpenVideo(st))));
         var noVideo = clips.Where(c => c.Video == null && c.Media?.Video != null).Select(c => c.Name).ToList();
-        if (noVideo.Count > 0) Status($"Sin video (¿falta el archivo, ffmpeg o ffprobe?): {string.Join(", ", noVideo)}");
+        if (noVideo.Count > 0) Status(Loc.T("main.noVideo", string.Join(", ", noVideo)));
     }
 
     // --- transport and inspector -----------------------------------------------------------------
@@ -444,9 +424,9 @@ public partial class MainWindow : Window
     {
         shortcutTips.AddRange(
         [
-            (UndoButton, "Deshacer", "undo"), (RedoButton, "Rehacer", "redo"), (TimelineFitButton, "Ver todo (ajustar el zoom al ancho)", "fit"),
-            (ToStartButton, "Volver al inicio", "toStart"), (CountInToggle, "Cuenta de 4 tiempos antes de grabar", "countIn"),
-            (ClickToggle, "Metrónomo al grabar y al reproducir", "click"), (ViewSwitch, "Alternar timeline / mixer", "mixer"), (FitButton, "Ver todo", "fit"),
+            (UndoButton, Loc.T("title.undo"), "undo"), (RedoButton, Loc.T("title.redo"), "redo"), (TimelineFitButton, Loc.T("timeline.fit.tip"), "fit"),
+            (ToStartButton, Loc.T("transport.start.tip"), "toStart"), (CountInToggle, Loc.T("transport.countin.tip"), "countIn"),
+            (ClickToggle, Loc.T("transport.click.tip"), "click"), (ViewSwitch, Loc.T("transport.view.tip"), "mixer"), (FitButton, Loc.T("transport.fit.tip"), "fit"),
         ]);
         ApplyShortcutTips();
         Shortcuts.Changed += ApplyShortcutTips;
@@ -456,8 +436,8 @@ public partial class MainWindow : Window
     {
         foreach (var (c, text, action) in shortcutTips) ToolTip.SetTip(c, Shortcuts.Tip(text, action));
         string keys = string.Join(" / ", new[] { Shortcuts.Label("play"), Shortcuts.Label("record") }.Where(k => k.Length > 0));
-        ToolTip.SetTip(RecStopButton, keys.Length > 0 ? $"Detener y guardar el canal ({keys})" : "Detener y guardar el canal");
-        ToolTip.SetTip(PlayButton, Shortcuts.Tip(engine.Playing ? "Pausa" : "Reproducir desde el cabezal", "play"));
+        ToolTip.SetTip(RecStopButton, keys.Length > 0 ? $"{Loc.T("transport.rec.stop.tip")} ({keys})" : Loc.T("transport.rec.stop.tip"));
+        ToolTip.SetTip(PlayButton, Shortcuts.Tip(Loc.T(engine.Playing ? "transport.pause.tip" : "transport.play.head.tip"), "play"));
         recTip = null;
         mixerKey = "";
         RefreshMixer();
@@ -509,6 +489,10 @@ public partial class MainWindow : Window
             case "save":
                 SaveSoon();
                 break;
+            case "newTrack":
+                e.Handled = true;
+                await NewTrackShortcut();
+                return;
             case "split":
                 e.Handled = true;
                 await SplitAtPlayhead();
@@ -646,8 +630,8 @@ public partial class MainWindow : Window
         UpdateUndoButtons();
         RefreshInspectorText();
         Timeline.InvalidateVisual();
-        string what = lit.Count == 1 ? "1 pista" : $"{lit.Count} pistas";
-        Status(solo ? $"Saqué el solo de {what}" : $"Volví a activar el sonido de {what}");
+        string what = lit.Count == 1 ? Loc.T("tracks.one") : Loc.T("tracks.many", lit.Count);
+        Status(Loc.T(solo ? "mute.clearedSolo" : "mute.clearedMute", what));
     }
 
     /// <summary>The timeline corner's clear-all M / S, lit like the track toggles while any track has one.</summary>
@@ -663,7 +647,7 @@ public partial class MainWindow : Window
             b.Background = lit ? (solo ? Palette.Accent : Palette.Brush("#f59e0b")) : Brushes.Transparent;
             b.BorderBrush = lit ? Brushes.Transparent : Palette.Line;
             ((TextBlock)b.Content!).Foreground = lit ? Palette.App : Palette.Dim;
-            ToolTip.SetTip(b, lit ? (solo ? "Quitar todos los solo" : "Quitar todos los mute") : (solo ? "No hay pistas en solo" : "No hay pistas silenciadas"));
+            ToolTip.SetTip(b, lit ? Loc.T(solo ? "mixer.clearSolos" : "mixer.clearMutes") : Loc.T(solo ? "timeline.noSolos" : "timeline.noMutes"));
         }
     }
 
@@ -714,11 +698,11 @@ public partial class MainWindow : Window
             else await ApplyTracks(st);
             int index = tracks.FindIndex(t => t.Track.Id == selected);
             Timeline.Select(index >= 0 ? index : tracks.Count - 1);
-            Status(redo ? "Rehice el último cambio" : "Deshice el último cambio");
+            Status(Loc.T(redo ? "main.redone" : "main.undone"));
         }
         catch (Exception e)
         {
-            Status($"Recuperé los ajustes, pero no pude actualizar la vista: {e.Message}");
+            Status(Loc.T("main.restoredNoView", e.Message));
         }
         finally
         {

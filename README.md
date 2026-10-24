@@ -134,6 +134,7 @@ la consola, sin abrir la ventana.
 | `click` | escribe todos los sonidos de click a un WAV |
 | `sistema [--segundos 5]` | CPU, GPU y RAM, y si FFmpeg está en el PATH |
 | `espectro [toma.wav]` | el espectro en vivo del EQ |
+| `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas y reinicio de la cadena |
 | `camara [listar]` | las cámaras que ve FFmpeg y sus formatos |
 | `camara grabar [--dispositivo X \| --ip 192.168.1.50:4747] [--segundos 5]` | graba video como una toma y lo revisa con ffprobe |
 | `camara verificar-corte` | corta una grabación a la mitad y comprueba que el video quede |

@@ -55,13 +55,13 @@ public sealed class FxIcon : Control
         if (!Paths.TryGetValue(icon, out var path)) return;
         double s = box.Width / 24;
         using (ctx.PushTransform(Matrix.CreateScale(s, s) * Matrix.CreateTranslation(box.X, box.Y)))
-            ctx.DrawGeometry(null, new Pen(brush, 2) { LineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round }, path);
+            ctx.DrawGeometry(null, Palette.Pen(brush, 2, PenLineCap.Round, PenLineJoin.Round), path);
     }
 
     public override void Render(DrawingContext ctx)
     {
         double s = Math.Min(Bounds.Width, Bounds.Height) / 24;
         using (ctx.PushTransform(Matrix.CreateScale(s, s)))
-            ctx.DrawGeometry(null, new Pen(Foreground ?? Palette.Dim, 2) { LineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round }, path);
+            ctx.DrawGeometry(null, Palette.Pen(Foreground ?? Palette.Dim, 2, PenLineCap.Round, PenLineJoin.Round), path);
     }
 }

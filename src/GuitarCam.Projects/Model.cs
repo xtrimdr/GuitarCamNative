@@ -1,3 +1,4 @@
+using GuitarCam.Audio;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -84,7 +85,7 @@ public sealed class ProjectSettings
     /// <summary>App.tsx changeAspectRatio: vertical stacks the panels, horizontal puts them side by side (square keeps the layout).</summary>
     public void SetAspect(string aspect)
     {
-        if (aspect is not ("16:9" or "9:16" or "1:1")) throw new ArgumentException("La relación tiene que ser 16:9, 9:16 o 1:1.");
+        if (aspect is not ("16:9" or "9:16" or "1:1")) throw new ArgumentException(Texts.T("err.aspect", "La relación tiene que ser 16:9, 9:16 o 1:1."));
         Aspect = aspect;
         if (aspect == "9:16") Layout = "top-to-bottom";
         else if (aspect == "16:9") Layout = "side-by-side";
@@ -93,7 +94,7 @@ public sealed class ProjectSettings
     /// <summary>App.tsx changeLayout.</summary>
     public void SetLayout(string layout)
     {
-        if (layout is not ("side-by-side" or "top-to-bottom")) throw new ArgumentException("La disposición tiene que ser side-by-side o top-to-bottom.");
+        if (layout is not ("side-by-side" or "top-to-bottom")) throw new ArgumentException(Texts.T("err.layout", "La disposición tiene que ser side-by-side o top-to-bottom."));
         Layout = layout;
     }
 

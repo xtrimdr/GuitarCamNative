@@ -5,7 +5,7 @@ Al terminar uno, pasarlo a **Hecho** con la fecha.
 
 ## Ideas nuevas (solo nativa)
 
-_Cosas que no están en la app web o que la versión nativa debería hacer distinto._
+_Ideas y mejoras para la nativa._
 
 > **Foco:** la app sigue siendo para hacer videos de guitarra. Lo de DAW tiene que servir para eso
 > y no puede complicar el camino de "grabo, mezclo y exporto el video".
@@ -65,12 +65,11 @@ _Ideas que surgieron charlando. Todas apuntan al video._
 - [ ] **Acordes / tablatura / letra en pantalla** mientras grabás (tipo teleprompter) y opcionalmente en el video
 - [ ] **Exportar con la GPU** (NVENC) para que el render sea mucho más rápido
 
-## Falta portar de la app web
+## Relevamiento de la web (histórico)
 
-Nada: al 2026-10-23 está todo portado. El relevamiento (qué hace cada cosa en la web, cómo funciona y
-cómo quedó acá) sigue en [docs/MIGRACION.md](docs/MIGRACION.md); si la web suma algo, se anota ahí y se
-porta igual ([AGENTS.md → Migrar algo de la web](AGENTS.md#migrar-algo-de-la-web)). Lo que falta probar a
-mano está en [docs/PRUEBAS.md](docs/PRUEBAS.md).
+La web ya no manda sobre lo que hace la nativa. El relevamiento viejo sigue en
+[docs/MIGRACION.md](docs/MIGRACION.md) solo como historia. Lo que falta probar a mano está en
+[docs/PRUEBAS.md](docs/PRUEBAS.md).
 
 ## Notas
 
@@ -93,6 +92,16 @@ mano está en [docs/PRUEBAS.md](docs/PRUEBAS.md).
 
 ## Hecho
 
+- 2026-10-24: **cabezal y medidores del timeline en una capa aparte** (`TimelineView.Layer`): mientras suena solo se
+  redibuja esa capa, no cada clip, onda y etiqueta. El timeline entero se redibuja solo si se desplaza, si se graba
+  (la barra roja crece con el cabezal) o si se arrastra un encabezado (los medidores vuelven al fondo para que la
+  tarjeta levantada los tape). Con "Un beso y una flor" sonando: de ~4,2 a ~2 MB/s de basura y de 22 a 11 GC cada
+  40 s; los gen1 de la reproducción ya no dejan huecos (queda uno, en el primer gen1 después de abrir y dar play).
+- 2026-10-24: **cortes de audio por el recolector de memoria**: cambiar Compacto / Amplio en el mixer lo reconstruía
+  entero y los GC frenaban el callback de ASIO 10–40 ms; ahora arma las dos vistas juntas y alterna (`MixerLayout`).
+  Además la UI dejó de generar basura por cuadro: el timeline y el medidor de entrada no se redibujan si nada se movió,
+  y `Palette` cachea textos (`TextLayout`), pinceles y plumas. Medido con "Un beso y una flor": de ~20 MB/s y ~48 GC
+  cada 20 s a ~4 MB/s y ~10 (quieta, 1,7 MB/s); huecos de audio de 1,5 bloques o más, de 13 cada 20 s a 1 cada 40 s.
 - 2026-10-24: **borrar un pedazo (rango)** (ítem 1): Shift+arrastrar sobre una pista marca un rango (con el imán, Alt
   = libre; se ve como una banda de acento con su largo) y Supr, o "Borrar el rango" del clic derecho, saca ese tramo
   de todos los clips de la pista: los que quedan adentro se van, los que sobresalen por un lado se recortan y los que

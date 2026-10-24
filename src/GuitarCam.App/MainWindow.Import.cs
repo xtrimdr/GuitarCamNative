@@ -41,7 +41,7 @@ public partial class MainWindow
         if (!CanImport()) return;
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Importar audio",
+            Title = Loc.T("imp.title"),
             AllowMultiple = true,
             FileTypeFilter = [AudioFiles, FilePickerFileTypes.All],
         });
@@ -51,7 +51,7 @@ public partial class MainWindow
 
     async Task ImportAudio(IReadOnlyList<string> paths)
     {
-        if (!CanImport()) { Status("Ahora no puedo importar: terminá lo que estás haciendo y probá de nuevo."); return; }
+        if (!CanImport()) { Status(Loc.T("imp.busy")); return; }
         var st = store!;
         string dir = st.Dir;
         int done = 0;
@@ -60,24 +60,24 @@ public partial class MainWindow
             string name = Path.GetFileName(path);
             if (!AudioImport.IsSupported(path))
             {
-                Status($"No sé leer \"{name}\": probá con WAV, MP3, FLAC, OGG, M4A o AIFF.");
+                Status(Loc.T("imp.unknown", name));
                 continue;
             }
-            Status($"Importando \"{name}\"…");
+            Status(Loc.T("imp.importing", name));
             AudioImport.Imported file;
             try { file = await Task.Run(() => AudioImport.CopyIn(dir, path)); }
             catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException)
             {
-                Status($"No pude importar \"{name}\": {e.Message.TrimEnd('.')}.");
+                Status(Loc.T("imp.fail", name, e.Message.TrimEnd('.')));
                 continue;
             }
             // the project may have changed while the file was copied
-            if (store != st || !CanImport()) { Status($"No pude sumar \"{name}\" al timeline porque cambiaste de proyecto; quedó en la carpeta media/."); return; }
+            if (store != st || !CanImport()) { Status(Loc.T("imp.switched", name)); return; }
             double at = engine.PositionSec;
             string? selected = done == 0 ? sel?.Track.Id : null;
             await EditTimeline(p => AudioImport.AddClip(p, file, at, selected).Id, "audio-imported");
             done++;
         }
-        if (done > 0) Status(done == 1 ? "Importé el audio y lo dejé en una pista nueva." : $"Importé {done} audios, cada uno en su pista.");
+        if (done > 0) Status(done == 1 ? Loc.T("imp.done.one") : Loc.T("imp.done.many", done));
     }
 }

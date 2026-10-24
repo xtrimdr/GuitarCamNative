@@ -14,15 +14,16 @@ using GuitarCam.Projects;
 namespace GuitarCam.App;
 
 /// <summary>
-/// The Historial tab of the project bar, port of HistoryPanel.tsx: Canales (filter, search, by day, listen to the raw
-/// file, show in Explorer, take off the timeline or use again), Exportaciones (watch, show, Recycle Bin with an inline
-/// confirmation), Actividad (the log as sentences, by day, "Ver más") and "Borrar no usados". Same as the web except:
+/// The Biblioteca and Historial tabs of the project bar (once one tab, HistoryPanel.tsx). Biblioteca: Canales (filter,
+/// search, by day, listen to the raw file, show in Explorer, take off the timeline or use again) and "Borrar no usados".
+/// Historial: Exportaciones (watch, show, Recycle Bin with an inline confirmation) and Actividad (the log as sentences,
+/// by day, "Ver más"). Both are refreshed together while either is on screen. Same as the web except:
 /// there are no "Guardando / Reintentar" rows, as a native take is written to disk while it is recorded, and listening
 /// goes through Windows' default output (the web's &lt;audio&gt;), not the ASIO engine. The work is in ProjectHistory.
 /// </summary>
 public partial class MainWindow
 {
-    readonly StackPanel historyPanel = new();
+    readonly StackPanel historyPanel = new(), libraryPanel = new();
     readonly StackPanel historyTakes = new(), historyExports = new(), historyActivity = new();
     readonly Border historyPurge = new() { Padding = new Thickness(16) };
     readonly TextBlock historyTotal = new() { Classes = { "mono" }, FontSize = 10, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap };
@@ -39,14 +40,14 @@ public partial class MainWindow
     string? historyDeletingExport;
     bool historyExportBusy, historyConfirmPurge, historyPurging;
 
-    bool HistoryVisible => projectTab == "history" && projectBarExpanded.IsVisible;
+    bool HistoryVisible => projectTab is "history" or "library" && projectBarExpanded.IsVisible;
 
     void BuildHistoryPanel()
     {
         // Canales
         var reveal = HeaderAction("\uE838", Loc.T("hist.openFolder"), Loc.T("hist.openFolder.tip"), () => RevealInExplorer(store?.Dir, null));
         reveal.Foreground = Palette.Dim;
-        var takes = ColorSection("Canales", "\uE714", action: reveal, host: historyPanel, scope: "history");
+        var takes = ColorSection("Canales", "\uE714", action: reveal, host: libraryPanel, scope: "history");
         var seg = new UniformGrid { Rows = 1 };
         foreach (var (key, text) in new[] { ("all", Loc.T("hist.filter.all")), ("timeline", Loc.T("hist.filter.timeline")), ("unused", Loc.T("hist.filter.unused")) })
         {
@@ -82,10 +83,10 @@ public partial class MainWindow
         takes.Children.Add(historyFilters);
         takes.Children.Add(historyTakes);
         takes.Children.Add(historyTotal);
+        libraryPanel.Children.Add(historyPurge);
 
         ColorSection("Exportaciones", "\uE8B2", host: historyPanel, scope: "history").Children.Add(historyExports);
         ColorSection("Actividad", "\uE81C", host: historyPanel, scope: "history").Children.Add(historyActivity);
-        historyPanel.Children.Add(historyPurge);
 
         takePreview.Stopped += RefreshHistory;
         historyClock.Tick += (_, _) => { if (HistoryVisible) RefreshHistory(); };
@@ -100,7 +101,7 @@ public partial class MainWindow
         historyExports.Children.Clear();
         historyActivity.Children.Clear();
         var st = store;
-        historyPanel.IsEnabled = st != null;
+        historyPanel.IsEnabled = libraryPanel.IsEnabled = st != null;
         if (st == null)
         {
             historyFilters.IsVisible = historyTotal.IsVisible = false;
@@ -254,11 +255,14 @@ public partial class MainWindow
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         var nameLine = new TrimRow { Spacing = 8 };
         nameLine.Children.Add(new TextBlock { Text = m.Name, FontSize = 13, Foreground = inTimeline ? Palette.Fg : Palette.Dim, TextTrimming = TextTrimming.CharacterEllipsis });
-        if (!inTimeline) nameLine.Children.Add(new Border
+        Border Badge(string text) => new()
         {
             Background = Palette.Hover, CornerRadius = new CornerRadius(4), Padding = new Thickness(6, 1), VerticalAlignment = VerticalAlignment.Center,
-            Child = new TextBlock { Text = Loc.T("hist.unusedBadge"), FontSize = 10, FontWeight = FontWeight.Medium, Foreground = Palette.Faint },
-        });
+            Child = new TextBlock { Text = text, FontSize = 10, FontWeight = FontWeight.Medium, Foreground = Palette.Faint },
+        };
+        // where it came from (native only: the web has no imports)
+        nameLine.Children.Add(Badge(m.Kind == "import" ? Loc.T("hist.kind.import") : Loc.T("hist.kind.recording")));
+        if (!inTimeline) nameLine.Children.Add(Badge(Loc.T("hist.unusedBadge")));
         text.Children.Add(nameLine);
         text.Children.Add(new TextBlock
         {

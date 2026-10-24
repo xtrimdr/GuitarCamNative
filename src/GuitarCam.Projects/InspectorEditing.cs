@@ -1,3 +1,4 @@
+using GuitarCam.Audio;
 namespace GuitarCam.Projects;
 
 /// <summary>
@@ -14,7 +15,7 @@ public static class InspectorEditing
     /// <summary>TakeInspector.tsx setSync: moves the audio while keeping the timeline anchor fixed.</summary>
     public static void SetSync(Clip clip, Media? media, double value)
     {
-        if (!double.IsFinite(value)) throw new ArgumentException("El ajuste de sincronía tiene que ser un número válido.");
+        if (!double.IsFinite(value)) throw new ArgumentException(Texts.T("err.sync.number", "El ajuste de sincronía tiene que ser un número válido."));
         clip.AtSec += (value - clip.EffectiveSyncMs(media)) / 1000;
         clip.SyncMs = value;
     }

@@ -378,23 +378,26 @@ public partial class MainWindow
     void ShowNewTrackMenu(Point point)
     {
         if (store == null || restoring) return;
-        var p = store.Project;
-        var list = new List<object>
+        bool enabled = !store.ReadOnly;
+        var list = new List<object>();
+        if (AudioOnly)
+            list.Add(MenuAction(Loc.T("menu.emptyTrack"), () => EditTimeline(p => ClipEditing.AddEmpty(p, false), "track-added"), Loc.T("menu.emptyTrack.hint"), enabled, icon: "empty"));
+        else
         {
-            MenuAction(Loc.T("menu.emptyTrack"), () => EditTimeline(ClipEditing.AddEmpty, "track-added"), Loc.T("menu.emptyTrack.hint"), !store.ReadOnly, icon: "empty"),
-            MenuAction(Loc.T("menu.import"), PickAudioToImport, Loc.T("menu.import.hint"), CanImport(), icon: ""),
-            new Separator(), new MenuItem { Header = Loc.T("menu.fromHistory"), IsEnabled = false, FontSize = 10.5 },
-        };
-        var used = p.Tracks.SelectMany(t => t.Clips).Select(c => c.MediaId).ToHashSet();
-        var unused = p.Media.Where(m => !used.Contains(m.Id)).ToList();
-        if (unused.Count == 0) list.Add(new MenuItem { Header = Loc.T("menu.noUnused"), IsEnabled = false, FontSize = 12 });
-        foreach (var m in unused)
-        {
-            string? selected = sel?.Track.Id;
-            list.Add(MenuAction(m.Name, () => EditTimeline(project => ClipEditing.AddMedia(project, m.Id, selected), "clip-added"),
-                $"{m.DurationSec:0.0} s", !store.ReadOnly));
+            list.Add(MenuAction(Loc.T("menu.trackVideo"), () => EditTimeline(p => ClipEditing.AddEmpty(p, true), "track-added"), Loc.T("menu.emptyTrack.hint"), enabled, icon: "empty"));
+            list.Add(MenuAction(Loc.T("menu.trackAudio"), () => EditTimeline(p => ClipEditing.AddEmpty(p, false), "track-added"), Loc.T("menu.emptyTrack.hint"), enabled, icon: "empty"));
         }
-        OpenTimelineMenu(Popup(list, 288), point, 100 + Math.Max(1, unused.Count) * 36);
+        list.Add(MenuAction(Loc.T("menu.import"), PickAudioToImport, Loc.T("menu.import.hint"), CanImport(), icon: ""));
+        OpenTimelineMenu(Popup(list, 288), point, 140);
+    }
+
+    /// <summary>The "nueva pista" shortcut: audio-only projects add the track at once; in video mode it asks audio+video or audio only.</summary>
+    Task NewTrackShortcut()
+    {
+        if (store == null || restoring || store.ReadOnly) return Task.CompletedTask;
+        if (AudioOnly) return EditTimeline(p => ClipEditing.AddEmpty(p, false), "track-added");
+        ShowNewTrackMenu(new Point(8, Math.Max(8, Timeline.Bounds.Height - 120)));
+        return Task.CompletedTask;
     }
 
     void ShowTimelineMenu(LiveTrack track, LiveClip? clicked, Point point)

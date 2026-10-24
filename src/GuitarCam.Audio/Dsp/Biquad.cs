@@ -46,9 +46,6 @@ public readonly record struct BiquadSpec(BiquadType Type, double Freq, double Q,
 /// <summary>
 /// Stereo zero-latency biquad filter matching Web Audio's <c>BiquadFilterNode</c> formulas and
 /// <c>getFrequencyResponse</c> (<c>GuitarCam/src/audio/eq.ts</c> and <c>mixGraph.ts</c>).
-/// Note: in <c>gclab verificar</c> (<c>tools/worklet-ref.mjs</c>), Web Audio's native <c>BiquadFilterNode</c>,
-/// <c>DelayNode</c> and <c>ConvolverNode</c> are emulated in Node following the W3C Web Audio specification
-/// and Chromium's implementation (not executed inside a browser <c>OfflineAudioContext</c>).
 /// Coefficient updates via <see cref="Set"/> replace a single immutable reference so live UI changes never
 /// tear coefficients on the audio thread.
 /// </summary>

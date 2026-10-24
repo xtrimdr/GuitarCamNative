@@ -48,7 +48,7 @@ public sealed partial class SettingsDialog : UserControl
     readonly InspectorSlider gain;
     readonly TextBlock outputHelp = Help("");
     readonly TextBlock bufferText = new() { FontSize = 12, Foreground = Palette.Dim, Classes = { "mono" }, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
-    readonly Button panelButton = new() { Classes = { "btn", "outline" }, Height = 28, Padding = new Thickness(10, 0), FontSize = 12, Content = "Panel del driver" };
+    readonly Button panelButton = new() { Classes = { "btn", "outline" }, Height = 28, Padding = new Thickness(10, 0), FontSize = 12, Content = Loc.T("set.panelButton") };
     DispatcherTimer? resetRetry;
     readonly ToggleSwitch monitorSwitch = new() { VerticalAlignment = VerticalAlignment.Center };
     readonly TextBlock pairText = new() { FontSize = 11, Foreground = Palette.Faint, TextTrimming = TextTrimming.CharacterEllipsis };
@@ -87,25 +87,25 @@ public sealed partial class SettingsDialog : UserControl
         SizeChanged += (_, _) => Panel.Height = Math.Min(640, Bounds.Height * 0.88);
 
         // --- Entradas y salidas
-        var refresh = Act("", "Refrescar dispositivos", () => Refresh());
-        var input = Section("Entrada", refresh);
+        var refresh = Act("", Loc.T("set.refresh"), () => Refresh());
+        var input = Section(Loc.T("set.input"), refresh);
         driverBox.SelectionChanged += async (_, _) =>
         {
             if (filling || driverBox.SelectedItem is not string d || d == engine?.DriverName) return;
             await Reopen(d, 0);
         };
-        input.Children.Add(Field("Interfaz", driverBox));
+        input.Children.Add(Field(Loc.T("set.driver"), driverBox));
         input.Children.Add(Meter);
         // native only: the buffer size lives in the driver's own panel (the web had the browser's fixed buffer)
-        ToolTip.SetTip(panelButton, "Abrí el panel del driver para cambiar el tamaño del buffer. Cuando el driver lo cambia, reabro el audio solo.");
+        ToolTip.SetTip(panelButton, Loc.T("set.panel.tip"));
         panelButton.Click += (_, _) => ShowDriverPanel();
-        input.Children.Add(Field("Buffer", Row(bufferText, panelButton)));
+        input.Children.Add(Field(Loc.T("set.buffer"), Row(bufferText, panelButton)));
         var modes = new UniformGrid { Columns = 3 };
         foreach (var (mode, text, tip) in new[]
         {
-            (InputChannelMode.Stereo, "Estéreo", "Input 1 → L, Input 2 → R"),
-            (InputChannelMode.Ch1Mono, "Mono 1", "Solo Input 1, duplicado a ambos lados"),
-            (InputChannelMode.Ch2Mono, "Mono 2", "Solo Input 2, duplicado a ambos lados"),
+            (InputChannelMode.Stereo, Loc.T("set.mode.stereo"), Loc.T("set.mode.stereo.tip")),
+            (InputChannelMode.Ch1Mono, Loc.T("set.mode.mono1"), Loc.T("set.mode.mono1.tip")),
+            (InputChannelMode.Ch2Mono, Loc.T("set.mode.mono2"), Loc.T("set.mode.mono2.tip")),
         })
         {
             var b = new ToggleButton { Content = text, Classes = { "seg" }, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center };
@@ -115,30 +115,40 @@ public sealed partial class SettingsDialog : UserControl
             modeButtons.Add(b);
             modes.Children.Add(b);
         }
-        input.Children.Add(Field("Canales", new Border { Classes = { "seg" }, Child = modes }));
-        gain = new InspectorSlider("Ganancia de entrada", 0, 24, 1, InputProcessor.DefaultInputGainDb, v => $"+{v:0} dB",
-            v => { if (engine != null) engine.InputGainDb = v; Refresh(); }, "Afecta el vúmetro y el WAV grabado");
+        input.Children.Add(Field(Loc.T("set.channels"), new Border { Classes = { "seg" }, Child = modes }));
+        gain = new InspectorSlider(Loc.T("set.gain"), -24, 24, 1, InputProcessor.DefaultInputGainDb, v => $"{v:+0;-0;0} dB",
+            v =>
+            {
+                if (engine != null) engine.InputGainDb = v;
+                string text = v.ToString(CultureInfo.InvariantCulture);
+                _ = Task.Run(() =>
+                {
+                    try { AppConfig.Set("audio.inputGainDb", text); }
+                    catch (Exception x) when (x is IOException or UnauthorizedAccessException) { /* keep this session's choice */ }
+                });
+                Refresh();
+            }, Loc.T("set.gain.hint"));
         input.Children.Add(gain);
         audioPage.Children.Add(Card(input));
 
-        var output = Section("Salida");
+        var output = Section(Loc.T("set.output"));
         outputBox.SelectionChanged += async (_, _) =>
         {
             if (filling || engine == null || outputBox.SelectedIndex < 0 || outputBox.SelectedIndex * 2 == engine.OutputOffset) return;
             await Reopen(engine.DriverName, outputBox.SelectedIndex * 2);
         };
-        output.Children.Add(Field("Dispositivo", outputBox));
+        output.Children.Add(Field(Loc.T("set.device"), outputBox));
         output.Children.Add(outputHelp);
-        var monitorLabel = new TextBlock { Text = "Monitorear la entrada por esta salida", FontSize = 12, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
-        ToolTip.SetTip(monitorLabel, "Activalo solo si no tenés monitoreo directo en la interfaz (agrega latencia)");
+        var monitorLabel = new TextBlock { Text = Loc.T("set.monitor"), FontSize = 12, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
+        ToolTip.SetTip(monitorLabel, Loc.T("set.monitor.tip"));
         monitorSwitch.IsCheckedChanged += (_, _) => { if (!filling && engine != null) engine.SoftwareMonitor = monitorSwitch.IsChecked == true; };
         output.Children.Add(Row(monitorLabel, monitorSwitch));
         audioPage.Children.Add(Card(output));
 
         // --- Cámara
-        var camera = Section("Cámara", cameraRes);
+        var camera = Section(Loc.T("set.camera"), cameraRes);
         var camKind = new UniformGrid { Columns = 2 };
-        foreach (var (ip, text) in new[] { (false, "Webcam / Driver"), (true, "IP DroidCam") })
+        foreach (var (ip, text) in new[] { (false, Loc.T("set.cam.webcam")), (true, Loc.T("set.cam.ip")) })
         {
             var b = new ToggleButton { Content = text, Tag = ip, Classes = { "seg" }, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center };
             b.Click += async (_, _) =>
@@ -158,18 +168,18 @@ public sealed partial class SettingsDialog : UserControl
         };
         var camRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
         camRow.Children.Add(camBox);
-        var camRefresh = Act("\uE72C", "Refrescar dispositivos", () => _ = cam?.Refresh());
+        var camRefresh = Act("\uE72C", Loc.T("set.refresh"), () => _ = cam?.Refresh());
         camRefresh.Width = camRefresh.Height = 36;
         Grid.SetColumn(camRefresh, 1);
         camRow.Children.Add(camRefresh);
-        driverFields.Children.Add(Field("Dispositivo", camRow));
-        resolutionBox.ItemsSource = new[] { "Auto (nativa)", "1080p · 30 fps", "720p · 30 fps", "480p · 30 fps" };
+        driverFields.Children.Add(Field(Loc.T("set.device"), camRow));
+        resolutionBox.ItemsSource = new[] { Loc.T("set.res.auto"), "1080p · 30 fps", "720p · 30 fps", "480p · 30 fps" };
         resolutionBox.SelectionChanged += async (_, _) =>
         {
             if (filling || cam == null || resolutionBox.SelectedIndex < 0) return;
             await cam.SetMode(ResModes[resolutionBox.SelectedIndex]);
         };
-        driverFields.Children.Add(Field("Resolución", resolutionBox));
+        driverFields.Children.Add(Field(Loc.T("set.resolution"), resolutionBox));
         camera.Children.Add(driverFields);
         ipBox.TextChanged += (_, _) => { if (!filling && cam != null) cam.IpInput = ipBox.Text ?? ""; };
         ipBox.KeyDown += async (_, e) =>
@@ -178,30 +188,30 @@ public sealed partial class SettingsDialog : UserControl
             e.Handled = true;
             await cam.ConnectIp();
         };
-        var connect = new Button { Content = "Conectar", Classes = { "accent" }, Height = 36, FontSize = 14 };
+        var connect = new Button { Content = Loc.T("set.connect"), Classes = { "accent" }, Height = 36, FontSize = 14 };
         connect.Click += async (_, _) => { if (cam != null) await cam.ConnectIp(); };
         var ipRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
         ipRow.Children.Add(ipBox);
         Grid.SetColumn(connect, 1);
         ipRow.Children.Add(connect);
-        ipField = Field("IP y puerto del celular", ipRow);
+        ipField = Field(Loc.T("set.ip"), ipRow);
         camera.Children.Add(ipField);
         mirrorButton.Content = new TextBlock { Classes = { "icon" }, Text = "\uE8AB", FontSize = 13 };
-        ToolTip.SetTip(mirrorButton, "Espejar cámara en vivo");
+        ToolTip.SetTip(mirrorButton, Loc.T("set.mirror.tip"));
         mirrorButton.IsCheckedChanged += (_, _) => { if (!filling && cam != null) cam.Mirror = mirrorButton.IsChecked == true; };
-        camera.Children.Add(Row(new TextBlock { Text = "Espejar imagen en vivo", FontSize = 12, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center }, mirrorButton));
+        camera.Children.Add(Row(new TextBlock { Text = Loc.T("set.mirror"), FontSize = 12, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center }, mirrorButton));
         cameraPage.Children.Add(Card(camera));
 
         // --- Sincronización
-        var sync = Section("Sincronización por defecto");
+        var sync = Section(Loc.T("set.sync"));
         sync.Children.Add(pairText);
         sync.Children.Add(new Border { Background = Palette.Raised, CornerRadius = new CornerRadius(6), Padding = new Thickness(12, 10), Child = readout });
         sync.Children.Add(new Border { BorderBrush = Palette.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(12), Child = calBox });
-        fine = new InspectorSlider("Ajuste fino de audio (canales nuevos)", -100, 100, 1, 0, v => v > 0 ? $"+{v:0} ms" : $"{v:0} ms",
-            v => { OverdubOffsetMs = v; Refresh(); }, "Se suma a la latencia (calibrada o estimada). Negativo = el canal nuevo queda más adelantado");
+        fine = new InspectorSlider(Loc.T("set.fine"), -100, 100, 1, 0, v => v > 0 ? $"+{v:0} ms" : $"{v:0} ms",
+            v => { OverdubOffsetMs = v; Refresh(); }, Loc.T("set.fine.hint"));
         sync.Children.Add(fine);
-        cameraLatency = new InspectorSlider("Latencia de cámara", 0, 200, 5, LiveCamera.DefaultLatencyMs, v => $"{v:0} ms",
-            v => { if (cam != null) cam.LatencyMs = v; }, "Cuánto llega tarde la imagen respecto del audio");
+        cameraLatency = new InspectorSlider(Loc.T("set.camLatency"), 0, 200, 5, LiveCamera.DefaultLatencyMs, v => $"{v:0} ms",
+            v => { if (cam != null) cam.LatencyMs = v; }, Loc.T("set.camLatency.hint"));
         sync.Children.Add(cameraLatency);
         syncPage.Children.Add(Card(sync));
     }
@@ -220,7 +230,7 @@ public sealed partial class SettingsDialog : UserControl
     {
         if (engine == null) return;
         try { engine.ShowDriverPanel(); }
-        catch (Exception x) { bufferText.Text = $"No pude abrir el panel del driver: {x.Message}"; }
+        catch (Exception x) { bufferText.Text = Loc.T("set.panelFail", x.Message); }
     }
 
     /// <summary>
@@ -268,7 +278,7 @@ public sealed partial class SettingsDialog : UserControl
                 var g = new KeyGesture(e.Key, e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Shift | KeyModifiers.Alt));
                 capturing = null;
                 var taken = Shortcuts.Assign(id, g);
-                shortcutNote = taken != null ? $"{Shortcuts.Label(g)} era de \"{taken}\": ahora es de \"{Shortcuts.All.First(a => a.Id == id).Name}\"." : null;
+                shortcutNote = taken != null ? Loc.T("set.shortcut.taken", Shortcuts.Label(g), taken, Shortcuts.All.First(a => a.Id == id).Name) : null;
                 BuildShortcuts();
             }
             e.Handled = true;
@@ -298,7 +308,9 @@ public sealed partial class SettingsDialog : UserControl
         var e = engine;
         reopening = true;
         Refresh();
-        await Task.Run(() => e.Open(driver, 0, outputOffset));
+        // ASIO drivers are COM objects: they can only be created on an STA thread (the UI one), not the pool's
+        await Task.Delay(50);
+        e.Open(driver, 0, outputOffset);
         reopening = false;
         if (e.IsOpen)
         {
@@ -347,8 +359,8 @@ public sealed partial class SettingsDialog : UserControl
             }
             else if (!cts.IsCancellationRequested)
                 calError = method == CalibrationMethod.Tap
-                    ? "No detecté suficientes golpes. Tocá una nota corta y apagada en cada click, fuerte y sin dejarla sonar."
-                    : "No volvió la señal. Revisá que el cable vaya de la salida a una entrada de la interfaz (o el micrófono frente al parlante) y que la ganancia no esté al mínimo.";
+                    ? Loc.T("set.cal.tap.error")
+                    : Loc.T("set.cal.loop.error");
         }
         catch (InvalidOperationException x)
         {
@@ -383,21 +395,21 @@ public sealed partial class SettingsDialog : UserControl
         try
         {
             var drivers = AsioDuplex.DriverNames();
-            driverBox.ItemsSource = drivers.Length > 0 ? drivers : ["Sin dispositivos"];
-            driverBox.SelectedItem = drivers.Length > 0 ? e.DriverName : "Sin dispositivos";
+            driverBox.ItemsSource = drivers.Length > 0 ? drivers : [Loc.T("set.noDevices")];
+            driverBox.SelectedItem = drivers.Length > 0 ? e.DriverName : Loc.T("set.noDevices");
             driverBox.IsEnabled = drivers.Length > 0 && !locked;
-            bufferText.Text = reopening ? "Reabriendo el audio…" : e.BufferFrames > 0
-                ? $"{e.BufferFrames} muestras · {1000.0 * e.BufferFrames / PlaybackEngine.SampleRate:0.0} ms" : "Sin audio";
+            bufferText.Text = reopening ? Loc.T("set.reopening") : e.BufferFrames > 0
+                ? Loc.T("set.buffer.value", e.BufferFrames, $"{1000.0 * e.BufferFrames / PlaybackEngine.SampleRate:0.0}") : Loc.T("set.noAudio");
             panelButton.IsEnabled = drivers.Length > 0 && !locked;
             foreach (var b in modeButtons) b.IsChecked = (InputChannelMode)b.Tag! == e.InputChannelMode;
             gain.Set(e.InputGainDb);
 
             int pairs = e.OutputChannels / 2;
-            outputBox.ItemsSource = Enumerable.Range(0, pairs).Select(i => $"Salida {2 * i + 1}-{2 * i + 2}").ToArray();
+            outputBox.ItemsSource = Enumerable.Range(0, pairs).Select(i => Loc.T("set.outputPair", 2 * i + 1, 2 * i + 2)).ToArray();
             outputBox.SelectedIndex = pairs > 0 ? e.OutputOffset / 2 : -1;
             outputBox.IsEnabled = pairs > 0 && !locked;
-            outputHelp.Text = locked && !reopening ? "No se puede cambiar mientras grabás o calibrás."
-                : "Por acá suenan las pistas, el click y el monitoreo. Usá la salida de la interfaz para la menor latencia. Cada combinación de entrada y salida guarda su propia calibración.";
+            outputHelp.Text = locked && !reopening ? Loc.T("set.locked")
+                : Loc.T("set.output.help");
             monitorSwitch.IsChecked = e.SoftwareMonitor;
             fine.Set(OverdubOffsetMs);
             if (cam != null) FillCamera(cam);
@@ -415,8 +427,8 @@ public sealed partial class SettingsDialog : UserControl
         cameraRes.Text = c.Resolution;
         driverFields.IsVisible = !c.UseIp;
         ipField.IsVisible = c.UseIp;
-        camBox.ItemsSource = c.Devices.Length > 0 ? c.Devices : ["Sin cámaras"];
-        camBox.SelectedItem = c.Devices.Length > 0 ? c.Device : "Sin cámaras";
+        camBox.ItemsSource = c.Devices.Length > 0 ? c.Devices : [Loc.T("set.noCameras")];
+        camBox.SelectedItem = c.Devices.Length > 0 ? c.Device : Loc.T("set.noCameras");
         resolutionBox.SelectedIndex = Array.IndexOf(ResModes, c.Mode);
         if (ipBox.Text != c.IpInput) ipBox.Text = c.IpInput;
         mirrorButton.IsChecked = c.Mirror;
@@ -425,8 +437,8 @@ public sealed partial class SettingsDialog : UserControl
 
     void RefreshSync(PlaybackEngine e)
     {
-        string pair = $"Entrada {e.InputOffset + 1}-{e.InputOffset + 2} → Salida {e.OutputOffset + 1}-{e.OutputOffset + 2}";
-        pairText.Text = e.DriverName is { } d ? $"{d} · {pair}" : "Sin entrada → Salida predeterminada";
+        string pair = Loc.T("set.pair", e.InputOffset + 1, e.InputOffset + 2, e.OutputOffset + 1, e.OutputOffset + 2);
+        pairText.Text = e.DriverName is { } d ? $"{d} · {pair}" : Loc.T("set.noInput");
         ToolTip.SetTip(pairText, pairText.Text);
         var stored = e.DriverName is { } dn ? LatencyCalibration.ReadCalibration(dn, e.CalibrationOutputId) : null;
 
@@ -437,48 +449,48 @@ public sealed partial class SettingsDialog : UserControl
             var info = e.GetLatencyInfo();
             bool calibrated = info.CalibratedMs != null;
             var top = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-            top.Children.Add(new TextBlock { Text = calibrated ? "Latencia calibrada" : "Latencia estimada", FontSize = 12 });
+            top.Children.Add(new TextBlock { Text = Loc.T(calibrated ? "set.lat.calibrated" : "set.lat.estimated"), FontSize = 12 });
             var ms = new TextBlock { Text = $"{Math.Round(info.AppliedMs):0} ms", FontSize = 12, Classes = { "mono" } };
             Grid.SetColumn(ms, 1);
             top.Children.Add(ms);
             readout.Children.Add(top);
             string how = calibrated
-                ? $"{(stored?.Method == "tap" ? "medida tocando" : "medida por loopback")} · el driver estima {info.TotalMs:0.#} ms"
-                : $"salida {info.OutputMs:0.#} ms + entrada {info.InputMs:0.#} ms, según el driver";
-            readout.Children.Add(new TextBlock { Text = how + " · se compensa sola en cada canal nuevo", FontSize = 11, Foreground = Palette.Faint, Classes = { "mono" }, TextWrapping = TextWrapping.Wrap });
+                ? Loc.T("set.lat.driver", Loc.T(stored?.Method == "tap" ? "set.lat.tap" : "set.lat.loop"), $"{info.TotalMs:0.#}")
+                : Loc.T("set.lat.parts", $"{info.OutputMs:0.#}", $"{info.InputMs:0.#}");
+            readout.Children.Add(new TextBlock { Text = how + Loc.T("set.lat.auto"), FontSize = 11, Foreground = Palette.Faint, Classes = { "mono" }, TextWrapping = TextWrapping.Wrap });
             if (info.OutputMs > 60)
-                readout.Children.Add(Warning("La salida tiene mucha latencia: ¿auriculares Bluetooth, HDMI o un parlante externo? Escuchá por la salida de la interfaz."));
+                readout.Children.Add(Warning(Loc.T("set.lat.high")));
             if (stored != null && LatencyCalibration.IsCalibrationStale(stored, info.TotalMs, info.SampleRate))
-                readout.Children.Add(Warning("Cambió la configuración de audio desde que calibraste (frecuencia o dispositivo de salida). Conviene volver a calibrar."));
+                readout.Children.Add(Warning(Loc.T("set.lat.stale")));
         }
 
         calBox.Children.Clear();
         var head = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-        head.Children.Add(new TextBlock { Text = "Calibrar latencia", FontSize = 12, FontWeight = FontWeight.SemiBold });
+        head.Children.Add(new TextBlock { Text = Loc.T("set.cal.title"), FontSize = 12, FontWeight = FontWeight.SemiBold });
         if (stored != null && running == null)
         {
-            var useEstimate = new Button { Content = "Usar la estimación", Classes = { "link" } };
-            ToolTip.SetTip(useEstimate, "Descartar la medición y usar lo que informa el driver");
+            var useEstimate = new Button { Content = Loc.T("set.cal.useEstimate"), Classes = { "link" } };
+            ToolTip.SetTip(useEstimate, Loc.T("set.cal.useEstimate.tip"));
             useEstimate.Click += (_, _) => Forget();
             Grid.SetColumn(useEstimate, 1);
             head.Children.Add(useEstimate);
         }
         calBox.Children.Add(head);
-        const string cableHow = "Conectá un cable de la salida de la interfaz a una entrada (o poné un micrófono frente al parlante). Bajá los auriculares: suenan 8 pulsos de ruido.";
-        const string tapHow = "Escuchá 4 clicks de cuenta y después tocá una nota corta y apagada justo en cada uno de los 12 siguientes. Es menos precisa que el cable.";
+        string cableHow = Loc.T("set.cal.cableHow");
+        string tapHow = Loc.T("set.cal.tapHow");
         if (running is { } m)
         {
             calBox.Children.Add(Help(m == CalibrationMethod.Tap ? tapHow : cableHow));
-            string status = progress is not { } p ? "Preparando…"
-                : p.CountIn ? "Escuchá…"
-                : m == CalibrationMethod.Tap ? $"Tocá {p.Step} / {p.Total}" : $"Pulso {p.Step} / {p.Total}";
+            string status = progress is not { } p ? Loc.T("set.cal.preparing")
+                : p.CountIn ? Loc.T("set.cal.listen")
+                : m == CalibrationMethod.Tap ? Loc.T("set.cal.playStep", p.Step, p.Total) : Loc.T("set.cal.pulseStep", p.Step, p.Total);
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
             row.Children.Add(new Border
             {
                 Background = Palette.Raised, CornerRadius = new CornerRadius(6), Padding = new Thickness(12, 6),
                 Child = new TextBlock { Text = status, FontSize = 14, Classes = { "mono" }, Foreground = progress is { CountIn: true } ? Palette.Accent : Palette.Fg },
             });
-            var cancel = new Button { Content = "Cancelar", Classes = { "chip" } };
+            var cancel = new Button { Content = Loc.T("transport.count.cancel"), Classes = { "chip" } };
             cancel.Click += (_, _) => calibration?.Cancel();
             Grid.SetColumn(cancel, 1);
             row.Children.Add(cancel);
@@ -488,7 +500,7 @@ public sealed partial class SettingsDialog : UserControl
         {
             bool can = e.IsOpen && !busy();
             var buttons = new UniformGrid { Columns = 2 };
-            foreach (var (method, text, tip) in new[] { (CalibrationMethod.Loopback, "Con cable", cableHow), (CalibrationMethod.Tap, "Tocando", tapHow) })
+            foreach (var (method, text, tip) in new[] { (CalibrationMethod.Loopback, Loc.T("set.cal.cable"), cableHow), (CalibrationMethod.Tap, Loc.T("set.cal.tap"), tapHow) })
             {
                 var b = new Button { Content = text, Classes = { "chip" }, Height = 32, FontSize = 11, IsEnabled = can, Margin = new Thickness(method == CalibrationMethod.Tap ? 4 : 0, 0, method == CalibrationMethod.Loopback ? 4 : 0, 0),
                     HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center };
@@ -497,15 +509,14 @@ public sealed partial class SettingsDialog : UserControl
                 buttons.Children.Add(b);
             }
             calBox.Children.Add(buttons);
-            calBox.Children.Add(Help(can ? "Mide la latencia real. Con un cable de la salida a una entrada es lo más preciso; si no, tocá sobre el click."
-                : "Abrí la placa de audio (y no estés grabando) para calibrar."));
+            calBox.Children.Add(Help(Loc.T(can ? "set.cal.help.can" : "set.cal.help.cant")));
             if (stored != null)
             {
                 var at = DateTimeOffset.FromUnixTimeMilliseconds(stored.At).LocalDateTime;
-                calBox.Children.Add(new TextBlock { Text = $"Última: {stored.LatencyMs:0.#} ms ± {stored.SpreadMs:0.#} ms · {at:d/M/yyyy, HH:mm:ss}", FontSize = 11, Foreground = Palette.Faint, Classes = { "mono" } });
+                calBox.Children.Add(new TextBlock { Text = Loc.T("set.cal.last", $"{stored.LatencyMs:0.#}", $"{stored.SpreadMs:0.#}", $"{at:d/M/yyyy, HH:mm:ss}"), FontSize = 11, Foreground = Palette.Faint, Classes = { "mono" } });
                 bool tap = stored.Method == "tap";
                 if (stored.SpreadMs > (tap ? 20 : 2))
-                    calBox.Children.Add(Warning($"Las mediciones variaron bastante entre sí. Repetila{(tap ? " o probá con el cable" : "")}."));
+                    calBox.Children.Add(Warning(Loc.T("set.cal.varied", tap ? Loc.T("set.cal.varied.cable") : "")));
             }
         }
         if (calError != null) calBox.Children.Add(Warning(calError));
@@ -546,11 +557,11 @@ public sealed partial class SettingsDialog : UserControl
     void BuildShortcuts()
     {
         shortcutsPage.Children.Clear();
-        var resetAll = new Button { Content = "Restablecer todo", Classes = { "link" }, IsEnabled = Shortcuts.All.Any(a => !Shortcuts.IsDefault(a.Id)) };
-        ToolTip.SetTip(resetAll, "Volver a los atajos de siempre");
+        var resetAll = new Button { Content = Loc.T("set.sc.resetAll"), Classes = { "link" }, IsEnabled = Shortcuts.All.Any(a => !Shortcuts.IsDefault(a.Id)) };
+        ToolTip.SetTip(resetAll, Loc.T("set.sc.resetAll.tip"));
         resetAll.Click += (_, _) => { shortcutNote = null; capturing = null; Shortcuts.ResetAll(); };
-        var intro = Section("Atajos de teclado", resetAll);
-        intro.Children.Add(Help("Hacé clic en un atajo y tocá la tecla nueva (con Ctrl, Shift o Alt si querés). Esc cancela. Si la tecla era de otra acción, esa se queda sin atajo. Esc siempre cancela la cuenta y lo que estés arrastrando."));
+        var intro = Section(Loc.T("settings.tab.shortcuts"), resetAll);
+        intro.Children.Add(Help(Loc.T("set.sc.help")));
         if (shortcutNote != null) intro.Children.Add(Warning(shortcutNote));
         shortcutsPage.Children.Add(Card(intro));
         foreach (var group in Shortcuts.All.GroupBy(a => a.Group))
@@ -569,11 +580,11 @@ public sealed partial class SettingsDialog : UserControl
         var key = new Button
         {
             Classes = { "chip" }, FontFamily = Palette.Mono.FontFamily, MinWidth = 120, Height = 30, Padding = new Thickness(10, 0), HorizontalContentAlignment = HorizontalAlignment.Center,
-            Content = waiting ? "Tocá una tecla…" : label.Length > 0 ? label : "Sin atajo",
+            Content = waiting ? Loc.T("set.sc.press") : label.Length > 0 ? label : Loc.T("set.sc.none"),
         };
         key.Classes.Set("on", waiting);
         if (!waiting && label.Length == 0) key.Foreground = Palette.Faint;
-        ToolTip.SetTip(key, waiting ? "Tocá la tecla nueva (Esc: cancelar)" : "Cambiar el atajo");
+        ToolTip.SetTip(key, Loc.T(waiting ? "set.sc.press.tip" : "set.sc.change.tip"));
         key.Click += (_, _) =>
         {
             capturing = capturing == a.Id ? null : a.Id;
@@ -581,7 +592,7 @@ public sealed partial class SettingsDialog : UserControl
             BuildShortcuts();
             Focus();
         };
-        var reset = Act("", "Volver al atajo de siempre", () => { shortcutNote = null; Shortcuts.Reset(a.Id); });
+        var reset = Act("", Loc.T("set.sc.reset.tip"), () => { shortcutNote = null; Shortcuts.Reset(a.Id); });
         reset.IsVisible = !Shortcuts.IsDefault(a.Id);
         var right = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         right.Children.Add(reset);

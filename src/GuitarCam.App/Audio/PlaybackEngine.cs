@@ -13,7 +13,7 @@ namespace GuitarCam.App.Audio;
 /// post-fader sends into the shared <see cref="ReverbBus"/> and <see cref="DelayBus"/>;
 /// tracks + returns summed into <see cref="MasterLimiter"/>; click mixed outside the limiter (delayed by
 /// <see cref="MasterLimiter.Latency"/> so it lands on the same sample as the limited tracks).
-/// Also processes input 1-2 (<see cref="InputProcessor"/>: channel mode, +12 dB pre-amp gain, soft-limiter,
+/// Also processes input 1-2 (<see cref="InputProcessor"/>: channel mode, pre-amp gain (0 dB default), soft-limiter,
 /// optional software monitoring), runs count-in + recording on the same sample clock via <see cref="TakeRecorder"/>,
 /// and runs round-trip latency calibration (<see cref="CalibrationSession"/>).
 /// Native only: every driver input is open, and each armed track has an <see cref="InputTap"/> with its own
@@ -66,7 +66,7 @@ public sealed class PlaybackEngine : IDisposable
     float inL, inR, outL, outR;
     volatile bool inClip;
 
-    public string Status { get; private set; } = "Audio apagado";
+    public string Status { get; private set; } = Loc.T("engine.off");
     public string? DriverName => io?.Driver;
     public bool IsOpen => io != null;
     /// <summary>The driver's buffer size in samples (0 with no audio).</summary>
@@ -213,7 +213,7 @@ public sealed class PlaybackEngine : IDisposable
             io.Start();
             for (int i = 0; i < 100 && io.FramesPerBuffer == 0; i++) Thread.Sleep(10);
             double ms = 1000.0 * io.FramesPerBuffer / SampleRate;
-            Status = $"{driver} · {SampleRate / 1000} kHz · {io.FramesPerBuffer} muestras ({ms:0.0} ms)";
+            Status = Loc.T("engine.status", driver, SampleRate / 1000, io.FramesPerBuffer, $"{ms:0.0}");
 
             // like the web, a saved measurement applies even when stale (Configuración warns about it);
             // a pair with nothing saved goes back to the driver's estimate
@@ -223,7 +223,7 @@ public sealed class PlaybackEngine : IDisposable
         {
             io?.Dispose();
             io = null;
-            Status = $"Sin audio: {e.Message}";
+            Status = Loc.T("engine.noAudio", e.Message);
         }
     }
 
@@ -381,9 +381,9 @@ public sealed class PlaybackEngine : IDisposable
     /// </summary>
     public void StartRecording(IReadOnlyList<(InputRoute? Route, string WavPath)> takes, bool useCountIn = true, int countInBeats = 4)
     {
-        if (io == null) throw new InvalidOperationException("Abrí primero la placa de audio.");
+        if (io == null) throw new InvalidOperationException(Loc.T("engine.openFirst"));
         if (recording || activeCalibration != null) return;
-        if (takes.Count == 0) throw new ArgumentException("No hay nada para grabar.", nameof(takes));
+        if (takes.Count == 0) throw new ArgumentException(Loc.T("engine.nothingToRecord"), nameof(takes));
 
         SetInputs(takes.Select(t => t.Route).ToList());
         var recorders = new List<TakeRecorder>();
@@ -504,8 +504,8 @@ public sealed class PlaybackEngine : IDisposable
         Action<CalibrationProgress>? onProgress = null,
         CancellationToken ct = default)
     {
-        if (io == null) throw new InvalidOperationException("Abrí primero la placa de audio.");
-        if (recording) throw new InvalidOperationException("No se puede calibrar mientras grabás.");
+        if (io == null) throw new InvalidOperationException(Loc.T("engine.openFirst"));
+        if (recording) throw new InvalidOperationException(Loc.T("engine.cantCalibrate"));
 
         playing = false;
         var session = new CalibrationSession(method, SampleRate, buses.Limiter.Latency, clickSound);

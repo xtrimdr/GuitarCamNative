@@ -34,14 +34,14 @@ public sealed class AsioDuplex : IDisposable
     public static string PickDriver(string? wanted)
     {
         var names = DriverNames();
-        if (names.Length == 0) throw new InvalidOperationException("No hay drivers ASIO instalados.");
+        if (names.Length == 0) throw new InvalidOperationException(Texts.T("err.asio.none", "No hay drivers ASIO instalados."));
         if (!string.IsNullOrEmpty(wanted))
             return names.FirstOrDefault(n => n.Equals(wanted, StringComparison.OrdinalIgnoreCase))
                 ?? names.FirstOrDefault(n => n.Contains(wanted, StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidOperationException($"No encontré el driver ASIO \"{wanted}\".");
+                ?? throw new InvalidOperationException(Texts.T("err.asio.notFound", "No encontré el driver ASIO \"{0}\".", wanted));
         bool generic(string n) => GenericDrivers.Any(g => n.Contains(g, StringComparison.OrdinalIgnoreCase));
         return names.Where(n => !generic(n)).FirstOrDefault(Opens) ?? names.FirstOrDefault(Opens)
-            ?? throw new InvalidOperationException("Ningún driver ASIO se pudo abrir (¿está conectada la interfaz?).");
+            ?? throw new InvalidOperationException(Texts.T("err.asio.noOpen", "Ningún driver ASIO se pudo abrir (¿está conectada la interfaz?)."));
     }
 
     static bool Opens(string driver)

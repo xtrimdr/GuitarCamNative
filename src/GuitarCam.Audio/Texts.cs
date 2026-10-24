@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace GuitarCam.Projects;
+namespace GuitarCam.Audio;
 
 /// <summary>
 /// Hook for the few texts this layer builds itself (the Actividad lines, day names, "hace 5 min"): it has no UI,

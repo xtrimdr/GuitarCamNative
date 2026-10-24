@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
+using GuitarCam.Audio;
 using GuitarCam.Projects;
 
 namespace GuitarCam.App;

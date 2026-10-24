@@ -17,7 +17,7 @@ public sealed class StereoMeter : Control
     readonly double[] hold = [MinDb, MinDb];
     readonly double[] holdAge = [0, 0];
     bool clip;
-    DateTime last = DateTime.Now;
+    DateTime last = DateTime.UtcNow;
 
     const double LightW = 7;
     /// <summary>With the scale: the two bars take this much and the ticks and numbers the rest.</summary>
@@ -72,13 +72,14 @@ public sealed class StereoMeter : Control
 
     public void Push(float peakL, float peakR)
     {
-        var now = DateTime.Now;
+        var now = DateTime.UtcNow;
         double dt = (now - last).TotalSeconds;
         last = now;
-        float[] p = [peakL, peakR];
+        bool was = clip;
+        double l0 = level[0], l1 = level[1], h0 = hold[0], h1 = hold[1];
         for (int c = 0; c < 2; c++)
         {
-            double db = Math.Max(MinDb, Palette.ToDb(p[c]));
+            double db = Math.Max(MinDb, Palette.ToDb(c == 0 ? peakL : peakR));
             level[c] = db > level[c] ? db : Math.Max(db, level[c] - 24 * dt);
             if (db >= hold[c])
             {
@@ -88,8 +89,13 @@ public sealed class StereoMeter : Control
             else if ((holdAge[c] += dt) > 1.5) hold[c] = Math.Max(level[c], hold[c] - 24 * dt);
             if (db > -0.3) clip = true;
         }
-        InvalidateVisual();
+        // repaint only when something moved (resting at the floor, the meter stays as it is)
+        if (clip != was || Moved(l0, level[0]) || Moved(l1, level[1]) || Moved(h0, hold[0]) || Moved(h1, hold[1])) InvalidateVisual();
     }
+
+    /// <summary>Changes under this many dB don't move the bar a visible amount.</summary>
+    const double RedrawDb = 0.1;
+    static bool Moved(double a, double b) => Math.Abs(a - b) >= RedrawDb;
 
     protected override void OnPointerPressed(Avalonia.Input.PointerPressedEventArgs e)
     {

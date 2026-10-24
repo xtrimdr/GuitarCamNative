@@ -201,7 +201,35 @@ public sealed class TimelineView : Control
         DetachedFromVisualTree += (_, _) => { dragScroll.Stop(); slide.Stop(); };
         dragScroll.Stop();
         slide.Stop();
+        layer = new Layer(this);
+        VisualChildren.Add(layer);
     }
+
+    /// <summary>
+    /// What moves on every tick while audio runs, the playhead and the header meters, drawn over the timeline. Each
+    /// tick repaints only this; repainting the whole timeline per frame (every clip, wave and label) made enough
+    /// garbage for GCs that stalled the audio callback. Not hit-testable: the timeline under it takes the pointer.
+    /// </summary>
+    sealed class Layer : Control
+    {
+        readonly TimelineView owner;
+        public Layer(TimelineView owner) { this.owner = owner; IsHitTestVisible = false; }
+        public override void Render(DrawingContext ctx) => owner.RenderLayer(ctx);
+    }
+
+    readonly Layer layer;
+
+    /// <summary>Repaints the timeline and its moving layer (the layer's positions follow scroll, zoom and lane
+    /// height). Hides Visual.InvalidateVisual so every caller, inside or outside, keeps both in step.</summary>
+    public new void InvalidateVisual()
+    {
+        base.InvalidateVisual();
+        layer?.InvalidateVisual();
+    }
+
+    /// <summary>The meters move to the background while a header is lifted or sliding, so the lifted card covers its
+    /// neighbours' meters as it covers the rest of their header.</summary>
+    bool MetersOnLayer => liftedId == null && !slide.IsEnabled;
 
     public void SetTracks(IReadOnlyList<LiveTrack> list, bool preserveView = false)
     {
@@ -236,12 +264,42 @@ public sealed class TimelineView : Control
     }
 
     /// <summary>Moves the playhead, scrolling a page when it runs off the right edge while playing.</summary>
+    /// <summary>Called every tick: repaints only when the playhead or a header meter moved, and then only the moving
+    /// <see cref="Layer"/>, unless the view scrolled, a take is recording (its bar grows with the playhead) or the
+    /// meters are in the background.</summary>
     public void SetPlayhead(double sec, bool follow)
     {
+        bool meters = MetersMoved();
+        if (sec == Playhead && !meters) return;
         Playhead = sec;
-        double x = X(sec);
+        double x = X(sec), oldScroll = scrollX;
         if (follow && (x > Bounds.Width - 40 || x < HeaderW)) scrollX = Math.Max(0, sec * pps - 40);
-        InvalidateVisual();
+        if (scrollX != oldScroll || Recording || (meters && !MetersOnLayer)) InvalidateVisual();
+        else layer.InvalidateVisual();
+    }
+
+    /// <summary>The header meters as last drawn, in steps finer than a pixel (see <see cref="DrawMeterBar"/>).</summary>
+    int[] meterSteps = [];
+    bool MetersMoved()
+    {
+        if (meterSteps.Length != tracks.Count * 2) meterSteps = new int[tracks.Count * 2];
+        bool moved = false;
+        for (int i = 0; i < tracks.Count; i++)
+            for (int c = 0; c < 2; c++)
+            {
+                int step = MeterStep(c == 0 ? tracks[i].ShowL : tracks[i].ShowR);
+                if (meterSteps[i * 2 + c] == step) continue;
+                meterSteps[i * 2 + c] = step;
+                moved = true;
+            }
+        return moved;
+    }
+
+    static int MeterStep(float peak)
+    {
+        double db = Palette.ToDb(peak);
+        int step = (int)Math.Round(Math.Clamp((db + 48) / 48, 0, 1) * 200);
+        return db > -1 ? -step - 1 : step;
     }
 
     /// <summary>True while the zoom follows the width ("Ver todo"); the toolbar disables its button then, like the web.</summary>
@@ -346,6 +404,7 @@ public sealed class TimelineView : Control
         double W = Bounds.Width, H = Bounds.Height;
         ctx.FillRectangle(Palette.App, new Rect(0, 0, W, H));
 
+        BuildGrid(W);
         using (ctx.PushClip(new Rect(HeaderW, RulerH, W - HeaderW, Math.Max(0, H - RulerH))))
         {
             foreach (int i in DrawOrder()) DrawLane(ctx, i, W);
@@ -353,21 +412,6 @@ public sealed class TimelineView : Control
                 foreach (int r in recordingLanes) DrawRecordingBar(ctx, r, W);
         }
         DrawRuler(ctx, W);
-        using (ctx.PushClip(new Rect(HeaderW, 0, W - HeaderW, H)))
-        {
-            double px = X(Playhead);
-            var playColor = Recording ? Palette.Rec : Palette.Accent;
-            ctx.DrawLine(Palette.Pen(playColor, 1.5), new Point(px, 0), new Point(px, H));
-            var head = new StreamGeometry();
-            using (var g = head.Open())
-            {
-                g.BeginFigure(new Point(px - 6, 0), true);
-                g.LineTo(new Point(px + 6, 0));
-                g.LineTo(new Point(px, 8));
-                g.EndFigure(true);
-            }
-            ctx.DrawGeometry(playColor, null, head);
-        }
 
         // sticky headers
         ctx.FillRectangle(Palette.Panel, new Rect(0, 0, HeaderW, H));
@@ -526,6 +570,46 @@ public sealed class TimelineView : Control
         }
     }
 
+    // x of every ruler tick in view (major = labelled step, minor = beat / subdivision), rebuilt each Render so the
+    // lanes can draw the same ticks as faint vertical lines behind their clips without allocating per lane
+    readonly List<(double X, bool Major)> grid = [];
+
+    /// <summary>Collects the ruler's tick positions (same steps and thresholds as <see cref="DrawRuler"/>) into <see cref="grid"/>.</summary>
+    void BuildGrid(double W)
+    {
+        grid.Clear();
+        if (!bars)
+        {
+            double[] steps = [0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800];
+            int[] divs = [5, 5, 5, 4, 5, 5, 3, 6, 6, 4, 5, 5, 6];
+            int si = Array.FindIndex(steps, s => s * pps >= 64);
+            if (si < 0) si = steps.Length - 1;
+            double seconds = steps[si];
+            int div = divs[si];
+            for (double s = Math.Max(0, Math.Floor(Sec(HeaderW) / seconds) * seconds); X(s) <= W; s += seconds)
+            {
+                grid.Add((X(s), true));
+                if (seconds * pps / div >= 6)
+                    for (int k = 1; k < div; k++) grid.Add((X(s + k * seconds / div), false));
+            }
+            return;
+        }
+        double beat = 60 / Bpm, bar = 4 * beat;
+        int step = 1;
+        while (step * bar * pps < 56) step *= 2;
+        int first = Math.Max(0, (int)(Sec(HeaderW) / bar) - 1);
+        for (int b = first - first % step; ; b += step)
+        {
+            double x = X(b * bar);
+            if (x > W) break;
+            grid.Add((x, true));
+            double sub = step == 1 ? beat : bar;
+            int subN = step == 1 ? 4 : step;
+            if (sub * pps >= 6)
+                for (int k = 1; k < subN; k++) grid.Add((X(b * bar + k * sub), false));
+        }
+    }
+
     void DrawLane(DrawingContext ctx, int i, double W)
     {
         var t = tracks[i];
@@ -536,6 +620,10 @@ public sealed class TimelineView : Control
         if (t.Track.Id == liftedId) ctx.FillRectangle(Palette.App, new Rect(HeaderW, y, W - HeaderW, laneH));
         if (sel) ctx.FillRectangle(Palette.Alpha(Palette.RaisedColor, 0.6), new Rect(HeaderW, y, W - HeaderW, laneH));
         if (armed.Contains(i) && !Recording) ctx.FillRectangle(Palette.Alpha(Palette.RecColor, 0.06), new Rect(HeaderW, y, W - HeaderW, laneH));
+        var majorPen = Palette.Pen(Palette.Alpha(Palette.LineColor, 0.55));
+        var minorPen = Palette.Pen(Palette.Alpha(Palette.LineColor, 0.22));
+        foreach (var (gx, major) in grid)
+            if (gx >= HeaderW) ctx.DrawLine(major ? majorPen : minorPen, new Point(gx, y), new Point(gx, y + laneH));
         foreach (var c in t.Clips) DrawClip(ctx, t, c, y, sel, W);
         if (Range is { } r && r.TrackId == t.Track.Id) DrawRange(ctx, y, W, r.Start, r.End);
         ctx.DrawLine(Palette.Pen(Palette.Line), new Point(HeaderW, y + laneH - 0.5), new Point(W, y + laneH - 0.5));
@@ -781,11 +869,47 @@ public sealed class TimelineView : Control
         DrawToggle(ctx, MuteRect(i), "M", ch.Muted, Palette.Brush("#f59e0b"));
         DrawToggle(ctx, SoloRect(i), "S", ch.Solo, Palette.Accent);
 
-        // meter: two thin bars at the right edge
-        double mh = laneH - 20, mx = HeaderW - 10;
-        DrawMeterBar(ctx, new Rect(mx, y + 10, 4, mh), t.ShowL);
-        DrawMeterBar(ctx, new Rect(mx + 6, y + 10, 4, mh), t.ShowR);
+        if (!MetersOnLayer) DrawMeters(ctx, i);
     }
+
+    /// <summary>The header's meter: two thin bars at the right edge.</summary>
+    void DrawMeters(DrawingContext ctx, int i)
+    {
+        double y = LaneY(i);
+        if (y + laneH < RulerH || y > Bounds.Height) return;
+        double mh = laneH - 20, mx = HeaderW - 10;
+        DrawMeterBar(ctx, new Rect(mx, y + 10, 4, mh), tracks[i].ShowL);
+        DrawMeterBar(ctx, new Rect(mx + 6, y + 10, 4, mh), tracks[i].ShowR);
+    }
+
+    /// <summary>Draws the <see cref="Layer"/>: the header meters (unless they are in the background) and the playhead,
+    /// which stops at the "Nueva pista" row like it did when the row was painted over it.</summary>
+    void RenderLayer(DrawingContext ctx)
+    {
+        double W = Bounds.Width, H = Bounds.Height;
+        if (MetersOnLayer)
+            using (ctx.PushClip(new Rect(0, RulerH, HeaderW, Math.Max(0, H - RulerH))))
+                for (int i = 0; i < tracks.Count; i++) DrawMeters(ctx, i);
+
+        using (ctx.PushClip(new Rect(HeaderW, 0, Math.Max(0, W - HeaderW), H)))
+        {
+            double px = X(Playhead);
+            var playColor = Recording ? Palette.Rec : Palette.Accent;
+            var pen = Palette.Pen(playColor, 1.5);
+            double addY = LaneY(tracks.Count + ExtraRows);
+            if (addY >= RulerH && addY < H)
+            {
+                ctx.DrawLine(pen, new Point(px, 0), new Point(px, addY));
+                if (addY + 44 < H) ctx.DrawLine(pen, new Point(px, addY + 44), new Point(px, H));
+            }
+            else ctx.DrawLine(pen, new Point(px, 0), new Point(px, H));
+            using (ctx.PushTransform(Matrix.CreateTranslation(px, 0)))
+                ctx.DrawGeometry(playColor, null, PlayheadTriangle);
+        }
+    }
+
+    /// <summary>The playhead's head in the ruler, at x = 0 (moved into place when drawn).</summary>
+    static readonly Geometry PlayheadTriangle = Geometry.Parse("M -6,0 L 6,0 L 0,8 Z");
 
     /// <summary>The record-arm toggle: a red dot, lit red while the track takes the next take.</summary>
     static void DrawArm(DrawingContext ctx, Rect r, bool on)

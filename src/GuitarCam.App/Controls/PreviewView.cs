@@ -43,7 +43,7 @@ public sealed class PreviewView : Control
     public PreviewView()
     {
         ClipToBounds = true;
-        ToolTip.SetTip(this, "Arrastrá el panel en el video para mover el encuadre; la rueda del mouse hace zoom.");
+        ToolTip.SetTip(this, Loc.T("insp.frame.hint"));
     }
 
     /// <summary>ExportJobSpec.BorderSize: the gap the export leaves around each panel, in output pixels.</summary>

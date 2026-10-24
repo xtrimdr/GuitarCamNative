@@ -1,3 +1,4 @@
+using GuitarCam.Audio;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -35,14 +36,14 @@ public sealed class ProjectTemplate
         p.Normalize();
     }
 
-    static readonly Dictionary<string, string> AspectLabel = new() { ["16:9"] = "16:9", ["9:16"] = "9:16 vertical", ["1:1"] = "1:1" };
+    static readonly Dictionary<string, string> AspectLabel = new() { ["16:9"] = "16:9", ["9:16"] = Texts.T("tpl.aspect.vertical", "9:16 vertical"), ["1:1"] = "1:1" };
 
     /// <summary>One line: tracks, then format and tempo.</summary>
     public string Summary
     {
         get
         {
-            var parts = new List<string> { Tracks.Count > 0 ? string.Join(", ", Tracks.Select(t => t.Name)) : "Sin pistas" };
+            var parts = new List<string> { Tracks.Count > 0 ? string.Join(", ", Tracks.Select(t => t.Name)) : Texts.T("tpl.noTracks", "Sin pistas") };
             if (Settings.Aspect is { } a) parts.Add(AspectLabel.GetValueOrDefault(a, a));
             if (Settings.Bpm is { } bpm) parts.Add($"{Math.Round(bpm * 100) / 100:0.##} BPM");
             return string.Join(" · ", parts);
@@ -79,12 +80,16 @@ public static class ProjectTemplates
 
     static string FilePath => Path.Combine(AppConfig.Dir, "plantillas.json");
 
+    /// <summary>Built-in track names by their Spanish name, to look up the translation.</summary>
+    static readonly Dictionary<string, string> TrackIds = new() { ["Rítmica"] = "rhythm", ["Rítmica L"] = "rhythmL", ["Rítmica R"] = "rhythmR", ["Punteo"] = "lead", ["Arpegio"] = "arpeggio", ["Guitarra"] = "guitar" };
+
     /// <summary>The compressor's raw values get computed from the first take that fills the track.</summary>
     static TemplateTrack Track(string name, string preset, Action<Channel>? set = null, double amount = 0.5)
     {
         var ch = new Channel { Comp = new CompSettings { On = true, Preset = preset, Amount = amount } };
         set?.Invoke(ch);
-        return new TemplateTrack { Name = name, Channel = ch };
+        string[] known = ["Rítmica", "Rítmica L", "Rítmica R", "Punteo", "Arpegio", "Guitarra"];
+        return new TemplateTrack { Name = Array.IndexOf(known, name) >= 0 ? Texts.T("tpl.track." + TrackIds[name], name) : name, Channel = ch };
     }
 
     static ReverbSettings Sala() => new() { Decay = 1.3, PreDelayMs = 15, Tone = 6000, LowCut = 150, Width = 1 };
@@ -96,8 +101,8 @@ public static class ProjectTemplates
         new()
         {
             Id = "builtin:rhythm-lead",
-            Name = "Rítmica + Punteo",
-            Hint = "Base al centro y punteo con reverb y delay",
+            Name = Texts.T("tpl.rhythmLead.name", "Rítmica + Punteo"),
+            Hint = Texts.T("tpl.rhythmLead.hint", "Base al centro y punteo con reverb y delay"),
             Builtin = true,
             Tracks =
             [
@@ -109,8 +114,8 @@ public static class ProjectTemplates
         new()
         {
             Id = "builtin:double-rhythm-lead",
-            Name = "Rítmica L/R + Punteo",
-            Hint = "Dos rítmicas abiertas a los costados, punteo al centro",
+            Name = Texts.T("tpl.doubleRhythmLead.name", "Rítmica L/R + Punteo"),
+            Hint = Texts.T("tpl.doubleRhythmLead.hint", "Dos rítmicas abiertas a los costados, punteo al centro"),
             Builtin = true,
             Tracks =
             [
@@ -123,8 +128,8 @@ public static class ProjectTemplates
         new()
         {
             Id = "builtin:full",
-            Name = "Rítmica L/R + Arpegio + Punteo",
-            Hint = "Cuatro guitarras en grilla 2×2",
+            Name = Texts.T("tpl.full.name", "Rítmica L/R + Arpegio + Punteo"),
+            Hint = Texts.T("tpl.full.hint", "Cuatro guitarras en grilla 2×2"),
             Builtin = true,
             Tracks =
             [
@@ -138,8 +143,8 @@ public static class ProjectTemplates
         new()
         {
             Id = "builtin:vertical",
-            Name = "Rítmica + Punteo vertical",
-            Hint = "9:16 una arriba de la otra, para Reels / Shorts / TikTok",
+            Name = Texts.T("tpl.vertical.name", "Rítmica + Punteo vertical"),
+            Hint = Texts.T("tpl.vertical.hint", "9:16 una arriba de la otra, para Reels / Shorts / TikTok"),
             Builtin = true,
             Tracks =
             [
@@ -151,8 +156,8 @@ public static class ProjectTemplates
         new()
         {
             Id = "builtin:single",
-            Name = "Canal único",
-            Hint = "Una guitarra sola con un poco de placa",
+            Name = Texts.T("tpl.single.name", "Canal único"),
+            Hint = Texts.T("tpl.single.hint", "Una guitarra sola con un poco de placa"),
             Builtin = true,
             Tracks = [Track("Guitarra", "lead", c => c.ReverbSend = 0.2, amount: 0.4)],
             Settings = new() { Layout = "side-by-side", Aspect = "16:9", Reverb = Placa() },

@@ -26,17 +26,17 @@ public sealed class ThemePicker : Panel
     public ThemePicker()
     {
         button = new Button { Classes = { "ghost" }, Content = new TextBlock { Classes = { "icon" }, Text = "" } };
-        ToolTip.SetTip(button, "Tema");
-        Avalonia.Automation.AutomationProperties.SetName(button, "Tema");
+        ToolTip.SetTip(button, Loc.T("theme.title"));
+        Avalonia.Automation.AutomationProperties.SetName(button, Loc.T("theme.title"));
         var body = new StackPanel { Spacing = 12 };
-        body.Children.Add(Group("Acento", accents));
-        body.Children.Add(Group("Fondo", surfaces));
+        body.Children.Add(Group(Loc.T("theme.accent"), accents));
+        body.Children.Add(Group(Loc.T("theme.surface"), surfaces));
         var reset = new Button
         {
             Classes = { "ghost" }, Content = "Restablecer", FontSize = 11, Height = 28, Padding = new Thickness(0),
             HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
         };
-        Avalonia.Automation.AutomationProperties.SetName(reset, "Restablecer");
+        Avalonia.Automation.AutomationProperties.SetName(reset, Loc.T("color.reset"));
         reset.Click += (_, _) => Pick(UiTheme.Default);
         body.Children.Add(reset);
         var card = new Border
@@ -101,7 +101,7 @@ public sealed class ThemePicker : Panel
             bool on = current.Accent == hex;
             var fill = new Border { Height = 32, CornerRadius = new CornerRadius(6), Background = new SolidColorBrush(Color.Parse(hex)) };
             if (on) fill.Child = new TextBlock { Classes = { "icon" }, Text = "", FontSize = 14, Foreground = new SolidColorBrush(Color.FromArgb(0xb3, 0, 0, 0)), HorizontalAlignment = HorizontalAlignment.Center };
-            var b = Swatch(Ring(on, fill), name);
+            var b = Swatch(Ring(on, fill), Loc.Or("theme.accent." + name, name));
             string pick = hex;
             b.Click += (_, _) => Pick(UiTheme.Current with { Accent = pick });
             accents.Children.Add(b);
@@ -118,7 +118,7 @@ public sealed class ThemePicker : Panel
                 }
                 : new SolidColorBrush(Color.Parse(current.Accent)),
         };
-        var choose = Swatch(Ring(!preset, custom), "Color a elección");
+        var choose = Swatch(Ring(!preset, custom), Loc.T("theme.custom"));
         choose.Click += (_, _) =>
         {
             if (ColorDialog.Show(TopLevel.GetTopLevel(this), Color.Parse(UiTheme.Current.Accent)) is { } c)
@@ -138,13 +138,13 @@ public sealed class ThemePicker : Panel
             var stack = new DockPanel();
             DockPanel.SetDock(bars, Dock.Top);
             stack.Children.Add(bars);
-            stack.Children.Add(new TextBlock { Text = s.Name, FontSize = 10, FontWeight = FontWeight.Medium, Foreground = new SolidColorBrush(s.Dim), VerticalAlignment = VerticalAlignment.Bottom });
+            stack.Children.Add(new TextBlock { Text = Loc.Or("theme.surface." + s.Id, s.Name), FontSize = 10, FontWeight = FontWeight.Medium, Foreground = new SolidColorBrush(s.Dim), VerticalAlignment = VerticalAlignment.Bottom });
             var tile = new Border
             {
                 Height = 48, CornerRadius = new CornerRadius(6), Padding = new Thickness(6), BorderThickness = new Thickness(2),
                 Background = new SolidColorBrush(s.App), BorderBrush = new SolidColorBrush(current.Surface == s.Id ? Color.Parse(current.Accent) : s.Line), Child = stack,
             };
-            var b = Swatch(tile, s.Name);
+            var b = Swatch(tile, Loc.Or("theme.surface." + s.Id, s.Name));
             string id = s.Id;
             b.Click += (_, _) => Pick(UiTheme.Current with { Surface = id });
             surfaces.Children.Add(b);

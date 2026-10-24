@@ -8,9 +8,8 @@ nativa. Cada ítem dice **qué hace y cómo funciona en la web**, y en qué esta
 Al 2026-10-23 está todo portado. Lo que todavía no se probó a mano (porque hace falta la interfaz, la
 guitarra, un cable o un celular) está juntado en [PRUEBAS.md](PRUEBAS.md).
 
-Regla: todo se porta **igual que en la web** (diseño, textos, flujo). Ver
-[AGENTS.md → Migrar algo de la web](../AGENTS.md#migrar-algo-de-la-web). Las únicas diferencias que ya
-están decididas son las del formato de proyecto propio (ver §2).
+**Archivo histórico.** La web ya no manda sobre la nativa: esto es el relevamiento de cuando se portó,
+y no hay ninguna regla de "igualar a la web". Las decisiones las toma el usuario con la nativa.
 
 ---
 

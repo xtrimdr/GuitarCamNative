@@ -55,33 +55,33 @@ public sealed class EqEditor : StackPanel
         }
         Children.Add(bands);
         var controls = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto") };
-        type.ItemsSource = Types.Select(t => TrackEq.TypeLabel(BiquadSpec.ParseType(t))).ToArray();
+        type.ItemsSource = Types.Select(t => TypeName(BiquadSpec.ParseType(t))).ToArray();
         type.SelectionChanged += (_, _) => { if (!filling && type.SelectedIndex >= 0) Patch(selected, b => { b.Type = Types[type.SelectedIndex]; b.On = true; }); };
         controls.Children.Add(type);
         power.Click += (_, _) => Patch(selected, b => b.On = !b.On);
         Grid.SetColumn(power, 1); controls.Children.Add(power);
         var reset = new Button { Content = "Reset", Classes = { "chip" }, FontSize = 11 };
-        ToolTip.SetTip(reset, "Volver esta banda a como venía (apagada)");
+        ToolTip.SetTip(reset, Loc.T("eq.reset.tip"));
         reset.Click += (_, _) => Patch(selected, b =>
         {
             var d = EqSettings.Defaults()[selected]; b.On = d.On; b.Type = d.Type; b.Freq = d.Freq; b.Gain = d.Gain; b.Q = d.Q; b.Slope = d.Slope;
         });
         Grid.SetColumn(reset, 2); controls.Children.Add(reset); Children.Add(controls);
-        freq = new InspectorSlider("Frecuencia", 0, 1000, 1, 0, p => $"{TrackEq.FmtHz(FromPos(p))} Hz",
+        freq = new InspectorSlider(Loc.T("eq.freq"), 0, 1000, 1, 0, p => $"{TrackEq.FmtHz(FromPos(p))} Hz",
             p => Patch(selected, b => { b.Freq = FromPos(p); b.On = true; }));
-        gain = new InspectorSlider("Ganancia", -18, 18, 0.1, 0, v => $"{v:+0.0;-0.0;0.0} dB", v => Patch(selected, b => { b.Gain = v; b.On = true; }));
+        gain = new InspectorSlider(Loc.T("eq.gain"), -18, 18, 0.1, 0, v => $"{v:+0.0;-0.0;0.0} dB", v => Patch(selected, b => { b.Gain = v; b.On = true; }));
         q = new InspectorSlider("Ancho (Q)", 0.3, 12, 0.05, 1, v => $"{v:0.00}", v => Patch(selected, b => { b.Q = v; b.On = true; }),
-            "Más alto = campana más angosta (para buscar una frecuencia molesta); más bajo = más ancha y musical");
+            Loc.T("eq.q.tip"));
         Children.Add(freq); Children.Add(gain); Children.Add(q);
         slope.Children.Add(new TextBlock { Text = "Pendiente", Classes = { "dim" }, VerticalAlignment = VerticalAlignment.Center });
         foreach (int s in new[] { 12, 24 })
         {
             var b = new Button { Content = $"{s} dB/oct", Classes = { "chip" }, FontSize = 11, Padding = new Thickness(5, 2) };
-            ToolTip.SetTip(b, s == 12 ? "Corte suave" : "Corte firme");
+            ToolTip.SetTip(b, Loc.T(s == 12 ? "eq.cut.soft" : "eq.cut.firm"));
             b.Click += (_, _) => Patch(selected, x => { x.Slope = s; x.On = true; }); slope.Children.Add(b);
         }
         Children.Add(slope);
-        Children.Add(new TextBlock { Text = "Arrastrá los puntos en el gráfico. Mientras suena, atrás ves el espectro de esta pista.",
+        Children.Add(new TextBlock { Text = Loc.T("eq.help"),
             FontSize = 11, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap });
     }
     /// <summary>One frame of the live spectrum (dB per bin, as <see cref="SpectrumTap.Read"/> gives it), or null while
@@ -102,6 +102,7 @@ public sealed class EqEditor : StackPanel
 
     internal static double ToPos(double hz) => Math.Round(Math.Log(Math.Clamp(hz, 20, 20000) / 20) / Math.Log(1000) * 1000);
     internal static double FromPos(double pos) => Math.Round(20 * Math.Exp(pos / 1000 * Math.Log(1000)));
+    static string TypeName(BiquadType t) => Loc.Or("eq.type." + t, TrackEq.TypeLabel(t));
     void Publish(EqSettings value) { Changed?.Invoke(value); }
     void Patch(int i, Action<EqBand> edit)
     {
@@ -114,18 +115,18 @@ public sealed class EqEditor : StackPanel
         var b = eq.Bands[selected];
         int p = PresetIndex(eq);
         customPreset = p < 0;
-        preset.ItemsSource = (customPreset ? new[] { "Personalizado" } : Array.Empty<string>()).Concat(TrackEq.Presets.Select(x => x.Label)).ToArray();
+        preset.ItemsSource = (customPreset ? new[] { Loc.T("mix.custom.m") } : Array.Empty<string>()).Concat(TrackEq.Presets.Select(x => Loc.Or("mix.eq." + x.Id, x.Label))).ToArray();
         preset.SelectedIndex = customPreset ? 0 : p;
-        ToolTip.SetTip(preset, p < 0 ? "Ajustado a mano" : TrackEq.Presets[p].Hint);
+        ToolTip.SetTip(preset, p < 0 ? Loc.T("mix.eq.manual") : Loc.Or("mix.eq." + TrackEq.Presets[p].Id + ".hint", TrackEq.Presets[p].Hint));
         type.SelectedIndex = Array.IndexOf(Types, b.Type);
         power.Content = b.On ? "ON" : "OFF";
-        ToolTip.SetTip(power, b.On ? "Apagar esta banda" : "Prender esta banda");
+        ToolTip.SetTip(power, Loc.T(b.On ? "eq.band.off" : "eq.band.on"));
         for (int i = 0; i < 6; i++)
         {
             var band = eq.Bands[i];
             chips[i].Foreground = band.On ? Palette.Accent : Palette.Faint;
             chips[i].BorderBrush = i == selected ? Palette.Fg : Palette.Line;
-            ToolTip.SetTip(chips[i], $"{TrackEq.TypeLabel(BiquadSpec.ParseType(band.Type))} · {TrackEq.FmtHz(band.Freq)} Hz{(band.On ? "" : " (apagada)")} · doble click: prender/apagar");
+            ToolTip.SetTip(chips[i], Loc.T("eq.chip.tip", TypeName(BiquadSpec.ParseType(band.Type)), TrackEq.FmtHz(band.Freq), band.On ? "" : Loc.T("eq.chip.off")));
         }
         freq.ResetValue = ToPos(EqSettings.Defaults()[selected].Freq);
         freq.Set(ToPos(b.Freq)); gain.Set(b.Gain); q.Set(b.Q);
@@ -160,7 +161,7 @@ sealed class EqGraph : Control
         this.interactive = interactive;
         Height = height; ClipToBounds = true;
         if (interactive)
-            ToolTip.SetTip(this, "Arrastrá un punto (Shift = fino) · rueda: ancho de la campana / pendiente del corte · doble click en un punto: prender/apagar · doble click en otro lado: banda nueva");
+            ToolTip.SetTip(this, Loc.T("eq.graph.tip"));
     }
     double X(double hz) => Math.Log(Math.Clamp(hz, 20, 20000) / 20) / Math.Log(1000) * Bounds.Width;
     double F(double x) => EqEditor.FromPos(x / Math.Max(1, Bounds.Width) * 1000);

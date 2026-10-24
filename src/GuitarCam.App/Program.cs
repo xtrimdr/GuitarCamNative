@@ -8,8 +8,8 @@ static class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        // The ASIO callback is managed code, so a blocking full GC stalls it and the audio drops out:
-        // keep full collections in the background while the app runs.
+        // The ASIO callback is managed code, so every blocking GC stalls it: keep full collections in the background.
+        // Short ones still stop it, so the UI avoids allocation bursts while audio runs (see MainWindow.compactMixer).
         System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }

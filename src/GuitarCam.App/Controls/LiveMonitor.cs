@@ -19,7 +19,7 @@ namespace GuitarCam.App.Controls;
 public sealed class LiveMonitor : UserControl
 {
     readonly Border root = new() { CornerRadius = new CornerRadius(8), Padding = new Thickness(8), Margin = new Thickness(-8) };
-    readonly TextBlock title = new() { Text = "EN VIVO", FontSize = 11, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.9, VerticalAlignment = VerticalAlignment.Center };
+    readonly TextBlock title = new() { Text = Loc.T("live.title"), FontSize = 11, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.9, VerticalAlignment = VerticalAlignment.Center };
     readonly TextBlock ready = new() { Text = "Listo para grabar", FontSize = 11, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center };
     readonly TextBlock elapsed = new() { FontSize = 11, Foreground = Brushes.White, Classes = { "mono" }, VerticalAlignment = VerticalAlignment.Center };
     readonly Border recBadge, countBadge;
@@ -37,7 +37,7 @@ public sealed class LiveMonitor : UserControl
 
     /// <summary>The input meter; the window feeds it from the same read as the transport bar's.</summary>
     public StereoMeter Meter { get; } = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
-    /// <summary>"Configurar entradas": the window opens Configuración on its audio tab.</summary>
+    /// <summary>Loc.T("live.inputs.tip"): the window opens Configuración on its audio tab.</summary>
     public event Action? OpenInputs;
 
     public LiveMonitor()
@@ -45,7 +45,7 @@ public sealed class LiveMonitor : UserControl
         recBadge = Badge(Palette.Rec, new StackPanel
         {
             Orientation = Orientation.Horizontal, Spacing = 6,
-            Children = { Dot(), new TextBlock { Text = "GRABANDO", FontSize = 11, FontWeight = FontWeight.SemiBold, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center }, elapsed },
+            Children = { Dot(), new TextBlock { Text = Loc.T("live.recording"), FontSize = 11, FontWeight = FontWeight.SemiBold, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center }, elapsed },
         });
         countBadge = Badge(Palette.Accent, countText);
         var head = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
@@ -78,7 +78,7 @@ public sealed class LiveMonitor : UserControl
         Grid.SetColumn(gainText, 2);
         inputsRow.Children.Add(gainText);
         inputs.Content = inputsRow;
-        ToolTip.SetTip(inputs, "Configurar entradas");
+        ToolTip.SetTip(inputs, Loc.T("live.inputs.tip"));
         inputs.Click += (_, _) => OpenInputs?.Invoke();
         var audio = new Border
         {
@@ -122,16 +122,16 @@ public sealed class LiveMonitor : UserControl
         ready.IsVisible = !recording && !counting;
         recBadge.IsVisible = recTag.IsVisible = recording;
         countBadge.IsVisible = countOverlay.IsVisible = counting;
-        countText.Text = $"Cuenta {beat}/4";
+        countText.Text = Loc.T("rec.count", beat);
         countBig.Text = $"{beat}";
         frameBox.BorderThickness = new Thickness(recording || counting ? 2 : 1);
         frameBox.BorderBrush = recording ? Palette.Rec : counting ? Palette.Accent : Palette.Line;
     }
 
-    /// <summary>The input device ("Sin interfaz de audio" without one) and its gain.</summary>
+    /// <summary>The input device (Loc.T("live.noAudio") without one) and its gain.</summary>
     public void SetAudio(string? device, double gainDb)
     {
-        audioLabel.Text = device ?? "Sin interfaz de audio";
+        audioLabel.Text = device ?? Loc.T("live.noAudio");
         gainText.Text = $"{(gainDb > 0 ? "+" : "")}{gainDb:0} dB";
     }
 

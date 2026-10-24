@@ -1,3 +1,4 @@
+using GuitarCam.Audio;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -218,7 +219,7 @@ public static partial class ProjectLibrary
         {
             dir = Path.GetFullPath(dir);
             if (Directory.Exists(dir) && Directory.EnumerateFileSystemEntries(dir).Any())
-                throw new IOException("Esa carpeta no está vacía. Elegí una carpeta vacía para crear el proyecto.");
+                throw new IOException(Texts.T("err.lib.notEmpty", "Esa carpeta no está vacía. Elegí una carpeta vacía para crear el proyecto."));
         }
         var p = new Project { Name = name };
         template?.ApplyTo(p);
@@ -337,11 +338,11 @@ public static partial class ProjectLibrary
     public static void Delete(string dir)
     {
         dir = Path.GetFullPath(dir);
-        if (Path.GetPathRoot(dir) == dir) throw new ArgumentException("Ruta inválida");
-        if (!ProjectStore.IsProject(dir)) throw new IOException("Esa carpeta no es un proyecto de GuitarCam");
+        if (Path.GetPathRoot(dir) == dir) throw new ArgumentException(Texts.T("err.lib.badPath", "Ruta inválida"));
+        if (!ProjectStore.IsProject(dir)) throw new IOException(Texts.T("err.lib.notProject", "Esa carpeta no es un proyecto de GuitarCam"));
         // a project open in another window holds guitarcam.lock: don't pull the folder from under it
         using (var store = ProjectStore.Open(dir))
-            if (store.ReadOnly) throw new IOException("Está abierto en otra ventana de GuitarCam");
+            if (store.ReadOnly) throw new IOException(Texts.T("err.lib.open", "Está abierto en otra ventana de GuitarCam"));
         Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(dir,
             Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
             Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);

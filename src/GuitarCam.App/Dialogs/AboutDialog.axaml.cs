@@ -25,14 +25,14 @@ public sealed partial class AboutDialog : UserControl
             Directory.CreateDirectory(AppConfig.Dir);
             Explorer.Open(AppConfig.Dir);
         };
-        VersionText.Text = $"Versión {AppVersion()}";
+        VersionText.Text = Loc.T("about.version", AppVersion());
         AudioText.Text = $"ASIO · NAudio {Short(typeof(NAudio.Wave.WaveFormat).Assembly)}";
         UiText.Text = $"Avalonia {Short(typeof(Avalonia.Application).Assembly)} · .NET {Environment.Version.ToString(3)}";
     }
 
     /// <summary>The FFmpeg check runs at startup (<see cref="MainWindow"/>); null = not on the PATH.</summary>
     public void SetFfmpeg(string? version) =>
-        VideoText.Text = version == null ? "FFmpeg no encontrado" : version.Length > 0 ? $"FFmpeg {version} (del PATH)" : "FFmpeg (del PATH)";
+        VideoText.Text = version == null ? Loc.T("title.ffmpeg.missing") : version.Length > 0 ? Loc.T("about.ffmpeg.version", version) : Loc.T("about.ffmpeg");
 
     /// <summary>"1.0.0 · 9395e4a": the informational version, with the commit the SDK appends after '+' shortened.</summary>
     static string AppVersion()

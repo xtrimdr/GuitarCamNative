@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:GuitarCam.App"
              x:Class="GuitarCam.App.Controls.ProjectsDialog"
              Background="#F20b0b0d" KeyboardNavigation.TabNavigation="Cycle" Focusable="True">
 
@@ -86,12 +87,12 @@
             <TextBlock Classes="icon" Text="&#xE722;" FontSize="18" Foreground="{StaticResource AccentFg}" HorizontalAlignment="Center" />
           </Border>
           <StackPanel VerticalAlignment="Center">
-            <TextBlock Text="Proyectos" FontSize="16" FontWeight="SemiBold" />
-            <TextBlock Text="Cada canal que grabes se guarda solo en la carpeta del proyecto." FontSize="12" Foreground="{StaticResource Dim}" Margin="0,2,0,0" />
+            <TextBlock Text="{loc:T title.projects}" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Text="{loc:T proj.subtitle}" FontSize="12" Foreground="{StaticResource Dim}" Margin="0,2,0,0" />
           </StackPanel>
         </StackPanel>
         <Button Grid.Column="1" x:Name="CloseButton" Classes="act" Width="32" Height="32" Margin="0,-4,-8,0" VerticalAlignment="Top"
-                Foreground="{StaticResource Faint}" ToolTip.Tip="Cerrar">
+                Foreground="{StaticResource Faint}" ToolTip.Tip="{loc:T settings.close}">
           <TextBlock Classes="icon" Text="&#xE711;" FontSize="14" />
         </Button>
       </Grid>
@@ -101,20 +102,20 @@
         <Button x:Name="NewButton" Classes="btn primary" Padding="14,0">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Classes="icon" Text="&#xE710;" FontSize="13" FontWeight="Bold" />
-            <TextBlock Text="Nuevo proyecto" />
+            <TextBlock Text="{loc:T proj.new}" />
           </StackPanel>
         </Button>
-        <Button Grid.Column="1" x:Name="OpenFolderButton" Classes="btn outline" Margin="8,0,0,0" ToolTip.Tip="Abrir un proyecto guardado en otra carpeta">
+        <Button Grid.Column="1" x:Name="OpenFolderButton" Classes="btn outline" Margin="8,0,0,0" ToolTip.Tip="{loc:T proj.openFolder.tip}">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Panel Width="16" Height="16">
               <TextBlock x:Name="OpenFolderIcon" Classes="icon" Text="&#xE8DA;" FontSize="15" HorizontalAlignment="Center" />
               <Arc x:Name="OpenFolderSpin" Classes="spin" Width="14" Height="14" Stroke="{StaticResource Dim}" IsVisible="False" />
             </Panel>
-            <TextBlock x:Name="OpenFolderText" Text="Abrir carpeta…" />
+            <TextBlock x:Name="OpenFolderText" Text="{loc:T proj.openFolder}" />
           </StackPanel>
         </Button>
         <Panel Grid.Column="2" Margin="8,0,0,0">
-          <TextBox x:Name="SearchBox" Classes="field" Watermark="Buscar" AutomationProperties.Name="Buscar proyectos" Padding="32,0,12,0" />
+          <TextBox x:Name="SearchBox" Classes="field" Watermark="{loc:T proj.search}" AutomationProperties.Name="{loc:T proj.search.name}" Padding="32,0,12,0" />
           <TextBlock Classes="icon" Text="&#xE721;" FontSize="13" Foreground="{StaticResource Faint}" Margin="11,0,0,0"
                      HorizontalAlignment="Left" IsHitTestVisible="False" />
         </Panel>
@@ -125,14 +126,14 @@
               BorderThickness="1" BorderBrush="{StaticResource Accent40}" Background="{StaticResource AccentTint}">
         <StackPanel Spacing="8">
           <StackPanel Spacing="6">
-            <TextBlock Text="Nombre del proyecto nuevo" FontSize="12" Foreground="{StaticResource Dim}" />
+            <TextBlock Text="{loc:T proj.newName}" FontSize="12" Foreground="{StaticResource Dim}" />
             <Grid ColumnDefinitions="*,Auto,Auto">
               <TextBox x:Name="NewName" Classes="field" MaxLength="120" />
-              <Button Grid.Column="1" x:Name="NewCancel" Classes="btn" Margin="8,0,0,0" Content="Cancelar" />
+              <Button Grid.Column="1" x:Name="NewCancel" Classes="btn" Margin="8,0,0,0" Content="{loc:T transport.count.cancel}" />
               <Button Grid.Column="2" x:Name="NewCreate" Classes="btn primary" Margin="8,0,0,0" Padding="16,0">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                   <Arc x:Name="CreateSpin" Classes="spin" Width="14" Height="14" Stroke="{StaticResource AccentFg}" IsVisible="False" />
-                  <TextBlock Text="Crear" />
+                  <TextBlock Text="{loc:T proj.create}" />
                 </StackPanel>
               </Button>
             </Grid>
@@ -141,29 +142,29 @@
           <TextBlock x:Name="NewTaken" FontSize="11" Foreground="{StaticResource Accent}" TextWrapping="Wrap" IsVisible="False" />
           <!-- native only: video or solo audio, the same switch the title bar has once it is open -->
           <StackPanel Spacing="6" Margin="0,4,0,0">
-            <TextBlock Text="Tipo" FontSize="12" Foreground="{StaticResource Dim}" />
+            <TextBlock Text="{loc:T proj.type}" FontSize="12" Foreground="{StaticResource Dim}" />
             <StackPanel Orientation="Horizontal" Spacing="10">
               <Border Classes="seg">
                 <StackPanel Orientation="Horizontal">
-                  <ToggleButton x:Name="NewVideoButton" Classes="seg" ToolTip.Tip="Con cámara: cada canal tiene su panel en el video y exportás un MP4">
+                  <ToggleButton x:Name="NewVideoButton" Classes="seg" ToolTip.Tip="{loc:T proj.type.video.tip}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                       <TextBlock Classes="icon" Text="&#xE714;" FontSize="12" VerticalAlignment="Center" />
-                      <TextBlock Text="Video + audio" VerticalAlignment="Center" />
+                      <TextBlock Text="{loc:T mode.video}" VerticalAlignment="Center" />
                     </StackPanel>
                   </ToggleButton>
-                  <ToggleButton x:Name="NewAudioButton" Classes="seg" ToolTip.Tip="Sin cámara: grabás audio y exportás la mezcla en WAV o MP3">
+                  <ToggleButton x:Name="NewAudioButton" Classes="seg" ToolTip.Tip="{loc:T proj.type.audio.tip}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                       <TextBlock Classes="icon" Text="&#xE8D6;" FontSize="12" VerticalAlignment="Center" />
-                      <TextBlock Text="Solo audio" VerticalAlignment="Center" />
+                      <TextBlock Text="{loc:T mode.audio}" VerticalAlignment="Center" />
                     </StackPanel>
                   </ToggleButton>
                 </StackPanel>
               </Border>
-              <TextBlock Text="Lo podés cambiar después desde la barra de arriba." FontSize="11" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
+              <TextBlock Text="{loc:T proj.type.hint}" FontSize="11" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
             </StackPanel>
           </StackPanel>
           <StackPanel Spacing="6" Margin="0,4,0,0">
-            <TextBlock Text="Plantilla" FontSize="12" Foreground="{StaticResource Dim}" />
+            <TextBlock Text="{loc:T proj.template}" FontSize="12" Foreground="{StaticResource Dim}" />
             <ScrollViewer MaxHeight="208" Padding="0,0,2,0">
               <UniformGrid x:Name="TemplateGrid" Columns="2" />
             </ScrollViewer>
@@ -173,7 +174,6 @@
 
       <StackPanel Grid.Row="3" x:Name="NoticePanel" Margin="24,12,24,0" Spacing="8" IsVisible="False">
         <TextBlock x:Name="NoticeText" FontSize="12" TextWrapping="Wrap" IsVisible="False" />
-        <Button x:Name="ImportWebButton" Classes="btn outline" Content="Importar de la app web…" IsVisible="False" HorizontalAlignment="Left" />
       </StackPanel>
 
       <!-- project list -->
@@ -187,14 +187,14 @@
       <Border Grid.Row="5" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="24,12">
         <Grid ColumnDefinitions="*,Auto,Auto">
           <StackPanel VerticalAlignment="Center">
-            <TextBlock Text="Carpeta de proyectos" FontSize="11" Foreground="{StaticResource Faint}" />
+            <TextBlock Text="{loc:T proj.root}" FontSize="11" Foreground="{StaticResource Faint}" />
             <TextBlock x:Name="RootText" Classes="mono" FontSize="11" Foreground="{StaticResource Dim}" TextTrimming="CharacterEllipsis" Text="…" />
           </StackPanel>
-          <Button Grid.Column="1" x:Name="RevealRoot" Classes="btn sm" Margin="12,0,0,0" Content="Mostrar" />
+          <Button Grid.Column="1" x:Name="RevealRoot" Classes="btn sm" Margin="12,0,0,0" Content="{loc:T proj.reveal}" />
           <Button Grid.Column="2" x:Name="ChangeRoot" Classes="btn sm outline" Margin="12,0,0,0">
             <StackPanel Orientation="Horizontal" Spacing="6">
               <Arc x:Name="RootSpin" Classes="spin" Width="12" Height="12" Stroke="{StaticResource Dim}" IsVisible="False" />
-              <TextBlock Text="Cambiar…" />
+              <TextBlock Text="{loc:T proj.change}" />
             </StackPanel>
           </Button>
         </Grid>

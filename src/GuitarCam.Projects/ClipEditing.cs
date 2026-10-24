@@ -1,3 +1,4 @@
+using GuitarCam.Audio;
 using GuitarCam.Audio.Dsp;
 using System.Text.Json;
 
@@ -48,8 +49,10 @@ public static class ClipEditing
                 double shift = dx;
                 if (!free)
                 {
+                    // Native only: with a grid the clip moves in grid steps and edges don't pull it. Near the start the
+                    // edges of every take cluster there, and mixing both magnets made the clip jump between them.
                     if (grid > 0) shift = Snap(w.Anchor + dx, grid, false) - w.Anchor;
-                    double best = 8 / Math.Max(0.001, pps); // SNAP_PX in Timeline.tsx.
+                    double best = grid > 0 ? 0 : 8 / Math.Max(0.001, pps); // SNAP_PX in Timeline.tsx.
                     var targets = new List<double> { 0, Math.Max(0, playhead) };
                     foreach (var other in others) { targets.Add(other.Anchor); targets.Add(other.End); }
                     foreach (double target in targets)
@@ -91,7 +94,7 @@ public static class ClipEditing
     {
         foreach (var t in p.Tracks)
             if (t.Clips.Find(c => c.Id == clipId) is { } c) return (t, c);
-        throw new ArgumentException("No encontré ese clip en el proyecto.");
+        throw new ArgumentException(Texts.T("err.clip.clipNotFound", "No encontré ese clip en el proyecto."));
     }
 
     public static void Replace(Project p, Clip value)
@@ -103,10 +106,10 @@ public static class ClipEditing
     public static string MoveToTrack(Project p, string clipId, string targetId, string? swapId = null)
     {
         var (from, clip) = Find(p, clipId);
-        var to = p.Tracks.Find(t => t.Id == targetId) ?? throw new ArgumentException("No encontré esa pista.");
+        var to = p.Tracks.Find(t => t.Id == targetId) ?? throw new ArgumentException(Texts.T("err.clip.trackNotFound", "No encontré esa pista."));
         if (from == to) return to.Id;
         Clip? other = swapId == null ? null : to.Clips.Find(c => c.Id == swapId)
-            ?? throw new ArgumentException("No encontré el clip para intercambiar.");
+            ?? throw new ArgumentException(Texts.T("err.clip.swapNotFound", "No encontré el clip para intercambiar."));
         int index = from.Clips.IndexOf(clip);
         from.Clips.RemoveAt(index);
         if (other != null)
@@ -127,9 +130,9 @@ public static class ClipEditing
         if (track.Clips.Count == 0) track.Name = FreeTrackName(p, p.Tracks.IndexOf(track) + 1);
     }
 
-    public static string AddEmpty(Project p)
+    public static string AddEmpty(Project p, bool video = true)
     {
-        var track = new Track { Name = FreeTrackName(p, p.Tracks.Count + 1) };
+        var track = new Track { Name = FreeTrackName(p, p.Tracks.Count + 1), Video = video };
         p.Tracks.Add(track);
         return track.Id;
     }
@@ -143,8 +146,8 @@ public static class ClipEditing
 
     public static string AddMedia(Project p, string mediaId, string? selectedTrackId)
     {
-        var media = p.FindMedia(mediaId) ?? throw new ArgumentException("No encontré ese canal en el historial.");
-        if (p.Tracks.Any(t => t.Clips.Any(c => c.MediaId == mediaId))) throw new ArgumentException("Ese canal ya está en el timeline.");
+        var media = p.FindMedia(mediaId) ?? throw new ArgumentException(Texts.T("err.clip.mediaNotFound", "No encontré ese canal en el historial."));
+        if (p.Tracks.Any(t => t.Clips.Any(c => c.MediaId == mediaId))) throw new ArgumentException(Texts.T("err.clip.mediaInUse", "Ese canal ya está en el timeline."));
         var target = p.Tracks.Find(t => t.Id == selectedTrackId && t.Clips.Count == 0);
         Channel? previousChannel = null;
         Clip? previousClip = null;
@@ -154,8 +157,10 @@ public static class ClipEditing
             previousClip = clipJson.Deserialize<Clip>(ProjectStore.Json);
         if (target == null)
         {
-            target = new Track { Name = media.Name, Channel = previousChannel ?? new Channel { Comp = new CompSettings { On = true,
-                Preset = p.Tracks.Count == 1 ? "lead" : "rhythm" } } };
+            // an imported file comes back as it was imported: audio only and a neutral strip
+            bool imported = media.Kind == "import";
+            target = new Track { Name = media.Name, Video = !imported, Channel = previousChannel ?? (imported ? new Channel()
+                : new Channel { Comp = new CompSettings { On = true, Preset = p.Tracks.Count == 1 ? "lead" : "rhythm" } }) };
             p.Tracks.Add(target);
         }
         else target.Name = media.Name;
@@ -213,7 +218,7 @@ public static class ClipEditing
         var (track, left) = Find(p, id);
         var w = Window(left, p.FindMedia(left.MediaId), durationSec);
         if (atSec < w.Start + ClipEnvelope.MinClipSec || atSec > w.End - ClipEnvelope.MinClipSec)
-            throw new ArgumentException("El cabezal tiene que estar adentro del clip, a más de 0,1 s de los bordes.");
+            throw new ArgumentException(Texts.T("err.clip.splitEdge", "El cabezal tiene que estar adentro del clip, a más de 0,1 s de los bordes."));
         double trimStart = Fixed3(atSec - w.Origin);
         var right = Copy(left);
         right.Id = Ids.New("clp");
@@ -235,7 +240,7 @@ public static class ClipEditing
     /// </summary>
     public static int DeleteRange(Project p, string trackId, double startSec, double endSec, Func<Clip, double?>? lengthOf = null)
     {
-        var track = p.Tracks.Find(t => t.Id == trackId) ?? throw new ArgumentException("No encontré esa pista.");
+        var track = p.Tracks.Find(t => t.Id == trackId) ?? throw new ArgumentException(Texts.T("err.clip.trackNotFound", "No encontré esa pista."));
         if (!(endSec > startSec)) return 0;
         int changed = 0;
         foreach (var clip in track.Clips.ToList())

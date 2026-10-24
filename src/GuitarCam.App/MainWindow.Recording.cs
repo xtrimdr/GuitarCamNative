@@ -115,7 +115,7 @@ public partial class MainWindow
     /// <summary>The input as the header chip shows it: "1-2", "3".</summary>
     static string InputShort(Track t) => InputRoute.Parse(t.Input)?.Key ?? "1-2";
 
-    static string InputLabel(Track t) => InputRoute.Parse(t.Input) is { } r ? r.Label : "Entradas 1-2 (Configuración)";
+    static string InputLabel(Track t) => InputRoute.Parse(t.Input) is { } r ? r.Label : Loc.T("rec.inputDefault");
 
     /// <summary>
     /// The armed track's input menu: Configuración's input, then each driver input and each pair. From the
@@ -129,17 +129,17 @@ public partial class MainWindow
             MenuAction(label, () => { SetTrackInput(t, value); return Task.CompletedTask; }, hint, icon: check(value) ?? " ");
         var list = new List<object>
         {
-            new MenuItem { Header = "GRABA DE", IsEnabled = false, FontSize = 10.5 },
-            Pick("Entradas 1-2", null, "Configuración"),
+            new MenuItem { Header = Loc.T("rec.from"), IsEnabled = false, FontSize = 10.5 },
+            Pick(Loc.T("rec.inputs12"), null, Loc.T("rec.inputs12.hint")),
         };
         int inputs = engine.InputChannels;
-        if (inputs == 0) list.Add(new MenuItem { Header = "Abrí la placa de audio para ver sus entradas.", IsEnabled = false, FontSize = 12 });
+        if (inputs == 0) list.Add(new MenuItem { Header = Loc.T("rec.openAudio"), IsEnabled = false, FontSize = 12 });
         else
         {
             list.Add(new Separator());
-            foreach (var r in InputRoute.All(inputs).Where(r => !r.Stereo)) list.Add(Pick(r.Label, r.Key, "mono"));
+            foreach (var r in InputRoute.All(inputs).Where(r => !r.Stereo)) list.Add(Pick(r.Label, r.Key, Loc.T("rec.mono")));
             if (inputs > 1) list.Add(new Separator());
-            foreach (var r in InputRoute.All(inputs).Where(r => r.Stereo)) list.Add(Pick(r.Label, r.Key, "estéreo"));
+            foreach (var r in InputRoute.All(inputs).Where(r => r.Stereo)) list.Add(Pick(r.Label, r.Key, Loc.T("rec.stereo")));
         }
         var menu = Popup(list, 220);
         if (point is { } at) OpenTimelineMenu(menu, at, 60 + list.Count * 32);
@@ -161,7 +161,7 @@ public partial class MainWindow
         ShowArm();
         Timeline.InvalidateVisual();
         if (mixerView) RefreshMixer();
-        Status($"\"{t.Track.Name}\" graba de {InputLabel(t.Track)}.");
+        Status(Loc.T("rec.recordsFrom", t.Track.Name, InputLabel(t.Track)));
     }
 
     // --- recording --------------------------------------------------------------------------------
@@ -171,7 +171,7 @@ public partial class MainWindow
         if (store == null || restoring || Projects.IsVisible || Export.IsVisible || RecordingBusy || engine.Calibrating) return;
         if (store.ReadOnly)
         {
-            Status(store.ReadOnlyReason ?? "El proyecto está abierto en solo lectura: no puedo grabar acá.");
+            Status(store.ReadOnlyReason ?? Loc.T("rec.readOnly"));
             return;
         }
         if (!engine.IsOpen)
@@ -185,7 +185,7 @@ public partial class MainWindow
         List<Track?> targets = [.. RecordTargets()];
         if (targets.Count == 0)
         {
-            Status("No hay ninguna pista armada: armá una con su ● (o creá una desde «Nueva pista») y grabá.");
+            Status(Loc.T("rec.noneArmed"));
             return;
         }
         bool countIn = CountInToggle.IsChecked == true;
@@ -211,8 +211,8 @@ public partial class MainWindow
                 Mirror = camera.Mirror,
             }, number + i));
         }
-        string? notice = camera.Capture != null && !AudioOnly && cam == null ? "La cámara no manda imagen: este canal va a ser solo audio."
-            : cam != null && videoAt < 0 ? "Ninguna pista armada va en el video: esta vez no grabo la cámara."
+        string? notice = camera.Capture != null && !AudioOnly && cam == null ? Loc.T("rec.noCamera")
+            : cam != null && videoAt < 0 ? Loc.T("rec.noVideoTrack")
             : null;
         try
         {
@@ -224,7 +224,7 @@ public partial class MainWindow
             foreach (var t in takes)
                 try { store.EndRecording(t.Journal.MediaId); } catch (IOException) { }
             armedKey = ""; // the engine's inputs may have changed: hand them over again
-            Status($"No pude empezar a grabar: {e.Message}");
+            Status(Loc.T("rec.startFail", e.Message));
             return;
         }
         if (cam != null && videoAt >= 0)
@@ -240,7 +240,7 @@ public partial class MainWindow
             {
                 j.Video = null;
                 try { store.BeginRecording(j); } catch (IOException) { }
-                notice = $"No pude grabar el video ({e.Message}): este canal va a ser solo audio.";
+                notice = Loc.T("rec.videoFail", e.Message);
             }
         }
         recTakes = takes;
@@ -292,7 +292,7 @@ public partial class MainWindow
         {
             // the journals stay: whatever reached the WAVs comes back the next time the project opens
             recStopping = false;
-            Status($"No pude cerrar el canal: {e.Message}. Lo grabado vuelve al abrir el proyecto.");
+            Status(Loc.T("rec.closeFail", e.Message));
             return;
         }
         finally
@@ -308,10 +308,10 @@ public partial class MainWindow
         try
         {
             bool videoKept = videoAt >= 0 && videoAt < res.Length && res[videoAt] != null;
-            string? problem = engine.RecordingError is { } err ? $"Hubo un problema escribiendo el canal en disco: {err}"
-                : engine.RecordingDroppedFrames > 0 ? $"Se perdieron {engine.RecordingDroppedFrames * 1000.0 / Audio.PlaybackEngine.SampleRate:0} ms de audio en el canal (el disco no dio abasto)"
-                : vres?.Error is { } verr ? $"Hubo un problema grabando el video: {verr}"
-                : video != null && videoKept && vres == null ? "No llegó imagen de la cámara: el canal quedó solo audio."
+            string? problem = engine.RecordingError is { } err ? Loc.T("rec.diskFail", err)
+                : engine.RecordingDroppedFrames > 0 ? Loc.T("rec.dropped", $"{engine.RecordingDroppedFrames * 1000.0 / Audio.PlaybackEngine.SampleRate:0}")
+                : vres?.Error is { } verr ? Loc.T("rec.videoProblem", verr)
+                : video != null && videoKept && vres == null ? Loc.T("rec.noImage")
                 : null;
             if (videoAt >= 0 && vres == null) takes[videoAt].Journal.Video = null;
             var kept = new List<(RecTake Take, RecordedTakeResult Res)>();
@@ -324,8 +324,8 @@ public partial class MainWindow
             {
                 if (problem != null) Status(problem);
                 else if (discard && !wasCountingIn) Status(takes.Count > 1
-                    ? "Descarté los canales: los archivos quedaron en la Papelera por si los necesitás."
-                    : "Descarté el canal: el archivo quedó en la Papelera por si lo necesitás.");
+                    ? Loc.T("rec.discarded.many")
+                    : Loc.T("rec.discarded.one"));
                 return;
             }
             foreach (var (t, r) in kept)
@@ -342,7 +342,7 @@ public partial class MainWindow
             if (st != store || kept.Any(k => st.Project.FindMedia(k.Take.Journal.MediaId) == null))
             {
                 // the journals stay, so the takes come back the next time the project opens
-                Status($"No pude poner \"{kept[0].Take.Journal.Name}\" en el timeline; la grabación quedó a salvo y vuelve al abrir el proyecto.");
+                Status(Loc.T("rec.timelineFail", kept[0].Take.Journal.Name));
                 return;
             }
             // a preset compressor sets its make-up and the rest from the new take's level (the web's updateComp)
@@ -355,13 +355,13 @@ public partial class MainWindow
             await FlushProjectOperation();
             foreach (var (t, _) in kept) st.EndRecording(t.Journal.MediaId);
             Status(problem ?? (kept.Count == 1
-                ? $"Guardé \"{kept[0].Take.Journal.Name}\" ({kept[0].Res.DurationSec:0.0} s)"
-                : $"Guardé {kept.Count} canales: {string.Join(", ", kept.Select(k => $"\"{k.Take.Journal.Name}\""))} ({kept[0].Res.DurationSec:0.0} s)"));
+                ? Loc.T("rec.saved.one", kept[0].Take.Journal.Name, $"{kept[0].Res.DurationSec:0.0}")
+                : Loc.T("rec.saved.many", kept.Count, string.Join(", ", kept.Select(k => $"\"{k.Take.Journal.Name}\"")), $"{kept[0].Res.DurationSec:0.0}")));
         }
         catch (IOException e)
         {
             // the journals stay: the takes are in media/ and the next open puts them back if this save never lands
-            Status($"No pude guardar el canal: {e.Message}. Lo vuelvo a intentar…");
+            Status(Loc.T("rec.saveFail", e.Message));
         }
         finally
         {

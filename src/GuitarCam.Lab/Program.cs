@@ -23,8 +23,8 @@ static class Program
                 "procesar" => DspCommands.Process(a),
                 "mezclar" => DspCommands.Mix(a),
                 "exportar" => DspCommands.Export(a),
-                "verificar" => DspCommands.Verify(a),
                 "click" => DspCommands.Click(a),
+                "comprobar-dsp" => DspCommands.Check(a),
                 "espectro" => DspCommands.Spectrum(a),
                 "camara" => CameraCommands.Run(a),
                 "sistema" => SystemCommands.Run(a),
@@ -68,7 +68,6 @@ static class Program
               exportar  [carpeta-proyecto] [--salida nombre] [--carpeta destino] [--calidad alta|estandar|borrador]
                         [--reemplazar] [--prueba]
                                            exporta el proyecto a MP4 con mezcla offline y FFmpeg
-              verificar [entrada.wav]      compara el DSP portado con los worklets de la app web (necesita Node)
               click     [--salida clicks.wav] [--bpm 100]
                                            escribe todos los sonidos de click a un WAV para escucharlos
               espectro  [entrada.wav] [--hz 1000] [--nivel -6]
@@ -81,8 +80,6 @@ static class Program
               camara verificar-corte [--dispositivo X]
                                            corta una grabación a la mitad (con y sin FFmpeg) y comprueba que el video quede
               sistema   [--segundos 5]     muestra CPU, GPU y RAM cada 1,5 s como la barra de arriba, y si está FFmpeg
-              proyecto importar carpeta-web [--destino X]
-                                           pasa un proyecto de la app web al formato nativo (no toca el original)
               proyecto abrir    carpeta    abre un proyecto nativo y muestra pistas, avisos e historial
               proyecto versiones carpeta   lista las versiones guardadas, de más nueva a más vieja
               proyecto volver   carpeta n  restaura la versión n y conserva el estado actual en el historial
