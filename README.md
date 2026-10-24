@@ -3,9 +3,12 @@
 **GuitarCam Studio Native** es una aplicación de escritorio para Windows para hacer **videos de guitarra**:
 grabás tomas con cámara y audio, las mezclás y exportás un video con un panel por toma.
 
+Funciona tanto como un **cam studio** (grabar tomas con cámara y armar el video) como un **DAW** (grabar,
+editar y mezclar audio en un timeline y un mixer completos, con o sin imagen: el modo **Solo audio**
+sirve para hacer música sin video).
+
 Está pensada para usarse con la guitarra colgada: atajos de una tecla, botones grandes y un camino corto
-de **grabar → mezclar → exportar**. Las herramientas de estudio (clips, efectos, mixer) están al servicio
-del video, no al revés.
+de **grabar → mezclar → exportar**.
 
 ![El timeline, con un panel de video por toma](docs/screenshot-timeline.png)
 
@@ -29,6 +32,15 @@ del video, no al revés.
 - **No pierde nada**: autoguardado atómico 1,5 s después de cada edición, copias en `historial/` para volver
   atrás, recuperación de grabaciones interrumpidas y un gestor de proyectos con Papelera.
 - Idiomas, tema y atajos de teclado configurables.
+
+## Hacia dónde va
+
+GuitarCam Studio Native está **en desarrollo constante**. La idea es llevarla a un nivel que sirva tanto
+para quien recién empieza y quiere hacer música rápido y sin complicaciones, como para profesionales que
+quieren hacer música en serio.
+
+Lo próximo es la compatibilidad con **MIDI**, **plugins VST** y más herramientas de estudio. Lo que está
+planeado y lo que falta está en [PENDIENTES.md](PENDIENTES.md).
 
 ## Requisitos
 
