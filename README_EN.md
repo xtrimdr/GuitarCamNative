@@ -16,6 +16,8 @@ It is designed to be used with the guitar strapped on: one-key shortcuts, big bu
 
 ![The mixer, with one strip per track, the reverb and delay returns and the master](docs/screenshot-mixer.png)
 
+![Audio only mode: a DAW without video](docs/screenshot-audio.png)
+
 ## What it does
 
 - **Records** audio over ASIO (input and output in the same callback, with monitoring) and video from a

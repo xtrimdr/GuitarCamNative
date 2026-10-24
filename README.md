@@ -16,6 +16,8 @@ de **grabar → mezclar → exportar**.
 
 ![El mixer, con una tira por pista, los retornos de reverb y delay y el master](docs/screenshot-mixer.png)
 
+![El modo Solo audio: un DAW sin video](docs/screenshot-audio.png)
+
 ## Qué hace
 
 - **Graba** audio por ASIO (entrada y salida en un mismo callback, con monitoreo) y video desde una cámara
