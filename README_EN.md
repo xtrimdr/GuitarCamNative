@@ -109,7 +109,16 @@ media/                recordings and imports (never rewritten)
 exports/              exported videos and audio
 ```
 
-If you are going to contribute or use an AI agent, read [AGENTS.md](AGENTS.md) first.
+## Contributing and license
+
+GuitarCam Studio Native is **free and non-profit**: it is made for the community, so anyone can record and
+make music without paying a cent. Contributions are welcome and **all of them go through the maintainer's
+approval**: open an issue or a Pull Request following [CONTRIBUTING.md](CONTRIBUTING.md). Before touching code,
+read [AGENTS.md](AGENTS.md) (the project guide, in Spanish) and see [PENDIENTES.md](PENDIENTES.md) for what is
+missing.
+
+It is released under the [GPL-3.0](LICENSE) license: you can use, study, modify and share it freely, and
+distributed modified versions must stay free under the same license.
 
 ## gclab
 
