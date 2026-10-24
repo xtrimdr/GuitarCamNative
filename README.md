@@ -34,7 +34,8 @@ de **grabar → mezclar → exportar**.
   WAV de 24 bits o MP3 de 320 kbps; si querés, además cada pista en su WAV (stems). Lo que ves en la vista
   previa es lo que se exporta.
 - **Metrónomo** con compás, tempo, tap tempo, cuenta previa y seis sonidos de click; calibración de latencia
-  con cable o tocando. **Afinador** y medidor de **LUFS** del master en la barra de transporte.
+  con cable o tocando. **Afinador** (notas en castellano, flechas que
+  te dicen para dónde girar la clavija y sensibilidad ajustable) y medidor de **LUFS** del master en la barra de transporte.
 - **No pierde nada**: autoguardado atómico 1,5 s después de cada edición, copias en `historial/` para volver
   atrás, recuperación de grabaciones interrumpidas y un gestor de proyectos con Papelera.
 - Idiomas, tema y atajos de teclado configurables.
@@ -141,7 +142,7 @@ la consola, sin abrir la ventana.
 | `sistema [--segundos 5]` | CPU, GPU y RAM, y si FFmpeg está en el PATH |
 | `espectro [toma.wav]` | el espectro en vivo del EQ |
 | `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas, reinicio de la cadena, afinador y LUFS |
-| `lufs archivo` / `afinar archivo [--en segundos]` | volumen integrado de un archivo / la nota que oye el afinador en ese momento |
+| `lufs archivo` / `afinar archivo [--en segundos] [--umbral -50]` | volumen integrado de un archivo / la nota que oye el afinador en ese momento, con la sensibilidad de la ventana (dB) |
 | `camara [listar]` | las cámaras que ve FFmpeg y sus formatos |
 | `camara grabar [--dispositivo X \| --ip 192.168.1.50:4747] [--segundos 5]` | graba video como una toma y lo revisa con ffprobe |
 | `camara verificar-corte` | corta una grabación a la mitad y comprueba que el video quede |

@@ -3,6 +3,12 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-24: **afinador pulido**: notas en castellano desde `Loc` (`note.*`, en inglés C D E) en el panel y en la celda;
+  triángulos a los costados que dicen para dónde girar la clavija y parpadean más rápido cuanto más desafinado
+  (`TunerView`); "OK!" en verde dentro de ±3 cents (token `InTune` = verde de los medidores del mixer); slider
+  "Sensibilidad" = compuerta de nivel de `PitchTap.GateDb` (por defecto −50 dB, igual que antes), en `config.json`
+  (`tuner.gateDb`) y en `gclab afinar --umbral`; el panel se cierra con un clic afuera. `comprobar-dsp` suma un tono de
+  −60 dB que no pasa con −50 y sí con −70. Sin probar con una guitarra ni mirando el panel en la ventana.
 - 2026-10-24: **afinador y medidor de LUFS** (sugerencias): celda "Afinador" (A) en la barra de transporte con un panel
   de aguja (`TunerView`); YIN sobre la primera pista armada o la entrada 1-2 (`PitchTap`). Celda "LUFS" con el integrado
   del master de cada pasada, corto y momentáneo en el tooltip (`LoudnessMeter`, BS.1770). `gclab lufs`, `gclab afinar` y

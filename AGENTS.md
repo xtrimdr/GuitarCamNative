@@ -192,6 +192,7 @@ usá siempre el pincel (`Palette.Accent`, `{StaticResource Accent}`) y no un col
 | `Composition` | `#09090b` | fondo del cuadro del video |
 | ámbar | `#f59e0b` | mute activo y zona de −6 a 0 dB en medidores |
 | gris offline | `#71717a` | clips cuyo archivo falta |
+| `InTune` | `#22c55e` | "afinado" en el afinador. Es el verde de los medidores del mixer (`Palette.MeterGreen`), no uno nuevo |
 
 Reglas: no inventes colores nuevos para estados nuevos sin necesidad; el acento no se usa como
 decoración; el rojo significa **grabación o peligro de clip**, nunca "error genérico". Las variantes con
@@ -356,7 +357,15 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
   (`ClearAllToggles`).
 - **Afinador y LUFS** (solo nativa, `MainWindow.Meters.cs`): en la barra de transporte, después de Monitor, la celda
   "Afinador" (A) muestra la nota y abre un panel (`Controls/TunerView`) con la aguja; escucha la primera pista armada o
-  la entrada 1-2 (`PlaybackEngine.Pitch`, YIN en el `Tick` solo mientras está prendido). A la derecha, la celda "LUFS"
+  la entrada 1-2 (`PlaybackEngine.Pitch`, YIN en el `Tick` solo mientras está prendido). Las notas salen de `Loc`
+  (`note.0`…`note.11`: Do Re Mi en castellano, C D E en inglés; `TunerView.NoteName`). A cada lado de la nota, un
+  triángulo dice para dónde girar la clavija (▶ a la izquierda = subí, ◀ a la derecha = bajá) y parpadea más rápido
+  cuanto más lejos está (1,5 a 8 por segundo, llevado por el `Tick`, sin asignar); dentro de ±3 cents
+  (`TunerView.InTuneCents`) la nota, la aguja y un "OK!" se ponen en verde (`InTune`), también la nota de la celda.
+  El slider "Sensibilidad" del panel es la compuerta de nivel de `PitchTap` (−70 a −30 dB, por defecto −50 =
+  `PitchTap.DefaultGateDb`, que es como detectaba antes; el umbral de YIN no se toca), se guarda en `config.json`
+  (`tuner.gateDb`) al cerrar el panel y en `gclab afinar --umbral`. El panel se cierra con un clic afuera
+  (`IsLightDismissEnabled`), con A o con la celda; con el foco en el slider, los atajos pasan igual. A la derecha, la celda "LUFS"
   con el integrado del master de la pasada actual (`LoudnessMeter`, BS.1770; empieza de nuevo con cada play o un clic).
 - **Stems** (solo nativa): la casilla del diálogo de exportar (MP4 o audio) deja además "<nombre> - stems" con un
   WAV float por pista que suena, cada una sola con sus envíos y sin el limitador (`AudioExporter.ExportStemsAsync`).

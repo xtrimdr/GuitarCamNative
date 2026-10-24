@@ -36,6 +36,8 @@
     <SolidColorBrush x:Key="Accent70" Color="#B322d3ee" />
     <SolidColorBrush x:Key="Rec" Color="{StaticResource RecColor}" />
     <SolidColorBrush x:Key="RecSoft" Color="#24ef4444" />
+    <!-- the tuner's "in tune": the mixer meters' green (Palette.MeterGreen / Palette.InTune) -->
+    <SolidColorBrush x:Key="InTune" Color="#22c55e" />
 
     <!-- Fluent controls (sliders, switches) take the accent from these -->
     <Color x:Key="SystemAccentColor">#22d3ee</Color>

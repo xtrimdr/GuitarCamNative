@@ -74,7 +74,9 @@ static class Program
               click     [--salida clicks.wav] [--bpm 100]
                                            escribe todos los sonidos de click a un WAV para escucharlos
               lufs      archivo.wav|mp3        volumen integrado (EBU R128) del archivo, como el medidor LUFS del master
-              afinar    archivo.wav [--en segundos]   la nota que oye el afinador en ese momento del archivo
+              afinar    archivo.wav [--en segundos] [--umbral -50]
+                                           la nota que oye el afinador en ese momento del archivo; --umbral es
+                                           la sensibilidad de la ventana (dB, de -70 = muy sensible a -30)
               espectro  [entrada.wav] [--hz 1000] [--nivel -6]
                                            el espectro en vivo del EQ (FFT de 8192 después del EQ, como la web);
                                            sin WAV, comprueba un seno contra el AnalyserNode de Web Audio

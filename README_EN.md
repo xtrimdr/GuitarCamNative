@@ -34,7 +34,7 @@ It is designed to be used with the guitar strapped on: one-key shortcuts, big bu
   24-bit WAV or 320 kbps MP3; optionally each track in its own WAV too (stems). What you see in the preview
   is what gets exported.
 - **Metronome** with time signature, tempo, tap tempo, count-in and six click sounds; latency calibration
-  with a cable or by playing. A **tuner** and a master **LUFS** meter in the transport bar.
+  with a cable or by playing. A **tuner** (arrows that tell you which way to turn the peg, adjustable sensitivity) and a master **LUFS** meter in the transport bar.
 - **Never loses anything**: atomic autosave 1.5 s after every edit, copies in `historial/` to go back,
   recovery of interrupted recordings and a project manager with a Recycle Bin.
 - Configurable language, theme and keyboard shortcuts.

@@ -6,7 +6,9 @@ public readonly record struct TunerReading(double Hz, int Midi, double Cents)
     static readonly string[] Names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
     /// <summary>"E", "F#": letters, like the tuners a guitarist already knows.</summary>
-    public string Note => Names[((Midi % 12) + 12) % 12];
+    public string Note => Names[PitchClass];
+    /// <summary>0 = C … 11 = B, for the window's own note names.</summary>
+    public int PitchClass => ((Midi % 12) + 12) % 12;
     public int Octave => Midi / 12 - 1;
 
     public static TunerReading FromHz(double hz, double a4 = 440)
@@ -22,7 +24,8 @@ public readonly record struct TunerReading(double Hz, int Midi, double Cents)
 /// ring, like <see cref="SpectrumTap"/>; <see cref="Read"/> runs on the reader's thread and finds the pitch with
 /// YIN (de Cheveigné &amp; Kawahara, 2002) on the latest samples, halved to 24 kHz so it stays cheap enough for
 /// every UI tick. It covers 50–1400 Hz: a 7-string's low B to well above the 12th fret of the high E. Below
-/// <see cref="GateDb"/> or without a clear period it reads nothing. No allocation after construction.
+/// <see cref="GateDb"/> (the sensitivity, <see cref="DefaultGateDb"/> unless the user moves it) or without a clear
+/// period it reads nothing. No allocation after construction.
 /// </summary>
 public sealed class PitchTap
 {
@@ -31,8 +34,10 @@ public sealed class PitchTap
     /// <summary>Samples after halving: the analysis window plus the longest period.</summary>
     const int Half = RingSize / 2;
     const int Window = 1024;
-    /// <summary>Quieter than this (RMS) is no note: the tuner waits.</summary>
-    public const double GateDb = -50;
+    /// <summary>Quieter than this (RMS) is no note: the tuner waits. The sensitivity slider moves it within
+    /// <see cref="MinGateDb"/>…<see cref="MaxGateDb"/>.</summary>
+    public const double DefaultGateDb = -50;
+    public const double MinGateDb = -70, MaxGateDb = -30;
     /// <summary>YIN's absolute threshold on the normalized difference: lower is stricter.</summary>
     const double Threshold = 0.15;
 
@@ -42,7 +47,20 @@ public sealed class PitchTap
     readonly double[] d = new double[Half - Window];
     readonly int sampleRate;
 
+    double gateDb = DefaultGateDb;
+
     public PitchTap(int sampleRate) => this.sampleRate = sampleRate;
+
+    /// <summary>The level gate in dB RMS (lower = more sensitive), kept within range by <see cref="NormalizeGate"/>.
+    /// Set and read on the reader's thread.</summary>
+    public double GateDb
+    {
+        get => gateDb;
+        set => gateDb = NormalizeGate(value);
+    }
+
+    /// <summary>A saved or typed gate: whole dB within range; anything unreadable is the default.</summary>
+    public static double NormalizeGate(double db) => double.IsFinite(db) ? Math.Clamp(Math.Round(db), MinGateDb, MaxGateDb) : DefaultGateDb;
 
     /// <summary>Audio thread: appends a block. No allocation, no locks.</summary>
     public void Write(ReadOnlySpan<float> l, ReadOnlySpan<float> r)

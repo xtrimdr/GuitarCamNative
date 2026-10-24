@@ -273,9 +273,10 @@
               <TextBlock Classes="metro-label" Text="{loc:T transport.tuner}" />
             </StackPanel>
           </ToggleButton>
-          <Popup x:Name="TunerPopup" PlacementTarget="{Binding #TunerToggle}" Placement="Top" VerticalOffset="-8" IsLightDismissEnabled="False">
-            <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8" Padding="12,10">
-              <StackPanel Spacing="6">
+          <!-- light dismiss: a click outside closes it (and is not passed on, so a click on the cell only closes) -->
+          <Popup x:Name="TunerPopup" PlacementTarget="{Binding #TunerToggle}" Placement="Top" VerticalOffset="-8" IsLightDismissEnabled="True">
+            <Border x:Name="TunerPanel" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8" Padding="12,10">
+              <StackPanel x:Name="TunerBody" Spacing="10">
                 <TextBlock Classes="label" Text="{loc:T tuner.title}" />
                 <c:TunerView x:Name="Tuner" />
               </StackPanel>

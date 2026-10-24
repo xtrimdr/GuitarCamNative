@@ -65,6 +65,8 @@ static class Palette
     public static readonly Color MeterGreen = Color.Parse("#22c55e");
     public static readonly Color MeterYellow = Color.Parse("#eab308");
     public static readonly Color MeterRed = Color.Parse("#ef4444");
+    /// <summary>"In tune" in the tuner: the meters' green, not a color of its own (App.axaml InTune).</summary>
+    public static readonly IBrush InTune = new ImmutableSolidColorBrush(MeterGreen);
 
     public static readonly Typeface Ui = new("Segoe UI Variable Text, Segoe UI");
     public static readonly Typeface UiBold = new("Segoe UI Variable Text, Segoe UI", FontStyle.Normal, FontWeight.SemiBold);

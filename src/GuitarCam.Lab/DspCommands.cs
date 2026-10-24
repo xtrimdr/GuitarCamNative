@@ -566,9 +566,16 @@ static class DspCommands
         }
         var silent = new PitchTap(sr48);
         silent.Write(new float[8192], new float[8192]);
-        bool gateOk = silent.Read() == null;
+        // a tone at -60 dB RMS: nothing at the default gate (-50), a note at the most sensitive one (-70)
+        var quiet = new float[8192];
+        for (int i = 0; i < quiet.Length; i++) quiet[i] = (float)(Math.Pow(10, -60 / 20.0) * Math.Sqrt(2) * Math.Sin(2 * Math.PI * 110 * i / sr48));
+        var quietDefault = new PitchTap(sr48);
+        quietDefault.Write(quiet, quiet);
+        var quietSensitive = new PitchTap(sr48) { GateDb = PitchTap.MinGateDb };
+        quietSensitive.Write(quiet, quiet);
+        bool gateOk = silent.Read() == null && quietDefault.Read() == null && quietSensitive.Read() is { Midi: 45 };
         allOk &= gateOk;
-        Console.WriteLine($"{"Afinador en silencio",-36} {"nada",12} {"nada",10}  {(gateOk ? "igual" : "DISTINTO")}");
+        Console.WriteLine($"{"Afinador: silencio y umbral",-36} {"nada",12} {"nada",10}  {(gateOk ? "igual" : "DISTINTO")}");
 
         // LUFS (EBU Tech 3341 case 1): a 1 kHz sine at -23 dBFS on both channels reads -23 LUFS; with half of it
         // silent, the relative gate leaves the silence out and it still reads -23
@@ -599,16 +606,19 @@ static class DspCommands
         return 0;
     }
 
-    /// <summary>gclab afinar: what the tuner hears at a moment of a file (its first 4096 samples from --en).</summary>
+    /// <summary>gclab afinar: what the tuner hears at a moment of a file (its first 4096 samples from --en), with the
+    /// window's sensitivity (--umbral, the level gate in dB).</summary>
     public static int Tune(Args a)
     {
         string file = a.Positional.ElementAtOrDefault(0) ?? throw new ArgumentException("afinar: falta el archivo.");
         var audio = AudioLoader.Load(file, 48000);
         int from = (int)(a.Double("en", 0) * audio.SampleRate);
         if (from + 4096 > audio.Left.Length) throw new ArgumentException("afinar: el archivo termina antes.");
-        var tap = new PitchTap(audio.SampleRate);
+        var tap = new PitchTap(audio.SampleRate) { GateDb = a.Double("umbral", PitchTap.DefaultGateDb) };
         tap.Write(audio.Left.AsSpan(from, 4096), audio.Right.AsSpan(from, 4096));
-        Console.WriteLine(tap.Read() is { } r ? $"{r.Note}{r.Octave} {r.Cents:+0.0;-0.0;0.0} cents ({r.Hz:0.00} Hz)" : "No hay una nota clara.");
+        Console.WriteLine(tap.Read() is { } r
+            ? $"{r.Note}{r.Octave} {r.Cents:+0.0;-0.0;0.0} cents ({r.Hz:0.00} Hz)"
+            : $"No hay una nota clara (umbral {tap.GateDb:0} dB).");
         return 0;
     }
 
