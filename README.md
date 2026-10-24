@@ -1,5 +1,7 @@
 # GuitarCam Studio Native
 
+**Español** · [English](README_EN.md)
+
 **GuitarCam Studio Native** es una aplicación de escritorio para Windows para hacer **videos de guitarra**:
 grabás tomas con cámara y audio, las mezclás y exportás un video con un panel por toma.
 
