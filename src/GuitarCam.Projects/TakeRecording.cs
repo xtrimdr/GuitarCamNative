@@ -18,7 +18,7 @@ public static class TakeRecording
     /// <summary>Same as the web: takes shorter than this are dropped silently.</summary>
     public const double MinTakeSec = TakeRecorder.MinTakeDurationSec;
 
-    static readonly Regex TakeNumberInName = new(@"^Toma (\d+)\b", RegexOptions.Compiled);
+    static readonly Regex TakeNumberInName = new(@"^(?:Canal|Toma) (\d+)\b", RegexOptions.Compiled);
 
     /// <summary>
     /// The selected empty track; with a take (or nothing) selected, the next empty track after it, else the
@@ -48,8 +48,11 @@ public static class TakeRecording
         return match.Success && int.TryParse(match.Groups[1].Value, out v) ? v : 0;
     }
 
-    public static string TakeName(Project p, Track? target) =>
-        TakeRecorder.DefaultTakeName(NextTakeNumber(p), Slot(p, target), target?.Name);
+    public static string TakeName(Project p, Track? target) => TakeName(p, target, NextTakeNumber(p));
+
+    /// <summary>With the number given: several tracks recorded at once take consecutive numbers.</summary>
+    public static string TakeName(Project p, Track? target, int number) =>
+        TakeRecorder.DefaultTakeName(number, Slot(p, target), target?.Name);
 
     static string Role(int slot) => slot == 0 ? "base" : slot == 1 ? "solo" : "extra";
 

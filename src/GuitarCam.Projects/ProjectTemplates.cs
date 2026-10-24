@@ -151,7 +151,7 @@ public static class ProjectTemplates
         new()
         {
             Id = "builtin:single",
-            Name = "Toma única",
+            Name = "Canal único",
             Hint = "Una guitarra sola con un poco de placa",
             Builtin = true,
             Tracks = [Track("Guitarra", "lead", c => c.ReverbSend = 0.2, amount: 0.4)],

@@ -70,7 +70,8 @@ public sealed class TempoControl : Border
             else if (e.Key == Key.Escape) { FinishEdit(); e.Handled = true; }
         };
         var tap = new Button { Content = "TAP", Classes = { "ghost" }, FontSize = 11, FontWeight = FontWeight.SemiBold, Padding = new Thickness(10, 0), CornerRadius = new CornerRadius(0), VerticalAlignment = VerticalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Center };
-        ToolTip.SetTip(tap, "Tocá al ritmo para medir el tempo (T)");
+        ToolTip.SetTip(tap, Shortcuts.Tip("Tocá al ritmo para medir el tempo", "tap"));
+        Shortcuts.Changed += () => ToolTip.SetTip(tap, Shortcuts.Tip("Tocá al ritmo para medir el tempo", "tap"));
         tap.Click += (_, _) => Tap();
         row.Children.Add(value); Grid.SetColumn(tap, 1); row.Children.Add(tap); Child = row;
         Set(bpm);

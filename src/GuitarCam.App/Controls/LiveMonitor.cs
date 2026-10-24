@@ -92,7 +92,7 @@ public sealed class LiveMonitor : UserControl
             Children =
             {
                 head, frameBox, resolution, audio,
-                new TextBlock { Text = "Lo que entra ahora: cámara y audio. La toma pasa a la composición cuando la terminás.", FontSize = 11, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap },
+                new TextBlock { Text = "Lo que entra ahora: cámara y audio. El canal pasa a la composición cuando la terminás.", FontSize = 11, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap },
             },
         };
         Content = root;

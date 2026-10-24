@@ -219,7 +219,7 @@ public sealed partial class ExportDialog : UserControl
         var takes = ExtractVideoTakes(store, liveTracks);
         if (audio ? !store.Project.Tracks.Any(t => t.Clips.Count > 0) : takes.Count == 0)
         {
-            statusError = "Necesitás al menos una toma en el timeline para exportar.";
+            statusError = "Necesitás al menos un canal en el timeline para exportar.";
             return false;
         }
 
@@ -467,7 +467,7 @@ public sealed partial class ExportDialog : UserControl
     void RenderSetupState()
     {
         HeaderTitle.Text = audio ? "Exportar audio" : "Exportar MP4";
-        string takesWord = summary.Takes == 1 ? "toma" : "tomas";
+        string takesWord = summary.Takes == 1 ? "canal" : "canales";
         int tracksWithClips = currentStore?.Project.Tracks.Count(t => t.Clips.Count > 0) ?? 0;
         HeaderSubtitle.Text = audio
             ? $"La mezcla · {tracksWithClips} {(tracksWithClips == 1 ? "pista" : "pistas")} · 48 kHz estéreo · {Mp4Exporter.FormatTime(summary.DurationSec)}"

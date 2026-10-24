@@ -112,8 +112,11 @@ public sealed class VideoDecoder : IDisposable
                 continue;
             }
 
-            // restart when there's no process, or the wanted time is behind what we show / far ahead
-            bool behind = !double.IsNaN(latestTime) && w < latestTime - 0.5 / Fps;
+            // restart when there's no process, or the wanted time is behind the earliest frame we can still give
+            // (the one shown, else the one read ahead, else the pipe's next: right after a restart nothing is
+            // shown yet, and a sync edit moving back past the restart point would otherwise wait forever) / far ahead
+            double earliest = !double.IsNaN(latestTime) ? latestTime : !double.IsNaN(pendingTime) ? pendingTime : TimeOf(nextIndex);
+            bool behind = w < earliest - 0.5 / Fps;
             bool farAhead = w > TimeOf(nextIndex) + 1.0;
             if (proc == null || behind || farAhead)
             {

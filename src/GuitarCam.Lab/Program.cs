@@ -52,9 +52,11 @@ static class Program
               grabar    [--driver X] [--segundos 15] [--bpm 100] [--cuenta 4] [--click madera]
                         [--volumen-click 0] [--canal 1|2|estereo] [--monitor]
                         [--sat valvula|cinta] [--vida 0.3] [--salida toma.wav]
-                        [--simular [--ruido-2 0.0001]]
+                        [--simular [--ruido-2 0.0001]] [--entradas 1,2,3-4]
                                            graba sobre el click; con --monitor te escuchás con la saturación;
-                                           --simular graba un tono sin la placa (--ruido-2: la entrada 2 con soplido)
+                                           --simular graba un tono sin la placa (--ruido-2: la entrada 2 con soplido);
+                                           --entradas graba una toma por entrada a la vez, como varias pistas
+                                           armadas (toma_e1.wav, toma_e3-4.wav…); con --simular verifica cada WAV
               procesar  entrada.wav [--salida x.wav] [--sat valvula|cinta] [--vida 0.3]
                         [--comp] [--umbral -24] [--ratio 4] [--ataque 10] [--release 150] [--knee 6]
                         [--makeup 0] [--limit] [--comp-estilo rasgueo|arpegio|punteo] [--comp-cant 0.5]
@@ -96,7 +98,10 @@ static class Program
               proyecto editar carpeta a-pista clip pista [--intercambiar clip] | reordenar desde hasta
               proyecto editar carpeta inicio|fijar-corte|restaurar|quitar-clip clip | quitar-pista pista
               proyecto editar carpeta nueva-pista | agregar-toma medio [--pista pista]
+              proyecto editar carpeta borrar-rango pista desde --hasta fin   saca ese tramo de los clips de la pista (queda el hueco)
               proyecto verificar-tomas     verifica a qué pista va una toma nueva, su nombre y su canal
+              proyecto importar-audio carpeta archivo [--en segundos] [--pista id]   copia un audio de afuera a media/ y lo pone en una pista
+              proyecto verificar-importar  verifica la importación de audio (formato, nombres, archivos rotos)
               proyecto historial carpeta   tomas (en uso / no usadas), exportaciones y actividad, como la pestaña Historial
               proyecto historial carpeta quitar|usar medio | borrar-no-usadas | borrar-exportacion n
               proyecto verificar-historial verifica el registro de tomas, la Papelera y las frases de la actividad

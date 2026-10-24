@@ -364,7 +364,7 @@ public static partial class Mp4Exporter
         string? runId = null)
     {
         if (job.Takes.Count == 0)
-            throw new ExportException("No hay tomas activas para exportar.");
+            throw new ExportException("No hay canales activos para exportar.");
 
         var (outW, outH) = ExportSize(job.AspectRatio);
         int numTakes = job.Takes.Count;
@@ -376,7 +376,7 @@ public static partial class Mp4Exporter
         {
             string vp = job.Takes[i].VideoPath;
             if (string.IsNullOrWhiteSpace(vp) || !File.Exists(vp))
-                throw new ExportException($"Falta el video de la toma #{i + 1}");
+                throw new ExportException($"Falta el video del canal #{i + 1}");
             ffmpegArgs.Add("-i");
             ffmpegArgs.Add(vp);
         }
@@ -564,7 +564,7 @@ public static partial class Mp4Exporter
         CancellationToken ct = default)
     {
         if (job.Takes.Count == 0)
-            throw new ExportException("Necesitás al menos una toma en el timeline para exportar.");
+            throw new ExportException("Necesitás al menos un canal en el timeline para exportar.");
 
         var target = CheckDestination(job.ProjectDir, job.OutDir, string.IsNullOrWhiteSpace(job.FileName) ? job.ProjectName : job.FileName);
         if (target.Exists && !job.Overwrite)

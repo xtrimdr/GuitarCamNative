@@ -49,6 +49,15 @@ public sealed class FxIcon : Control
 
     public static void SetColor(Control icon, IBrush brush) => icon.SetValue(TextElement.ForegroundProperty, brush);
 
+    /// <summary>Draws an effect's icon straight into a drawing context (the timeline's track headers are hand-drawn).</summary>
+    public static void Draw(DrawingContext ctx, string icon, Rect box, IBrush brush)
+    {
+        if (!Paths.TryGetValue(icon, out var path)) return;
+        double s = box.Width / 24;
+        using (ctx.PushTransform(Matrix.CreateScale(s, s) * Matrix.CreateTranslation(box.X, box.Y)))
+            ctx.DrawGeometry(null, new Pen(brush, 2) { LineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round }, path);
+    }
+
     public override void Render(DrawingContext ctx)
     {
         double s = Math.Min(Bounds.Width, Bounds.Height) / 24;

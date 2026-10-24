@@ -36,9 +36,16 @@ public static class AudioLoader
         {
             srcRate = reader.WaveFormat.SampleRate;
             int ch = reader.WaveFormat.Channels;
-            var all = new float[(int)(reader.Length / 4)];
+            // The reader's Length is only a hint: Media Foundation (FLAC, M4A…) can report less than the file
+            // holds, so read until the decoder runs dry and grow the buffer when the hint was short.
+            var all = new float[Math.Max(65536, (int)(reader.Length / 4))];
             int read = 0, n;
-            while ((n = reader.Read(all, read, Math.Min(65536, all.Length - read))) > 0) read += n;
+            while (true)
+            {
+                if (read == all.Length) Array.Resize(ref all, all.Length * 2);
+                if ((n = reader.Read(all, read, Math.Min(65536, all.Length - read))) <= 0) break;
+                read += n;
+            }
             int len = read / ch;
             l = new float[len];
             r = new float[len];
@@ -56,6 +63,21 @@ public static class AudioLoader
         }
 
         return new LoadedAudio(l, r, srcRate, srcRate);
+    }
+
+    /// <summary>
+    /// The real length, sample rate and channel count of a file, found by decoding it to the end without keeping
+    /// anything: <c>TotalTime</c> is wrong for some formats (see <see cref="Load"/>).
+    /// </summary>
+    public static (double DurationSec, int SampleRate, int Channels) Measure(string path)
+    {
+        using var reader = new AudioFileReader(path);
+        var buf = new float[65536];
+        long samples = 0;
+        int n;
+        while ((n = reader.Read(buf, 0, buf.Length)) > 0) samples += n;
+        int ch = reader.WaveFormat.Channels, rate = reader.WaveFormat.SampleRate;
+        return (samples / (double)ch / rate, rate, ch);
     }
 
     /// <summary>

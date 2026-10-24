@@ -35,8 +35,8 @@ public partial class MainWindow
             UpdateUndoButtons();
             ApplyMode();
             Status(mode == "audio"
-                ? "Proyecto solo de audio: la cámara quedó libre y exportás la mezcla en WAV o MP3. Los videos siguen guardados."
-                : "Proyecto con video: volvieron la cámara y la composición.");
+                ? Loc.T("mode.status.audio")
+                : Loc.T("mode.status.video"));
         }
         // a click on the checked option would uncheck it: always show the project's mode again
         RefreshModeButtons();
@@ -54,8 +54,8 @@ public partial class MainWindow
     {
         RefreshModeButtons();
         bool audio = AudioOnly;
-        ExportButtonText.Text = audio ? "Exportar audio" : "Exportar MP4";
-        ToolTip.SetTip(ExportButton, audio ? "Exportar la mezcla en WAV o MP3" : "Exportar MP4");
+        ExportButtonText.Text = audio ? Loc.T("export.audio") : Loc.T("export.mp4");
+        ToolTip.SetTip(ExportButton, audio ? Loc.T("export.audio.tip") : Loc.T("export.mp4"));
         Timeline.ShowVideo = !audio;
         foreach (var c in videoOnly) c.IsVisible = !audio;
         SetColorTabVisible(!audio);
@@ -86,8 +86,11 @@ public partial class MainWindow
             if (row.ActualHeight > 0) { if (mixerView) mixerH = row.ActualHeight; else timelineH = row.ActualHeight; }
             Root.Children.Remove(MixerHost);
             Root.Children.Remove(TimelineHost);
-            AudioArea.Children.Add(MixerHost);
+            // the timeline always stays on screen; the mixer opens under it (so no mini timeline there)
+            Grid.SetRow(TimelineHost, 0);
+            Grid.SetRow(MixerHost, 2);
             AudioArea.Children.Add(TimelineHost);
+            AudioArea.Children.Add(MixerHost);
             row.MinHeight = 0;
             row.Height = new GridLength(0);
         }
@@ -95,6 +98,8 @@ public partial class MainWindow
         {
             AudioArea.Children.Remove(MixerHost);
             AudioArea.Children.Remove(TimelineHost);
+            Grid.SetRow(TimelineHost, 3);
+            Grid.SetRow(MixerHost, 3);
             Root.Children.Add(MixerHost);
             Root.Children.Add(TimelineHost);
             row.MinHeight = mixerView ? MixerMinH : TimelineMinH;
@@ -104,7 +109,21 @@ public partial class MainWindow
         StageArea.IsVisible = !audio;
         AudioArea.IsVisible = audio;
         BottomSplitter.IsVisible = !audio;
+        TimelineHost.IsVisible = !mixerView || audio;
+        miniTimeline.IsVisible = !audio;
+        ApplyAudioMixerRows();
         RefreshMixer();
+    }
+
+    /// <summary>Solo audio: the mixer's row under the timeline (resizable with its splitter) is open only while the mixer is.</summary>
+    void ApplyAudioMixerRows()
+    {
+        bool open = audioMode && mixerView;
+        AudioSplitter.IsVisible = open;
+        AudioArea.RowDefinitions[0].MinHeight = open ? TimelineMinH : 0;
+        AudioArea.RowDefinitions[1].Height = new GridLength(open ? 4 : 0);
+        AudioArea.RowDefinitions[2].MinHeight = open ? MixerMinH : 0;
+        AudioArea.RowDefinitions[2].Height = new GridLength(open ? Math.Max(MixerMinH, mixerH) : 0);
     }
 
     /// <summary>Opens the decoders of the clips shown in the video that don't have one yet (after an edit, or back from solo audio).</summary>

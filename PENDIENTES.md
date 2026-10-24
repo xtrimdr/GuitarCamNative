@@ -14,12 +14,13 @@ _Cosas que no están en la app web o que la versión nativa debería hacer disti
 
 #### 1. Usarla también como DAW, solo audio
 - [x] Proyectos o pistas sin video (hecho, ver abajo)
-- [ ] Edición de clips: ~~dividir, duplicar~~ (hechos), borrar un pedazo (rango), mover un clip a otra pista
-  a otro tiempo (hoy cambiar de pista conserva el tiempo, como la web)
+- [x] Edición de clips: dividir, duplicar, mover a otra pista y a otro tiempo, borrar un pedazo (rango) (hechos). Falta
+  borrar el rango "cerrando el hueco" (que lo de después se corra) y rangos que abarquen varias pistas
 - [ ] Ganancia por clip, aparte del fader de la pista (con su curva de volumen dentro del clip)
 - [ ] Varios clips por pista: ya se reproducen, se dibujan y se exportan (comparten el panel); falta grabar
   desde el cabezal (hoy toda toma arranca en 0) y elegir qué clip se ve cuando se pisan
-- [ ] Importar audio externo (WAV, MP3, FLAC…): pistas de acompañamiento, loops, tomas de otro lado
+- [x] Importar audio externo (hecho, ver abajo). Falta: que el clip importado siga el tempo del proyecto (hoy se
+  usa tal cual) y importar el audio de un video
 - [ ] Mejorar el mixer: inserts reordenables, más sends/buses, grupos, medidores más completos
 - [ ] Exportar las pistas por separado (stems). La mezcla en WAV / MP3 ya está
 - …y más: ir sumando acá
@@ -42,10 +43,6 @@ _Cosas que no están en la app web o que la versión nativa debería hacer disti
 - [ ] Textos y títulos: nombre del tema, créditos, carteles
 - [ ] Transiciones entre clips y entre layouts
 - [ ] Recorte y encuadre animados (zoom/paneo que cambian con el tiempo)
-
-#### 5. Atajos personalizables
-- [ ] Un apartado (probablemente en Configuración) para cambiar las teclas de cada acción. Los atajos ya
-  se muestran solo en los tooltips; cuando exista, los tooltips tienen que leer la tecla configurada.
 
 ### Sugerencias (para decidir)
 
@@ -96,6 +93,56 @@ mano está en [docs/PRUEBAS.md](docs/PRUEBAS.md).
 
 ## Hecho
 
+- 2026-10-24: **borrar un pedazo (rango)** (ítem 1): Shift+arrastrar sobre una pista marca un rango (con el imán, Alt
+  = libre; se ve como una banda de acento con su largo) y Supr, o "Borrar el rango" del clic derecho, saca ese tramo
+  de todos los clips de la pista: los que quedan adentro se van, los que sobresalen por un lado se recortan y los que
+  sobresalen por los dos se parten en dos, con el fade in a la izquierda y el fade out a la derecha. Queda el hueco y
+  nada se corre; es un paso de deshacer y no toca los archivos (`ClipEditing.DeleteRange`, `TimelineView.Range`,
+  `MainWindow.DeleteRangeSelection`). Un clic, Esc o cualquier edición sacan la selección. `gclab proyecto editar
+  carpeta borrar-rango pista desde --hasta fin` y 9 comprobaciones nuevas en `verificar-clips`. Probado con `gclab`
+  (borrar y mezclar) y la ventana abre; sin ver el arrastre ni la banda con el mouse.
+
+- 2026-10-24: **mover un clip a otra pista y a otro tiempo a la vez** (ítem 1, pedido del usuario): al arrastrar un
+  clip sobre otra pista, el clip original queda atenuado donde estaba y un "fantasmita" (contorno punteado de acento
+  con el nombre de la pista y el segundo de inicio) muestra dónde va a caer, con el imán de siempre (Alt = libre).
+  Ctrl mantiene lo de la web: intercambiar con el clip de abajo, sin cambiar el tiempo (`TimelineView.DrawGhost`).
+  Probado con `gclab` (mover y pasar de pista en el mismo proyecto; `verificar-clips` y `verificar-deshacer`
+  siguen bien). Sin ver en la ventana: el dibujo del fantasma y el arrastre con el mouse.
+
+- 2026-10-24: **importar audio externo** (ítem 1): "Importar audio…" en el menú del "+" de las pistas o soltar
+  archivos WAV / MP3 / FLAC / OGG / M4A / AIFF en la ventana (`MainWindow.Import.cs`). Cada archivo se copia a
+  `media/` en segundo plano (`GuitarCam.Projects/AudioImport.cs`, con nombre único y sin dejar medio archivo si
+  falla) y queda en una pista nueva de solo audio, sin compresor ni saturación, en el cabezal (la pista vacía
+  seleccionada se usa para el primero); es un paso de deshacer. `gclab proyecto importar-audio` y
+  `proyecto verificar-importar`. De paso se arregló `AudioLoader`: con FLAC (y otros formatos de Media Foundation)
+  el audio se cortaba porque el largo que informa el lector es solo una pista; ahora se lee hasta el final y la
+  duración del medio se mide decodificando (`AudioLoader.Measure`). Probado con `gclab`: MP3, FLAC y M4A importados y
+  mezclados (largos revisados con ffprobe), y la ventana abre el proyecto. Sin probar a mano: el diálogo de archivos
+  y soltar archivos sobre la ventana.
+
+- 2026-10-23: **R arma la pista seleccionada** (pedido del usuario): R ahora arma / desarma la pista seleccionada
+  (acción "arm" en `Shortcuts.cs`) y grabar pasó a **Shift+R** o **Num \***; los tooltips del ● lo dicen.
+
+- 2026-10-23: **atajos personalizables** (pedido del usuario): pestaña "Atajos de teclado" en Configuración, con una
+  fila por acción agrupada en Transporte / Pistas / Edición / Vista; clic en la tecla y se toca la nueva (Esc cancela),
+  si era de otra acción esa queda sin atajo y se avisa, ↺ por fila y "Restablecer todo". Se guardan en `config.json`
+  ("shortcuts", solo lo que cambió). `OnKey` y las teclas de grabación buscan la acción en la tabla (`Shortcuts.cs`)
+  y todos los tooltips leen la tecla de ahí. Atajos nuevos: **B** muestra / oculta el panel de la toma (izquierda) y
+  **P** el del proyecto (derecha). Compila y arranca; la pestaña no la pude probar con el mouse en esta sesión.
+
+- 2026-10-23: barras de estado más prolijas (pedido del usuario): botón **Monitor** al lado del medidor de entrada
+  (prende el monitoreo por software, el mismo de Configuración); el formato ("48 kHz · 192 muestras") chiquito debajo
+  del medidor; la carga DSP arriba con barrita, junto a CPU / GPU / RAM, que ahora se leen "CPU 19% ▬" (antes el
+  número quedaba pegado a la etiqueta siguiente) con líneas finas entre los grupos (`MainWindow.axaml`,
+  `MainWindow.TopBar.cs`, `Controls/SystemMeter.cs`). El medidor de entrada tiene el ancho de ese texto y una escala
+  en dB debajo (`StereoMeter.ShowScale`). Visto en la ventana; el botón Monitor no lo escuché.
+
+- 2026-10-23: **Quitar todos los mute / solo** (pedido del usuario, como Cubase): una M y una S al final de la barra
+  de arriba del timeline (la columna de encabezados pasa a medir 324 como mínimo para que entren) y en la barra del
+  mixer; se prenden si alguna pista tiene mute o solo y un clic los saca todos en un solo paso de deshacer
+  (`MainWindow.ClearAllToggles`). Las plantillas de paneo del mixer pasaron a un desplegable "Paneo" con la apertura
+  adentro (30 % por defecto). Visto en la ventana con la copia de prueba de "Camino a San Francisco".
+
 - 2026-10-23: **Video | Solo audio** (ítem 1, pedido del usuario): interruptor en la barra de título y en "Nuevo
   proyecto" (`ProjectSettings.Mode`, `MainWindow.Mode.cs`, `gclab proyecto modo`). En solo audio el timeline ocupa el
   lugar de la composición, la cámara queda libre, se ocultan Color, Encuadre y lo de video del inspector, y
@@ -112,6 +159,14 @@ mano está en [docs/PRUEBAS.md](docs/PRUEBAS.md).
   dividir|duplicar`, comprobados en `verificar-clips`). La exportación pone todos los clips de una pista en su
   panel, cada uno en su tramo (`ExportTakeSpec.Panel` en `Mp4Exporter`); probado con `gclab exportar` sobre una
   copia de PruebasNEW con clips divididos, movidos y duplicados (cuadros revisados a mano).
+- 2026-10-23: **grabar varias pistas a la vez** (pedido del usuario): se arman varias pistas y R graba una toma
+  por pista desde el mismo sample, cada una con su entrada (chip "1-2 ▾" en el encabezado armado y en la tira del
+  mixer; `Track.Input`, `InputRoute`/`InputTap` en `GuitarCam.Audio`, el motor abre todas las entradas). Un journal
+  por toma, así un corte las recupera todas; el video va a la primera armada que sale en el video. El ● ahora se
+  puede desarmar también cuando lo eligió la app, y las pistas vacías tienen volumen, paneo, M, S y medidor.
+  Probado: `gclab grabar --simular --entradas 1,2,3-4,1-2,4` (cada WAV comparado muestra a muestra),
+  `proyecto verificar-tomas`, y la ventana con un proyecto de tres pistas (chip de entrada visible). Sin probar:
+  grabar de verdad con la placa, el menú de entradas y armar varias en la ventana, y el monitoreo de varias entradas.
 - 2026-10-23: armar pistas para grabar (pedido del usuario): ● en cada encabezado del timeline y en cada tira
   del mixer; la pista donde cae la toma se tiñe de rojo; armada con una toma, la nueva la reemplaza (la vieja
   queda en Historial) y la pista no suena mientras grabás. El botón Grabar del transporte quedó como un ● chico.

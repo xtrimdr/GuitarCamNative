@@ -13,6 +13,7 @@ static class ProjectCommands
         if (sub == "verificar-deshacer") return UndoChecks.Run();
         if (sub == "verificar-clips") return ClipChecks.Run();
         if (sub == "verificar-tomas") return TakeChecks.Run();
+        if (sub == "verificar-importar") return ImportChecks.Run();
         if (sub == "verificar-historial") return HistoryCommands.Check();
         string? dir = a.Positional.Skip(1).FirstOrDefault();
         if (dir == null) throw new ArgumentException("Falta la carpeta del proyecto.");
@@ -24,6 +25,7 @@ static class ProjectCommands
             "versiones" => Versions(dir),
             "volver" => Restore(dir, a.Positional.Skip(2).FirstOrDefault()),
             "clips" => Clips(dir),
+            "importar-audio" => ImportAudio(dir, a),
             "editar" => EditClips(dir, a),
             "historial" => HistoryCommands.Run(dir, a),
             "encuadre" => Frame(dir, a),
@@ -32,7 +34,7 @@ static class ProjectCommands
             "modo" => Mode(dir, a),
             "cortar" => Crash(dir, a.Double("segundos", 3), a.Flag("camara")),
             "toma" => RecordTake(dir, a.Double("segundos", 3), a.Get("pista"), a.Flag("camara")),
-            _ => throw new ArgumentException("proyecto importar|abrir|versiones|volver|cortar <carpeta>"),
+            _ => throw new ArgumentException("proyecto importar|importar-audio|abrir|versiones|volver|cortar <carpeta>"),
         };
     }
 
@@ -70,6 +72,18 @@ static class ProjectCommands
         return 0;
     }
 
+    static int ImportAudio(string dir, Args a)
+    {
+        using var store = ProjectStore.Open(dir);
+        if (store.ReadOnly) throw new IOException(store.ReadOnlyReason);
+        string file = a.Positional.ElementAtOrDefault(2) ?? throw new ArgumentException("Falta el archivo de audio.");
+        var imported = AudioImport.CopyIn(dir, Path.GetFullPath(file));
+        var track = AudioImport.AddClip(store.Project, imported, a.Double("en", 0), a.Get("pista"));
+        store.Save();
+        Console.WriteLine($"{track.Id} · {imported.Name} · {imported.DurationSec:0.00} s · {imported.SampleRate} Hz · {imported.Channels} canal(es) · {imported.RelativePath}");
+        return 0;
+    }
+
     static int EditClips(string dir, Args a)
     {
         using var store = ProjectStore.Open(dir);
@@ -91,6 +105,9 @@ static class ProjectCommands
             case "restaurar": ClipEditing.Reset(p, id); break;
             case "dividir": Console.WriteLine(ClipEditing.Split(p, id, double.Parse(value, System.Globalization.CultureInfo.InvariantCulture))); break;
             case "duplicar": Console.WriteLine(ClipEditing.Duplicate(p, id)); break;
+            case "borrar-rango":
+                Console.WriteLine($"{ClipEditing.DeleteRange(p, id, double.Parse(value, System.Globalization.CultureInfo.InvariantCulture), a.Double("hasta", 0))} clip(s) cambiados");
+                break;
             default:
                 var mode = op switch
                 {

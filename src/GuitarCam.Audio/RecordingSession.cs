@@ -352,14 +352,14 @@ public sealed class TakeRecorder : IDisposable
 
     /// <summary>
     /// Port of <c>App.tsx:1001-1005</c>: preserves a custom track name or builds
-    /// <c>"Toma N — Base Rítmica / Solo / Punteo / Arreglo"</c> according to the lane slot.
+    /// <c>"Canal N — Base Rítmica / Solo / Punteo / Arreglo"</c> according to the lane slot.
     /// </summary>
     public static string DefaultTakeName(int takeNumber, int slot, string? existingTrackName = null)
     {
         if (!string.IsNullOrWhiteSpace(existingTrackName) && !DefaultTrackNameRegex.IsMatch(existingTrackName.Trim()))
             return existingTrackName.Trim();
         string roleLabel = slot == 0 ? "Base Rítmica" : slot == 1 ? "Solo / Punteo" : "Arreglo";
-        return $"Toma {takeNumber} — {roleLabel}";
+        return $"Canal {takeNumber} — {roleLabel}";
     }
 
     /// <summary>

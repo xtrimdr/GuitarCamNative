@@ -143,8 +143,8 @@ public static class ClipEditing
 
     public static string AddMedia(Project p, string mediaId, string? selectedTrackId)
     {
-        var media = p.FindMedia(mediaId) ?? throw new ArgumentException("No encontré esa toma en el historial.");
-        if (p.Tracks.Any(t => t.Clips.Any(c => c.MediaId == mediaId))) throw new ArgumentException("Esa toma ya está en el timeline.");
+        var media = p.FindMedia(mediaId) ?? throw new ArgumentException("No encontré ese canal en el historial.");
+        if (p.Tracks.Any(t => t.Clips.Any(c => c.MediaId == mediaId))) throw new ArgumentException("Ese canal ya está en el timeline.");
         var target = p.Tracks.Find(t => t.Id == selectedTrackId && t.Clips.Count == 0);
         Channel? previousChannel = null;
         Clip? previousClip = null;
@@ -223,6 +223,51 @@ public static class ClipEditing
         left.FadeOutSec = left.VideoFadeOutSec = 0;
         track.Clips.Insert(track.Clips.IndexOf(left) + 1, right);
         return right.Id;
+    }
+
+    /// <summary>
+    /// Deletes what is between two timeline times on one track (native only): every clip the range touches is cut
+    /// there, the middle goes and the rest stays where it was, leaving a gap (nothing slides to fill it). A clip
+    /// inside the range goes whole; one that sticks out on one side is trimmed; one that sticks out on both is
+    /// split in two, the left piece keeping the fade in and the right one the fade out (the cut edges get none).
+    /// A leftover shorter than <see cref="ClipEnvelope.MinClipSec"/> goes too, like the rest of the editing does not
+    /// allow smaller clips. Media files are never touched. Returns how many clips changed (0 = the range was empty).
+    /// </summary>
+    public static int DeleteRange(Project p, string trackId, double startSec, double endSec, Func<Clip, double?>? lengthOf = null)
+    {
+        var track = p.Tracks.Find(t => t.Id == trackId) ?? throw new ArgumentException("No encontré esa pista.");
+        if (!(endSec > startSec)) return 0;
+        int changed = 0;
+        foreach (var clip in track.Clips.ToList())
+        {
+            var w = Window(clip, p.FindMedia(clip.MediaId), lengthOf?.Invoke(clip));
+            if (endSec <= w.Start || startSec >= w.End) continue;
+            changed++;
+            bool keepLeft = startSec - w.Start >= ClipEnvelope.MinClipSec;
+            bool keepRight = w.End - endSec >= ClipEnvelope.MinClipSec;
+            if (!keepLeft && !keepRight) { RemoveClip(p, clip.Id); continue; }
+            if (keepLeft && keepRight)
+            {
+                var right = Copy(clip);
+                right.Id = Ids.New("clp");
+                right.TrimStartSec = Fixed3(endSec - w.Origin);
+                right.FadeInSec = right.VideoFadeInSec = 0;
+                clip.TrimEndSec = Fixed3(w.Dur - (startSec - w.Origin));
+                clip.FadeOutSec = clip.VideoFadeOutSec = 0;
+                track.Clips.Insert(track.Clips.IndexOf(clip) + 1, right);
+            }
+            else if (keepLeft)
+            {
+                clip.TrimEndSec = Fixed3(w.Dur - (startSec - w.Origin));
+                clip.FadeOutSec = clip.VideoFadeOutSec = 0;
+            }
+            else
+            {
+                clip.TrimStartSec = Fixed3(endSec - w.Origin);
+                clip.FadeInSec = clip.VideoFadeInSec = 0;
+            }
+        }
+        return changed;
     }
 
     /// <summary>

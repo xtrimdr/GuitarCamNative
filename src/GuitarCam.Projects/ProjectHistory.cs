@@ -201,11 +201,11 @@ public static class ProjectHistory
                 if (i > 0) parts.Add(new(", "));
                 parts.Add(Quote(names[i]));
             }
-            parts.Add(new(" y "));
+            parts.Add(new(T("act.and", " y ")));
             parts.Add(Quote(names[^1]));
             return parts;
         }
-        return [new($"{names.Count} tomas", true)];
+        return [new(T("act.nChannels", "{0} canales", names.Count), true)];
     }
 
     /// <summary>
@@ -240,57 +240,57 @@ public static class ProjectHistory
                 int recorded = g.Where(x => x.Type == "take-recorded").Select(x => Str(x, "takeId")).Distinct().Count();
                 int touched = g.Select(x => Str(x, "takeId")).Distinct().Count();
                 lines.Add(new(at, recorded > 0 ? "mic" : "minus", [new(recorded > 0
-                    ? $"Grabaste {(recorded == 1 ? "una toma" : $"{recorded} tomas")} que después borraste"
-                    : $"Moviste {(touched == 1 ? "una toma" : $"{touched} tomas")} que después borraste")]));
+                    ? T("act.ghost.recorded", "Grabaste {0} que después borraste", Channels(recorded))
+                    : T("act.ghost.moved", "Moviste {0} que después borraste", Channels(touched)))]));
                 continue;
             }
-            var names = g.Select(x => TakeName(x) ?? "una toma").Distinct().ToList();
+            var names = g.Select(x => TakeName(x) ?? T("act.aChannel", "un canal")).Distinct().ToList();
             switch (e.Type)
             {
                 case "session-created":
-                    lines.Add(new(at, "plus", [new("Creaste el proyecto")]));
+                    lines.Add(new(at, "plus", [new(T("act.created", "Creaste el proyecto"))]));
                     break;
                 case "session-duplicated":
-                    lines.Add(new(at, "plus", [new("Proyecto duplicado de "), Quote(FileName(Str(e, "from")) is { Length: > 0 } f ? f : "otro proyecto")]));
+                    lines.Add(new(at, "plus", [new(T("act.duplicatedFrom", "Proyecto duplicado de ")), Quote(FileName(Str(e, "from")) is { Length: > 0 } f ? f : T("act.otherProject", "otro proyecto"))]));
                     break;
                 case "session-renamed":
-                    lines.Add(new(at, "folder", [new("Renombraste el proyecto: "), Quote(Str(e, "from") ?? ""), new(" → "), Quote(Str(e, "to") ?? "")]));
+                    lines.Add(new(at, "folder", [new(T("act.renamed", "Renombraste el proyecto: ")), Quote(Str(e, "from") ?? ""), new(" → "), Quote(Str(e, "to") ?? "")]));
                     break;
                 case "take-recorded":
-                    lines.Add(new(at, "mic", [new("Grabaste "), Quote(names[0])]));
+                    lines.Add(new(at, "mic", [new(T("act.recorded", "Grabaste ")), Quote(names[0])]));
                     break;
                 case "take-removed":
-                    lines.Add(new(at, "minus", [new("Sacaste "), .. ListNames(names), new(" del timeline")]));
+                    lines.Add(new(at, "minus", [new(T("act.removed", "Sacaste ")), .. ListNames(names), new(T("act.removed.end", " del timeline"))]));
                     break;
                 case "take-restored":
-                    lines.Add(new(at, "plus", [new("Volviste a usar "), .. ListNames(names)]));
+                    lines.Add(new(at, "plus", [new(T("act.restored", "Volviste a usar ")), .. ListNames(names)]));
                     break;
                 case "unused-purged":
                 {
                     var purged = Strings(e, "names");
                     int n = Strings(e, "takeIds").Count;
-                    var who = purged.Count > 0 ? ListNames(purged) : [new($"{n} {(n == 1 ? "toma" : "tomas")}")];
-                    lines.Add(new(at, "trash", [new("Mandaste "), .. who, new($" a la Papelera{BytesSuffix(e)}")], Rec: true));
+                    var who = purged.Count > 0 ? ListNames(purged) : [new(Channels(n))];
+                    lines.Add(new(at, "trash", [new(T("act.sent", "Mandaste ")), .. who, new(T("act.toTrash", " a la Papelera{0}", BytesSuffix(e)))], Rec: true));
                     break;
                 }
                 case "exported":
-                    lines.Add(new(at, "film", [new("Exportaste "), Quote(FileName(Str(e, "file") ?? e.Name) is { Length: > 0 } x ? x : "un video")]));
+                    lines.Add(new(at, "film", [new(T("act.exported", "Exportaste ")), Quote(FileName(Str(e, "file") ?? e.Name) is { Length: > 0 } x ? x : T("act.aVideo", "un video"))]));
                     break;
                 case "export-deleted":
-                    lines.Add(new(at, "trash", [new("Mandaste "), Quote(FileName(Str(e, "file")) is { Length: > 0 } d ? d : "un video"), new($" a la Papelera{BytesSuffix(e)}")], Rec: true));
+                    lines.Add(new(at, "trash", [new(T("act.sent", "Mandaste ")), Quote(FileName(Str(e, "file")) is { Length: > 0 } d ? d : T("act.aVideo", "un video")), new(T("act.toTrash", " a la Papelera{0}", BytesSuffix(e)))], Rec: true));
                     break;
                 // native-only entries
                 case "imported-from-web":
-                    lines.Add(new(at, "plus", [new("Importaste el proyecto de la app web")]));
+                    lines.Add(new(at, "plus", [new(T("act.importedWeb", "Importaste el proyecto de la app web"))]));
                     break;
                 case "snapshot-restored":
-                    lines.Add(new(at, "history", [new("Volviste a la versión "), Quote(e.Name ?? "")]));
+                    lines.Add(new(at, "history", [new(T("act.versionBack", "Volviste a la versión ")), Quote(e.Name ?? "")]));
                     break;
                 case "recording-recovered":
-                    lines.Add(new(at, "mic", [new("Recuperé "), Quote(e.Name ?? "una toma"), new(" después de un corte")]));
+                    lines.Add(new(at, "mic", [new(T("act.recovered", "Recuperé ")), Quote(e.Name ?? T("act.aChannel", "un canal")), new(T("act.recovered.end", " después de un corte"))]));
                     break;
                 case "media-adopted":
-                    lines.Add(new(at, "plus", [new("Sumé archivos que estaban en media: "), Quote(e.Name ?? "")]));
+                    lines.Add(new(at, "plus", [new(T("act.adopted", "Sumé archivos que estaban en media: ")), Quote(e.Name ?? "")]));
                     break;
                 default:
                     lines.Add(new(at, "history", [new(e.Type)]));
@@ -300,6 +300,9 @@ public static class ProjectHistory
         lines.Reverse();
         return lines;
     }
+
+    static string T(string key, string es, params object?[] args) => Texts.T(key, es, args);
+    static string Channels(int n) => n == 1 ? T("act.oneChannel", "un canal") : T("act.nChannels", "{0} canales", n);
 
     static List<string> Strings(LogEntry e, string key) =>
         e.Extra?.TryGetValue(key, out var v) == true && v.ValueKind == JsonValueKind.Array
@@ -330,10 +333,10 @@ public static class ProjectHistory
     public static string DayLabel(DateTime local, DateTime? today = null)
     {
         var t = (today ?? DateTime.Now).Date;
-        if (local.Date == t) return "Hoy";
-        if (local.Date == t.AddDays(-1)) return "Ayer";
-        var es = CultureInfo.GetCultureInfo("es-AR");
-        string label = local.ToString(local.Year != t.Year ? "dddd, d 'de' MMMM 'de' yyyy" : "dddd, d 'de' MMMM", es);
+        if (local.Date == t) return T("hist.today", "Hoy");
+        if (local.Date == t.AddDays(-1)) return T("hist.yesterday", "Ayer");
+        var es = Texts.Culture;
+        string label = local.ToString(local.Year != t.Year ? T("hist.day.fmtYear", "dddd, d 'de' MMMM 'de' yyyy") : T("hist.day.fmt", "dddd, d 'de' MMMM"), es);
         return char.ToUpper(label[0], es) + label[1..];
     }
 
@@ -341,9 +344,9 @@ public static class ProjectHistory
     public static string FormatAgo(DateTime utc, DateTime? nowUtc = null)
     {
         double sec = ((nowUtc ?? DateTime.UtcNow) - utc).TotalSeconds;
-        if (sec < 60) return "recién";
-        if (sec < 3600) return $"hace {(int)(sec / 60)} min";
-        if (sec < 86400) return $"hace {(int)(sec / 3600)} h";
+        if (sec < 60) return T("hist.ago.now", "recién");
+        if (sec < 3600) return T("hist.ago.min", "hace {0} min", (int)(sec / 60));
+        if (sec < 86400) return T("hist.ago.h", "hace {0} h", (int)(sec / 3600));
         var local = utc.ToLocalTime();
         return $"{DayLabel(local)} {local:HH:mm}";
     }

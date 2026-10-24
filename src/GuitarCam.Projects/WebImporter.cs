@@ -79,7 +79,7 @@ public static class WebImporter
         foreach (var t in Arr(root, "takes"))
         {
             string id = Str(t, "id") ?? Ids.New("med");
-            string name = Str(t, "name") ?? $"Toma {Num(t, "number", 0)}";
+            string name = Str(t, "name") ?? $"Canal {Num(t, "number", 0)}";
             string? audio = Bring(Str(t, "audioFile"), name);
             string? video = Bring(Str(t, "videoFile"), name);
             var media = new Media

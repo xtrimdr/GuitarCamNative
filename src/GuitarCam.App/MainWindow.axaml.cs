@@ -2,10 +2,12 @@ using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using GuitarCam.App.Audio;
+using GuitarCam.App.Controls;
 using GuitarCam.App.Model;
 using GuitarCam.App.Video;
 using GuitarCam.Audio;
@@ -107,15 +109,19 @@ public partial class MainWindow : Window
             if (solo) x.Channel.Solo = !x.Channel.Solo;
             else x.Channel.Muted = !x.Channel.Muted;
         }, solo ? "solo" : "mute");
+        ClearMutesButton.Click += (_, _) => ClearAllToggles(false);
+        ClearSolosButton.Click += (_, _) => ClearAllToggles(true);
         InitTimelineEditing();
         InitTransport();
         InitPreview();
         InitMode();
+        InitImport();
 
         InitInspector();
         InitProjectBar();
         InitMixer();
         InitTopBar();
+        InitShortcutTips();
 
         AddHandler(KeyDownEvent, OnKey, RoutingStrategies.Tunnel);
 
@@ -193,7 +199,8 @@ public partial class MainWindow : Window
         };
     }
 
-    void Status(string s) => StatusText.Text = s;
+    // messages go to the bell in the title bar; Status("") (the old "clear") is ignored there
+    void Status(string s) => Bell.Add(s);
 
     // --- saving ----------------------------------------------------------------------------------
 
@@ -293,7 +300,11 @@ public partial class MainWindow : Window
         store?.Dispose();
         store = null;
         RefreshColorPanel();
-        if (clearUndo) undo.Clear();
+        if (clearUndo)
+        {
+            undo.Clear();
+            armedIds = null;
+        }
         UpdateUndoButtons();
     }
 
@@ -361,7 +372,7 @@ public partial class MainWindow : Window
             {
                 if (audio.TryGetValue(m.Id, out var a)) return a;
                 int index = audio.Count + 1;
-                Dispatcher.UIThread.Post(() => Projects.ReportProgress($"Cargando tomas… {index}/{total} · {m.Name}"));
+                Dispatcher.UIThread.Post(() => Projects.ReportProgress($"Cargando canales… {index}/{total} · {m.Name}"));
                 try
                 {
                     a = st.Resolve(m.Audio) is { } path && File.Exists(path) ? new MediaAudio(path) : null;
@@ -425,6 +436,33 @@ public partial class MainWindow : Window
         else engine.Play();
     }
 
+    /// <summary>Controls whose tooltip names a shortcut: text and action, refreshed when the user changes a key.</summary>
+    readonly List<(Control Control, string Text, string Action)> shortcutTips = [];
+
+    /// <summary>Tooltips with keys come from <see cref="Shortcuts"/>, so a key changed in Configuración shows up everywhere.</summary>
+    void InitShortcutTips()
+    {
+        shortcutTips.AddRange(
+        [
+            (UndoButton, "Deshacer", "undo"), (RedoButton, "Rehacer", "redo"), (TimelineFitButton, "Ver todo (ajustar el zoom al ancho)", "fit"),
+            (ToStartButton, "Volver al inicio", "toStart"), (CountInToggle, "Cuenta de 4 tiempos antes de grabar", "countIn"),
+            (ClickToggle, "Metrónomo al grabar y al reproducir", "click"), (ViewSwitch, "Alternar timeline / mixer", "mixer"), (FitButton, "Ver todo", "fit"),
+        ]);
+        ApplyShortcutTips();
+        Shortcuts.Changed += ApplyShortcutTips;
+    }
+
+    void ApplyShortcutTips()
+    {
+        foreach (var (c, text, action) in shortcutTips) ToolTip.SetTip(c, Shortcuts.Tip(text, action));
+        string keys = string.Join(" / ", new[] { Shortcuts.Label("play"), Shortcuts.Label("record") }.Where(k => k.Length > 0));
+        ToolTip.SetTip(RecStopButton, keys.Length > 0 ? $"Detener y guardar el canal ({keys})" : "Detener y guardar el canal");
+        ToolTip.SetTip(PlayButton, Shortcuts.Tip(engine.Playing ? "Pausa" : "Reproducir desde el cabezal", "play"));
+        recTip = null;
+        mixerKey = "";
+        RefreshMixer();
+    }
+
     async void OnKey(object? sender, KeyEventArgs e)
     {
         if (Export.IsVisible)
@@ -451,67 +489,74 @@ public partial class MainWindow : Window
         if (e.Source is Control source && source.FindAncestorOfType<TextBox>(true) != null) return;
         if (restoring) { e.Handled = true; return; }
         if (RecordingBusy && await RecordingKey(e)) return;
-        if ((e.KeyModifiers & KeyModifiers.Control) != 0)
+        if (e.Key == Key.Escape)
         {
-            if (e.Key is Key.Z or Key.Y)
-            {
-                e.Handled = true;
-                await RestoreEdit(e.Key == Key.Y || (e.KeyModifiers & KeyModifiers.Shift) != 0);
-            }
-            else if (e.Key == Key.S)
-            {
-                e.Handled = true;
-                SaveSoon();
-            }
-            return;
-        }
-        if ((e.KeyModifiers & KeyModifiers.Alt) != 0)
-        {
-            if (e.Key != Key.X) return;
+            Timeline.CancelGesture();
+            Preview.CancelGesture();
             e.Handled = true;
-            await SplitAtPlayhead();
             return;
         }
-        if (e.Key is Key.Space or Key.Home or Key.C or Key.T or Key.R && !transportKeys.Add(e.Key)) { e.Handled = true; return; }
-        switch (e.Key)
+        var action = Shortcuts.Find(e);
+        if (action == null) return;
+        // held transport keys don't repeat (App.tsx ignores e.repeat)
+        if (action is "play" or "toStart" or "click" or "countIn" or "tap" or "record" && !transportKeys.Add(e.Key)) { e.Handled = true; return; }
+        switch (action)
         {
-            case Key.Escape:
-                Timeline.CancelGesture();
-                Preview.CancelGesture();
+            case "undo" or "redo":
+                e.Handled = true;
+                await RestoreEdit(action == "redo");
+                return;
+            case "save":
+                SaveSoon();
                 break;
-            case Key.Delete:
-                await DeleteTimelineSelection();
+            case "split":
+                e.Handled = true;
+                await SplitAtPlayhead();
+                return;
+            case "delete":
+                await (Timeline.Range != null ? DeleteRangeSelection() : DeleteTimelineSelection());
                 break;
-            case Key.Space:
+            case "play":
                 TogglePlay();
                 break;
-            case Key.R:
+            case "record":
                 StartRecording();
                 break;
-            case Key.Home:
+            case "arm" when sel != null:
+                ToggleArm(sel);
+                break;
+            case "toStart":
                 engine.Seek(0);
                 break;
-            case Key.F:
+            case "fit":
                 Timeline.FitAll();
                 break;
-            case Key.D:
+            case "duplicate":
                 await DuplicateSelection();
                 break;
-            case Key.X:
+            case "mixer":
                 SetMixerView(!mixerView);
                 break;
-            case Key.C:
-                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift)) CountInToggle.IsChecked = CountInToggle.IsChecked != true;
-                else ClickToggle.IsChecked = ClickToggle.IsChecked != true;
+            case "click":
+                ClickToggle.IsChecked = ClickToggle.IsChecked != true;
                 break;
-            case Key.T:
+            case "countIn":
+                CountInToggle.IsChecked = CountInToggle.IsChecked != true;
+                break;
+            case "tap":
                 Tempo.Tap();
                 break;
-            case Key.M when sel != null:
+            case "mute" when sel != null:
                 Edit(t => t.Channel.Muted = !t.Channel.Muted, "mute");
                 break;
-            case Key.S when sel != null:
+            case "solo" when sel != null:
                 Edit(t => t.Channel.Solo = !t.Channel.Solo, "solo");
+                break;
+            case "leftPanel":
+                SetInspectorCollapsed(inspectorExpanded.IsVisible);
+                break;
+            case "rightPanel":
+                SetProjectBarCollapsed(projectBarExpanded.IsVisible);
                 break;
             default:
                 return;
@@ -528,11 +573,13 @@ public partial class MainWindow : Window
         bool timed = engine.Playing || RecordingBusy;
         videoFade |= timed != Preview.Timed;
         Preview.Timed = timed;
+        TakeArmedPeaks();
+        RefreshClearButtons();
         foreach (var t in tracks)
         {
-            t.ShowL = Math.Max(t.MeterL, t.ShowL * 0.82f);
-            t.ShowR = Math.Max(t.MeterR, t.ShowR * 0.82f);
-            t.MeterL = t.MeterR = 0;
+            t.ShowL = Math.Max(Math.Max(t.MeterL, t.InputL), t.ShowL * 0.82f);
+            t.ShowR = Math.Max(Math.Max(t.MeterR, t.InputR), t.ShowR * 0.82f);
+            t.MeterL = t.MeterR = t.InputL = t.InputR = 0;
             double gr = t.GrDb;
             t.GrDb = 0;
             t.GrPeak = gr;
@@ -555,7 +602,7 @@ public partial class MainWindow : Window
         TickTopBar();
         TickInspectorSpectrum();
         if (Settings.IsVisible) Settings.Meter.Push(m.InL, m.InR);
-        if (engine.IsOpen) DspText.Text = $"{engine.LoadPercent:0.0} %";
+        if (engine.IsOpen) ShowDsp(engine.LoadPercent);
 
         if (sel != null)
         {
@@ -581,6 +628,43 @@ public partial class MainWindow : Window
         UpdateUndoButtons();
         RefreshInspectorText();
         Timeline.InvalidateVisual();
+    }
+
+    /// <summary>Cubase's "deactivate all mute / solo states" (native only): one undo step for every track.</summary>
+    void ClearAllToggles(bool solo)
+    {
+        if (syncing || restoring || store == null || store.ReadOnly) return;
+        var lit = tracks.Where(t => solo ? t.Channel.Solo : t.Channel.Muted).ToList();
+        if (lit.Count == 0) return;
+        undo.Checkpoint(store.Project);
+        foreach (var t in lit)
+        {
+            if (solo) t.Channel.Solo = false; else t.Channel.Muted = false;
+            t.ApplyChannel();
+        }
+        MarkDirty();
+        UpdateUndoButtons();
+        RefreshInspectorText();
+        Timeline.InvalidateVisual();
+        string what = lit.Count == 1 ? "1 pista" : $"{lit.Count} pistas";
+        Status(solo ? $"Saqué el solo de {what}" : $"Volví a activar el sonido de {what}");
+    }
+
+    /// <summary>The timeline corner's clear-all M / S, lit like the track toggles while any track has one.</summary>
+    void RefreshClearButtons()
+    {
+        bool editable = store != null && !store.ReadOnly && !restoring;
+        foreach (var (b, solo) in new[] { (ClearMutesButton, false), (ClearSolosButton, true) })
+        {
+            bool lit = tracks.Any(t => solo ? t.Channel.Solo : t.Channel.Muted);
+            if (b.Classes.Contains("lit") == lit && b.IsEnabled == editable) continue;
+            b.IsEnabled = editable;
+            b.Classes.Set("lit", lit);
+            b.Background = lit ? (solo ? Palette.Accent : Palette.Brush("#f59e0b")) : Brushes.Transparent;
+            b.BorderBrush = lit ? Brushes.Transparent : Palette.Line;
+            ((TextBlock)b.Content!).Foreground = lit ? Palette.App : Palette.Dim;
+            ToolTip.SetTip(b, lit ? (solo ? "Quitar todos los solo" : "Quitar todos los mute") : (solo ? "No hay pistas en solo" : "No hay pistas silenciadas"));
+        }
     }
 
     void UpdateUndoButtons()

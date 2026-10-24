@@ -19,10 +19,9 @@ public partial class MainWindow
     DispatcherTimer? timelinePrefs;
     ContextMenu? timelineMenu;
     static readonly string[] SnapIds = ["off", "bar", "1/2", "1/4", "1/8", "1/8T", "1/16"];
-    static readonly string[] SnapLabels = ["Sin imán", "Compás", "1/2", "1/4", "1/8", "1/8T", "1/16"];
+    static readonly string[] SnapLabels = [Loc.T("snap.label.0"), Loc.T("snap.label.1"), "1/2", "1/4", "1/8", "1/8T", "1/16"];
     /// <summary>What each grid snaps to, in musician's words: the snap box's tooltip and the hint of each option.</summary>
-    static readonly string[] SnapHints = ["Todo se mueve libre, sin pegarse a nada", "Se pega al principio de cada compás", "Se pega cada blanca (medio compás)",
-        "Se pega cada negra (cada tiempo)", "Se pega cada corchea", "Se pega cada corchea de tresillo", "Se pega cada semicorchea"];
+    static readonly string[] SnapHints = [Loc.T("snap.hint.0"), Loc.T("snap.hint.1"), Loc.T("snap.hint.2"), Loc.T("snap.hint.3"), Loc.T("snap.hint.4"), Loc.T("snap.hint.5"), Loc.T("snap.hint.6")];
 
     void SetRulerMode(bool bars)
     {
@@ -50,8 +49,8 @@ public partial class MainWindow
         SnapBox.Background = on ? Palette.AccentSoft : Palette.Raised;
         SnapBox.BorderBrush = on ? (Avalonia.Media.IBrush)this.FindResource("Accent40")! : Palette.Line;
         ToolTip.SetTip(SnapPanel, on
-            ? $"Imán a la grilla ({SnapLabels[i]}): {SnapHints[i].ToLowerInvariant()}. Lo usan el cabezal, mover clips, recortes y fades (Alt: sin imán)"
-            : "Imán apagado: todo se mueve libre. Elegí una grilla para que el cabezal, los clips, los recortes y los fades se peguen a los tiempos");
+            ? Loc.T("snap.on.tip", SnapLabels[i], SnapHints[i].ToLowerInvariant())
+            : Loc.T("snap.off.tip"));
     }
 
     void InitTimelineEditing()
@@ -73,6 +72,7 @@ public partial class MainWindow
             string mode = Timeline.RulerInBars ? "bars" : "time";
             string grid = Timeline.SnapMode;
             string h = Timeline.TrackHeight.ToString(CultureInfo.InvariantCulture);
+            string hw = Timeline.HeaderW.ToString(CultureInfo.InvariantCulture);
             try
             {
                 await Task.Run(() =>
@@ -80,9 +80,10 @@ public partial class MainWindow
                     AppConfig.Set("rulerMode", mode);
                     AppConfig.Set("timelineSnap", grid);
                     AppConfig.Set("trackHeight", h);
+                    AppConfig.Set("headerWidth", hw);
                 });
             }
-            catch (Exception e) { Status($"No pude recordar la vista del timeline: {e.Message}"); }
+            catch (Exception e) { Status(Loc.T("timeline.viewSaveError", e.Message)); }
         };
         Closed += (_, _) => timelinePrefs.Stop();
         void Prefs() { timelinePrefs.Stop(); timelinePrefs.Start(); }
@@ -113,6 +114,40 @@ public partial class MainWindow
             if (volume is { } v) t.Channel.Volume = v;
             if (pan is { } p) t.Channel.Pan = p;
         }, volume != null ? "volume" : "pan");
+        Timeline.EffectRequested += (track, fx, toggle, amount) =>
+        {
+            if (fx == FxIcon.Comp)
+            {
+                StripComp(track, c => { if (toggle) c.On = !c.On; if (amount is { } a) { c.Amount = a; c.On = true; } }, toggle ? "on" : "amount");
+                return;
+            }
+            EditTrack(track, t =>
+            {
+                var ch = t.Channel;
+                switch (fx)
+                {
+                    case FxIcon.Sat:
+                        if (toggle) ch.Sat.On = !ch.Sat.On;
+                        if (amount is { } s) { ch.Sat.Amount = s; ch.Sat.On = true; }
+                        break;
+                    case FxIcon.Reverb:
+                        if (toggle) ch.ReverbOn = !ch.ReverbOn;
+                        if (amount is { } r) { ch.ReverbSend = r; ch.ReverbOn = true; }
+                        break;
+                    default:
+                        if (toggle) ch.DelayOn = !ch.DelayOn;
+                        if (amount is { } d) { ch.DelaySend = d; ch.DelayOn = true; }
+                        break;
+                }
+            }, fx + (toggle ? ".on" : ".amount"));
+        };
+        Timeline.HeaderWidthChanged += w =>
+        {
+            TimelineToolbar.Width = w;
+            Prefs();
+        };
+        if (double.TryParse(AppConfig.Get("headerWidth"), CultureInfo.InvariantCulture, out double headerW))
+            Timeline.SetHeaderWidth(headerW);
         Timeline.ClipEditCommitted += async (clip, target, swap) => await EditTimeline(p =>
         {
             ClipEditing.Replace(p, clip);
@@ -152,7 +187,7 @@ public partial class MainWindow
         }
         catch (Exception e)
         {
-            Status($"No pude completar la edición del timeline: {e.Message}. Podés deshacer el cambio.");
+            Status(Loc.T("timeline.editError", e.Message));
         }
         finally
         {
@@ -181,7 +216,7 @@ public partial class MainWindow
             .Select(c => p.FindMedia(c.MediaId)).OfType<Media>().DistinctBy(m => m.Id).ToList();
         if (missing.Count > 0)
         {
-            Status("Cargando la toma…");
+            Status(Loc.T("timeline.loading"));
             var loaded = await Task.Run(() => missing.Select(m =>
             {
                 try { return (m.Id, Audio: st.Resolve(m.Audio) is { } path && File.Exists(path) ? new MediaAudio(path) : null); }
@@ -229,6 +264,24 @@ public partial class MainWindow
         await OpenMissingVideos(st);
     }
 
+    /// <summary>
+    /// Supr or the menu on a range selected with Shift+drag (native only): cuts that stretch out of every clip of
+    /// its track (<see cref="ClipEditing.DeleteRange"/>), leaving a gap, in one undo step.
+    /// </summary>
+    async Task DeleteRangeSelection()
+    {
+        if (Timeline.Range is not { } range || store == null) return;
+        Timeline.ClearRange();
+        var lengths = tracks.SelectMany(t => t.Clips).ToDictionary(c => c.Clip.Id, c => c.LengthSec);
+        int changed = 0;
+        await EditTimeline(p =>
+        {
+            changed = ClipEditing.DeleteRange(p, range.TrackId, range.Start, range.End, c => lengths.TryGetValue(c.Id, out double l) ? l : null);
+            return range.TrackId;
+        }, "range-deleted");
+        Status(changed == 0 ? Loc.T("range.nothing") : Loc.T("range.deleted", range.End - range.Start));
+    }
+
     Task DeleteTimelineSelection()
     {
         if (sel == null || store == null) return Task.CompletedTask;
@@ -253,8 +306,8 @@ public partial class MainWindow
     /// <summary>Alt+X, like Studio One: splits the clip under the playhead and selects the right piece.</summary>
     async Task SplitAtPlayhead()
     {
-        if (sel == null) { Status("Elegí una pista y poné el cabezal sobre el clip que querés dividir."); return; }
-        if (ClipUnderPlayhead() is not { } clip) { Status("El cabezal no está sobre ningún clip de esta pista: ponelo donde querés cortar."); return; }
+        if (sel == null) { Status(Loc.T("timeline.split.pick")); return; }
+        if (ClipUnderPlayhead() is not { } clip) { Status(Loc.T("timeline.split.nowhere")); return; }
         string trackId = sel.Track.Id;
         double at = engine.PositionSec, length = clip.LengthSec;
         string? right = null;
@@ -266,7 +319,7 @@ public partial class MainWindow
     async Task DuplicateSelection()
     {
         var clip = sel?.Clips.FirstOrDefault(c => c.Clip.Id == Timeline.SelectedClipId);
-        if (sel == null || clip == null) { Status("Elegí el clip que querés duplicar."); return; }
+        if (sel == null || clip == null) { Status(Loc.T("timeline.dup.pick")); return; }
         string trackId = sel.Track.Id;
         string? copy = null;
         await EditTimeline(p => { copy = ClipEditing.Duplicate(p, clip.Clip.Id, clip.LengthSec); return trackId; }, "clip-duplicated");
@@ -328,12 +381,13 @@ public partial class MainWindow
         var p = store.Project;
         var list = new List<object>
         {
-            MenuAction("Pista vacía", () => EditTimeline(ClipEditing.AddEmpty, "track-added"), "grabás después con R", !store.ReadOnly, icon: "empty"),
-            new Separator(), new MenuItem { Header = "DESDE EL HISTORIAL", IsEnabled = false, FontSize = 10.5 },
+            MenuAction(Loc.T("menu.emptyTrack"), () => EditTimeline(ClipEditing.AddEmpty, "track-added"), Loc.T("menu.emptyTrack.hint"), !store.ReadOnly, icon: "empty"),
+            MenuAction(Loc.T("menu.import"), PickAudioToImport, Loc.T("menu.import.hint"), CanImport(), icon: ""),
+            new Separator(), new MenuItem { Header = Loc.T("menu.fromHistory"), IsEnabled = false, FontSize = 10.5 },
         };
         var used = p.Tracks.SelectMany(t => t.Clips).Select(c => c.MediaId).ToHashSet();
         var unused = p.Media.Where(m => !used.Contains(m.Id)).ToList();
-        if (unused.Count == 0) list.Add(new MenuItem { Header = "No hay tomas sin usar.", IsEnabled = false, FontSize = 12 });
+        if (unused.Count == 0) list.Add(new MenuItem { Header = Loc.T("menu.noUnused"), IsEnabled = false, FontSize = 12 });
         foreach (var m in unused)
         {
             string? selected = sel?.Track.Id;
@@ -350,52 +404,57 @@ public partial class MainWindow
         var clip = clicked ?? track.Clips.FirstOrDefault(c => c.Clip.Id == Timeline.SelectedClipId) ?? track.Clips.FirstOrDefault();
         var list = new List<object> { new MenuItem { Header = track.Track.Name, IsEnabled = false, FontSize = 11 } };
         Task Command(Action<Project> action, string type) => EditTimeline(p => { action(p); return track.Track.Id; }, type, clip?.Clip.Id);
+        if (Timeline.Range is { } range && range.TrackId == track.Track.Id)
+        {
+            list.Add(MenuAction(Loc.T("menu.deleteRange"), DeleteRangeSelection, Shortcuts.Label("delete"), enabled, danger: true));
+            list.Add(new Separator());
+        }
         if (clip != null)
         {
             string id = clip.Clip.Id;
-            list.Add(MenuAction(track.Channel.Muted ? "Activar sonido" : "Silenciar", () =>
+            list.Add(MenuAction(track.Channel.Muted ? Loc.T("menu.unmute") : Loc.T("menu.mute"), () =>
             {
                 EditTrack(track, t => t.Channel.Muted = !t.Channel.Muted, "mute");
                 return Task.CompletedTask;
             }, "M", enabled));
-            list.Add(MenuAction(track.Channel.Solo ? "Quitar solo" : "Solo", () =>
+            list.Add(MenuAction(track.Channel.Solo ? Loc.T("menu.unsolo") : Loc.T("menu.solo"), () =>
             {
                 EditTrack(track, t => t.Channel.Solo = !t.Channel.Solo, "solo");
                 return Task.CompletedTask;
             }, "S", enabled));
             if (!AudioOnly)
-                list.Add(MenuAction(track.Track.Video ? "Sacar del video" : "Mostrar en el video", () => SetInVideo(track, !track.Track.Video),
+                list.Add(MenuAction(track.Track.Video ? Loc.T("menu.hideVideo") : Loc.T("menu.showVideo"), () => SetInVideo(track, !track.Track.Video),
                     enabled: enabled, icon: "\uE714"));
             list.Add(new Separator());
             double at = engine.PositionSec;
             bool under = at > clip.ClipStartSec + ClipEnvelope.MinClipSec && at < clip.ClipEndSec - ClipEnvelope.MinClipSec;
-            list.Add(MenuAction("Dividir en el cabezal", async () =>
+            list.Add(MenuAction(Loc.T("menu.split"), async () =>
             {
                 string? right = null;
                 await EditTimeline(p => { right = ClipEditing.Split(p, id, at, clip.LengthSec); return track.Track.Id; }, "clip-split");
                 if (right != null) Timeline.SelectClip(Timeline.Selected, right);
             }, "Alt+X", enabled && under));
-            list.Add(MenuAction("Duplicar", async () =>
+            list.Add(MenuAction(Loc.T("menu.duplicate"), async () =>
             {
                 string? copy = null;
                 await EditTimeline(p => { copy = ClipEditing.Duplicate(p, id, clip.LengthSec); return track.Track.Id; }, "clip-duplicated");
                 if (copy != null) Timeline.SelectClip(Timeline.Selected, copy);
             }, "D", enabled));
-            list.Add(MenuAction("Llevar al inicio", () => Command(p => ClipEditing.ToStart(p, id, clip.LengthSec), "clip-moved"), enabled: enabled));
+            list.Add(MenuAction(Loc.T("menu.toStart"), () => Command(p => ClipEditing.ToStart(p, id, clip.LengthSec), "clip-moved"), enabled: enabled));
             var w = ClipEditing.Window(clip.Clip, clip.Media, clip.LengthSec);
-            list.Add(MenuAction("Fijar el corte en 0", () => Command(p => ClipEditing.FixCut(p, id, clip.LengthSec), "clip-trimmed"),
+            list.Add(MenuAction(Loc.T("menu.fixCut"), () => Command(p => ClipEditing.FixCut(p, id, clip.LengthSec), "clip-trimmed"),
                 w.AnchorCut > 0.0005 ? $"{w.AnchorCut:0.00} s" : null, enabled && w.AnchorCut > 0.0005));
             var c = clip.Clip;
-            list.Add(MenuAction("Restaurar recortes y fades", () => Command(p => ClipEditing.Reset(p, id), "clip-reset"),
+            list.Add(MenuAction(Loc.T("menu.resetClip"), () => Command(p => ClipEditing.Reset(p, id), "clip-reset"),
                 enabled: enabled && (c.TrimStartSec != 0 || c.TrimEndSec != 0 || c.FadeInSec != 0 || c.FadeOutSec != 0 || c.VideoFadeInSec != 0 || c.VideoFadeOutSec != 0)));
             list.Add(new Separator());
-            list.Add(MenuAction("Quitar clip", () => Command(p => ClipEditing.RemoveClip(p, id), "clip-removed"), "Supr", enabled, danger: true));
+            list.Add(MenuAction(Loc.T("menu.removeClip"), () => Command(p => ClipEditing.RemoveClip(p, id), "clip-removed"), "Supr", enabled, danger: true));
         }
-        list.Add(MenuAction("Quitar pista", () => EditTimeline(p => { ClipEditing.RemoveTrack(p, track.Track.Id); return null; }, "track-removed"),
+        list.Add(MenuAction(Loc.T("menu.removeTrack"), () => EditTimeline(p => { ClipEditing.RemoveTrack(p, track.Track.Id); return null; }, "track-removed"),
             clip == null ? "Supr" : null, enabled, danger: true));
         if (clip != null) list.Add(new MenuItem { IsEnabled = false, Header = new TextBlock
         {
-            Text = track.Clips.Count > 1 ? "El archivo del clip queda en Historial." : "Quitar clip deja la pista vacía. El archivo queda en Historial.", FontSize = 10.5,
+            Text = Loc.T(track.Clips.Count > 1 ? "menu.clipKept.many" : "menu.clipKept.last"), FontSize = 10.5,
             TextWrapping = Avalonia.Media.TextWrapping.Wrap, MaxWidth = 212,
         } });
         OpenTimelineMenu(Popup(list, 240), point, clip == null ? 80 : 390);

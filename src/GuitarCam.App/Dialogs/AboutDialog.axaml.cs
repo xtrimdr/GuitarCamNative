@@ -30,6 +30,10 @@ public sealed partial class AboutDialog : UserControl
         UiText.Text = $"Avalonia {Short(typeof(Avalonia.Application).Assembly)} · .NET {Environment.Version.ToString(3)}";
     }
 
+    /// <summary>The FFmpeg check runs at startup (<see cref="MainWindow"/>); null = not on the PATH.</summary>
+    public void SetFfmpeg(string? version) =>
+        VideoText.Text = version == null ? "FFmpeg no encontrado" : version.Length > 0 ? $"FFmpeg {version} (del PATH)" : "FFmpeg (del PATH)";
+
     /// <summary>"1.0.0 · 9395e4a": the informational version, with the commit the SDK appends after '+' shortened.</summary>
     static string AppVersion()
     {

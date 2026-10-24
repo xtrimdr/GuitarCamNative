@@ -271,6 +271,12 @@
     <Style Selector="ToggleButton.cell:checked PathIcon">
       <Setter Property="Foreground" Value="{StaticResource Accent}" />
     </Style>
+    <Style Selector="ToggleButton.cell TextBlock.icon">
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+    </Style>
+    <Style Selector="ToggleButton.cell:checked TextBlock.icon">
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+    </Style>
     <Style Selector=":is(Button).cell">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="Foreground" Value="{StaticResource Dim}" />

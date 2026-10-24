@@ -33,7 +33,7 @@ public partial class MainWindow
     string projectTab = "history";
     List<VideoTemplate> videoTemplates = [];
     readonly StackPanel templateRows = new() { Spacing = 4 };
-    readonly TextBox templateName = new() { Watermark = "Nombre de la plantilla", MaxLength = VideoTemplates.MaxName, FontSize = 12, MinHeight = 32, Height = 32, VerticalContentAlignment = VerticalAlignment.Center };
+    readonly TextBox templateName = new() { Watermark = Loc.T("color.tpl.name"), MaxLength = VideoTemplates.MaxName, FontSize = 12, MinHeight = 32, Height = 32, VerticalContentAlignment = VerticalAlignment.Center };
     readonly Grid templateForm = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto"), IsVisible = false };
     Button? templateSaveStart;
 
@@ -42,15 +42,15 @@ public partial class MainWindow
 
     static readonly (string Key, string Label, double Min, string? Hint, Func<ColorGrade, double> Get, Action<ColorGrade, double> Set)[] Adjust =
     [
-        ("exposure", "Exposición", -100, null, c => c.Exposure, (c, v) => c.Exposure = v),
-        ("contrast", "Contraste", -100, null, c => c.Contrast, (c, v) => c.Contrast = v),
-        ("highlights", "Luces", -100, "Zonas claras", c => c.Highlights, (c, v) => c.Highlights = v),
-        ("shadows", "Sombras", -100, "Zonas oscuras", c => c.Shadows, (c, v) => c.Shadows = v),
-        ("saturation", "Saturación", -100, null, c => c.Saturation, (c, v) => c.Saturation = v),
-        ("vibrance", "Vibrancia", -100, "Satura más los colores apagados que los vivos", c => c.Vibrance, (c, v) => c.Vibrance = v),
-        ("temperature", "Temperatura", -100, "Frío ← → cálido", c => c.Temperature, (c, v) => c.Temperature = v),
-        ("tint", "Tinte", -100, "Verde ← → magenta", c => c.Tint, (c, v) => c.Tint = v),
-        ("fade", "Desvanecer", 0, "Levanta los negros, como una foto lavada", c => c.Fade, (c, v) => c.Fade = v),
+        ("exposure", Loc.T("color.adj.exposure"), -100, null, c => c.Exposure, (c, v) => c.Exposure = v),
+        ("contrast", Loc.T("color.adj.contrast"), -100, null, c => c.Contrast, (c, v) => c.Contrast = v),
+        ("highlights", Loc.T("color.adj.highlights"), -100, Loc.T("color.adj.highlights.hint"), c => c.Highlights, (c, v) => c.Highlights = v),
+        ("shadows", Loc.T("color.adj.shadows"), -100, Loc.T("color.adj.shadows.hint"), c => c.Shadows, (c, v) => c.Shadows = v),
+        ("saturation", Loc.T("color.adj.saturation"), -100, null, c => c.Saturation, (c, v) => c.Saturation = v),
+        ("vibrance", Loc.T("color.adj.vibrance"), -100, Loc.T("color.adj.vibrance.hint"), c => c.Vibrance, (c, v) => c.Vibrance = v),
+        ("temperature", Loc.T("color.adj.temperature"), -100, Loc.T("color.adj.temperature.hint"), c => c.Temperature, (c, v) => c.Temperature = v),
+        ("tint", Loc.T("color.adj.tint"), -100, Loc.T("color.adj.tint.hint"), c => c.Tint, (c, v) => c.Tint = v),
+        ("fade", Loc.T("color.adj.fade"), 0, Loc.T("color.adj.fade.hint"), c => c.Fade, (c, v) => c.Fade = v),
     ];
 
     static string Signed(double v) => v > 0 ? $"+{v:0}" : $"{v:0}";
@@ -67,13 +67,15 @@ public partial class MainWindow
         bool collapsed = AppConfig.Get("projectBarCollapsed") == "1";
 
         var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*"), Height = 44, Margin = new Thickness(6, 0, 16, 0) };
-        var hide = RailButton("", "Ocultar panel", () => SetProjectBarCollapsed(true));
+        var hide = RailButton("", Loc.T("insp.hide"), () => SetProjectBarCollapsed(true));
+        shortcutTips.Add((hide, Loc.T("insp.hide"), "rightPanel"));
         hide.Margin = new Thickness(0, 0, 12, 0);
         header.Children.Add(hide);
-        var rail = RailButton("", "Mostrar panel", () => SetProjectBarCollapsed(false));
+        var rail = RailButton("", Loc.T("bar.show"), () => SetProjectBarCollapsed(false));
+        shortcutTips.Add((rail, Loc.T("bar.show"), "rightPanel"));
         projectBarCollapsed.Children.Add(rail);
         int col = 1;
-        foreach (var (key, label, glyph) in new[] { ("color", "Color", ""), ("history", "Historial", "") })
+        foreach (var (key, label, glyph) in new[] { ("color", Loc.T("bar.tab.color"), ""), ("history", Loc.T("bar.tab.history"), "") })
         {
             var tab = new Button { Classes = { "ghost" }, Content = label, FontSize = 13, FontWeight = FontWeight.Medium, Padding = new Thickness(0),
                 Margin = new Thickness(0, 0, 20, 0), CornerRadius = new CornerRadius(0), BorderThickness = new Thickness(0, 0, 0, 2), VerticalAlignment = VerticalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Center };
@@ -154,7 +156,7 @@ public partial class MainWindow
         var content = new StackPanel { Spacing = 14, Margin = new Thickness(16, 2, 16, 16) };
         var outer = new StackPanel();
         (host ?? colorPanel).Children.Add(new Border { Child = outer, BorderBrush = Palette.Line, BorderThickness = new Thickness(0, 0, 0, 1) });
-        var header = new SectionHeader(title, icon);
+        var header = new SectionHeader(Loc.Or("bar.section." + title, title), icon);
         var sectionIcon = header.Icon;
         colorSections[title] = (content, action, header, collapsed);
         header.Toggled += () =>
@@ -228,7 +230,7 @@ public partial class MainWindow
     void BuildColorPanel()
     {
         // Plantillas
-        templateSaveStart = HeaderAction("", "Guardar actual", "Guardar el filtro, los ajustes y los efectos actuales como plantilla", () =>
+        templateSaveStart = HeaderAction("", Loc.T("color.tpl.saveCurrent"), Loc.T("color.tpl.saveCurrent.tip"), () =>
         {
             templateName.Text = "";
             templateForm.IsVisible = true;
@@ -237,7 +239,7 @@ public partial class MainWindow
             templateName.Focus();
         });
         var templates = ColorSection("Plantillas", "", action: templateSaveStart);
-        var save = new Button { Classes = { "accent" }, Content = "Guardar", Height = 32, MinHeight = 32, FontSize = 12, Padding = new Thickness(10, 0), Margin = new Thickness(6, 0, 0, 0), IsEnabled = false };
+        var save = new Button { Classes = { "accent" }, Content = Loc.T("color.tpl.save"), Height = 32, MinHeight = 32, FontSize = 12, Padding = new Thickness(10, 0), Margin = new Thickness(6, 0, 0, 0), IsEnabled = false };
         Grid.SetColumn(save, 1);
         templateForm.Children.Add(templateName); templateForm.Children.Add(save);
         templateName.TextChanged += (_, _) => save.IsEnabled = !string.IsNullOrWhiteSpace(templateName.Text);
@@ -253,17 +255,17 @@ public partial class MainWindow
 
         // Filtro
         var filter = ColorSection("Filtro", "", () => ProjectColor.On, () => ColorEdit(s => s.Color.On = !s.Color.On, "color:on"),
-            lit => lit ? "Ver sin color" : "Aplicar color");
+            lit => lit ? Loc.T("color.filter.off") : Loc.T("color.filter.on"));
         var looks = new UniformGrid { Columns = 3 };
         foreach (var look in VideoColorProcessor.Looks)
         {
             var swatch = new ColorSwatch { Height = 24, Spec = new ExportColorSpec(Look: look.Id, Amount: 100) };
-            var name = new TextBlock { Text = look.Label, FontSize = 11, FontWeight = FontWeight.Medium, TextTrimming = TextTrimming.CharacterEllipsis };
+            var name = new TextBlock { Text = Loc.Or("color.look." + look.Id, look.Label), FontSize = 11, FontWeight = FontWeight.Medium, TextTrimming = TextTrimming.CharacterEllipsis };
             var chipContent = new StackPanel { Spacing = 6 };
             chipContent.Children.Add(swatch); chipContent.Children.Add(name);
             var chip = new ToggleButton { Classes = { "chip" }, Content = chipContent, Padding = new Thickness(6), Margin = new Thickness(3),
                 HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch };
-            Avalonia.Automation.AutomationProperties.SetName(chip, look.Label);
+            Avalonia.Automation.AutomationProperties.SetName(chip, Loc.Or("color.look." + look.Id, look.Label));
             string id = look.Id;
             chip.Click += (_, _) => ColorEdit(s => s.Color.Look = id, "color:look");
             colorRefresh.Add(() =>
@@ -275,12 +277,12 @@ public partial class MainWindow
             looks.Children.Add(chip);
         }
         filter.Children.Add(new Border { Margin = new Thickness(-3), Child = looks });
-        var amount = ColorSlider(filter, "Intensidad", 0, 100, 100, () => ProjectColor.Amount,
+        var amount = ColorSlider(filter, Loc.T("color.intensity"), 0, 100, 100, () => ProjectColor.Amount,
             v => ColorEdit(s => s.Color.Amount = v, "color:amount"), v => $"{v:0}%");
         colorRefresh.Add(() => amount.IsVisible = ProjectColor.Look != "none");
 
         // Ajustes
-        var reset = HeaderAction("", "Restablecer", "Volver todos los ajustes a 0", () => ColorEdit(s =>
+        var reset = HeaderAction("", Loc.T("color.reset"), Loc.T("color.reset.tip"), () => ColorEdit(s =>
         {
             foreach (var a in Adjust) a.Set(s.Color, 0);
         }, "color:" + string.Join(",", Adjust.Select(a => a.Key).Order())));
@@ -294,23 +296,23 @@ public partial class MainWindow
 
         // Efectos
         var fx = ColorSection("Efectos", "", () => ProjectFx.On, () => ColorEdit(s => s.VideoFx.On = !s.VideoFx.On, "videoFx:on"),
-            lit => lit ? "Ver sin efectos" : "Aplicar efectos");
-        ColorSlider(fx, "Viñeta", 0, 100, 0, () => ProjectFx.Vignette, v => ColorEdit(s => s.VideoFx.Vignette = v, "videoFx:vignette"),
-            v => $"{v:0}", "Oscurece los bordes de cada panel");
-        var size = ColorSlider(fx, "Tamaño de la viñeta", 0, 100, 50, () => ProjectFx.VignetteSize, v => ColorEdit(s => s.VideoFx.VignetteSize = v, "videoFx:vignetteSize"),
-            v => $"{v:0}", "Más grande = empieza más lejos del centro");
+            lit => lit ? Loc.T("color.fx.off") : Loc.T("color.fx.on"));
+        ColorSlider(fx, Loc.T("color.fx.vignette"), 0, 100, 0, () => ProjectFx.Vignette, v => ColorEdit(s => s.VideoFx.Vignette = v, "videoFx:vignette"),
+            v => $"{v:0}", Loc.T("color.fx.vignette.hint"));
+        var size = ColorSlider(fx, Loc.T("color.fx.vignetteSize"), 0, 100, 50, () => ProjectFx.VignetteSize, v => ColorEdit(s => s.VideoFx.VignetteSize = v, "videoFx:vignetteSize"),
+            v => $"{v:0}", Loc.T("color.fx.vignetteSize.hint"));
         colorRefresh.Add(() => size.IsVisible = ProjectFx.Vignette > 0);
-        ColorSlider(fx, "Grano", 0, 100, 0, () => ProjectFx.Grain, v => ColorEdit(s => s.VideoFx.Grain = v, "videoFx:grain"),
-            v => $"{v:0}", "Grano de película, se mueve cuadro a cuadro");
+        ColorSlider(fx, Loc.T("color.fx.grain"), 0, 100, 0, () => ProjectFx.Grain, v => ColorEdit(s => s.VideoFx.Grain = v, "videoFx:grain"),
+            v => $"{v:0}", Loc.T("color.fx.grain.hint"));
         var bars = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-        var barsLabel = new TextBlock { Text = "Barras de cine", Classes = { "dim" }, VerticalAlignment = VerticalAlignment.Center };
-        ToolTip.SetTip(barsLabel, "Barras arriba y abajo de cada panel, formato panorámico");
+        var barsLabel = new TextBlock { Text = Loc.T("color.letterbox"), Classes = { "dim" }, VerticalAlignment = VerticalAlignment.Center };
+        ToolTip.SetTip(barsLabel, Loc.T("color.letterbox.tip0"));
         bars.Children.Add(barsLabel);
         var seg = new StackPanel { Orientation = Orientation.Horizontal };
         foreach (var l in VideoColorProcessor.LetterboxOptions)
         {
-            var b = new ToggleButton { Classes = { "seg" }, Padding = new Thickness(7, 0), MinWidth = 0, Content = new TextBlock { Text = l.Label, Classes = { "mono" }, FontSize = 12 } };
-            ToolTip.SetTip(b, l.Ratio > 0 ? $"Formato {l.Label}:1" : "Sin barras");
+            var b = new ToggleButton { Classes = { "seg" }, Padding = new Thickness(7, 0), MinWidth = 0, Content = new TextBlock { Text = l.Id == "off" ? Loc.T("color.letterbox.off") : l.Label, Classes = { "mono" }, FontSize = 12 } };
+            ToolTip.SetTip(b, l.Ratio > 0 ? Loc.T("color.letterbox.format", l.Label) : Loc.T("color.letterbox.none"));
             string id = l.Id;
             b.Click += (_, _) => ColorEdit(s => s.VideoFx.Letterbox = id, "videoFx:letterbox");
             colorRefresh.Add(() => b.IsChecked = ProjectFx.Letterbox == id);
@@ -319,7 +321,7 @@ public partial class MainWindow
         var segBox = new Border { Classes = { "seg" }, Child = seg };
         Grid.SetColumn(segBox, 1); bars.Children.Add(segBox);
         fx.Children.Add(bars);
-        fx.Children.Add(Help("Todo se aplica al video completo, igual en la vista previa y en el MP4 (el grano es aleatorio, así que coincide en intensidad, no grano por grano). Doble click en un valor lo resetea."));
+        fx.Children.Add(Help(Loc.T("color.fx.hint")));
 
         RefreshColorPanel();
     }
@@ -360,7 +362,7 @@ public partial class MainWindow
         templateRows.Children.Clear();
         if (videoTemplates.Count == 0 && !templateForm.IsVisible)
         {
-            templateRows.Children.Add(Help("Guardá el filtro, los ajustes y los efectos como plantilla para usarlos en otros proyectos."));
+            templateRows.Children.Add(Help(Loc.T("color.tpl.empty")));
             return;
         }
         var color = ProjectColor; var fx = ProjectFx;
@@ -373,7 +375,7 @@ public partial class MainWindow
             label.Children.Add(new TextBlock { Text = t.Name, FontSize = 12, Foreground = active ? Palette.Fg : Palette.Dim, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
             var apply = new Button { Classes = { "ghost" }, Content = label, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Stretch, Padding = new Thickness(6, 0), Background = Brushes.Transparent };
-            ToolTip.SetTip(apply, "Aplicar esta plantilla");
+            ToolTip.SetTip(apply, Loc.T("color.tpl.apply"));
             var tpl = t;
             apply.Click += (_, _) =>
             {
@@ -385,8 +387,8 @@ public partial class MainWindow
             row.Children.Add(apply);
             var remove = new Button { Classes = { "ghost" }, Width = 24, Height = 24, MinHeight = 24, Padding = new Thickness(0), Margin = new Thickness(0, 0, 4, 0), Opacity = 0,
                 HorizontalContentAlignment = HorizontalAlignment.Center, Content = new TextBlock { Classes = { "icon" }, Text = "", FontSize = 12 } };
-            ToolTip.SetTip(remove, "Borrar plantilla");
-            Avalonia.Automation.AutomationProperties.SetName(remove, $"Borrar plantilla {t.Name}");
+            ToolTip.SetTip(remove, Loc.T("color.tpl.delete"));
+            Avalonia.Automation.AutomationProperties.SetName(remove, Loc.T("color.tpl.delete.name", t.Name));
             remove.PointerEntered += (_, _) => remove.Foreground = Palette.Rec;
             remove.PointerExited += (_, _) => remove.Foreground = Palette.Faint;
             remove.Foreground = Palette.Faint;
@@ -427,7 +429,7 @@ public partial class MainWindow
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            Status($"No pude guardar las plantillas de video: {e.Message}");
+            Status(Loc.T("color.tpl.saveError", e.Message));
             return false;
         }
     }

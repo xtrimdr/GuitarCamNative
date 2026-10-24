@@ -40,13 +40,15 @@ public partial class MainWindow
     readonly Grid mixerStrips = new() { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto,Auto") };
     readonly ScrollViewer mixerScroll = new() { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled };
     readonly MiniTimeline miniTimeline = new();
-    readonly List<Button> panTemplateButtons = [];
+    Button? panButton;
     readonly Dictionary<string, (MixerMeter Meter, Action<double> Gr)> stripMeters = [];
     MixerMeter? reverbMeter, delayMeter, masterMeter;
     TextBlock? limLight;
     string mixerKey = "";
+    /// <summary>The track strips' cards, resized in place when only the strip width changes.</summary>
+    readonly List<Border> stripBoxes = [];
     string mixerWidth = "auto";
-    double panWidth = 0.6;
+    double panWidth = 0.3; // the templates' opening; asked by the user (the web starts at 60%)
     const double TimelineDefaultH = 280, TimelineMinH = 110; // web: TIMELINE_MIN_H (its default is 240; the native layout keeps 280)
     double timelineH = TimelineDefaultH, mixerH = MixerDefaultH;
     float masterShow, reverbShow, delayShow;
@@ -79,6 +81,12 @@ public partial class MainWindow
         bottom.Height = new GridLength(timelineH);
         // Like the web's resize handle: the bottom view keeps its height, double click goes back to the default.
         BottomSplitter.DragCompleted += (_, _) => SaveBottomHeight();
+        AudioSplitter.DragCompleted += (_, _) =>
+        {
+            mixerH = AudioArea.RowDefinitions[2].ActualHeight;
+            SaveViewPref("mixerHeight", mixerH.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        };
+        AudioSplitter.DoubleTapped += (_, _) => { mixerH = MixerDefaultH; ApplyAudioMixerRows(); SaveViewPref("mixerHeight", mixerH.ToString(System.Globalization.CultureInfo.InvariantCulture)); };
         BottomSplitter.DoubleTapped += (_, _) =>
         {
             bottom.Height = new GridLength(mixerView ? MixerDefaultH : TimelineDefaultH);
@@ -111,8 +119,10 @@ public partial class MainWindow
             row.Height = new GridLength(mixer ? mixerH : timelineH);
         }
         mixerView = mixer;
-        TimelineHost.IsVisible = !mixer;
+        TimelineHost.IsVisible = !mixer || audioMode;
         MixerHost.IsVisible = mixer;
+        miniTimeline.IsVisible = !audioMode;
+        ApplyAudioMixerRows();
         ToolTip.SetTip(BottomSplitter, $"Arrastrá para cambiar la altura {(mixer ? "del mixer" : "de la timeline")}");
         TimelineViewButton.Classes.Set("on", !mixer);
         MixerViewButton.Classes.Set("on", mixer);
@@ -134,32 +144,12 @@ public partial class MainWindow
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, VerticalAlignment = VerticalAlignment.Center };
         row.Children.Add(new TextBlock { Text = "MIXER", Classes = { "label" }, FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
         row.Children.Add(new Border { Width = 1, Height = 20, Background = Palette.Line });
-        row.Children.Add(new TextBlock { Text = "Paneo:", FontSize = 11, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center });
-        var templates = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-        foreach (var t in PanTemplates.All)
-        {
-            var b = new Button { Classes = { "chip" }, Content = t.Label, FontSize = 12, Height = 28, MinHeight = 28, Padding = new Thickness(10, 0) };
-            ToolTip.SetTip(b, t.Hint);
-            string id = t.Id;
-            b.Click += (_, _) => ApplyPanTemplate(id);
-            panTemplateButtons.Add(b);
-            templates.Children.Add(b);
-        }
-        row.Children.Add(templates);
-        var open = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        ToolTip.SetTip(open, "Qué tan abiertas quedan las pistas con la plantilla");
-        open.Children.Add(new TextBlock { Text = "Apertura", FontSize = 11, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center });
-        var width = new InspectorRange { Minimum = 0.1, Maximum = 1, TickFrequency = 0.05, IsSnapToTickEnabled = true, SmallChange = 0.05, Width = 96, Value = panWidth, VerticalAlignment = VerticalAlignment.Center };
-        Avalonia.Automation.AutomationProperties.SetName(width, "Apertura");
-        var widthText = new TextBlock { Text = $"{panWidth * 100:0}%", Classes = { "mono" }, FontSize = 11, Foreground = Palette.Dim, Width = 32, VerticalAlignment = VerticalAlignment.Center };
-        width.ValueChanged += (_, e) => { panWidth = Math.Round(e.NewValue * 20) / 20; widthText.Text = $"{panWidth * 100:0}%"; };
-        open.Children.Add(width); open.Children.Add(widthText);
-        row.Children.Add(open);
+        row.Children.Add(panButton = BuildPanMenu());
 
         var seg = new StackPanel { Orientation = Orientation.Horizontal };
         foreach (var (id, label, tip) in new[]
         {
-            ("auto", "Auto", "Canales amplios cuando entran (2–3 tomas), compactos si hay muchas"),
+            ("auto", "Auto", "Canales amplios cuando entran (2–3 canales), compactos si hay muchas"),
             ("compact", "Compacto", "Canales angostos"),
             ("wide", "Amplio", "Canales anchos con controles grandes"),
         })
@@ -172,14 +162,74 @@ public partial class MainWindow
             seg.Children.Add(b);
         }
 
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(12, 0) };
+        // Cubase's "deactivate all mute / solo states" (native only), lit while any track has one
+        var clear = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
+        foreach (bool solo in new[] { false, true })
+        {
+            var b = new Button { Classes = { "chip" }, Width = 24, Height = 24, MinHeight = 24, Padding = new Thickness(0), CornerRadius = new CornerRadius(4),
+                HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
+                Content = new TextBlock { Text = solo ? "S" : "M", Classes = { "mono" }, FontSize = 10, FontWeight = FontWeight.Bold } };
+            b.Click += (_, _) => ClearAllToggles(solo);
+            headerRefresh.Add(() =>
+            {
+                bool lit = tracks.Any(t => solo ? t.Channel.Solo : t.Channel.Muted);
+                b.IsEnabled = store != null && !store.ReadOnly && !restoring && tracks.Any(t => t.Clips.Count > 0);
+                b.Background = lit ? (solo ? Palette.Fg : Palette.Accent) : Brushes.Transparent;
+                b.BorderBrush = lit ? (solo ? Palette.Fg : Palette.Accent) : Palette.Line;
+                ((TextBlock)b.Content!).Foreground = lit ? Palette.App : Palette.Faint;
+                ToolTip.SetTip(b, lit ? (solo ? "Quitar todos los solo" : "Quitar todos los mute") : (solo ? "No hay pistas en solo" : "No hay pistas silenciadas"));
+            });
+            clear.Children.Add(b);
+        }
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), Margin = new Thickness(12, 0) };
         grid.Children.Add(new ScrollViewer { Content = row, HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        Grid.SetColumn(clear, 1); grid.Children.Add(clear);
         var segBox = new Border { Classes = { "seg" }, Child = seg, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
-        Grid.SetColumn(segBox, 1); grid.Children.Add(segBox);
+        Grid.SetColumn(segBox, 2); grid.Children.Add(segBox);
         return new Border { Height = 40, Background = Palette.Panel, BorderBrush = Palette.Line, BorderThickness = new Thickness(0, 0, 0, 1), Child = grid };
     }
 
     readonly List<Action> headerRefresh = [];
+
+    /// <summary>The pan templates in one drop-down with their opening (asked by the user; the web shows a chip per
+    /// template and the "Apertura" slider in the header). Picking a template applies it and closes the menu.</summary>
+    Button BuildPanMenu()
+    {
+        var label = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        label.Children.Add(new TextBlock { Text = "Paneo", FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
+        label.Children.Add(new TextBlock { Classes = { "icon" }, Text = "", FontSize = 9, VerticalAlignment = VerticalAlignment.Center });
+        var button = new Button { Classes = { "chip" }, Content = label, Height = 28, MinHeight = 28, Padding = new Thickness(10, 0) };
+        ToolTip.SetTip(button, "Plantillas de paneo para todas las pistas con toma");
+        Avalonia.Automation.AutomationProperties.SetName(button, "Paneo");
+
+        var list = new StackPanel { Width = 280, Spacing = 2 };
+        var flyout = new Flyout { Placement = PlacementMode.BottomEdgeAlignedLeft, Content = list };
+        var open = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), Margin = new Thickness(8, 4, 8, 8) };
+        ToolTip.SetTip(open, "Qué tan abiertas quedan las pistas con la plantilla");
+        open.Children.Add(new TextBlock { Text = "Apertura", FontSize = 12, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
+        var width = new InspectorRange { Minimum = 0.1, Maximum = 1, TickFrequency = 0.05, IsSnapToTickEnabled = true, SmallChange = 0.05, Value = panWidth, VerticalAlignment = VerticalAlignment.Center };
+        Avalonia.Automation.AutomationProperties.SetName(width, "Apertura");
+        var widthText = new TextBlock { Text = $"{panWidth * 100:0}%", Classes = { "mono" }, FontSize = 11, Foreground = Palette.Dim, Width = 36, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+        width.ValueChanged += (_, e) => { panWidth = Math.Round(e.NewValue * 20) / 20; widthText.Text = $"{panWidth * 100:0}%"; };
+        Grid.SetColumn(width, 1); open.Children.Add(width);
+        Grid.SetColumn(widthText, 2); open.Children.Add(widthText);
+        list.Children.Add(open);
+        list.Children.Add(new Border { Height = 1, Background = Palette.Line, Margin = new Thickness(0, 0, 0, 4) });
+        foreach (var t in PanTemplates.All)
+        {
+            var text = new StackPanel { Spacing = 2 };
+            text.Children.Add(new TextBlock { Text = t.Label, FontSize = 12.5, FontWeight = FontWeight.SemiBold, Foreground = Palette.Fg });
+            text.Children.Add(new TextBlock { Text = t.Hint, FontSize = 11, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap });
+            var item = new Button { Classes = { "ghost" }, Content = text, HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 6), CornerRadius = new CornerRadius(6) };
+            string id = t.Id;
+            item.Click += (_, _) => { flyout.Hide(); ApplyPanTemplate(id); };
+            list.Children.Add(item);
+        }
+        button.Click += (_, _) => flyout.ShowAt(button);
+        return button;
+    }
 
     void ApplyPanTemplate(string id)
     {
@@ -220,8 +270,11 @@ public partial class MainWindow
         double freeWide = (areaW - 2 * ReturnWideW - MasterW - 3 * StripGap) / n - StripGap;
         bool wide = mixerWidth == "wide" || (mixerWidth == "auto" && freeWide >= WideMin);
         double stripW = wide ? Math.Max(WideMin, Math.Min(WideMax, Math.Floor(freeWide))) : CompactW;
-        string key = $"{wide}|{stripW}|{string.Join(",", tracks.Select(t => t.Track.Id + ":" + t.Clips.Count))}";
+        // a new width only resizes the cards: rebuilding every strip on each pixel of a drag churns enough garbage
+        // for the GC to pause the audio thread
+        string key = $"{wide}|{string.Join(",", tracks.Select(t => t.Track.Id + ":" + t.Clips.Count))}";
         if (key != mixerKey) { mixerKey = key; BuildStrips(wide, stripW); }
+        else foreach (var box in stripBoxes) box.Width = stripW;
         miniTimeline.SetTracks(tracks);
         bool was = syncing;
         syncing = true;
@@ -229,7 +282,7 @@ public partial class MainWindow
         {
             bool editable = store != null && !store.ReadOnly && !restoring;
             mixerStrips.IsEnabled = editable;
-            foreach (var b in panTemplateButtons) b.IsEnabled = editable && tracks.Any(t => t.Clips.Count > 0);
+            if (panButton != null) panButton.IsEnabled = editable && tracks.Any(t => t.Clips.Count > 0);
             foreach (var r in headerRefresh) r();
             foreach (var r in mixerRefresh) r();
         }
@@ -264,12 +317,13 @@ public partial class MainWindow
     {
         mixerRefresh.Clear();
         stripMeters.Clear();
+        stripBoxes.Clear();
         mixerStrips.Children.Clear();
         var strips = new StackPanel { Orientation = Orientation.Horizontal };
         mixerStrips.Children.Add(strips);
         if (tracks.Count == 0)
         {
-            var empty = new TextBlock { Text = "Grabá una toma para ver su canal en el mixer.", FontSize = 12, Foreground = Palette.Faint,
+            var empty = new TextBlock { Text = "Grabá un canal para verlo en el mixer.", FontSize = 12, Foreground = Palette.Faint,
                 HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             Grid.SetColumn(empty, 1);
             mixerStrips.Children.Add(empty);
@@ -331,6 +385,7 @@ public partial class MainWindow
     Control Strip(LiveTrack t, int index, bool wide, double width)
     {
         var box = StripCard(width);
+        stripBoxes.Add(box);
         box.Cursor = new Cursor(StandardCursorType.Hand);
         var top = new Border { Height = 2, VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false };
         bool hover = false;
@@ -344,7 +399,7 @@ public partial class MainWindow
         };
         void Paint()
         {
-            bool selected = sel == t, armed = Timeline.ArmedIndex == tracks.IndexOf(t);
+            bool selected = sel == t, armed = Timeline.ArmedIndices.Contains(tracks.IndexOf(t));
             // the armed strip (where R records) is tinted red, like its lane in the timeline
             box.Background = armed && !selected ? Palette.Alpha(Palette.RecColor, 0.08)
                 : selected ? Palette.Raised : hover ? Palette.Alpha(Palette.RaisedColor, 0.6) : Palette.Panel;
@@ -358,7 +413,15 @@ public partial class MainWindow
         var name = new TextBlock { Text = t.Track.Name, FontSize = wide ? 12 : 11, FontWeight = wide ? FontWeight.Medium : FontWeight.Normal, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
         mixerRefresh.Add(() => { name.Text = t.Track.Name; name.Foreground = Silent() ? Palette.Faint : Palette.Fg; ToolTip.SetTip(name, t.Track.Name); });
         var emptyHint = new TextBlock { Text = "VACÍA", FontSize = 9, LetterSpacing = 0.8, Foreground = Palette.Faint, IsVisible = empty, VerticalAlignment = VerticalAlignment.Center };
-        ToolTip.SetTip(emptyHint, "Pista vacía: estos ajustes los toma la próxima toma que grabes acá");
+        ToolTip.SetTip(emptyHint, "Pista vacía: estos ajustes los toma el próximo canal que grabes acá");
+        // armed, the strip shows where it records from in the place of "VACÍA" (native only)
+        var input = InputChip(t);
+        mixerRefresh.Add(() =>
+        {
+            bool armed = Timeline.ArmedIndices.Contains(tracks.IndexOf(t)) && !RecordingTake;
+            input.IsVisible = armed;
+            emptyHint.IsVisible = empty && !armed;
+        });
         var badge = new Border { Width = 20, Height = 20, CornerRadius = new CornerRadius(4), VerticalAlignment = VerticalAlignment.Center,
             Child = new TextBlock { Text = (index + 1).ToString(), Classes = { "mono" }, FontSize = 10, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
         mixerRefresh.Add(() =>
@@ -368,8 +431,8 @@ public partial class MainWindow
             ((TextBlock)badge.Child!).Foreground = s ? Palette.Accent : Palette.Dim;
         });
         double btn = wide ? 28 : 24;
-        var mute = StripToggle("M", "Mute (M)", btn, () => t.Channel.Muted, false, () => EditTrack(t, x => x.Channel.Muted = !x.Channel.Muted, "mute"));
-        var solo = StripToggle("S", "Solo (S)", btn, () => t.Channel.Solo, true, () => EditTrack(t, x => x.Channel.Solo = !x.Channel.Solo, "solo"));
+        var mute = StripToggle("M", Shortcuts.Tip("Mute", "mute"), btn, () => t.Channel.Muted, false, () => EditTrack(t, x => x.Channel.Muted = !x.Channel.Muted, "mute"));
+        var solo = StripToggle("S", Shortcuts.Tip("Solo", "solo"), btn, () => t.Channel.Solo, true, () => EditTrack(t, x => x.Channel.Solo = !x.Channel.Solo, "solo"));
         var arm = ArmToggle(t, btn);
         var fader = new Fader();
         fader.Changed += v => EditTrack(t, x => x.Channel.Volume = v, "volume");
@@ -386,6 +449,7 @@ public partial class MainWindow
             h.Children.Add(badge);
             name.Margin = new Thickness(8, 0); Grid.SetColumn(name, 1); h.Children.Add(name);
             emptyHint.Margin = new Thickness(0, 0, 8, 0); Grid.SetColumn(emptyHint, 2); h.Children.Add(emptyHint);
+            input.Margin = new Thickness(0, 0, 6, 0); Grid.SetColumn(input, 2); h.Children.Add(input);
             arm.Margin = new Thickness(0, 0, 4, 0); Grid.SetColumn(arm, 3); h.Children.Add(arm);
             Grid.SetColumn(mute, 4); h.Children.Add(mute);
             solo.Margin = new Thickness(4, 0, 0, 0); Grid.SetColumn(solo, 5); h.Children.Add(solo);
@@ -404,6 +468,7 @@ public partial class MainWindow
             name.HorizontalAlignment = HorizontalAlignment.Center; name.TextAlignment = TextAlignment.Center; name.Margin = new Thickness(0, 4, 0, 0);
             h.Children.Add(name);
             emptyHint.HorizontalAlignment = HorizontalAlignment.Center; h.Children.Add(emptyHint);
+            input.HorizontalAlignment = HorizontalAlignment.Center; h.Children.Add(input);
             head = h;
             var stack = new StackPanel { Spacing = 6 };
             var knobs = new UniformGrid { Columns = 2 };
@@ -412,7 +477,7 @@ public partial class MainWindow
             knobs.Children.Add(MiniKnob("Comp", 0, 1, 0.5, () => t.Channel.Comp.Amount,
                 () => t.Channel.Comp.Preset == "custom" ? "man" : $"{t.Channel.Comp.Amount * 100:0}",
                 v => StripComp(t, c => { c.Amount = v; c.On = true; }, "amount"),
-                () => $"Compresión {CompPresets.PresetLabel(t.Channel.Comp.Preset)}: {CompPresets.AmountLabel(t.Channel.Comp.Amount)} (estilo y limitador en la pestaña Toma)"));
+                () => $"Compresión {CompPresets.PresetLabel(t.Channel.Comp.Preset)}: {CompPresets.AmountLabel(t.Channel.Comp.Amount)} (estilo y limitador en la pestaña Canal)"));
             knobs.Children.Add(MiniKnob("Rev", 0, 1, 0, () => t.Channel.ReverbSend, () => t.Channel.ReverbOn ? $"{t.Channel.ReverbSend * 100:0}" : "off",
                 v => EditTrack(t, x => { x.Channel.ReverbSend = v; x.Channel.ReverbOn = true; }, "reverb.send"),
                 () => $"Envío a la reverb {t.Channel.ReverbSend * 100:0}% (doble click: 0)"));
@@ -469,7 +534,7 @@ public partial class MainWindow
         var sat = FxPanel(fx, "Sat", FxIcon.Sat, () => t.Channel.Sat.On, () => EditTrack(t, x => x.Channel.Sat.On = !x.Channel.Sat.On, "sat.on"),
             on => on ? "Apagar la saturación" : "Prender la saturación");
         var satKnob = FxKnob(sat, "vida", 0.3, () => t.Channel.Sat.Amount, v => EditTrack(t, x => { x.Channel.Sat.Amount = v; x.Channel.Sat.On = true; }, "sat.amount"),
-            () => "Vida: cuánto empuja la toma contra la válvula o la cinta (doble click: 30%)");
+            () => "Vida: cuánto empuja el canal contra la válvula o la cinta (doble click: 30%)");
         var satSide = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
         var modes = new[] { ("tube", "Válvula", "Armónicos pares: más cálido y redondo, los picos se ablandan sin perder brillo"),
             ("tape", "Cinta", "Compacta los golpes, suaviza los agudos ásperos y suma un poco de cuerpo en los graves") };
@@ -521,7 +586,7 @@ public partial class MainWindow
                 CompPresets.All.Select(p => (string?)p.Hint).Concat(custom ? new string?[] { null } : []).ToArray());
             int i = Array.FindIndex(CompPresets.All, p => p.Id == c.Preset);
             preset.SelectedIndex = custom ? CompPresets.All.Length : i;
-            ToolTip.SetTip(preset, i >= 0 ? CompPresets.All[i].Hint : "Valores a mano (Toma → Ajuste fino)");
+            ToolTip.SetTip(preset, i >= 0 ? CompPresets.All[i].Hint : "Valores a mano (Canal → Ajuste fino)");
             compLabel.Text = custom ? "Valores a mano" : CompPresets.AmountLabel(c.Amount);
             ToolTip.SetTip(compLabel, $"{(custom ? "" : $"comprime ~{EstimatedCompression(c):0} dB · ")}{c.Threshold:0} dB · {c.Ratio:0.0}:1 · ganancia {c.Makeup:+0.0;-0.0;0.0} dB");
         });
@@ -551,11 +616,11 @@ public partial class MainWindow
             grText.Text = t.Channel.Comp.On ? $"{(gr > -0.05 ? 0 : gr):0.0} dB" : "—";
         };
 
-        // EQ: a summary; the bands are edited in the Toma tab
+        // EQ: a summary; the bands are edited in the Canal tab
         var eq = FxPanel(fx, "EQ", FxIcon.Eq, () => t.Channel.Eq.On, () => EditTrack(t, x => x.Channel.Eq.On = !x.Channel.Eq.On, "eq.on"),
             on => on ? "Apagar el EQ" : "Prender el EQ");
         var graph = new EqGraph(interactive: false, height: 54);
-        ToolTip.SetTip(graph, "Editá las bandas en la pestaña Toma (izquierda)");
+        ToolTip.SetTip(graph, "Editá las bandas en la pestaña Canal (izquierda)");
         var eqPreset = StripSelect([]);
         eqPreset.Margin = new Thickness(0, 6, 0, 0);
         eqPreset.Selected += index =>
@@ -729,15 +794,36 @@ public partial class MainWindow
         b.Click += (_, _) => ToggleArm(t);
         mixerRefresh.Add(() =>
         {
-            bool lit = Timeline.ArmedIndex == tracks.IndexOf(t);
+            bool lit = Timeline.ArmedIndices.Contains(tracks.IndexOf(t));
             b.Background = lit ? Palette.Rec : Brushes.Transparent;
             b.BorderBrush = lit ? Palette.Rec : Palette.Line;
             dot.Fill = lit ? Palette.Fg : Palette.Alpha(Palette.RecColor, 0.7);
-            ToolTip.SetTip(b, lit ? "Armada: la próxima toma (R) se graba en esta pista"
-                : t.Clips.Count == 0 ? "Armar para grabar en esta pista"
-                : "Armar para grabar en esta pista: la toma nueva reemplaza la que tiene (queda en Historial)");
+            ToolTip.SetTip(b, lit ? $"Armada: el próximo canal{Shortcuts.Paren("record")} se graba en esta pista · clic: desarmar"
+                : t.Clips.Count == 0 ? "Armar para grabar en esta pista (podés armar varias y grabarlas a la vez)" + Shortcuts.Note("arm", "armar la pista seleccionada")
+                : "Armar para grabar en esta pista: el canal nuevo reemplaza el que tiene (queda en Historial)" + Shortcuts.Note("arm", "armar la pista seleccionada"));
         });
         return b;
+    }
+
+    /// <summary>The armed strip's input ("1-2 ▾"): opens the same menu as the chip in the timeline header.</summary>
+    Border InputChip(LiveTrack t)
+    {
+        var text = new TextBlock { Classes = { "mono" }, FontSize = 9, Foreground = Palette.Fg, VerticalAlignment = VerticalAlignment.Center };
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 3 };
+        row.Children.Add(text);
+        row.Children.Add(new TextBlock { Classes = { "icon" }, Text = "", FontSize = 7, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center });
+        var chip = new Border { Child = row, Height = 14, Padding = new Thickness(4, 0), CornerRadius = new CornerRadius(3), BorderThickness = new Thickness(1),
+            Background = Palette.Hover, BorderBrush = Palette.Alpha(Palette.RecColor, 0.45), VerticalAlignment = VerticalAlignment.Center,
+            Cursor = new Cursor(StandardCursorType.Hand), IsVisible = false };
+        ToolTip.SetTip(chip, "Entrada: de dónde graba esta pista");
+        chip.PointerPressed += (_, e) =>
+        {
+            if (!e.GetCurrentPoint(chip).Properties.IsLeftButtonPressed) return;
+            e.Handled = true;
+            ShowInputMenu(t, chip);
+        };
+        mixerRefresh.Add(() => text.Text = InputShort(t.Track));
+        return chip;
     }
 
     /// <summary>MiniKnob: a 22 px knob, its value and a label under it.</summary>

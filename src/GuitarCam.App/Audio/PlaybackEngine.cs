@@ -16,6 +16,8 @@ namespace GuitarCam.App.Audio;
 /// Also processes input 1-2 (<see cref="InputProcessor"/>: channel mode, +12 dB pre-amp gain, soft-limiter,
 /// optional software monitoring), runs count-in + recording on the same sample clock via <see cref="TakeRecorder"/>,
 /// and runs round-trip latency calibration (<see cref="CalibrationSession"/>).
+/// Native only: every driver input is open, and each armed track has an <see cref="InputTap"/> with its own
+/// input; all of them record at once, one WAV each, starting on the same sample.
 /// </summary>
 public sealed class PlaybackEngine : IDisposable
 {
@@ -47,7 +49,7 @@ public sealed class PlaybackEngine : IDisposable
     volatile bool recording;
     volatile bool loop;
     volatile bool softwareMonitor;
-    volatile TakeRecorder? activeRecorder;
+    volatile InputTap[] taps = [];
     volatile CalibrationSession? activeCalibration;
     int recCountInBeats;
     bool recUsedCountIn;
@@ -86,13 +88,27 @@ public sealed class PlaybackEngine : IDisposable
     public bool ClickOn { get; set; }
 
     /// <summary>Disk error encountered by the active or last recording session, if any.</summary>
-    public Exception? RecordingDiskError => activeRecorder?.DiskError ?? lastRecordingError;
+    public Exception? RecordingDiskError
+    {
+        get
+        {
+            foreach (var t in taps)
+                if (t.Recorder?.DiskError is { } e) return e;
+            return lastRecordingError;
+        }
+    }
 
     /// <summary>Human-readable message for <see cref="RecordingDiskError"/>, or <c>null</c> if none.</summary>
     public string? RecordingError => RecordingDiskError?.Message;
 
     /// <summary>Samples dropped because the recording ring buffer overflowed (or could not be flushed on disk error).</summary>
-    public long RecordingDroppedFrames => activeRecorder is { } rec ? rec.DroppedFrames : Interlocked.Read(ref lastRecordingDroppedFrames);
+    public long RecordingDroppedFrames => recording ? taps.Sum(t => t.Recorder?.DroppedFrames ?? 0) : Interlocked.Read(ref lastRecordingDroppedFrames);
+
+    /// <summary>Driver inputs the stream opened (all of them), for the armed tracks' input selector.</summary>
+    public int InputChannels => io?.InputChannels ?? 0;
+
+    /// <summary>The armed tracks' inputs, in the order <see cref="SetInputs"/> got them (meters read their peaks).</summary>
+    public IReadOnlyList<InputTap> Taps => taps;
 
     public bool Loop
     {
@@ -117,7 +133,11 @@ public sealed class PlaybackEngine : IDisposable
     public double InputGainDb
     {
         get => inputProcessor.InputGainDb;
-        set => inputProcessor.InputGainDb = value;
+        set
+        {
+            inputProcessor.InputGainDb = value;
+            foreach (var t in taps) t.GainDb = value;
+        }
     }
 
     public ClickSound ClickSound
@@ -186,7 +206,7 @@ public sealed class PlaybackEngine : IDisposable
             io?.Dispose();
             io = null;
             string driver = AsioDuplex.PickDriver(wantedDriver);
-            io = new AsioDuplex(driver, SampleRate, inputOffset, 2, outputOffset, Process);
+            io = new AsioDuplex(driver, SampleRate, inputOffset, 0, outputOffset, Process);
             io.ResetRequested += () => DriverResetRequested?.Invoke();
             InputOffset = inputOffset;
             OutputOffset = outputOffset;
@@ -336,14 +356,46 @@ public sealed class PlaybackEngine : IDisposable
     // --- Recording (§5.8) ------------------------------------------------------------------------
 
     /// <summary>
-    /// Starts recording a take to <paramref name="wavPath"/> on the shared ASIO sample clock.
+    /// The armed tracks' inputs (null = the main input): metered and, with software monitoring, heard, each
+    /// input once. A tap with the same route as before is kept. Ignored while recording.
+    /// </summary>
+    public void SetInputs(IReadOnlyList<InputRoute?> routes)
+    {
+        if (recording) return;
+        var old = taps;
+        var next = new InputTap[routes.Count];
+        for (int i = 0; i < routes.Count; i++)
+        {
+            bool first = true;
+            for (int k = 0; k < i; k++) first &= routes[k] != routes[i];
+            var keep = Array.Find(old, t => t.Route == routes[i] && t.Monitored == first && Array.IndexOf(next, t) < 0);
+            next[i] = keep ?? new InputTap(routes[i], InputGainDb) { Monitored = first };
+        }
+        taps = next;
+    }
+
+    /// <summary>
+    /// Starts recording one take per input on the shared ASIO sample clock, each to its WAV.
     /// When <paramref name="useCountIn"/> is true, plays <paramref name="countInBeats"/> beats of count-in
     /// before timeline frame 0; at frame 0, backing tracks, click, and disk capture start on the exact same sample.
     /// </summary>
-    public void StartRecording(string wavPath, bool useCountIn = true, int countInBeats = 4)
+    public void StartRecording(IReadOnlyList<(InputRoute? Route, string WavPath)> takes, bool useCountIn = true, int countInBeats = 4)
     {
         if (io == null) throw new InvalidOperationException("Abrí primero la placa de audio.");
         if (recording || activeCalibration != null) return;
+        if (takes.Count == 0) throw new ArgumentException("No hay nada para grabar.", nameof(takes));
+
+        SetInputs(takes.Select(t => t.Route).ToList());
+        var recorders = new List<TakeRecorder>();
+        try
+        {
+            foreach (var t in takes) recorders.Add(new TakeRecorder(t.WavPath, SampleRate));
+        }
+        catch
+        {
+            foreach (var r in recorders) r.Finish(discard: true);
+            throw;
+        }
 
         playing = false;
         lastRecordingError = null;
@@ -363,8 +415,8 @@ public sealed class PlaybackEngine : IDisposable
         click = null;
         clickPos = 0;
 
-        var rec = new TakeRecorder(wavPath, SampleRate);
-        activeRecorder = rec;
+        var cur = taps;
+        for (int i = 0; i < cur.Length; i++) cur[i].Recorder = recorders[i];
         Interlocked.Exchange(ref position, startFrame);
         playStartSec = 0;
         recording = true;
@@ -380,33 +432,43 @@ public sealed class PlaybackEngine : IDisposable
     }
 
     /// <summary>
-    /// Stops the active recording, flushes and closes the WAV file, and returns the take metadata
-    /// (or <c>null</c> if <paramref name="discard"/> is true or the take lasted ≤ 0.3 s).
+    /// Stops the active recording, flushes and closes the WAV files, and returns each take's metadata in the
+    /// order they started (null for one discarded or of 0.3 s or less); empty when nothing was recording.
     /// </summary>
-    public RecordedTakeResult? StopRecording(
+    public RecordedTakeResult?[] StopRecording(
         bool discard = false,
         double defaultOverdubOffsetMs = 0,
         bool isFirstTake = false)
     {
-        if (!recording && activeRecorder == null) return null;
-        var rec = Interlocked.Exchange(ref activeRecorder, null);
+        var cur = taps;
+        var recs = cur.Select(t => t.Recorder).ToArray();
+        if (!recording && recs.All(r => r == null)) return [];
         recording = false;
         playing = false;
         click = null;
         Interlocked.Exchange(ref position, 0);
-        if (rec == null) return null;
+        foreach (var t in cur) t.Recorder = null;
 
         double latencyMs = GetLatencyInfo().AppliedMs;
-        var res = rec.Finish(
-            discard,
-            latencyMs,
-            defaultOverdubOffsetMs,
-            isFirstTake,
-            recUsedCountIn,
-            recUsedClick || ClickOn);
-        lastRecordingError = rec.DiskError;
-        Interlocked.Exchange(ref lastRecordingDroppedFrames, rec.DroppedFrames);
-        return res;
+        var results = new RecordedTakeResult?[recs.Length];
+        Exception? error = null;
+        long dropped = 0;
+        for (int i = 0; i < recs.Length; i++)
+        {
+            if (recs[i] is not { } rec) continue;
+            results[i] = rec.Finish(
+                discard,
+                latencyMs,
+                defaultOverdubOffsetMs,
+                isFirstTake,
+                recUsedCountIn,
+                recUsedClick || ClickOn);
+            error ??= rec.DiskError;
+            dropped += rec.DroppedFrames;
+        }
+        lastRecordingError = error;
+        Interlocked.Exchange(ref lastRecordingDroppedFrames, dropped);
+        return results;
     }
 
     // --- Latency & Calibration (§5.9) ------------------------------------------------------------
@@ -511,6 +573,8 @@ public sealed class PlaybackEngine : IDisposable
             procL.Clear();
             procR.Clear();
         }
+        var curTaps = taps;
+        for (int i = 0; i < curTaps.Length; i++) curTaps[i].Process(input, n, inProcL, inProcR);
 
         var cal = activeCalibration;
         if (cal != null)
@@ -580,9 +644,10 @@ public sealed class PlaybackEngine : IDisposable
                     if (Interlocked.Read(ref recStartTimestamp) == 0)
                         Interlocked.Exchange(ref recStartTimestamp, Math.Max(1, t0 - (long)((n - playOffset) * (double)Stopwatch.Frequency / SampleRate)));
                     recUsedClick |= ClickOn;
-                    activeRecorder?.WriteFromCallback(
-                        procL.Slice(playOffset, playCount),
-                        procR.Slice(playOffset, playCount));
+                    for (int i = 0; i < curTaps.Length; i++)
+                        curTaps[i].Recorder?.WriteFromCallback(
+                            curTaps[i].BlockL.Slice(playOffset, playCount),
+                            curTaps[i].BlockR.Slice(playOffset, playCount));
                 }
             }
 
@@ -676,21 +741,29 @@ public sealed class PlaybackEngine : IDisposable
 
         if (softwareMonitor)
         {
-            float ol = outL, or = outR;
-            for (int i = 0; i < n; i++)
-            {
-                float l = output[0][i] + procL[i];
-                float r = output[1][i] + procR[i];
-                output[0][i] = l;
-                output[1][i] = r;
-                if (Math.Abs(l) > ol) ol = Math.Abs(l);
-                if (Math.Abs(r) > or) or = Math.Abs(r);
-            }
-            outL = ol;
-            outR = or;
+            // the armed tracks' inputs, each once; with none armed, input 1-2
+            if (curTaps.Length == 0) Monitor(output, procL, procR, n);
+            for (int k = 0; k < curTaps.Length; k++)
+                if (curTaps[k].Monitored) Monitor(output, curTaps[k].BlockL, curTaps[k].BlockR, n);
         }
 
         UpdateLoad(t0, n);
+    }
+
+    void Monitor(float[][] output, ReadOnlySpan<float> l, ReadOnlySpan<float> r, int n)
+    {
+        float ol = outL, or = outR;
+        for (int i = 0; i < n; i++)
+        {
+            float a = output[0][i] + l[i];
+            float b = output[1][i] + r[i];
+            output[0][i] = a;
+            output[1][i] = b;
+            if (Math.Abs(a) > ol) ol = Math.Abs(a);
+            if (Math.Abs(b) > or) or = Math.Abs(b);
+        }
+        outL = ol;
+        outR = or;
     }
 
     void UpdateLoad(long t0, int n)

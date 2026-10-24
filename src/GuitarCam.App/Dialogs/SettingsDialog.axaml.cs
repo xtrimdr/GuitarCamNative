@@ -22,7 +22,8 @@ namespace GuitarCam.App.Dialogs;
 /// sessions (the web remembers the output; it re-picks the interface by name). The camera tab edits
 /// <see cref="LiveCamera"/> (the cameras are the ones FFmpeg lists through DirectShow). Like the web, gain,
 /// channels, monitoring, the fine adjustment and the camera settings live only in memory, and the
-/// calibration is stored per input + output pair.
+/// calibration is stored per input + output pair. The "Atajos de teclado" tab is native only (the web's keys are
+/// fixed): it edits <see cref="Shortcuts"/>; a click on a key waits for the next press, Esc cancels.
 /// </summary>
 public sealed partial class SettingsDialog : UserControl
 {
@@ -38,7 +39,10 @@ public sealed partial class SettingsDialog : UserControl
     bool reopening;
     bool filling;
 
-    readonly StackPanel audioPage = new(), cameraPage = new(), syncPage = new();
+    readonly StackPanel audioPage = new(), cameraPage = new(), syncPage = new(), shortcutsPage = new(), languagePage = new();
+    /// <summary>The action waiting for a key in "Atajos de teclado", and what the last change took from another one.</summary>
+    string? capturing;
+    string? shortcutNote;
     readonly ComboBox driverBox = Combo(), outputBox = Combo();
     readonly List<ToggleButton> modeButtons = [];
     readonly InspectorSlider gain;
@@ -62,7 +66,7 @@ public sealed partial class SettingsDialog : UserControl
 
     /// <summary>The input meter of the "Entrada" section; the window feeds it from the same read as the title bar's.</summary>
     public StereoMeter Meter { get; } = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
-    /// <summary>"Ajuste fino de audio (tomas nuevas)": added to the latency when recording.</summary>
+    /// <summary>"Ajuste fino de audio (canales nuevos)": added to the latency when recording.</summary>
     public double OverdubOffsetMs { get; private set; }
     public event Action? Dismissed;
     /// <summary>The driver was reopened or the calibration changed: the window refreshes what it shows.</summary>
@@ -75,6 +79,10 @@ public sealed partial class SettingsDialog : UserControl
         AudioTab.Click += (_, _) => ShowTab("audio");
         CameraTab.Click += (_, _) => ShowTab("camera");
         SyncTab.Click += (_, _) => ShowTab("sync");
+        ShortcutsTab.Click += (_, _) => ShowTab("shortcuts");
+        LanguageTab.Click += (_, _) => ShowTab("language");
+        BuildLanguage();
+        Shortcuts.Changed += BuildShortcuts;
         PointerPressed += (_, e) => { if (e.Source == this) HideDialog(); };
         SizeChanged += (_, _) => Panel.Height = Math.Min(640, Bounds.Height * 0.88);
 
@@ -189,8 +197,8 @@ public sealed partial class SettingsDialog : UserControl
         sync.Children.Add(pairText);
         sync.Children.Add(new Border { Background = Palette.Raised, CornerRadius = new CornerRadius(6), Padding = new Thickness(12, 10), Child = readout });
         sync.Children.Add(new Border { BorderBrush = Palette.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(12), Child = calBox });
-        fine = new InspectorSlider("Ajuste fino de audio (tomas nuevas)", -100, 100, 1, 0, v => v > 0 ? $"+{v:0} ms" : $"{v:0} ms",
-            v => { OverdubOffsetMs = v; Refresh(); }, "Se suma a la latencia (calibrada o estimada). Negativo = la toma nueva queda más adelantada");
+        fine = new InspectorSlider("Ajuste fino de audio (canales nuevos)", -100, 100, 1, 0, v => v > 0 ? $"+{v:0} ms" : $"{v:0} ms",
+            v => { OverdubOffsetMs = v; Refresh(); }, "Se suma a la latencia (calibrada o estimada). Negativo = el canal nuevo queda más adelantado");
         sync.Children.Add(fine);
         cameraLatency = new InspectorSlider("Latencia de cámara", 0, 200, 5, LiveCamera.DefaultLatencyMs, v => $"{v:0} ms",
             v => { if (cam != null) cam.LatencyMs = v; }, "Cuánto llega tarde la imagen respecto del audio");
@@ -242,14 +250,30 @@ public sealed partial class SettingsDialog : UserControl
     public void HideDialog()
     {
         calibration?.Cancel();
+        StopCapture();
         IsVisible = false;
         Dismissed?.Invoke();
     }
 
-    /// <summary>Escape closes (cancelling a running calibration first, like the web's close()).</summary>
+    /// <summary>Escape closes (cancelling a running calibration first, like the web's close()); while a shortcut
+    /// waits for its key, the press is the new key and Esc cancels.</summary>
     public bool HandleKey(KeyEventArgs e)
     {
         if (!IsVisible) return false;
+        if (capturing is { } id)
+        {
+            if (e.Key == Key.Escape) StopCapture();
+            else if (Shortcuts.Assignable(e.Key))
+            {
+                var g = new KeyGesture(e.Key, e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Shift | KeyModifiers.Alt));
+                capturing = null;
+                var taken = Shortcuts.Assign(id, g);
+                shortcutNote = taken != null ? $"{Shortcuts.Label(g)} era de \"{taken}\": ahora es de \"{Shortcuts.All.First(a => a.Id == id).Name}\"." : null;
+                BuildShortcuts();
+            }
+            e.Handled = true;
+            return true;
+        }
         if (e.Key == Key.Escape) HideDialog();
         e.Handled = true;
         return true;
@@ -260,7 +284,11 @@ public sealed partial class SettingsDialog : UserControl
         AudioTab.Classes.Set("active", id == "audio");
         CameraTab.Classes.Set("active", id == "camera");
         SyncTab.Classes.Set("active", id == "sync");
-        Body.Content = id switch { "camera" => cameraPage, "sync" => syncPage, _ => audioPage };
+        ShortcutsTab.Classes.Set("active", id == "shortcuts");
+        LanguageTab.Classes.Set("active", id == "language");
+        StopCapture();
+        if (id == "shortcuts") { shortcutNote = null; BuildShortcuts(); }
+        Body.Content = id switch { "camera" => cameraPage, "sync" => syncPage, "shortcuts" => shortcutsPage, "language" => languagePage, _ => audioPage };
         Refresh();
     }
 
@@ -417,7 +445,7 @@ public sealed partial class SettingsDialog : UserControl
             string how = calibrated
                 ? $"{(stored?.Method == "tap" ? "medida tocando" : "medida por loopback")} · el driver estima {info.TotalMs:0.#} ms"
                 : $"salida {info.OutputMs:0.#} ms + entrada {info.InputMs:0.#} ms, según el driver";
-            readout.Children.Add(new TextBlock { Text = how + " · se compensa sola en cada toma nueva", FontSize = 11, Foreground = Palette.Faint, Classes = { "mono" }, TextWrapping = TextWrapping.Wrap });
+            readout.Children.Add(new TextBlock { Text = how + " · se compensa sola en cada canal nuevo", FontSize = 11, Foreground = Palette.Faint, Classes = { "mono" }, TextWrapping = TextWrapping.Wrap });
             if (info.OutputMs > 60)
                 readout.Children.Add(Warning("La salida tiene mucha latencia: ¿auriculares Bluetooth, HDMI o un parlante externo? Escuchá por la salida de la interfaz."));
             if (stored != null && LatencyCalibration.IsCalibrationStale(stored, info.TotalMs, info.SampleRate))
@@ -484,6 +512,83 @@ public sealed partial class SettingsDialog : UserControl
     }
 
     void RefreshSync() { if (engine != null) RefreshSync(engine); }
+
+    void StopCapture()
+    {
+        if (capturing == null) return;
+        capturing = null;
+        BuildShortcuts();
+    }
+
+    /// <summary>"Idioma" (native only): the choice is stored right away and applies on the next start (see <see cref="Loc"/>).</summary>
+    void BuildLanguage()
+    {
+        var box = Combo();
+        box.ItemsSource = Loc.Languages.Select(l => l.Name).ToList();
+        box.SelectedIndex = Array.FindIndex(Loc.Languages, l => l.Code == Loc.Language);
+        var restart = Warning(Loc.T("settings.lang.restart"));
+        restart.IsVisible = false;
+        box.SelectionChanged += (_, _) =>
+        {
+            if (box.SelectedIndex < 0) return;
+            string code = Loc.Languages[box.SelectedIndex].Code;
+            Loc.Choose(code);
+            restart.IsVisible = code != Loc.Language;
+        };
+        var s = Section(Loc.T("settings.lang.section"));
+        s.Children.Add(Field(Loc.T("settings.lang.field"), box));
+        s.Children.Add(Help(Loc.T("settings.lang.help")));
+        s.Children.Add(restart);
+        languagePage.Children.Add(Card(s));
+    }
+
+    /// <summary>"Atajos de teclado": one card per group, a row per action with its key; rebuilt on every change.</summary>
+    void BuildShortcuts()
+    {
+        shortcutsPage.Children.Clear();
+        var resetAll = new Button { Content = "Restablecer todo", Classes = { "link" }, IsEnabled = Shortcuts.All.Any(a => !Shortcuts.IsDefault(a.Id)) };
+        ToolTip.SetTip(resetAll, "Volver a los atajos de siempre");
+        resetAll.Click += (_, _) => { shortcutNote = null; capturing = null; Shortcuts.ResetAll(); };
+        var intro = Section("Atajos de teclado", resetAll);
+        intro.Children.Add(Help("Hacé clic en un atajo y tocá la tecla nueva (con Ctrl, Shift o Alt si querés). Esc cancela. Si la tecla era de otra acción, esa se queda sin atajo. Esc siempre cancela la cuenta y lo que estés arrastrando."));
+        if (shortcutNote != null) intro.Children.Add(Warning(shortcutNote));
+        shortcutsPage.Children.Add(Card(intro));
+        foreach (var group in Shortcuts.All.GroupBy(a => a.Group))
+        {
+            var s = Section(group.Key);
+            s.Spacing = 6;
+            foreach (var a in group) s.Children.Add(ShortcutRow(a));
+            shortcutsPage.Children.Add(Card(s));
+        }
+    }
+
+    Control ShortcutRow(Shortcuts.Action a)
+    {
+        bool waiting = capturing == a.Id;
+        string label = Shortcuts.Label(a.Id);
+        var key = new Button
+        {
+            Classes = { "chip" }, FontFamily = Palette.Mono.FontFamily, MinWidth = 120, Height = 30, Padding = new Thickness(10, 0), HorizontalContentAlignment = HorizontalAlignment.Center,
+            Content = waiting ? "Tocá una tecla…" : label.Length > 0 ? label : "Sin atajo",
+        };
+        key.Classes.Set("on", waiting);
+        if (!waiting && label.Length == 0) key.Foreground = Palette.Faint;
+        ToolTip.SetTip(key, waiting ? "Tocá la tecla nueva (Esc: cancelar)" : "Cambiar el atajo");
+        key.Click += (_, _) =>
+        {
+            capturing = capturing == a.Id ? null : a.Id;
+            shortcutNote = null;
+            BuildShortcuts();
+            Focus();
+        };
+        var reset = Act("", "Volver al atajo de siempre", () => { shortcutNote = null; Shortcuts.Reset(a.Id); });
+        reset.IsVisible = !Shortcuts.IsDefault(a.Id);
+        var right = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        right.Children.Add(reset);
+        right.Children.Add(key);
+        var name = new TextBlock { Text = a.Name, FontSize = 12, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+        return Row(name, right);
+    }
 
     // --- building blocks (SettingsDialog.tsx Section / Field) ------------------------------------
 

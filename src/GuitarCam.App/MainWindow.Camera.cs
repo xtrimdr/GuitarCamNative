@@ -12,7 +12,7 @@ public partial class MainWindow
     {
         var cap = camera.Capture;
         Live.UpdateCamera(cap, camera.Mirror);
-        bool recording = recJournal != null;
+        bool recording = RecordingTake;
         int? beat = recording ? engine.CountdownBeat : null;
         Live.SetState(recording && beat == null, beat, Math.Max(0, engine.PositionSec));
         Live.SetAudio(engine.DriverName, engine.InputGainDb);

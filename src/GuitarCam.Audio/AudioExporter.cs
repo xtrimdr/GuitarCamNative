@@ -39,7 +39,7 @@ public static class AudioExporter
         Action<AudioExportProgress>? onProgress = null, CancellationToken ct = default)
     {
         if (job.MixTracks.All(t => t.Clips.Count == 0))
-            throw new ExportException("Necesitás al menos una toma en el timeline para exportar.");
+            throw new ExportException("Necesitás al menos un canal en el timeline para exportar.");
         string ext = Extension(format);
         var target = Mp4Exporter.CheckDestination(job.ProjectDir, job.OutDir,
             string.IsNullOrWhiteSpace(job.FileName) ? job.ProjectName : job.FileName, ext);

@@ -64,6 +64,7 @@ public sealed class AsioDuplex : IDisposable
     }
 
     /// <param name="inputOffset">First input channel (0-based).</param>
+    /// <param name="inputChannels">Inputs to open from <paramref name="inputOffset"/>; 0 = all the driver has (several tracks record at once).</param>
     /// <param name="outputOffset">First of the two output channels (0-based).</param>
     public AsioDuplex(string driver, int sampleRate, int inputOffset, int inputChannels, int outputOffset, ProcessBlock process)
     {
@@ -76,6 +77,8 @@ public sealed class AsioDuplex : IDisposable
             asio.Dispose();
             throw new InvalidOperationException($"El driver \"{driver}\" no acepta {sampleRate} Hz.");
         }
+        if (inputChannels <= 0) inputChannels = Math.Max(1, asio.DriverInputChannelCount - inputOffset);
+        InputChannels = inputChannels;
         asio.InputChannelOffset = inputOffset;
         asio.ChannelOffset = outputOffset;
         asio.InitRecordAndPlayback(new SilenceProvider(WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, 2)), inputChannels, sampleRate);
@@ -84,6 +87,8 @@ public sealed class AsioDuplex : IDisposable
     }
 
     public int DriverInputChannels => asio.DriverInputChannelCount;
+    /// <summary>The inputs this stream opened (the callback's <c>input</c> arrays).</summary>
+    public int InputChannels { get; }
     public int DriverOutputChannels => asio.DriverOutputChannelCount;
     public int ReportedOutputLatency => asio.PlaybackLatency;
 

@@ -58,7 +58,20 @@ gusta como quedó; la nativa no es una oportunidad para rediseñarla.
 | Mensajes de commit | Inglés, en imperativo, una línea descriptiva ("Decode real video in the preview with FFmpeg") |
 | Valores que se guardan en el JSON | Inglés, iguales a la web (`"tube"`, `"tape"`, `"side-by-side"`, `"rhythm"`…) |
 
-El vocabulario de la interfaz es de músico, no de programador: **toma**, **pista**, **click**, **Vida**
+**Multilenguaje** (solo nativa, pedido del usuario; en curso): los textos de la interfaz salen de `Loc`
+(`Loc.T("clave")`, o `{loc:T clave}` en XAML) y viven en `Assets/Lang/<código>.json`; **es.json es la
+referencia** (lo que falta en otro idioma cae al español). El idioma se elige en Configuración → "Idioma",
+se guarda en `config.json` (`language`) y se aplica al reiniciar. Ya usan claves Configuración, la
+barra de título, el transporte, el inspector, el timeline (con su menú), Color y Historial; el resto (mixer,
+diálogos, `Shortcuts`) sigue en español dentro del código y se migra de a una pantalla. Los títulos de
+sección del inspector, de Color y de Historial son ids estables en español (`SectionTitle` y
+`bar.section.*` los traducen solo al mostrarlos), porque con ellos se recuerda qué secciones están
+plegadas. `Projects` no conoce `Loc`: sus frases (Actividad, días, "hace 5 min") pasan por `Texts.T(clave,
+español)`, que `Loc.Load` conecta; sin esa conexión (gclab) queda el español de siempre. Texto nuevo → clave nueva
+en todos los idiomas. Tono: claro y corto en botones, etiquetas y tooltips; el humor (suave, nunca tosco)
+va en estados vacíos, avisos y confirmaciones, y nunca cuando el usuario puede perder algo.
+
+El vocabulario de la interfaz es de músico, no de programador: **canal**, **pista**, **click**, **Vida**
 (cantidad de saturación), **Válvula / Cinta**, **Rasgueo / Arpegio / Punteo** (presets del compresor),
 **Ver todo**. Los niveles de "Vida" se nombran Apenas / Sutil / Con vida / Caliente / Al palo.
 
@@ -140,7 +153,7 @@ El callback de ASIO (`AsioDuplex.ProcessBlock`, `PlaybackEngine.Process`) corre 
   caída visual (×0,82 por tick en pistas, 24 dB/s en el medidor estéreo) se hace del lado de la UI.
 - Lo que va a disco sale del callback por otro hilo (ver `RecordingWriter`).
 - Sample rate del motor: 48 kHz (`PlaybackEngine.SampleRate`).
-- `PlaybackEngine` muestra la carga del callback ("x %" con la etiqueta DSP, abajo a la izquierda): si un cambio la sube mucho, decilo.
+- `PlaybackEngine` muestra la carga del callback ("DSP x %" con su barrita, arriba junto a CPU / GPU / RAM; roja desde el 80 %): si un cambio la sube mucho, decilo.
 
 Cadena por pista (como en la web, `buildTrack` de `mixGraph.ts`): clips (con fades y ganancia) →
 saturación → EQ del preset antes (corte de graves, barro) → compresor → EQ del preset después (presencia,
@@ -252,23 +265,26 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 ### Estructura de la ventana
 
 ```
-┌ barra de título propia (44) ─ logo · chip del proyecto (guardado) ▾ · Video|Solo audio · deshacer/rehacer · estado ···· CPU GPU RAM · cámara · kHz · FFmpeg · tema · ⚙ · [Exportar MP4] ┐
+┌ barra de título propia (44) ─ logo · chip del proyecto (guardado) ▾ · Video|Solo audio · deshacer/rehacer · estado ···· CPU │ GPU │ RAM │ DSP │ cámara │ FFmpeg · tema · ⚙ · [Exportar MP4] ┐
 ├ inspector (290) ─┬─ preview (un panel por pista con video) ────────┬─ "En vivo" (256) ─┬─ proyecto (290, plegable a 44) ┤
 │ TOMA + secciones │                                                 │ cámara + entrada  │ pestañas Color / Historial     │
 ├──────────────────┴─ separador arrastrable ─────────────────────────┴───────────────────┤                                │
-│ timeline (280): regla (32) · encabezados fijos (264) · un carril por pista (64, 40–160) │                                │
+│ timeline (280): regla (32) · encabezados fijos (324) · un carril por pista (64, 40–160) │                                │
 ├ transporte, siempre abajo (~52) ────────────────────────────────────────────────────────────────────────────────────────────┤
-│ DSP % · formato/driver · ENTRADA 1-2 ··· [ reloj │ ⏮ ■ ▶ ● loop │ Compás Tempo TAP Cuenta Click ▾ ] ··· Timeline/Mixer · Ver todo │
+│ ·························· medidor de entrada (kHz · buffer debajo) · Monitor  [ reloj │ ⏮ ■ ▶ ● loop │ Compás Tempo TAP Cuenta Click ▾ ] ··· Timeline/Mixer · Ver todo │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 - **Transporte abajo, al estilo Fender Studio Pro** (pedido del usuario; en la web va arriba del timeline):
-  celdas planas con el valor arriba y una etiqueta chica abajo. A la izquierda el estado del audio (carga
-  DSP, formato con el driver como etiqueta, medidor de entrada), a la derecha la vista, y en el medio **un
+  celdas planas con el valor arriba y una etiqueta chica abajo. A la izquierda, pegados al recuadro del medio,
+  el medidor de entrada (del ancho del texto de abajo y con su escala en dB, `StereoMeter.ShowScale`) con
+  "Entrada 1-2 · 48 kHz · 192 muestras (4,0 ms)" chiquito debajo (el driver va en el tooltip) y el botón **Monitor** (`ToggleButton.cell`, el monitoreo por software de Configuración); a la derecha
+  la vista, y en el medio **un
   solo recuadro oscuro** (`Border.metro`) con reloj │ transporte (`Button.tbtn`, también Grabar: un ● rojo sin
   texto, pedido del usuario; en la web es un chip grande con la pista destino) │ metrónomo,
   separados por `Border.vsep`. Ese recuadro queda **siempre centrado en la ventana**: columnas `*,Auto,*`;
-  si falta lugar, el texto del audio de la izquierda se recorta antes de que el recuadro se mueva.
+  la carga DSP subió a la barra de título (pedido del usuario), con la misma forma que CPU / GPU / RAM
+  ("CPU 19% ▬", con líneas `Border.tsep` entre los grupos).
 
 - El logo de la barra de título es el ícono de la app y abre "Acerca de" (`Dialogs/AboutDialog`, solo de la
   nativa: la web no tiene). La barra de título es la de la app (`ExtendClientAreaToDecorationsHint`), arrastrable, doble clic
@@ -277,7 +293,7 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 - Maximizada, Windows corre la ventana 8 px afuera de cada borde de la pantalla (por la barra de título
   propia). La grilla raíz lleva `Margin="{Binding $parent[Window].OffScreenMargin}"` para compensarlo; no
   lo saques o se cortan los costados y la barra de transporte.
-- **Barra de estado** = el `StatusText` del centro de la barra de título. Ahí van los avisos, no en diálogos.
+- **Avisos** = la campanita de la barra de título (`Controls/NotificationBell`, a la izquierda del tema). `Status(texto)` agrega el mensaje a su lista (los últimos 50, el más nuevo arriba); un punto de acento marca los sin leer y abrirla los marca como leídos. Nada se escribe en el centro de la barra de título ni en diálogos.
 - **Inspector**: número + nombre editable de la toma (`TextBox.title`), los datos del archivo como badges
   (`Hover`, mono) y un botón que pliega o despliega **todas** las secciones (pedido del usuario; en la web
   solo los efectos). Después, una tarjeta (`Border.section`) por bloque, cada una con ícono +
@@ -311,6 +327,12 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 - **Preview**: los paneles se calculan con `PanelLayout.Compute` sobre un lienzo de 1080 px de alto,
   **la misma cuenta que usa la exportación** (port de `panelLayout.js`). Lo que se ve tiene que ser lo que
   se exporta. Encuadre: cover-fit + zoom/paneo/espejo del clip. Etiqueta con el nombre de la pista abajo a la izquierda.
+- **Encabezados de pista** (solo nativa, pedido del usuario): la columna se ensancha arrastrando su borde derecho
+  (324–460, se recuerda en `headerWidth`; las filas se arman para 264 y el sobrante va al volumen). Con carriles más altos aparecen debajo, de a
+  una fila de 22 px, Vida · Comp · Reverb · Delay (ícono `FxIcon`, clic prende/apaga, arrastrar el slider cambia la
+  cantidad, doble clic la restablece), también en pistas vacías (`TimelineView.EffectRequested`). Tocar cualquier
+  parte del encabezado (la manija o un control, menos "quitar") selecciona la pista. Al reordenar con la manija, la
+  pista sigue al puntero por encima de las demás y el resto se desliza a su lugar (`shownSlot`, `Slide`; la web salta).
 - **Timeline**: clips como en la web: fondo `Hover` al 40 %, borde `Line` (acento al 60 % si está
   seleccionado), onda `Dim` (acento si está seleccionado, `Faint` si la pista no suena), sin el nombre
   adentro; un clip sin archivo, gris con "Sin conexión…". Con video y carriles de 52 px o más, la tira de
@@ -319,6 +341,11 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
   Varios clips por pista (solo nativa): Alt+X divide en el cabezal y D duplica (`ClipEditing.Split` /
   `Duplicate`); los clips de una pista comparten su panel y se ve el de arriba (el último), igual en la preview
   (`LiveTrack.ShownClip`) y en la exportación (`ExportTakeSpec.Panel`).
+  Arrastrar un clip a otra pista lo cambia de pista **y de tiempo** a la vez (solo nativa, pedido del usuario; la web
+  conserva el tiempo): el original queda atenuado y un fantasma punteado marca dónde cae (`DrawGhost`). Con Ctrl
+  se intercambia con el clip de abajo, como en la web. Shift+arrastrar sobre una pista marca un rango (solo nativa,
+  pedido del usuario) y Supr o "Borrar el rango" del clic derecho lo saca de sus clips (`ClipEditing.DeleteRange`),
+  dejando el hueco; la selección se va con un clic, Esc o una edición.
 - **Video | Solo audio** (solo nativa, pedido del usuario; `MainWindow.Mode.cs`, `ProjectSettings.Mode`): el
   interruptor de la barra de título y del "Nuevo proyecto" del gestor. En solo audio el timeline (o el mixer) se
   mueve al lugar de la preview (`AudioArea`) y la fila de abajo se cierra; la cámara se suelta
@@ -327,9 +354,21 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
   con WAV / MP3, `AudioExporter`). Es un paso de deshacer y no borra nada. Todo lo nuevo que solo sirva con imagen
   va a `videoOnly` o mira `AudioOnly`.
 - **Armar para grabar** (solo nativa, pedido del usuario): el ● de cada encabezado de pista y de cada tira del
-  mixer elige dónde graba R (`armedTrackId` en `MainWindow.Recording.cs`; sin pista armada, la elección de la
-  web). La pista destino siempre se tiñe de rojo (`TimelineView.ArmedIndex`). Si tiene clips, la toma los
-  reemplaza (`TakeRecording.AddTake`, quedan en Historial) y la pista no suena mientras grabás (`LiveTrack.RecordMuted`).
+  mixer (o R, sobre la pista seleccionada) elige dónde graba Shift+R (`armedIds` en `MainWindow.Recording.cs`: null = la elección de la web, vacía = ninguna;
+  sin pista armada, Grabar queda deshabilitado, en video y en solo audio). Se pueden armar varias y R las graba a la vez, una toma y un WAV por pista desde el
+  mismo sample; las pistas destino siempre se tiñen de rojo (`TimelineView.ArmedIndices`). Cada pista armada
+  muestra su entrada (`Track.Input`, "3" o "3-4"; null = 1-2 de Configuración) en un chip que abre el menú de
+  entradas. El motor abre todas las entradas del driver y tiene un `InputTap` por pista armada (su
+  `InputProcessor`, medidor, monitoreo por software sin repetir entradas, y su `TakeRecorder`). El video de la
+  cámara va a la primera pista armada con `Video`. Si tiene clips, la toma los reemplaza (`TakeRecording.AddTake`,
+  quedan en Historial) y la pista no suena mientras grabás (`LiveTrack.RecordMuted`).
+- **Quitar todos los mute / solo** (solo nativa, pedido del usuario, como Cubase): M y S al final de la barra de la
+  esquina del timeline (`ClearMutesButton` / `ClearSolosButton`; por ellas la columna mide 324 como mínimo y no 264) y
+  en la barra del mixer; prendidas si alguna pista tiene uno, un clic los saca todos en un paso de deshacer
+  (`ClearAllToggles`).
+- **Plantillas de paneo** (pedido del usuario; en la web son chips sueltos con el slider "Apertura" en la barra del
+  mixer): un solo desplegable "Paneo" (`BuildPanMenu`) con la apertura arriba (30 % por defecto, la web arranca en 60)
+  y las plantillas con su descripción; elegir una la aplica y cierra el menú.
 
 ### Componentes (clases de estilo en `App.axaml`)
 
@@ -381,20 +420,28 @@ Mismo comportamiento que el `StereoMeter` de la web: ataque instantáneo, caída
 | Supr | quitar el clip; en una pista vacía, quitar la pista |
 | Alt+X / D | dividir el clip en el cabezal / duplicar el clip |
 | Esc | cancelar la cuenta antes de grabar; cancelar el gesto en curso en el timeline; en el gestor, cerrar el formulario y después el gestor |
-| R | grabar; grabando, detener y guardar la toma; durante la cuenta, cancelarla (Espacio hace lo mismo mientras graba) |
+| Shift+R o Num * | grabar; grabando, detener y guardar la toma; durante la cuenta, cancelarla (Espacio hace lo mismo mientras graba) |
+| R | armar / desarmar la pista seleccionada (pedido del usuario; en la web R graba) |
 | rueda / Shift o Ctrl+rueda / Alt+rueda | desplazar / zoom en el puntero / alto de pista |
 | clic en la regla, doble clic en un carril | mover el playhead |
+| B / P | mostrar / ocultar el panel de la toma (izquierda) / el del proyecto (derecha) |
 
-- Los atajos se manejan en `MainWindow.OnKey` (evento en túnel). Todo lo que tenga atajo lo muestra
-  **solo en el tooltip**, entre paréntesis: `"Reproducir / parar (Espacio)"`, y en el README. Nunca en el
-  texto visible del control (nada de "Click C" ni cajitas de tecla, aunque la web las tenga): la idea es
-  que los atajos se puedan personalizar más adelante, y entonces solo cambia el tooltip.
+- **Los atajos son configurables** (solo nativa, pedido del usuario): la tabla de acciones con sus teclas por
+  defecto es `Shortcuts.cs` y Configuración → "Atajos de teclado" las cambia (se guardan en `config.json`,
+  "shortcuts"). La tabla de arriba son los valores por defecto. Un atajo nuevo se agrega a `Shortcuts.All`, se
+  atiende en el `switch` de `OnKey` por su id (nunca comparando `Key` a mano) y su tooltip sale de
+  `Shortcuts.Tip(texto, id)` (los fijos, registrados en `shortcutTips`). Esc no se configura: siempre cancela.
+
+- Los atajos se manejan en `MainWindow.OnKey` (evento en túnel) a través de `Shortcuts.Find`. Todo lo que tenga
+  atajo lo muestra **solo en el tooltip**, entre paréntesis y leído de `Shortcuts` (`"Reproducir / parar (Espacio)"`),
+  y en el README. Nunca en el texto visible del control (nada de "Click C" ni cajitas de tecla, aunque la web las
+  tenga): el usuario los puede cambiar, y entonces solo cambia el tooltip.
 - Todo botón de ícono solo tiene `ToolTip.Tip`.
 - Los cambios se aplican en vivo (se escucha mientras movés el slider). El paneo se imanta al centro (|x| < 0,04).
 
 ### Mensajes al usuario
 
-- En la barra de estado, en primera persona y en criollo: **qué pasó + qué hago ahora o qué podés hacer**.
+- En la campanita de avisos, en primera persona y en criollo: **qué pasó + qué hago ahora o qué podés hacer**.
   - "No pude guardar: {motivo}. Lo vuelvo a intentar…"
   - "Es un proyecto de la app web: usá \"Importar proyecto de la app web…\""
   - "Volví a la versión de hace 5 min (lo que había antes también quedó en el historial)"

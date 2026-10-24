@@ -41,7 +41,7 @@ static class ClipChecks
         double offset = original.AtSec;
         ClipEditing.MoveToTrack(p, original.Id, right.Id);
         Check(left.Clips.Count == 0 && ReferenceEquals(right.Clips[0], original) && Near(original.AtSec, offset), "cambiar de pista conserva el tiempo");
-        Check(left.Channel.Pan == -0.8 && right.Channel.Pan == 0.8, "los canales se quedan en sus pistas");
+        Check(left.Channel.Pan == -0.8 && right.Channel.Pan == 0.8, "las tomas se quedan en sus pistas");
         var second = new Clip { MediaId = media.Id, AtSec = 8 };
         left.Clips.Add(second);
         ClipEditing.MoveToTrack(p, original.Id, left.Id, second.Id);
@@ -119,7 +119,7 @@ static class ClipChecks
         InspectorEditing.SetSync(overrideClip, media, -25);
         Check(Near(overrideClip.AtSec, .975), "nudge de cinco ms conserva la compensación anterior");
         InspectorEditing.SetSync(overrideClip, media, 0);
-        Check(overrideClip.SyncMs == 0 && Near(overrideClip.AtSec, 1), "reset de sincronía conserva la colocación de la toma");
+        Check(overrideClip.SyncMs == 0 && Near(overrideClip.AtSec, 1), "reset de sincronía conserva la colocación dla toma");
         var roleClip = new Clip { Extra = new() { ["role"] = System.Text.Json.JsonSerializer.SerializeToElement("solo") } };
         Check(InspectorEditing.DefaultCompPreset(roleClip) == "lead" && InspectorEditing.DefaultCompPreset(new Clip(), "rhythm") == "rhythm",
             "el reset del compresor usa el rol original y admite proyectos nativos anteriores");
@@ -147,6 +147,32 @@ static class ClipChecks
         sp.Tracks[0].Clips.Add(cutAtZero);
         var wz = ClipEditing.Window(ClipEditing.Find(sp, ClipEditing.Duplicate(sp, cutAtZero.Id)).Clip, media);
         Check(Near(wz.Start, 9) && Near(wz.End, 19), "duplicar un clip cortado en 0 copia la toma entera");
+        // delete a range: a clip of the media from 20 s to 30 s (AtSec 20, 10 s long), fades 0.5 / 0.7
+        var rp = new Project { Media = [media], Tracks = [new Track { Name = "R" }, new Track { Name = "Otra" }] };
+        var rc = new Clip { MediaId = media.Id, AtSec = 20, FadeInSec = 0.5, FadeOutSec = 0.7 };
+        rp.Tracks[0].Clips.Add(rc);
+        var other2 = new Clip { MediaId = media.Id, AtSec = 20 };
+        rp.Tracks[1].Clips.Add(other2);
+        Check(ClipEditing.DeleteRange(rp, rp.Tracks[0].Id, 40, 45) == 0 && ClipEditing.DeleteRange(rp, rp.Tracks[0].Id, 25, 25) == 0,
+            "un rango que no toca el clip, o vacío, no cambia nada");
+        Check(ClipEditing.DeleteRange(rp, rp.Tracks[0].Id, 23, 26) == 1 && rp.Tracks[0].Clips.Count == 2, "un rango adentro parte el clip en dos");
+        var rl = ClipEditing.Window(rp.Tracks[0].Clips[0], media); var rr = ClipEditing.Window(rp.Tracks[0].Clips[1], media);
+        Check(Near(rl.Start, 20) && Near(rl.End, 23) && Near(rr.Start, 26) && Near(rr.End, 30), "queda lo de antes y lo de después, con el hueco en el medio");
+        Check(rp.Tracks[0].Clips[0].FadeInSec == 0.5 && rp.Tracks[0].Clips[0].FadeOutSec == 0
+            && rp.Tracks[0].Clips[1].FadeInSec == 0 && rp.Tracks[0].Clips[1].FadeOutSec == 0.7, "los bordes del corte no tienen fade; los de afuera sí");
+        Check(rp.Tracks[0].Clips.All(c => c.AtSec == 20 && c.MediaId == media.Id) && Near(ClipEditing.Window(other2, media).End, 30),
+            "el audio no se mueve, el medio es el mismo y otras pistas no cambian");
+        Check(ClipEditing.DeleteRange(rp, rp.Tracks[0].Id, 24, 27) == 1 && rp.Tracks[0].Clips.Count == 2
+            && Near(ClipEditing.Window(rp.Tracks[0].Clips[1], media).Start, 27) && Near(ClipEditing.Window(rp.Tracks[0].Clips[1], media).End, 30),
+            "un rango que pisa el principio de un clip lo deja sin ese pedazo");
+        Check(ClipEditing.DeleteRange(rp, rp.Tracks[0].Id, 21, 29.95) == 2 && rp.Tracks[0].Clips.Count == 1
+            && Near(ClipEditing.Window(rp.Tracks[0].Clips[0], media).End, 21), "lo que sobra con menos de 0,1 s se va, y el final se recorta");
+        Check(ClipEditing.DeleteRange(rp, rp.Tracks[0].Id, 0, 100) == 1 && rp.Tracks[0].Clips.Count == 0, "un rango que cubre todo quita los clips");
+        var rq = new Project { Media = [media], Tracks = [new Track { Name = "Q" }] };
+        rq.Tracks[0].Clips.Add(new Clip { MediaId = media.Id, AtSec = 0, TrimStartSec = 2, FadeInSec = 1 });
+        ClipEditing.DeleteRange(rq, rq.Tracks[0].Id, 3, 6);
+        var qr = ClipEditing.Window(rq.Tracks[0].Clips[1], media);
+        Check(rq.Tracks[0].Clips.Count == 2 && Near(qr.Start, 6) && Near(qr.End, 10), "con un recorte previo también se corta en el lugar justo");
         Console.WriteLine($"Edición de clips: {n} comprobaciones correctas (sin modificar archivos).");
         return 0;
     }

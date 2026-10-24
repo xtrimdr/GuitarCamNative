@@ -351,8 +351,8 @@ public static partial class ProjectLibrary
     /// <summary>Takes a project off the recent list (its files stay where they are).</summary>
     public static void Forget(string dir) => RecentProjects.Forget(dir);
 
-    /// <summary>"Toma 3 — Base Rítmica" → "Base Rítmica"; a track's own name stays as is.</summary>
-    static readonly Regex TakePrefix = new(@"^Toma \d+\s*[—-]\s*");
+    /// <summary>"Canal 3 — Base Rítmica" → "Base Rítmica"; a track's own name stays as is.</summary>
+    static readonly Regex TakePrefix = new(@"^(?:Canal|Toma) \d+\s*[—-]\s*");
 
     /// <summary>The open project as a template: every track's channel (mute/solo cleared) plus its settings.</summary>
     public static ProjectTemplate TemplateOf(Project p, string name) => new()

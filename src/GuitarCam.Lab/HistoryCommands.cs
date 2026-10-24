@@ -72,8 +72,8 @@ static class HistoryCommands
         try
         {
             var p = new Project { Name = "Prueba" };
-            var a = new Media { Name = "Toma 1", Audio = "media/a.wav", DurationSec = 3 };
-            var b = new Media { Name = "Toma 2", Audio = "media/b.wav", DurationSec = 75 };
+            var a = new Media { Name = "Canal 1", Audio = "media/a.wav", DurationSec = 3 };
+            var b = new Media { Name = "Canal 2", Audio = "media/b.wav", DurationSec = 75 };
             p.Media.AddRange([a, b]);
             p.Tracks.Add(new Track { Name = a.Name, Clips = [new Clip { MediaId = a.Id }] });
             p.Tracks.Add(new Track { Name = b.Name, Clips = [new Clip { MediaId = b.Id }] });
@@ -91,7 +91,7 @@ static class HistoryCommands
             ProjectHistory.RemoveFromTimeline(p, b.Id);
             Check(p.Tracks.Count == 1, "quitar del timeline saca su pista");
             store.Save();
-            Check(p.Log[^1] is { Type: "take-removed", Name: "Toma 2" }, "registra que salió del timeline");
+            Check(p.Log[^1] is { Type: "take-removed", Name: "Canal 2" }, "registra que salió del timeline");
             store.Save();
             Check(p.Log.Count(e => e.Type == "take-removed") == 1, "guardar de nuevo no repite el registro");
             ClipEditing.AddMedia(p, b.Id, null);
@@ -113,8 +113,8 @@ static class HistoryCommands
 
             var lines = ProjectHistory.BuildActivity(p);
             Check(lines[0].Text == "Mandaste «gclab-afuera" + lines[0].Text["Mandaste «gclab-afuera".Length..] && lines[0].Rec, "borrar una exportación: rojo");
-            Check(lines[1].Text == "Mandaste «Toma 2» a la Papelera (4 KB)", "borrar no usadas, con el tamaño");
-            Check(lines[2].Text == "Sacaste «Toma 2» del timeline", "sacar del timeline");
+            Check(lines[1].Text == "Mandaste «Canal 2» a la Papelera (4 KB)", "borrar no usadas, con el tamaño");
+            Check(lines[2].Text == "Sacaste «Canal 2» del timeline", "sacar del timeline");
             Check(lines[^1].Text == "Creaste el proyecto", "lo más viejo al final");
 
             var q = new Project();

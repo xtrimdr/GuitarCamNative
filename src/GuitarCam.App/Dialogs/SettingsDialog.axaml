@@ -1,10 +1,11 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:GuitarCam.App"
              x:Class="GuitarCam.App.Dialogs.SettingsDialog"
-             AutomationProperties.Name="Configuración"
+             AutomationProperties.Name="{loc:T settings.title}"
              Background="#B3000000" KeyboardNavigation.TabNavigation="Cycle" Focusable="True">
 
-  <!-- Port of SettingsDialog from GuitarCam/src/components/SettingsDialog.tsx -->
+  <!-- Port of SettingsDialog from GuitarCam/src/components/SettingsDialog.tsx; "Atajos de teclado" and "Idioma" are native only -->
   <UserControl.Styles>
     <Style Selector="Button.nav">
       <Setter Property="Height" Value="36" />
@@ -72,8 +73,8 @@
     <Grid RowDefinitions="Auto,*">
       <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="20,10,12,10">
         <Grid ColumnDefinitions="*,Auto">
-          <TextBlock Text="Configuración" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
-          <Button Grid.Column="1" x:Name="CloseButton" Classes="act" Width="32" Height="32" ToolTip.Tip="Cerrar" AutomationProperties.Name="Cerrar">
+          <TextBlock Text="{loc:T settings.title}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <Button Grid.Column="1" x:Name="CloseButton" Classes="act" Width="32" Height="32" ToolTip.Tip="{loc:T settings.close}" AutomationProperties.Name="{loc:T settings.close}">
             <TextBlock Classes="icon" Text="&#xE711;" FontSize="13" />
           </Button>
         </Grid>
@@ -82,13 +83,19 @@
         <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0" Padding="8">
           <StackPanel Spacing="2">
             <Button x:Name="AudioTab" Classes="nav">
-              <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE8D6;" FontSize="15" /><TextBlock Text="Entradas y salidas" /></StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE8D6;" FontSize="15" /><TextBlock Text="{loc:T settings.tab.audio}" /></StackPanel>
             </Button>
             <Button x:Name="CameraTab" Classes="nav">
-              <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE722;" FontSize="15" /><TextBlock Text="Cámara" /></StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE722;" FontSize="15" /><TextBlock Text="{loc:T settings.tab.camera}" /></StackPanel>
             </Button>
             <Button x:Name="SyncTab" Classes="nav">
-              <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE916;" FontSize="15" /><TextBlock Text="Sincronización" /></StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE916;" FontSize="15" /><TextBlock Text="{loc:T settings.tab.sync}" /></StackPanel>
+            </Button>
+            <Button x:Name="ShortcutsTab" Classes="nav">
+              <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE765;" FontSize="15" /><TextBlock Text="{loc:T settings.tab.shortcuts}" /></StackPanel>
+            </Button>
+            <Button x:Name="LanguageTab" Classes="nav">
+              <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE774;" FontSize="15" /><TextBlock Text="{loc:T settings.tab.language}" /></StackPanel>
             </Button>
           </StackPanel>
         </Border>

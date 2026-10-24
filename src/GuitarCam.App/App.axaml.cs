@@ -10,7 +10,9 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        Loc.Load();
         UiTheme.Apply(UiTheme.Read(), persist: false);
+        Shortcuts.Load();
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             desktop.MainWindow = new MainWindow(desktop.Args?.FirstOrDefault());
         base.OnFrameworkInitializationCompleted();

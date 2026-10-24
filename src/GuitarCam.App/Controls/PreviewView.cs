@@ -173,7 +173,7 @@ public sealed class PreviewView : Control
         ctx.DrawRectangle(Palette.Composition, Palette.Pen(Palette.Line), frame.Inflate(1));
         if (tracks.Count == 0)
         {
-            var title = Palette.Text("La composición aparece cuando termines la primera toma", 12.5, Palette.Dim, Palette.UiBold);
+            var title = Palette.Text("La composición aparece cuando termines el primer canal", 12.5, Palette.Dim, Palette.UiBold);
             var hint = Palette.Text("Mientras grabás, la cámara se ve en el monitor \"En vivo\"", 11, Palette.Faint);
             ctx.DrawText(title, new Point(frame.Center.X - title.Width / 2, frame.Center.Y - title.Height - 2));
             ctx.DrawText(hint, new Point(frame.Center.X - hint.Width / 2, frame.Center.Y + 4));

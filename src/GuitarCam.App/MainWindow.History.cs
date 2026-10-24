@@ -14,9 +14,9 @@ using GuitarCam.Projects;
 namespace GuitarCam.App;
 
 /// <summary>
-/// The Historial tab of the project bar, port of HistoryPanel.tsx: Tomas (filter, search, by day, listen to the raw
+/// The Historial tab of the project bar, port of HistoryPanel.tsx: Canales (filter, search, by day, listen to the raw
 /// file, show in Explorer, take off the timeline or use again), Exportaciones (watch, show, Recycle Bin with an inline
-/// confirmation), Actividad (the log as sentences, by day, "Ver más") and "Borrar no usadas". Same as the web except:
+/// confirmation), Actividad (the log as sentences, by day, "Ver más") and "Borrar no usados". Same as the web except:
 /// there are no "Guardando / Reintentar" rows, as a native take is written to disk while it is recorded, and listening
 /// goes through Windows' default output (the web's &lt;audio&gt;), not the ASIO engine. The work is in ProjectHistory.
 /// </summary>
@@ -27,7 +27,7 @@ public partial class MainWindow
     readonly Border historyPurge = new() { Padding = new Thickness(16) };
     readonly TextBlock historyTotal = new() { Classes = { "mono" }, FontSize = 10, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap };
     readonly StackPanel historyFilters = new() { Spacing = 8 };
-    readonly TextBox historySearch = new() { Classes = { "field" }, Watermark = "Buscar toma…", Height = 32, MinHeight = 32, FontSize = 12, Padding = new Thickness(30, 0, 28, 0) };
+    readonly TextBox historySearch = new() { Classes = { "field" }, Watermark = Loc.T("hist.search"), Height = 32, MinHeight = 32, FontSize = 12, Padding = new Thickness(30, 0, 28, 0) };
     readonly Panel historySearchBox = new();
     readonly List<(string Key, ToggleButton Button, TextBlock Count)> historyFilterButtons = [];
     readonly Dictionary<string, long> historyBytes = [];
@@ -43,12 +43,12 @@ public partial class MainWindow
 
     void BuildHistoryPanel()
     {
-        // Tomas
-        var reveal = HeaderAction("\uE838", "Abrir carpeta", "Abrir la carpeta del proyecto en el Explorador", () => RevealInExplorer(store?.Dir, null));
+        // Canales
+        var reveal = HeaderAction("\uE838", Loc.T("hist.openFolder"), Loc.T("hist.openFolder.tip"), () => RevealInExplorer(store?.Dir, null));
         reveal.Foreground = Palette.Dim;
-        var takes = ColorSection("Tomas", "\uE714", action: reveal, host: historyPanel, scope: "history");
+        var takes = ColorSection("Canales", "\uE714", action: reveal, host: historyPanel, scope: "history");
         var seg = new UniformGrid { Rows = 1 };
-        foreach (var (key, text) in new[] { ("all", "Todas"), ("timeline", "En uso"), ("unused", "Sin usar") })
+        foreach (var (key, text) in new[] { ("all", Loc.T("hist.filter.all")), ("timeline", Loc.T("hist.filter.timeline")), ("unused", Loc.T("hist.filter.unused")) })
         {
             var count = new TextBlock { Classes = { "mono" }, FontSize = 10, Opacity = 0.6, VerticalAlignment = VerticalAlignment.Center };
             var label = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
@@ -66,7 +66,7 @@ public partial class MainWindow
         var clear = new Button { Classes = { "ghost" }, Width = 20, Height = 20, MinHeight = 20, Padding = new Thickness(0), Margin = new Thickness(0, 0, 6, 0),
             HorizontalAlignment = HorizontalAlignment.Right, HorizontalContentAlignment = HorizontalAlignment.Center, Foreground = Palette.Faint,
             Content = new TextBlock { Classes = { "icon" }, Text = "\uE711", FontSize = 10 }, IsVisible = false };
-        ToolTip.SetTip(clear, "Borrar búsqueda");
+        ToolTip.SetTip(clear, Loc.T("hist.search.clear"));
         clear.Click += (_, _) => historySearch.Text = "";
         historySearchBox.Children.Add(clear);
         historySearch.TextChanged += (_, _) =>
@@ -108,10 +108,10 @@ public partial class MainWindow
             return;
         }
         var p = st.Project;
-        bool editable = !st.ReadOnly && !restoring && recJournal == null;
+        bool editable = !st.ReadOnly && !restoring && !RecordingTake;
         MeasureHistoryBytes(st);
 
-        // Tomas
+        // Canales
         var used = ProjectHistory.UsedMediaIds(p);
         var takes = p.Media.OrderByDescending(m => m.CreatedAt).ToList();
         var unused = takes.Where(m => !used.Contains(m.Id)).ToList();
@@ -126,13 +126,13 @@ public partial class MainWindow
             b.IsChecked = key == historyFilter;
             count.Text = (key switch { "timeline" => takes.Count - unused.Count, "unused" => unused.Count, _ => takes.Count }).ToString();
         }
-        if (takes.Count == 0) historyTakes.Children.Add(Help("Las tomas que grabes van a aparecer acá."));
+        if (takes.Count == 0) historyTakes.Children.Add(Help(Loc.T("hist.empty")));
         else
         {
             var list = new StackPanel { Margin = new Thickness(-16, -4) };
             if (visible.Count == 0)
-                list.Children.Add(new TextBlock { Text = q.Length > 0 ? $"Ninguna toma coincide con «{q}»." : historyFilter == "unused"
-                    ? "No hay tomas sin usar: todas están en el timeline." : "No hay tomas en el timeline.",
+                list.Children.Add(new TextBlock { Text = q.Length > 0 ? Loc.T("hist.noMatch", q) : historyFilter == "unused"
+                    ? Loc.T("hist.noUnused") : Loc.T("hist.noneOnTimeline"),
                     FontSize = 12, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(16, 8) });
             foreach (var g in visible.GroupBy(m => m.CreatedAt.ToLocalTime().Date))
             {
@@ -142,13 +142,12 @@ public partial class MainWindow
             historyTakes.Children.Add(list);
         }
         historyTotal.IsVisible = takes.Count > 0;
-        historyTotal.Text = $"Total en disco: {ProjectHistory.FormatBytes(takes.Sum(Bytes))}"
-            + (unused.Count > 0 ? $" · sin usar: {ProjectHistory.FormatBytes(unused.Sum(Bytes))}" : "");
+        historyTotal.Text = Loc.T("hist.total", ProjectHistory.FormatBytes(takes.Sum(Bytes)))
+            + (unused.Count > 0 ? Loc.T("hist.totalUnused", ProjectHistory.FormatBytes(unused.Sum(Bytes))) : "");
 
         // Exportaciones
         var exports = p.Exports.OrderByDescending(e => e.CreatedAt).ToList();
-        if (exports.Count == 0) historyExports.Children.Add(Help(AudioOnly ? "Acá aparecen los audios que exportes, estén donde estén."
-            : "Acá aparecen los MP4 que exportes, estén donde estén."));
+        if (exports.Count == 0) historyExports.Children.Add(Help(Loc.T(AudioOnly ? "hist.exports.empty.audio" : "hist.exports.empty.video")));
         else
         {
             var list = new StackPanel { Margin = new Thickness(-16, -4) };
@@ -158,7 +157,7 @@ public partial class MainWindow
 
         // Actividad
         var activity = ProjectHistory.BuildActivity(p);
-        if (activity.Count == 0) historyActivity.Children.Add(Help("Todavía no pasó nada en este proyecto."));
+        if (activity.Count == 0) historyActivity.Children.Add(Help(Loc.T("hist.activity.empty")));
         else
         {
             var list = new StackPanel { Margin = new Thickness(-16, -4) };
@@ -170,7 +169,7 @@ public partial class MainWindow
             historyActivity.Children.Add(list);
             if (activity.Count > historyShown)
             {
-                var more = new Button { Classes = { "ghost" }, Content = $"Ver más ({activity.Count - historyShown})", FontSize = 11, Foreground = Palette.Dim,
+                var more = new Button { Classes = { "ghost" }, Content = Loc.T("hist.more", activity.Count - historyShown), FontSize = 11, Foreground = Palette.Dim,
                     Padding = new Thickness(0), MinHeight = 20, Height = 20, HorizontalAlignment = HorizontalAlignment.Left };
                 more.Click += (_, _) => { historyShown += ProjectHistory.ActivityPage; RefreshHistory(); };
                 historyActivity.Children.Add(more);
@@ -248,7 +247,7 @@ public partial class MainWindow
     {
         bool playing = takePreview.PlayingId == m.Id;
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), ColumnSpacing = 8 };
-        var play = RowButton(playing ? "\uE73B" : "\uF5B0", playing ? "Parar" : "Escuchar la toma (solo el audio grabado, sin efectos)", () => TogglePreview(st, m));
+        var play = RowButton(playing ? "\uE73B" : "\uF5B0", playing ? Loc.T("hist.stop") : Loc.T("hist.listen"), () => TogglePreview(st, m));
         if (playing) play.Foreground = Palette.Accent;
         grid.Children.Add(play);
 
@@ -258,7 +257,7 @@ public partial class MainWindow
         if (!inTimeline) nameLine.Children.Add(new Border
         {
             Background = Palette.Hover, CornerRadius = new CornerRadius(4), Padding = new Thickness(6, 1), VerticalAlignment = VerticalAlignment.Center,
-            Child = new TextBlock { Text = "No usada", FontSize = 10, FontWeight = FontWeight.Medium, Foreground = Palette.Faint },
+            Child = new TextBlock { Text = Loc.T("hist.unusedBadge"), FontSize = 10, FontWeight = FontWeight.Medium, Foreground = Palette.Faint },
         });
         text.Children.Add(nameLine);
         text.Children.Add(new TextBlock
@@ -268,7 +267,7 @@ public partial class MainWindow
         });
         Grid.SetColumn(text, 1); grid.Children.Add(text);
 
-        var reveal = RowButton("\uE838", "Mostrar el archivo en el Explorador", () => RevealInExplorer(st.Dir, m.Video ?? m.Audio));
+        var reveal = RowButton("\uE838", Loc.T("hist.reveal"), () => RevealInExplorer(st.Dir, m.Video ?? m.Audio));
         Grid.SetColumn(reveal, 2); grid.Children.Add(reveal);
         var hover = new List<Control> { reveal };
         Control action;
@@ -276,7 +275,7 @@ public partial class MainWindow
             action = new Panel { Width = 28, Height = 28, Children = { new Avalonia.Controls.Shapes.Arc { Classes = { "spin" }, Width = 14, Height = 14, Stroke = Palette.Dim } } };
         else if (inTimeline)
         {
-            var remove = RowButton("\uE738", "Quitar del timeline (el archivo queda guardado)", () => RemoveFromTimeline(m));
+            var remove = RowButton("\uE738", Loc.T("hist.removeFromTimeline"), () => RemoveFromTimeline(m));
             remove.IsEnabled = editable;
             hover.Add(remove);
             action = remove;
@@ -285,9 +284,9 @@ public partial class MainWindow
         {
             var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
             content.Children.Add(HistoryIcon("\uE710", 11, Palette.Dim));
-            content.Children.Add(new TextBlock { Text = "Usar", FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
+            content.Children.Add(new TextBlock { Text = Loc.T("hist.use"), FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
             var use = new Button { Classes = { "chip" }, Content = content, MinHeight = 28, Height = 28, Padding = new Thickness(8, 0), IsEnabled = editable };
-            ToolTip.SetTip(use, "Volver a agregar al timeline");
+            ToolTip.SetTip(use, Loc.T("hist.use.tip"));
             use.Click += async (_, _) => await UseTake(m);
             action = use;
         }
@@ -308,24 +307,24 @@ public partial class MainWindow
         text.Children.Add(title);
         var meta = new List<string> { ProjectHistory.FormatAgo(e.CreatedAt) };
         if (e.Aspect != null) meta.Add(e.Aspect);
-        meta.Add($"{e.TakeIds.Count} {(e.TakeIds.Count == 1 ? "toma" : "tomas")}");
+        meta.Add(Loc.T(e.TakeIds.Count == 1 ? "hist.channels.one" : "hist.channels.many", e.TakeIds.Count));
         if (e.DurationSec > 0) meta.Add(ProjectHistory.FormatDuration(e.DurationSec));
         meta.Add(ProjectHistory.FormatBytes(e.Bytes));
         text.Children.Add(new TextBlock { Classes = { "mono" }, FontSize = 10, Foreground = Palette.Faint, Text = string.Join(" · ", meta), TextTrimming = TextTrimming.CharacterEllipsis });
         Grid.SetColumn(text, 1); body.Children.Add(text);
         var open = new Button { Classes = { "ghost" }, Content = body, Padding = new Thickness(16, 8, 0, 8), HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch, Background = Brushes.Transparent, CornerRadius = new CornerRadius(0) };
-        ToolTip.SetTip(open, audioFile ? "Ver el archivo" : "Ver el video");
+        ToolTip.SetTip(open, audioFile ? Loc.T("hist.viewFile") : Loc.T("hist.viewVideo"));
         open.Click += (_, _) =>
         {
-            if (recJournal != null || Export.IsRunning) return;
+            if (RecordingTake || Export.IsRunning) return;
             engine.Pause();
             Export.ShowExported(st.Dir, e);
         };
         grid.Children.Add(open);
-        var reveal = RowButton("\uE838", "Mostrar el archivo en el Explorador", () => RevealInExplorer(null, ProjectHistory.ExportPath(st.Dir, e)));
+        var reveal = RowButton("\uE838", Loc.T("hist.reveal"), () => RevealInExplorer(null, ProjectHistory.ExportPath(st.Dir, e)));
         Grid.SetColumn(reveal, 1); grid.Children.Add(reveal);
-        var delete = RowButton("\uE74D", audioFile ? "Mandar el archivo a la Papelera" : "Mandar el video a la Papelera", () => { historyDeletingExport = e.File; RefreshHistory(); }, danger: true);
+        var delete = RowButton("\uE74D", audioFile ? Loc.T("hist.trashFile") : Loc.T("hist.trashVideo"), () => { historyDeletingExport = e.File; RefreshHistory(); }, danger: true);
         delete.IsEnabled = editable;
         Grid.SetColumn(delete, 2); grid.Children.Add(delete);
         return HistoryRow(grid, [reveal, delete], new Thickness(0, 0, 8, 0));
@@ -336,16 +335,16 @@ public partial class MainWindow
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), ColumnSpacing = 8 };
         grid.Children.Add(HistoryIcon("\uE74D", 14, Palette.Rec));
         var text = new TextBlock { FontSize = 12, Foreground = Palette.Fg, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
-        text.Inlines!.Add(new Run("¿Mandar "));
+        text.Inlines!.Add(new Run(Loc.T("hist.trashAsk.a")));
         text.Inlines.Add(new Run(Path.GetFileName(e.File.Replace('/', '\\'))) { FontWeight = FontWeight.Medium });
-        text.Inlines.Add(new Run(" a la Papelera?"));
+        text.Inlines.Add(new Run(Loc.T("hist.trashAsk.b")));
         Grid.SetColumn(text, 1); grid.Children.Add(text);
-        var no = new Button { Classes = { "btn", "sm" }, Content = "No", Height = 28, IsEnabled = !historyExportBusy };
+        var no = new Button { Classes = { "btn", "sm" }, Content = Loc.T("hist.no"), Height = 28, IsEnabled = !historyExportBusy };
         no.Click += (_, _) => { historyDeletingExport = null; RefreshHistory(); };
         Grid.SetColumn(no, 2); grid.Children.Add(no);
         var label = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         if (historyExportBusy) label.Children.Add(new Avalonia.Controls.Shapes.Arc { Classes = { "spin" }, Width = 12, Height = 12, Stroke = Brushes.White });
-        label.Children.Add(new TextBlock { Text = "Borrar" });
+        label.Children.Add(new TextBlock { Text = Loc.T("hist.delete") });
         var yes = new Button { Classes = { "btn", "sm", "danger" }, Content = label, Height = 28, IsEnabled = !historyExportBusy };
         yes.Click += async (_, _) => await DeleteExport(st, e);
         Grid.SetColumn(yes, 3); grid.Children.Add(yes);
@@ -384,7 +383,7 @@ public partial class MainWindow
         content.Children.Add(HistoryIcon("\uE74D"));
         content.Children.Add(new TextBlock
         {
-            Text = unused.Count == 0 ? "No hay tomas sin usar" : $"Borrar no usadas ({unused.Count} · {ProjectHistory.FormatBytes(bytes)})",
+            Text = unused.Count == 0 ? Loc.T("hist.purge.none") : Loc.T("hist.purge.button", unused.Count, ProjectHistory.FormatBytes(bytes)),
             FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
         });
         var b = new Button { Classes = { "chip", "purge" }, Content = content, Height = 32, MinHeight = 32, HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -404,17 +403,17 @@ public partial class MainWindow
         var text = new TextBlock
         {
             FontSize = 12, Foreground = Palette.Fg, TextWrapping = TextWrapping.Wrap,
-            Text = $"Vas a mandar {unused.Count} {(unused.Count == 1 ? "toma" : "tomas")} ({ProjectHistory.FormatBytes(bytes)}) a la Papelera de reciclaje. Si te equivocás, las recuperás desde ahí.",
+            Text = Loc.T("hist.purge.confirm", Loc.T(unused.Count == 1 ? "hist.channels.one" : "hist.channels.many", unused.Count), ProjectHistory.FormatBytes(bytes)),
         };
         Grid.SetColumn(text, 1); line.Children.Add(text);
         stack.Children.Add(line);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
-        var cancel = new Button { Classes = { "btn", "sm" }, Content = "Cancelar", IsEnabled = !historyPurging };
+        var cancel = new Button { Classes = { "btn", "sm" }, Content = Loc.T("transport.count.cancel"), IsEnabled = !historyPurging };
         cancel.Click += (_, _) => { historyConfirmPurge = false; RefreshHistory(); };
         buttons.Children.Add(cancel);
         var label = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         if (historyPurging) label.Children.Add(new Avalonia.Controls.Shapes.Arc { Classes = { "spin" }, Width = 12, Height = 12, Stroke = Brushes.White });
-        label.Children.Add(new TextBlock { Text = "Mandar a la Papelera" });
+        label.Children.Add(new TextBlock { Text = Loc.T("hist.purge.go") });
         var go = new Button { Classes = { "btn", "sm", "danger" }, Content = label, IsEnabled = !historyPurging && unused.Count > 0 };
         go.Click += async (_, _) => await PurgeUnused(st, unused);
         buttons.Children.Add(go);
@@ -442,7 +441,7 @@ public partial class MainWindow
         catch (Exception e) when (e is IOException or InvalidOperationException or NAudio.MmException or FormatException or InvalidDataException)
         {
             takePreview.Stop();
-            Status(e is FileNotFoundException ? $"No encontré el archivo de «{m.Name}»." : $"No pude reproducir «{m.Name}»: {e.Message}");
+            Status(e is FileNotFoundException ? Loc.T("hist.err.notFound", m.Name) : Loc.T("hist.err.play", m.Name, e.Message));
         }
         RefreshHistory();
     }
@@ -485,7 +484,7 @@ public partial class MainWindow
                 MarkDirty();
                 SaveSoon();
             }
-            if (failure != null) Status($"No se pudieron borrar las tomas: {failure.Message}");
+            if (failure != null) Status(Loc.T("hist.err.purge", failure.Message));
             else historyConfirmPurge = false;
         }
         finally
@@ -509,7 +508,7 @@ public partial class MainWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OperationCanceledException)
         {
-            Status($"No se pudo borrar la exportación: {ex.Message}");
+            Status(Loc.T("hist.err.export", ex.Message));
         }
         finally
         {
@@ -529,11 +528,11 @@ public partial class MainWindow
             if (file != null && File.Exists(path)) Explorer.Select(path);
             else if ((file == null ? path : Path.GetDirectoryName(path)) is { } folder && Directory.Exists(folder))
                 Explorer.Open(folder);
-            else Status("No encontré el archivo: ¿se movió o se borró?");
+            else Status(Loc.T("hist.err.moved"));
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or IOException)
         {
-            Status($"No pude abrir el Explorador: {e.Message}");
+            Status(Loc.T("hist.err.explorer", e.Message));
         }
     }
 }

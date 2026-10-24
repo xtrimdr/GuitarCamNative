@@ -41,15 +41,29 @@
   plantillas de paneo y mini timeline), reproducción por ASIO, autoguardado. Las tomas se graban con el video de la cámara. El ⚙
   abre Configuración: driver ASIO y salida (se recuerdan), canales, ganancia, monitoreo, cámara
   (dispositivo, resolución, IP DroidCam, espejo), calibración de latencia, ajuste fino de sincronía y
-  latencia de cámara.
-  R = grabar (grabando: detener y guardar; en la cuenta: cancelar), Esc = cancelar la cuenta,
+  latencia de cámara, y los atajos de teclado (pestaña "Atajos de teclado": clic en una tecla y tocá la nueva).
+  Shift+R o Num * = grabar (grabando: detener y guardar; en la cuenta: cancelar), Esc = cancelar la cuenta,
+  R = armar / desarmar la pista seleccionada,
   Espacio = play/pausa (grabando: detener y guardar), Inicio = al principio, C = click,
   Shift+C = cuenta, T = tap tempo, M/S = mute/solo, F = ver todo, X = timeline / mixer,
   Shift+rueda = zoom, Alt+rueda = alto de pista, Ctrl+Z = deshacer, Ctrl+Y o Ctrl+Shift+Z = rehacer,
-  Supr = quitar clip (otra vez: quitar la pista vacía), Esc = cancelar el arrastre,
-  Alt+X = dividir el clip en el cabezal, D = duplicar el clip (la copia va justo después).
-  El ● de cada pista (timeline y mixer) la arma para grabar: R graba ahí, aunque tenga una toma (la nueva la
+  Supr = quitar clip (otra vez: quitar la pista vacía), Esc = cancelar el arrastre
+  (arrastrar un clip a otra pista lo mueve también en el tiempo y un fantasma marca dónde cae; con Ctrl se intercambia con el clip de abajo; Shift+arrastrar sobre una pista marca un rango y Supr lo borra, dejando el hueco),
+  Alt+X = dividir el clip en el cabezal, D = duplicar el clip (la copia va justo después),
+  "+" de las pistas → "Importar audio…" (o soltar archivos WAV / MP3 / FLAC / OGG / M4A / AIFF en la ventana) = importar
+  audio de afuera: se copia a `media/` y queda en una pista nueva, sin video, en el cabezal,
+  B = mostrar / ocultar el panel de la toma, P = mostrar / ocultar el panel del proyecto. Todos menos Esc se
+  pueden cambiar en Configuración → Atajos de teclado.
+  El ● de cada pista (timeline y mixer) la arma para grabar (R hace lo mismo con la pista seleccionada): Shift+R graba ahí, aunque tenga una toma (la nueva la
   reemplaza y la anterior queda en Historial). La pista donde va a caer la toma siempre se ve teñida de rojo.
+  Sin ninguna pista armada, Grabar queda deshabilitado (en video y en solo audio).
+  Se pueden armar varias: R las graba todas a la vez, una toma por pista. Armada, la pista muestra su entrada
+  ("1-2 ▾" al lado del ●, o en lugar de "VACÍA" en el mixer); un clic elige de dónde graba (las entradas 1-2 de
+  Configuración, cualquier entrada sola o un par en estéreo), se guarda con el proyecto y su medidor muestra
+  esa entrada. El video de la cámara va a la primera pista armada que sale en el video.
+  Como en Cubase, la M y la S de la barra de arriba del timeline (al lado de la altura de pista) y de la barra
+  del mixer quitan todos los mute o todos los solo de una vez; se prenden mientras alguna pista tiene uno.
+  Las plantillas de paneo del mixer están en el desplegable "Paneo", con la apertura (30 % por defecto) arriba.
   En el gestor: F2 = renombrar la fila, Esc = cierra el formulario y después el gestor (si hay un
   proyecto abierto)
 - `tools/make-icon.ps1`: dibuja el ícono de la app (`src/GuitarCam.App/Assets/GuitarCam.ico` y el logo de la barra de título `GuitarCam-64.png`, vista previa en `docs/icon-256.png`)
@@ -71,7 +85,7 @@ src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe
 | `dispositivos` | drivers ASIO y dispositivos WASAPI |
 | `panel` | panel del driver ASIO (tamaño de buffer) |
 | `latencia [--modo cable\|tocando] [--ver] [--borrar] [--simular ms] [--datos X]` | mide la latencia ida y vuelta (con cable o tocando 4 + 12 clicks) o muestra / borra la guardada |
-| `grabar --monitor --sat valvula` | graba sobre el click; con `--monitor` te escuchás con el efecto, vía ASIO (también `--ganancia`, `--descartar`, `--latencia-ms`, `--ajuste-sincro`, `--simular`; con `--simular --ruido-2 0.0001`, la entrada 2 con soplido) |
+| `grabar --monitor --sat valvula` | graba sobre el click; con `--monitor` te escuchás con el efecto, vía ASIO (también `--ganancia`, `--descartar`, `--latencia-ms`, `--ajuste-sincro`, `--simular`; con `--simular --ruido-2 0.0001`, la entrada 2 con soplido; con `--entradas 1,2,3-4`, una toma por entrada a la vez, y con `--simular` verifica cada WAV) |
 | `mezclar proyecto\|toma.wav [--salida mezcla.wav] [--segundos N]` | renderiza la mezcla offline, con el mismo grafo que la reproducción |
 | `procesar toma.wav --sat cinta --comp-estilo punteo --eq ritmica --reverb cuarto --delay punteada` | aplica efectos a un WAV (también `--comp-cant`, `--reverb-envio`, `--delay-envio`) |
 | `verificar [toma.wav]` | compara el DSP portado con el de la app web |
@@ -86,7 +100,8 @@ src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe
 | `proyecto toma carpeta [--segundos 3] [--pista id] [--camara]` | graba un tono como la ventana: a qué pista va, nombre, canal, guardado y diario; con `--camara`, también el video |
 | `proyecto cortar carpeta [--camara]` | graba un tono (y el video) y corta sin cerrar, para probar la recuperación |
 | `proyecto versiones carpeta` / `proyecto volver carpeta n` | las versiones guardadas en `historial/` (1 = la más nueva) / vuelve a una (lo de antes queda en el historial) |
-| `proyecto verificar-deshacer` / `proyecto verificar-clips` / `proyecto verificar-tomas` | pruebas de deshacer/rehacer, de edición de clips y de dónde cae una toma nueva, sin tocar archivos |
+| `proyecto verificar-deshacer` / `proyecto verificar-clips` / `proyecto verificar-tomas` / `proyecto verificar-importar` | pruebas de deshacer/rehacer, de edición de clips, de dónde cae una toma nueva y de importar audio (usa una carpeta temporal) |
+| `proyecto importar-audio carpeta archivo [--en segundos] [--pista id]` | copia un audio de afuera a `media/` y lo pone en una pista de solo audio |
 | `proyecto historial carpeta [quitar\|usar medio \| borrar-no-usadas \| borrar-exportacion n]` | lo de la pestaña Historial: tomas en uso y no usadas, exportaciones y actividad; sus acciones (a la Papelera, como la ventana) |
 | `proyecto verificar-historial` | prueba el registro de tomas que salen o vuelven al timeline, la Papelera y las frases de Actividad (en una carpeta temporal) |
 | `proyecto clips carpeta` | lista pistas y clips |

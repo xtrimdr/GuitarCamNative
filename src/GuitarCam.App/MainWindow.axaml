@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:c="using:GuitarCam.App.Controls"
         xmlns:d="using:GuitarCam.App.Dialogs"
+        xmlns:loc="using:GuitarCam.App"
         x:Class="GuitarCam.App.MainWindow"
         Title="GuitarCam Studio Native"
         Icon="/Assets/GuitarCam.ico"
@@ -25,6 +26,17 @@
     <Style Selector="Border.section.off TextBlock.dim, Border.section.off Slider, Border.section.off UniformGrid, Border.section.off CheckBox">
       <Setter Property="Opacity" Value="0.4" />
     </Style>
+    <!-- the thin vertical lines between the groups of the top bar's status (CPU… · DSP · audio · camera · FFmpeg) -->
+    <Style Selector="Border.tsep">
+      <Setter Property="Width" Value="1" />
+      <Setter Property="Height" Value="14" />
+      <Setter Property="Background" Value="{StaticResource Line}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="StackPanel.tstat TextBlock">
+      <Setter Property="FontSize" Value="10.5" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
   </Window.Styles>
 
   <!-- maximized, Windows pushes a window with our own title bar 8 px past each screen edge: OffScreenMargin
@@ -35,7 +47,7 @@
     <Border x:Name="TitleBar" Grid.ColumnSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
       <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="12,0,150,0">
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <Button x:Name="LogoButton" Classes="ghost" Padding="2" Margin="-2,0" ToolTip.Tip="Acerca de GuitarCam Studio Native" AutomationProperties.Name="Acerca de">
+          <Button x:Name="LogoButton" Classes="ghost" Padding="2" Margin="-2,0" ToolTip.Tip="{loc:T title.about.tip}" AutomationProperties.Name="{loc:T title.about}">
             <Image Source="/Assets/GuitarCam-64.png" Width="24" Height="24" RenderOptions.BitmapInterpolationMode="HighQuality" />
           </Button>
           <TextBlock Text="GuitarCam Studio" FontWeight="SemiBold" FontSize="13.5" VerticalAlignment="Center" />
@@ -47,12 +59,12 @@
         <Button Grid.Column="1" x:Name="SessionChip" Classes="ghost" Foreground="{StaticResource Fg}" Height="32" Padding="10,0" VerticalContentAlignment="Center" FontSize="12" Margin="18,0,0,0">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <TextBlock Classes="icon" Text="&#xE8B7;" FontSize="13" Foreground="{StaticResource Dim}" />
-            <TextBlock x:Name="SessionName" Text="Sin proyecto" FontWeight="SemiBold" MaxWidth="180" TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="SessionName" Text="{loc:T title.noProject}" FontWeight="SemiBold" MaxWidth="180" TextTrimming="CharacterEllipsis" />
             <!-- save state (the web's Guardando / Guardado / Error al guardar next to the name) -->
             <StackPanel x:Name="SaveState" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" IsVisible="False">
               <Arc x:Name="SaveSpin" Classes="spin" Width="11" Height="11" StrokeThickness="1.5" Stroke="{StaticResource Dim}" IsVisible="False" />
               <TextBlock x:Name="SaveIcon" Classes="icon" Text="&#xE73E;" FontSize="10" Foreground="{StaticResource Faint}" />
-              <TextBlock x:Name="SaveText" Text="Guardado" FontSize="11" FontWeight="Normal" Foreground="{StaticResource Faint}" />
+              <TextBlock x:Name="SaveText" Text="{loc:T title.saved}" FontSize="11" FontWeight="Normal" Foreground="{StaticResource Faint}" />
             </StackPanel>
             <TextBlock Classes="icon" Text="&#xE70D;" FontSize="9" Foreground="{StaticResource Faint}" />
           </StackPanel>
@@ -62,58 +74,66 @@
           <!-- the project's mode (native only): video, or solo audio without stage, camera or MP4 -->
           <Border Classes="seg" Margin="0,0,10,0" VerticalAlignment="Center">
             <StackPanel Orientation="Horizontal">
-              <ToggleButton x:Name="ModeVideoButton" Classes="seg" ToolTip.Tip="Proyecto con video: un panel por pista, cámara y exportar MP4">
+              <ToggleButton x:Name="ModeVideoButton" Classes="seg" ToolTip.Tip="{loc:T mode.video.tip}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <TextBlock Classes="icon" Text="&#xE714;" FontSize="12" VerticalAlignment="Center" />
-                  <TextBlock x:Name="ModeVideoText" Text="Video" VerticalAlignment="Center" />
+                  <TextBlock x:Name="ModeVideoText" Text="{loc:T mode.video}" VerticalAlignment="Center" />
                 </StackPanel>
               </ToggleButton>
-              <ToggleButton x:Name="ModeAudioButton" Classes="seg" ToolTip.Tip="Proyecto solo de audio: sin cámara ni video; exportás la mezcla en WAV o MP3. Podés volver a Video cuando quieras: no se borra nada">
+              <ToggleButton x:Name="ModeAudioButton" Classes="seg" ToolTip.Tip="{loc:T mode.audio.tip}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <TextBlock Classes="icon" Text="&#xE8D6;" FontSize="12" VerticalAlignment="Center" />
-                  <TextBlock x:Name="ModeAudioText" Text="Solo audio" VerticalAlignment="Center" />
+                  <TextBlock x:Name="ModeAudioText" Text="{loc:T mode.audio}" VerticalAlignment="Center" />
                 </StackPanel>
               </ToggleButton>
             </StackPanel>
           </Border>
-          <Button x:Name="UndoButton" Classes="ghost" IsEnabled="False" ToolTip.Tip="Deshacer (Ctrl+Z)">
+          <Button x:Name="UndoButton" Classes="ghost" IsEnabled="False" ToolTip.Tip="{loc:T title.undo}">
             <TextBlock Classes="icon" Text="&#xE7A7;" />
           </Button>
-          <Button x:Name="RedoButton" Classes="ghost" IsEnabled="False" ToolTip.Tip="Rehacer (Ctrl+Y)">
+          <Button x:Name="RedoButton" Classes="ghost" IsEnabled="False" ToolTip.Tip="{loc:T title.redo}">
             <TextBlock Classes="icon" Text="&#xE7A6;" />
           </Button>
         </StackPanel>
 
-        <TextBlock Grid.Column="3" x:Name="StatusText" Classes="dim" HorizontalAlignment="Center" VerticalAlignment="Center" />
-
         <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="10" Margin="0,0,14,0" VerticalAlignment="Center">
-          <!-- system load, camera, sample rate and FFmpeg (the web's text-[11px] text-faint group) -->
-          <StackPanel x:Name="SystemInfo" Orientation="Horizontal" Spacing="16" Margin="0,0,6,0" VerticalAlignment="Center">
+          <!-- system load, the audio engine's DSP load, camera and FFmpeg (the web's text-[11px] text-faint group;
+               the DSP load came up here from the transport bar, asked by the user) -->
+          <StackPanel x:Name="SystemInfo" Classes="tstat" Orientation="Horizontal" Spacing="10" Margin="0,0,6,0" VerticalAlignment="Center">
             <c:SystemMeter x:Name="SysMeter" />
-            <Border x:Name="SysMeterSep" Width="1" Height="16" Background="{StaticResource Line}" />
-            <TextBlock x:Name="CameraResText" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}" VerticalAlignment="Center" IsVisible="False" />
-            <TextBlock x:Name="SampleRateText" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}" VerticalAlignment="Center" Text="48 kHz" />
-            <StackPanel x:Name="FfmpegState" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Background="Transparent" ToolTip.Tip="Buscando FFmpeg…">
+            <Border x:Name="SysMeterSep" Classes="tsep" />
+            <!-- the audio callback's load, drawn like CPU / GPU / RAM: name, number, bar -->
+            <StackPanel Orientation="Horizontal" Spacing="5" Background="Transparent" ToolTip.Tip="{loc:T title.dsp.tip}">
+              <TextBlock Text="DSP" Foreground="{StaticResource Faint}" />
+              <TextBlock x:Name="DspText" Classes="mono" Foreground="{StaticResource Dim}" Width="26" Text="–" />
+              <Border Width="32" Height="5" CornerRadius="3" Background="{StaticResource Raised}" ClipToBounds="True" VerticalAlignment="Center">
+                <Border x:Name="DspFill" CornerRadius="3" HorizontalAlignment="Left" Width="0" Background="{StaticResource Accent}" />
+              </Border>
+            </StackPanel>
+            <!-- FFmpeg only shows here when it is missing; its version is in "Acerca de" -->
+            <Border x:Name="FfmpegSep" Classes="tsep" IsVisible="False" />
+            <StackPanel x:Name="FfmpegState" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Background="Transparent" IsVisible="False" ToolTip.Tip="{loc:T title.ffmpeg.looking}">
               <Ellipse x:Name="FfmpegDot" Width="6" Height="6" Fill="{StaticResource Faint}" VerticalAlignment="Center" />
-              <TextBlock x:Name="FfmpegText" FontSize="11" Foreground="{StaticResource Faint}" VerticalAlignment="Center" Text="FFmpeg" />
+              <TextBlock x:Name="FfmpegText" Foreground="{StaticResource Faint}" Text="FFmpeg" />
             </StackPanel>
           </StackPanel>
+          <c:NotificationBell x:Name="Bell" VerticalAlignment="Center" />
           <c:ThemePicker x:Name="ThemePick" VerticalAlignment="Center" />
-          <Button x:Name="SettingsButton" Classes="ghost" ToolTip.Tip="Configuración">
+          <Button x:Name="SettingsButton" Classes="ghost" ToolTip.Tip="{loc:T settings.title}">
             <TextBlock Classes="icon" Text="&#xE713;" />
           </Button>
         </StackPanel>
 
-        <Button Grid.Column="5" x:Name="ExportButton" Classes="accent" ToolTip.Tip="Exportar MP4">
+        <Button Grid.Column="5" x:Name="ExportButton" Classes="accent" ToolTip.Tip="{loc:T export.mp4}">
           <StackPanel Orientation="Horizontal" Spacing="7">
             <TextBlock Classes="icon" Text="&#xE72D;" FontSize="12" Foreground="{StaticResource AccentFg}" />
-            <TextBlock x:Name="ExportButtonText" Text="Exportar MP4" />
+            <TextBlock x:Name="ExportButtonText" Text="{loc:T export.mp4}" />
           </StackPanel>
         </Button>
       </Grid>
     </Border>
 
-    <!-- inspector ("Toma"; folds to a column of icons in MainWindow.Inspector.cs) + preview -->
+    <!-- inspector ("Canal"; folds to a column of icons in MainWindow.Inspector.cs) + preview -->
     <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
       <Border x:Name="InspectorBar" Width="290" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
         <ScrollViewer>
@@ -153,7 +173,9 @@
         <c:LiveMonitor Grid.Row="1" Grid.Column="1" x:Name="Live" Width="256" Margin="0,16,16,16" VerticalAlignment="Top" />
       </Grid>
       <!-- solo audio: the timeline (or the mixer) moves up here, in the stage's place (MainWindow.Mode.cs) -->
-      <Panel Grid.Column="1" x:Name="AudioArea" IsVisible="False" Background="{StaticResource App}" />
+      <Grid Grid.Column="1" x:Name="AudioArea" IsVisible="False" RowDefinitions="*,0,0" Background="{StaticResource App}">
+        <GridSplitter x:Name="AudioSplitter" Grid.Row="1" IsVisible="False" ToolTip.Tip="Arrastrá para cambiar la altura del mixer" Background="{StaticResource Line}" ResizeDirection="Rows" />
+      </Grid>
     </Grid>
 
     <!-- project bar (Color / Historial): the web's right sidebar, beside the stage and the timeline; filled in MainWindow.Color.cs -->
@@ -166,8 +188,8 @@
     <Grid Grid.Row="3" x:Name="TimelineHost">
       <c:TimelineView x:Name="Timeline" />
       <!-- the corner above the track headers, like the web: ruler mode, snap, fit and track height -->
-      <Grid x:Name="TimelineToolbar" Width="264" Height="32" HorizontalAlignment="Left" VerticalAlignment="Top"
-            Background="{StaticResource Panel}" ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="0">
+      <Grid x:Name="TimelineToolbar" Width="324" Height="32" HorizontalAlignment="Left" VerticalAlignment="Top"
+            Background="{StaticResource Panel}" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" Margin="0">
         <!-- ruler mode: notes = bars and beats, clock = minutes and seconds; the active one on AccentSoft -->
         <Border Background="{StaticResource Raised}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="2" Margin="8,0,6,0" VerticalAlignment="Center">
           <StackPanel Orientation="Horizontal" Spacing="2">
@@ -194,7 +216,7 @@
                 ToolTip.Tip="Ver todo (ajustar el zoom al ancho) (F)">
           <TextBlock Classes="icon" Text="&#xE9A6;" FontSize="14" />
         </Button>
-        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" Margin="2,0,8,0" VerticalAlignment="Center" ToolTip.Tip="Altura de las pistas (Alt+rueda)">
+        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" Margin="2,0,6,0" VerticalAlignment="Center" ToolTip.Tip="Altura de las pistas (Alt+rueda)">
           <TextBlock Classes="icon" Text="&#xE8FD;" FontSize="13" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
           <!-- the web's .slider: 4 px track and a 14 px light thumb -->
           <Slider x:Name="TrackHeightSlider" Width="44" Minimum="40" Maximum="160" Value="64" TickFrequency="2" IsSnapToTickEnabled="True"
@@ -209,6 +231,17 @@
             </Slider.Resources>
           </Slider>
         </StackPanel>
+        <!-- Cubase's "deactivate all mute / solo states" (native only): lit while any track has one (MainWindow.Timeline.cs) -->
+        <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4" Margin="0,0,8,0" VerticalAlignment="Center">
+          <Button x:Name="ClearMutesButton" Classes="chip" Width="24" Height="24" MinHeight="24" Padding="0" CornerRadius="4"
+                  HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="No hay pistas silenciadas">
+            <TextBlock Text="M" FontSize="10.5" FontWeight="SemiBold" />
+          </Button>
+          <Button x:Name="ClearSolosButton" Classes="chip" Width="24" Height="24" MinHeight="24" Padding="0" CornerRadius="4"
+                  HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="No hay pistas en solo">
+            <TextBlock Text="S" FontSize="10.5" FontWeight="SemiBold" />
+          </Button>
+        </StackPanel>
       </Grid>
     </Grid>
 
@@ -217,20 +250,23 @@
          are equal stars, the audio status on the left trims its text before the box moves. -->
     <Border Grid.Row="4" Grid.ColumnSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="14,6">
       <Grid ColumnDefinitions="*,Auto,*">
-        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,16,0" VerticalAlignment="Center" ClipToBounds="True">
-          <StackPanel Classes="bar-cell" Width="44" Margin="0,0,16,0" ToolTip.Tip="Carga del callback de audio">
-            <TextBlock x:Name="DspText" Classes="mono metro-value" Text="—" />
-            <TextBlock Classes="metro-label" Text="DSP" />
+        <!-- the input: its meter with the audio format under it, and software monitoring on / off, next to the transport -->
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,0,16,0" VerticalAlignment="Center">
+          <StackPanel x:Name="AudioCell" Classes="bar-cell" Background="Transparent">
+            <!-- as wide as the line under it, with its dB scale -->
+            <c:StereoMeter x:Name="InputMeter" ShowScale="True" Margin="0,1,0,2" />
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <TextBlock Classes="metro-label" Text="{loc:T transport.input}" />
+              <TextBlock x:Name="AudioStatus" Classes="metro-label mono" />
+            </StackPanel>
           </StackPanel>
-          <StackPanel Grid.Column="1" x:Name="AudioCell" Classes="bar-cell" HorizontalAlignment="Left" Margin="0,0,16,0">
-            <TextBlock x:Name="AudioStatus" Classes="dim" FontSize="11" TextTrimming="CharacterEllipsis" Margin="0,1,0,2" />
-            <TextBlock x:Name="AudioDriverText" Classes="metro-label" Text="Audio" TextTrimming="CharacterEllipsis" />
-          </StackPanel>
-          <StackPanel Grid.Column="2" Classes="bar-cell">
-            <c:StereoMeter x:Name="InputMeter" Width="110" Margin="0,1,0,3" />
-            <TextBlock Classes="metro-label" Text="Entrada 1-2" />
-          </StackPanel>
-        </Grid>
+          <ToggleButton x:Name="MonitorToggle" Classes="cell" CornerRadius="6" ToolTip.Tip="{loc:T transport.monitor.tip}">
+            <StackPanel>
+              <TextBlock Classes="icon" Text="&#xE7F6;" FontSize="15" HorizontalAlignment="Center" Margin="0,0,0,2" />
+              <TextBlock Classes="metro-label" Text="{loc:T transport.monitor}" />
+            </StackPanel>
+          </ToggleButton>
+        </StackPanel>
 
         <Border Grid.Column="1" Classes="metro">
           <StackPanel Orientation="Horizontal">
@@ -242,76 +278,76 @@
             </Button>
             <Border Classes="vsep" />
             <StackPanel Orientation="Horizontal" Spacing="2" Margin="6,0">
-              <Button x:Name="ToStartButton" Classes="tbtn" ToolTip.Tip="Volver al inicio (Inicio)">
+              <Button x:Name="ToStartButton" Classes="tbtn" ToolTip.Tip="{loc:T transport.start.tip}">
                 <TextBlock Classes="icon" Text="&#xF8AC;" FontSize="15" />
               </Button>
-              <Button x:Name="StopButton" Classes="tbtn" ToolTip.Tip="Detener (vuelve a donde arrancó; si ya está detenido, al inicio)">
+              <Button x:Name="StopButton" Classes="tbtn" ToolTip.Tip="{loc:T transport.stop.tip}">
                 <TextBlock Classes="icon" Text="&#xE73B;" FontSize="14" />
               </Button>
-              <Button x:Name="PlayButton" Classes="tbtn" ToolTip.Tip="Reproducir desde el cabezal (Espacio)">
+              <Button x:Name="PlayButton" Classes="tbtn" ToolTip.Tip="{loc:T transport.play.tip}">
                 <TextBlock x:Name="PlayIcon" Classes="icon" Text="&#xF5B0;" FontSize="17" />
               </Button>
               <!-- a plain transport button (pedido del usuario; in the web it is a big chip with its target):
                    the track it records to is the one tinted red in the timeline and the mixer -->
-              <Button x:Name="RecButton" Classes="tbtn" ToolTip.Tip="Grabar en una pista nueva al final (R)">
+              <Button x:Name="RecButton" Classes="tbtn" ToolTip.ShowOnDisabled="True" ToolTip.Tip="{loc:T transport.rec.arm.tip}">
                 <Ellipse Width="13" Height="13" Fill="{StaticResource Rec}" />
               </Button>
-              <Button x:Name="RecStopButton" Classes="chip rec-stop" Height="30" Padding="12,0,16,0" IsVisible="False" Background="{StaticResource Rec}" BorderBrush="{StaticResource Rec}" Foreground="White" ToolTip.Tip="Detener y guardar la toma (Espacio / R)">
+              <Button x:Name="RecStopButton" Classes="chip rec-stop" Height="30" Padding="12,0,16,0" IsVisible="False" Background="{StaticResource Rec}" BorderBrush="{StaticResource Rec}" Foreground="White" ToolTip.Tip="{loc:T transport.rec.stop.tip}">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                   <TextBlock Classes="icon" Text="&#xE73B;" FontSize="13" Foreground="White" />
-                  <TextBlock Text="Detener" FontSize="14" FontWeight="SemiBold" Foreground="White" />
+                  <TextBlock Text="{loc:T transport.rec.stop}" FontSize="14" FontWeight="SemiBold" Foreground="White" />
                 </StackPanel>
               </Button>
-              <Button x:Name="RecDiscardButton" Classes="chip discard" Height="30" Padding="12,0" IsVisible="False" Background="Transparent" ToolTip.Tip="Parar sin guardar esta toma">
+              <Button x:Name="RecDiscardButton" Classes="chip discard" Height="30" Padding="12,0" IsVisible="False" Background="Transparent" ToolTip.Tip="{loc:T transport.rec.discard.tip}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <TextBlock Classes="icon" Text="&#xE74D;" FontSize="13" />
-                  <TextBlock Text="Descartar" FontSize="14" />
+                  <TextBlock Text="{loc:T transport.rec.discard}" FontSize="14" />
                 </StackPanel>
               </Button>
-              <Button x:Name="CountCancelButton" Classes="chip count" Height="30" Padding="12,0,16,0" IsVisible="False" Foreground="{StaticResource Fg}" Background="{StaticResource AccentSoft}" BorderBrush="{StaticResource Accent50}" ToolTip.Tip="Cancelar la cuenta (Esc)">
+              <Button x:Name="CountCancelButton" Classes="chip count" Height="30" Padding="12,0,16,0" IsVisible="False" Foreground="{StaticResource Fg}" Background="{StaticResource AccentSoft}" BorderBrush="{StaticResource Accent50}" ToolTip.Tip="{loc:T transport.count.cancel.tip}">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                   <TextBlock Classes="icon" Text="&#xE711;" FontSize="14" />
-                  <TextBlock Text="Cancelar" FontSize="14" FontWeight="SemiBold" />
+                  <TextBlock Text="{loc:T transport.count.cancel}" FontSize="14" FontWeight="SemiBold" />
                   <TextBlock x:Name="CountBeatText" Classes="mono" Foreground="{StaticResource Accent}" FontSize="14" Text="1/4" />
                 </StackPanel>
               </Button>
-              <ToggleButton x:Name="LoopToggle" Classes="tbtn" IsChecked="True" ToolTip.Tip="Repetir en loop">
+              <ToggleButton x:Name="LoopToggle" Classes="tbtn" IsChecked="True" ToolTip.Tip="{loc:T transport.loop.tip}">
                 <TextBlock Classes="icon" Text="&#xE8EE;" FontSize="16" />
               </ToggleButton>
             </StackPanel>
             <Border Classes="vsep" />
             <!-- metronome (Studio One style, asked by the user instead of the web's separate chips) -->
-            <StackPanel Classes="metro-cell" ToolTip.Tip="Compás: por ahora siempre 4/4">
+            <StackPanel Classes="metro-cell" ToolTip.Tip="{loc:T transport.meter.tip}">
               <TextBlock Classes="mono metro-value" Text="4/4" />
-              <TextBlock Classes="metro-label" Text="Compás" />
+              <TextBlock Classes="metro-label" Text="{loc:T transport.meter}" />
             </StackPanel>
             <c:TempoControl x:Name="Tempo" Height="38" BorderThickness="0" CornerRadius="0" Background="Transparent" />
-            <ToggleButton x:Name="CountInToggle" Classes="cell" IsChecked="True" ToolTip.Tip="Cuenta de 4 tiempos antes de grabar (Shift+C)">
+            <ToggleButton x:Name="CountInToggle" Classes="cell" IsChecked="True" ToolTip.Tip="{loc:T transport.countin.tip}">
               <StackPanel>
                 <TextBlock Classes="mono metro-value" Text="1234" LetterSpacing="1" />
-                <TextBlock Classes="metro-label" Text="Cuenta" />
+                <TextBlock Classes="metro-label" Text="{loc:T transport.countin}" />
               </StackPanel>
             </ToggleButton>
-            <ToggleButton x:Name="ClickToggle" Classes="cell" ToolTip.Tip="Metrónomo al grabar y al reproducir (C)">
+            <ToggleButton x:Name="ClickToggle" Classes="cell" ToolTip.Tip="{loc:T transport.click.tip}">
               <StackPanel>
                 <PathIcon Data="{StaticResource MetronomeIcon}" Width="15" Height="15" Margin="0,0,0,2" />
-                <TextBlock Classes="metro-label" Text="Click" />
+                <TextBlock Classes="metro-label" Text="{loc:T transport.click}" />
               </StackPanel>
             </ToggleButton>
-            <Button x:Name="ClickSoundButton" Classes="cell" Width="24" Padding="0" Margin="-4,0,0,0" ToolTip.Tip="Sonido del click: Bip">
+            <Button x:Name="ClickSoundButton" Classes="cell" Width="24" Padding="0" Margin="-4,0,0,0" ToolTip.Tip="{loc:T transport.click.sound.tip}">
               <TextBlock Classes="icon" Text="&#xE70D;" FontSize="10" />
             </Button>
           </StackPanel>
         </Border>
 
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="16,0,0,0">
-          <Border Classes="seg" ToolTip.Tip="Alternar timeline / mixer (X)">
+          <Border x:Name="ViewSwitch" Classes="seg" ToolTip.Tip="{loc:T transport.view.tip}">
             <StackPanel Orientation="Horizontal">
-              <Button x:Name="TimelineViewButton" Classes="seg on" Height="32" Padding="12,0" Content="Timeline" />
-              <Button x:Name="MixerViewButton" Classes="seg" Height="32" Padding="12,0" Content="Mixer" />
+              <Button x:Name="TimelineViewButton" Classes="seg on" Height="32" Padding="12,0" Content="{loc:T transport.view.timeline}" />
+              <Button x:Name="MixerViewButton" Classes="seg" Height="32" Padding="12,0" Content="{loc:T transport.view.mixer}" />
             </StackPanel>
           </Border>
-          <Button x:Name="FitButton" Classes="tbtn" ToolTip.Tip="Ver todo (F)">
+          <Button x:Name="FitButton" Classes="tbtn" ToolTip.Tip="{loc:T transport.fit.tip}">
             <TextBlock Classes="icon" Text="&#xE9A6;" FontSize="15" />
           </Button>
         </StackPanel>

@@ -780,7 +780,7 @@ public sealed partial class ProjectsDialog : UserControl
         var text = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
         text.Inlines!.Add(new Avalonia.Controls.Documents.Run("¿Mandar "));
         text.Inlines.Add(new Avalonia.Controls.Documents.Run($"\"{p.Name}\"") { FontWeight = FontWeight.SemiBold });
-        text.Inlines.Add(new Avalonia.Controls.Documents.Run(" a la Papelera? Se van todas sus tomas y exports."));
+        text.Inlines.Add(new Avalonia.Controls.Documents.Run(" a la Papelera? Se van todos sus canales y exports."));
         var cancel = new Button { Classes = { "btn", "sm" }, Content = "Cancelar", Margin = new Thickness(12, 0, 0, 0) };
         cancel.Click += (_, _) =>
         {
@@ -858,7 +858,7 @@ public sealed partial class ProjectsDialog : UserControl
     {
         if (p.TakeCount == 0) return "Vacío";
         var parts = new List<string> { p.TrackCount == 1 ? "1 pista" : $"{p.TrackCount} pistas" };
-        if (p.TakeCount != p.TrackCount) parts.Add(p.TakeCount == 1 ? "1 toma" : $"{p.TakeCount} tomas");
+        if (p.TakeCount != p.TrackCount) parts.Add(p.TakeCount == 1 ? "1 canal" : $"{p.TakeCount} canales");
         if (p.DurationSec > 0) parts.Add(Duration(p.DurationSec));
         if (p.Bpm is { } bpm and > 0) parts.Add($"{(Math.Round(bpm * 100) / 100).ToString(System.Globalization.CultureInfo.InvariantCulture)} BPM");
         if (p.ExportCount > 0) parts.Add(p.ExportCount == 1 ? "1 export" : $"{p.ExportCount} exports");

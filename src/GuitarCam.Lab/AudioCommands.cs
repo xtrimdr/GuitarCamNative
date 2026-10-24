@@ -256,6 +256,7 @@ static class AudioCommands
         double appliedLatencyMs = a.Double("latencia-ms", 15);
         string? satArg = a.Get("sat");
         string path = Path.GetFullPath(a.Get("salida", $"toma_{DateTime.Now:yyyyMMdd_HHmmss}.wav"));
+        if (a.Get("entradas") is { } list) return RecordInputs(a, list, path, sr, seconds, bpm, countIn, sound, clickDb, gainDb, overdubOffsetMs, appliedLatencyMs);
 
         var inProc = new InputProcessor
         {
@@ -431,6 +432,139 @@ static class AudioCommands
         Console.WriteLine("El tiempo 0 del archivo es el primer tiempo después de la cuenta, tal como salió por la salida;");
         Console.WriteLine("lo que tocaste llega tarde por la latencia ida y vuelta, que se compensa con syncMs (como hace la app web).");
         return 0;
+    }
+
+    /// <summary>
+    /// <c>grabar --entradas 1,2,3-4</c>: one take per input at once, like the window with several armed tracks
+    /// (an <see cref="InputTap"/> and a WAV each: toma_e1.wav, toma_e3-4.wav…). With <c>--simular</c>, input N
+    /// carries a sine of 110·N Hz and each WAV is checked against the inputs it should have.
+    /// </summary>
+    static int RecordInputs(Args a, string list, string path, int sr, double seconds, double bpm, int countIn,
+        ClickSound sound, double clickDb, double gainDb, double overdubOffsetMs, double appliedLatencyMs)
+    {
+        var routes = list.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => InputRoute.Parse(s) ?? throw new ArgumentException($"Entrada inválida: {s} (usá 1, 2, 3-4…)")).ToList();
+        if (routes.Count == 0) throw new ArgumentException("--entradas necesita al menos una entrada (1, 2, 3-4…)");
+        string Wav(InputRoute r) => Path.Combine(Path.GetDirectoryName(path)!, $"{Path.GetFileNameWithoutExtension(path)}_e{r.Key}.wav");
+        var taps = routes.Select(r => new InputTap(r, gainDb) { Recorder = new TakeRecorder(Wav(r), sr) }).ToList();
+        var mainL = new float[InputTap.MaxBlock];
+        var mainR = new float[InputTap.MaxBlock];
+
+        if (a.Flag("simular"))
+        {
+            int inputs = routes.Max(r => r.Last) + 1;
+            var raw = new float[inputs][];
+            for (int c = 0; c < inputs; c++) raw[c] = new float[192];
+            int total = (int)Math.Round(seconds * sr);
+            for (int pos = 0; pos < total; pos += 192)
+            {
+                int n = Math.Min(192, total - pos);
+                for (int c = 0; c < inputs; c++)
+                    for (int i = 0; i < n; i++) raw[c][i] = 0.1f * MathF.Sin(2f * MathF.PI * 110f * (c + 1) * (pos + i) / sr);
+                foreach (var t in taps)
+                {
+                    t.Process(raw, n, mainL, mainR);
+                    t.Recorder!.WriteFromCallback(t.BlockL, t.BlockR);
+                }
+            }
+            bool ok = true;
+            float g = (float)Math.Pow(10, gainDb / 20);
+            foreach (var t in taps)
+            {
+                var res = t.Recorder!.Finish(measuredLatencyMs: appliedLatencyMs, defaultOverdubOffsetMs: overdubOffsetMs, usedCountIn: countIn > 0, usedClick: true);
+                var r = t.Route!.Value;
+                var (l, rr) = ReadStereo(res!.WavPath, 2000);
+                // what each side should carry: the input (or the pair's second one), with the pre-amp gain and the soft limit
+                float Want(int ch, int i) => InputProcessor.SoftLimit(g * 0.1f * MathF.Sin(2f * MathF.PI * 110f * (ch + 1) * i / sr));
+                int right = r.Stereo ? r.First + 1 : r.First;
+                double err = 0;
+                for (int i = 0; i < l.Length; i++) err = Math.Max(err, Math.Max(Math.Abs(l[i] - Want(r.First, i)), Math.Abs(rr[i] - Want(right, i))));
+                bool good = err < 1e-5 && Math.Abs(res.DurationSec - seconds) < 0.01;
+                ok &= good;
+                Console.WriteLine($"{(good ? "OK " : "MAL")} {r.Label,-14} → {Path.GetFileName(res.WavPath)} · {res.DurationSec:0.00} s · error máx {err:0.0e0}");
+            }
+            return ok ? 0 : 1;
+        }
+
+        var driver = AsioDuplex.PickDriver(a.Get("driver"));
+        var clickHi = ClickSynth.Render(sound, true, sr, clickDb);
+        var clickLo = ClickSynth.Render(sound, false, sr, clickDb);
+        int limLatency = (int)Math.Round(MasterLimiter.LookaheadSec * sr);
+        double beatLen = sr * 60 / bpm;
+        long recStart = (long)Math.Round(countIn * beatLen);
+        int recLen = (int)Math.Round(seconds * sr);
+        long frame = 0, nextBeat = 0;
+        int beat = 0;
+        float[]? click = null;
+        int clickPos = 0;
+        using var done = new ManualResetEventSlim();
+        using var io = new AsioDuplex(driver, sr, 0, 0, a.Int("salida-ch", 1) - 1, (input, output, n) =>
+        {
+            if (n > mainL.Length) return;
+            long f0 = frame;
+            for (int i = 0; i < n; i++)
+            {
+                if (f0 + i >= nextBeat + limLatency)
+                {
+                    click = beat % 4 == 0 ? clickHi : clickLo;
+                    clickPos = 0;
+                    beat++;
+                    nextBeat = (long)Math.Round(beat * beatLen);
+                }
+                if (click != null)
+                {
+                    output[0][i] += click[clickPos];
+                    output[1][i] += click[clickPos];
+                    if (++clickPos >= click.Length) click = null;
+                }
+            }
+            int start = (int)Math.Clamp(recStart - f0, 0, n), end = (int)Math.Clamp(recStart + recLen - f0, 0, n);
+            foreach (var t in taps)
+            {
+                t.Process(input, n, mainL, mainR);
+                if (end > start) t.Recorder!.WriteFromCallback(t.BlockL[start..end], t.BlockR[start..end]);
+            }
+            frame = f0 + n;
+            if (frame >= recStart + recLen) done.Set();
+        });
+        foreach (var r in routes.Where(r => r.Last >= io.InputChannels))
+            Console.WriteLine($"Ojo: el driver tiene {io.InputChannels} entradas; {r.Label} va a grabar silencio.");
+        io.Start();
+        WaitStarted(io);
+        PrintStream(io);
+        Console.WriteLine($"Click {sound} a {bpm:0.#} BPM, cuenta de {countIn}. Grabando {seconds:0.#} s de {string.Join(", ", routes.Select(r => r.Label))}");
+        while (!done.Wait(100))
+        {
+            long f = frame;
+            string state = f < recStart ? $"cuenta {Math.Min(countIn, (int)(f / beatLen) + 1)}" : $"REC {(f - recStart) / (double)sr,5:0.0} s";
+            var levels = taps.Select(t => { var (l, r) = t.TakePeaks(); float pk = Math.Max(l, r); return $"{t.Route!.Value.Key}:{(pk > 0 ? 20 * Math.Log10(pk) : -120),6:0.0}"; });
+            Console.Write($"\r  {state,-12} {string.Join("  ", levels)} dB   ");
+            if (io.Error != null) break;
+        }
+        io.Stop();
+        Console.WriteLine();
+        if (io.Error != null) throw io.Error;
+        foreach (var t in taps)
+        {
+            var res = t.Recorder!.Finish(measuredLatencyMs: appliedLatencyMs, defaultOverdubOffsetMs: overdubOffsetMs, usedCountIn: countIn > 0, usedClick: true);
+            Console.WriteLine(res == null ? $"{t.Route!.Value.Label}: descartada" : $"Listo: {res.WavPath} ({res.DurationSec:0.00} s)");
+        }
+        return 0;
+    }
+
+    /// <summary>The first <paramref name="frames"/> frames of a 32-bit float stereo WAV written by <see cref="RecordingWriter"/>.</summary>
+    static (float[] L, float[] R) ReadStereo(string path, int frames)
+    {
+        var bytes = File.ReadAllBytes(path);
+        int n = Math.Min(frames, (bytes.Length - 44) / 8);
+        var l = new float[n];
+        var r = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            l[i] = BitConverter.ToSingle(bytes, 44 + i * 8);
+            r[i] = BitConverter.ToSingle(bytes, 48 + i * 8);
+        }
+        return (l, r);
     }
 
     public static ClickSound ParseClick(string s) => s.ToLowerInvariant() switch

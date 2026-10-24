@@ -8,13 +8,16 @@ using GuitarCam.Audio;
 namespace GuitarCam.App.Controls;
 
 /// <summary>
-/// CPU / GPU / RAM load of the whole PC in the top bar, port of SystemMeter.tsx: polled every 1.5 s, a 40 px
-/// bar per value that turns red from 90 %. Same as the web except it reads the system directly
-/// (<see cref="SystemStats"/>) instead of asking the server, and pauses while the window is minimized.
+/// CPU / GPU / RAM load of the whole PC in the top bar, port of SystemMeter.tsx: polled every 1.5 s, a bar per
+/// value that turns red from 90 %. Same as the web except it reads the system directly (<see cref="SystemStats"/>)
+/// instead of asking the server, pauses while the window is minimized, is a bit smaller (32 px bars, 10.5 text)
+/// and reads "CPU 19% ▬" with a thin line between the three (asked by the user: with the web's "CPU ▬ 19%" the
+/// number sat next to the following label and read as the GPU's).
 /// </summary>
 public sealed class SystemMeter : StackPanel
 {
     static readonly TimeSpan PollEvery = TimeSpan.FromMilliseconds(1500);
+    const double BarW = 32;
 
     readonly SystemStats stats = new();
     readonly DispatcherTimer timer;
@@ -23,29 +26,35 @@ public sealed class SystemMeter : StackPanel
     public SystemMeter()
     {
         Orientation = Orientation.Horizontal;
-        Spacing = 12;
+        Spacing = 10;
         VerticalAlignment = VerticalAlignment.Center;
         Opacity = 0; // until the first reading (the window decides IsVisible by width)
         cpu = Bar("CPU");
+        Children.Add(Separator());
         gpu = Bar("GPU");
+        Children.Add(Separator());
         ram = Bar("RAM");
         timer = new DispatcherTimer(PollEvery, DispatcherPriority.Background, (_, _) => Poll());
         AttachedToVisualTree += (_, _) => { Poll(); timer.Start(); };
         DetachedFromVisualTree += (_, _) => timer.Stop();
     }
 
+    /// <summary>The same thin line as the rest of the top bar's groups (Border.tsep).</summary>
+    static Border Separator() => new() { Width = 1, Height = 14, Background = Palette.Line, VerticalAlignment = VerticalAlignment.Center };
+
     (Border, TextBlock, StackPanel) Bar(string label)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Background = Brushes.Transparent };
-        row.Children.Add(new TextBlock { Text = label, FontSize = 11, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center });
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, Background = Brushes.Transparent };
+        row.Children.Add(new TextBlock { Text = label, FontSize = 10.5, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center });
+        // the number right after its name, a fixed width so the bar doesn't jump between 9% and 10%
+        var value = new TextBlock { Classes = { "mono" }, FontSize = 10.5, Width = 26, TextAlignment = TextAlignment.Left, VerticalAlignment = VerticalAlignment.Center };
+        row.Children.Add(value);
         var fill = new Border { CornerRadius = new CornerRadius(3), HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
         row.Children.Add(new Border
         {
-            Width = 40, Height = 6, CornerRadius = new CornerRadius(3), Background = Palette.Raised, ClipToBounds = true,
+            Width = BarW, Height = 5, CornerRadius = new CornerRadius(3), Background = Palette.Raised, ClipToBounds = true,
             VerticalAlignment = VerticalAlignment.Center, Child = fill,
         });
-        var value = new TextBlock { Classes = { "mono" }, FontSize = 11, Width = 28, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-        row.Children.Add(value);
         Children.Add(row);
         return (fill, value, row);
     }
@@ -53,7 +62,7 @@ public sealed class SystemMeter : StackPanel
     static void Show((Border Fill, TextBlock Value, StackPanel Row) bar, double? pct, string tip)
     {
         bool hot = pct >= 90;
-        bar.Fill.Width = 40 * Math.Clamp(pct ?? 0, 0, 100) / 100;
+        bar.Fill.Width = BarW * Math.Clamp(pct ?? 0, 0, 100) / 100;
         bar.Fill.Background = hot ? Palette.Rec : Palette.Accent;
         bar.Value.Text = pct is { } p ? $"{Math.Round(p):0}%" : "–";
         bar.Value.Foreground = hot ? Palette.Rec : Palette.Dim;

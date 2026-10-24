@@ -10,7 +10,7 @@ namespace GuitarCam.App.Controls;
 /// The heading row of a foldable section (ui.tsx Section: chevron, icon, uppercase label, then an action and a
 /// power button). The whole band reacts to the pointer and folds the section on a click anywhere outside its
 /// buttons, not just on the label: the user asked for a bigger target than the web's text-only heading.
-/// Shared by the inspector ("Toma") and the project bar (Color / Historial).
+/// Shared by the inspector ("Canal") and the project bar (Color / Historial).
 /// </summary>
 public sealed class SectionHeader : Border
 {

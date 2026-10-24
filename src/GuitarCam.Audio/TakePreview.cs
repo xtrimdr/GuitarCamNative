@@ -3,7 +3,7 @@ using NAudio.Wave;
 namespace GuitarCam.Audio;
 
 /// <summary>
-/// "Escuchar la toma" in Historial: plays a take's raw file (no effects) through Windows' default output, like the
+/// "Escuchar el canal" in Historial: plays a take's raw file (no effects) through Windows' default output, like the
 /// web's &lt;audio&gt; element, so it never touches the ASIO engine or the timeline. One at a time; Stopped fires when it
 /// ends or fails on its own.
 /// </summary>

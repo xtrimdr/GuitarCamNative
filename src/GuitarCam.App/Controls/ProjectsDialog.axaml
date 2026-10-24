@@ -87,7 +87,7 @@
           </Border>
           <StackPanel VerticalAlignment="Center">
             <TextBlock Text="Proyectos" FontSize="16" FontWeight="SemiBold" />
-            <TextBlock Text="Cada toma que grabes se guarda sola en la carpeta del proyecto." FontSize="12" Foreground="{StaticResource Dim}" Margin="0,2,0,0" />
+            <TextBlock Text="Cada canal que grabes se guarda solo en la carpeta del proyecto." FontSize="12" Foreground="{StaticResource Dim}" Margin="0,2,0,0" />
           </StackPanel>
         </StackPanel>
         <Button Grid.Column="1" x:Name="CloseButton" Classes="act" Width="32" Height="32" Margin="0,-4,-8,0" VerticalAlignment="Top"
@@ -145,10 +145,10 @@
             <StackPanel Orientation="Horizontal" Spacing="10">
               <Border Classes="seg">
                 <StackPanel Orientation="Horizontal">
-                  <ToggleButton x:Name="NewVideoButton" Classes="seg" ToolTip.Tip="Con cámara: cada toma tiene su panel en el video y exportás un MP4">
+                  <ToggleButton x:Name="NewVideoButton" Classes="seg" ToolTip.Tip="Con cámara: cada canal tiene su panel en el video y exportás un MP4">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                       <TextBlock Classes="icon" Text="&#xE714;" FontSize="12" VerticalAlignment="Center" />
-                      <TextBlock Text="Video" VerticalAlignment="Center" />
+                      <TextBlock Text="Video + audio" VerticalAlignment="Center" />
                     </StackPanel>
                   </ToggleButton>
                   <ToggleButton x:Name="NewAudioButton" Classes="seg" ToolTip.Tip="Sin cámara: grabás audio y exportás la mezcla en WAV o MP3">

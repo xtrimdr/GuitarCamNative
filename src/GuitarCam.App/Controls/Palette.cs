@@ -61,6 +61,7 @@ static class Palette
     public static readonly Typeface Ui = new("Segoe UI Variable Text, Segoe UI");
     public static readonly Typeface UiBold = new("Segoe UI Variable Text, Segoe UI", FontStyle.Normal, FontWeight.SemiBold);
     public static readonly Typeface Mono = new("Cascadia Mono, Consolas");
+    public static readonly Typeface MonoBold = new("Cascadia Mono, Consolas", FontStyle.Normal, FontWeight.Bold);
 
     public static IBrush Brush(string hex) => new ImmutableSolidColorBrush(Color.Parse(hex));
 

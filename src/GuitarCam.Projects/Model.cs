@@ -231,12 +231,18 @@ public sealed class Track
     public string Name { get; set; } = "";
     /// <summary>False = audio only: the track gets no panel in the video.</summary>
     public bool Video { get; set; } = true;
+    /// <summary>
+    /// The driver inputs it records from when armed, "3" or "3-4" (<see cref="GuitarCam.Audio.InputRoute"/>);
+    /// null = the input of Configuración. Native only.
+    /// </summary>
+    public string? Input { get; set; }
     public Channel Channel { get; set; } = new();
     public List<Clip> Clips { get; set; } = [];
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
     internal void Normalize()
     {
+        Input = GuitarCam.Audio.InputRoute.Parse(Input)?.Key;
         Channel ??= new();
         Channel.Normalize();
         Clips ??= [];
@@ -403,7 +409,7 @@ public sealed class ExportRecord
     public string? Quality { get; set; }
     public double DurationSec { get; set; }
     public long Bytes { get; set; }
-    /// <summary>The takes in the video (media ids), shown as "n tomas" in Historial.</summary>
+    /// <summary>The takes in the video (media ids), shown as "n canales" in Historial.</summary>
     public List<string> TakeIds { get; set; } = [];
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }

@@ -26,8 +26,8 @@ public partial class MainWindow
     bool? transportPlaying;
     string? clockTip;
     string? recTip;
-    static readonly string[] ClickLabels = ["Bip", "Madera", "Clave", "Aguja", "Cencerro", "Batería"];
-    static readonly string[] ClickHints = ["El de siempre, suave", "Woodblock seco, corta bien sobre la guitarra", "Agudo y corto, se escucha sobre la distorsión", "Electrónico, muy agudo y filoso", "Metálico, con cuerpo", "Bombo en el 1, hi-hat en el resto"];
+    static readonly string[] ClickLabels = [Loc.T("click.label.0"), Loc.T("click.label.1"), Loc.T("click.label.2"), Loc.T("click.label.3"), Loc.T("click.label.4"), Loc.T("click.label.5")];
+    static readonly string[] ClickHints = [Loc.T("click.hint.0"), Loc.T("click.hint.1"), Loc.T("click.hint.2"), Loc.T("click.hint.3"), Loc.T("click.hint.4"), Loc.T("click.hint.5")];
 
     void InitTransport()
     {
@@ -70,7 +70,7 @@ public partial class MainWindow
             text.Children.Add(new TextBlock { Text = ClickLabels[i], FontSize = 12 });
             text.Children.Add(new TextBlock { Text = ClickHints[i], FontSize = 11, Foreground = Palette.Faint, TextWrapping = Avalonia.Media.TextWrapping.Wrap });
             var b = new Button { Content = text, Classes = { "ghost" }, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 6) };
-            ToolTip.SetTip(b, "Click para elegirlo y escucharlo");
+            ToolTip.SetTip(b, Loc.T("click.pick.tip"));
             b.Click += (_, _) =>
             {
                 engine.SetClickSound(sound, engine.ClickVolumeDb);
@@ -80,7 +80,7 @@ public partial class MainWindow
             clickChoices.Add(b); sounds.Children.Add(b);
         }
         body.Children.Add(sounds);
-        clickVolume = new InspectorSlider("Volumen", -24, 9, .5, 0, Db, v =>
+        clickVolume = new InspectorSlider(Loc.T("click.volume"), -24, 9, .5, 0, Db, v =>
         {
             engine.SetClickSound(engine.ClickSound, v);
             RefreshClickMenu(); SaveClickPreferences();
@@ -96,7 +96,7 @@ public partial class MainWindow
 
     void RefreshClickMenu()
     {
-        ToolTip.SetTip(ClickSoundButton, $"Sonido del click: {ClickLabels[(int)engine.ClickSound]}");
+        ToolTip.SetTip(ClickSoundButton, Loc.T("click.sound.now", ClickLabels[(int)engine.ClickSound]));
         for (int i = 0; i < clickChoices.Count; i++)
         {
             clickChoices[i].Background = (int)engine.ClickSound == i ? Palette.Alpha(Palette.AccentColor, .14) : Avalonia.Media.Brushes.Transparent;
@@ -128,12 +128,11 @@ public partial class MainWindow
     }
     static string TransportTime(double sec) => $"{(long)(Math.Max(0, sec) / 60):00}:{Math.Max(0, sec) % 60:00.0}";
 
-    // bottom bar cell: format on top, driver name as the label ("Focusrite USB ASIO · 48 kHz · …")
+    // under the input meter, small: the format without the driver ("Focusrite USB ASIO · 48 kHz · …"), which goes to the tooltip
     void ShowAudioStatus()
     {
         var parts = engine.Status.Split(" · ", 2);
-        AudioStatus.Text = parts.Length == 2 ? parts[1] : parts[0];
-        AudioDriverText.Text = parts.Length == 2 ? parts[0] : "Audio";
+        AudioStatus.Text = parts.Length == 2 ? $"· {parts[1]}" : "";
         ToolTip.SetTip(AudioCell, engine.Status);
     }
 
@@ -144,24 +143,27 @@ public partial class MainWindow
         // while recording the total is the take so far, like the web
         double total = RecordingBusy ? pos : engine.LengthSec;
         BarText.Text = "/ " + (bars ? TransportBars(total, engine.Bpm) : TransportTime(total));
-        string tip = bars ? $"Compás.tiempo.semicorchea · {TransportTime(pos)} · click: ver minutos y segundos"
-            : $"{TransportBars(pos, engine.Bpm)} · click: ver compases y tiempos";
+        string tip = bars ? Loc.T("transport.clock.bars.tip", TransportTime(pos))
+            : Loc.T("transport.clock.time.tip", TransportBars(pos, engine.Bpm));
         if (tip != clockTip) { clockTip = tip; ToolTip.SetTip(ClockButton, tip); }
         if (transportPlaying != engine.Playing)
         {
             transportPlaying = engine.Playing;
             PlayIcon.Text = engine.Playing ? "\uF8AE" : "\uF5B0";
             PlayButton.Classes.Set("on", engine.Playing);
-            ToolTip.SetTip(PlayButton, engine.Playing ? "Pausa (Espacio)" : "Reproducir desde el cabezal (Espacio)");
+            ToolTip.SetTip(PlayButton, Shortcuts.Tip(engine.Playing ? Loc.T("transport.pause.tip") : Loc.T("transport.play.head.tip"), "play"));
         }
         StopButton.IsEnabled = !engine.Recording && (engine.Playing || pos > 0);
         PlayButton.IsEnabled = ToStartButton.IsEnabled = !engine.Recording;
         Tempo.Set(engine.Bpm);
         Tempo.IsEnabled = store != null && !store.ReadOnly && !restoring && !RecordingBusy;
         ShowArm();
-        var target = RecordTarget();
-        string recordTip = target == null ? "Grabar en una pista nueva al final (R)"
-            : target.Clips.Count > 0 ? $"Grabar en \"{target.Name}\", reemplazando su toma (R)" : $"Grabar en \"{target.Name}\" (R)";
+        var targets = RecordTargets();
+        // nothing armed, nothing to record into: armed tracks are the only way to say where a take goes
+        RecButton.IsEnabled = targets.Count > 0;
+        string recordTip = Shortcuts.Tip(targets.Count == 0 ? Loc.T("transport.rec.none")
+            : targets.Count > 1 ? Loc.T("transport.rec.many", targets.Count, string.Join(", ", targets.Select(t => $"\"{t.Name}\"")))
+            : targets[0].Clips.Count > 0 ? Loc.T("transport.rec.replace", targets[0].Name) : Loc.T("transport.rec.one", targets[0].Name), "record");
         if (recordTip != recTip) { recTip = recordTip; ToolTip.SetTip(RecButton, recordTip); }
     }
 }

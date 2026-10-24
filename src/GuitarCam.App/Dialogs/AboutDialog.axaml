@@ -50,7 +50,7 @@
         </StackPanel>
 
         <TextBlock Classes="dim" TextWrapping="Wrap" LineHeight="18"
-                   Text="Para hacer videos de guitarra: grabás tomas con cámara y audio, las mezclás y exportás un video con un panel por toma. Es la versión nativa de la app web GuitarCam Studio." />
+                   Text="Para hacer videos de guitarra: grabás canales con cámara y audio, los mezclás y exportás un video con un panel por canal. Es la versión nativa de la app web GuitarCam Studio." />
 
         <Border Classes="section" Padding="12,10">
           <Grid x:Name="Info" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="16">
@@ -59,7 +59,7 @@
             <TextBlock Grid.Row="1" Classes="label" Text="INTERFAZ" VerticalAlignment="Center" />
             <TextBlock Grid.Row="1" Grid.Column="1" x:Name="UiText" Classes="dim mono" HorizontalAlignment="Right" />
             <TextBlock Grid.Row="2" Classes="label" Text="VIDEO" VerticalAlignment="Center" />
-            <TextBlock Grid.Row="2" Grid.Column="1" Classes="dim mono" Text="FFmpeg (del PATH)" HorizontalAlignment="Right" />
+            <TextBlock Grid.Row="2" Grid.Column="1" x:Name="VideoText" Classes="dim mono" Text="FFmpeg (del PATH)" HorizontalAlignment="Right" />
           </Grid>
         </Border>
 

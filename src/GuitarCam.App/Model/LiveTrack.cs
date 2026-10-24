@@ -216,6 +216,7 @@ public sealed class LiveTrack
     public float MeterL, MeterR;
     public double GrDb;
     public float ShowL, ShowR; // UI side, with fall-off
+    public float InputL, InputR; // UI side: the input's peak while armed, shown on the track's meter
     public double GrPeak, GrShow; // UI side: this tick's reduction, and the mixer's (instant attack, slow release)
     /// <summary>Silences the track while a take that replaces its clips is being recorded (set by the UI).</summary>
     public volatile bool RecordMuted;

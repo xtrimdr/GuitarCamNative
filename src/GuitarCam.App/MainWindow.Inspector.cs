@@ -10,7 +10,7 @@ using GuitarCam.Projects;
 
 namespace GuitarCam.App;
 
-/// <summary>Port of TakeInspector.tsx inside App.tsx's left sidebar ("Toma", folds to a column of icons and remembers
+/// <summary>Port of TakeInspector.tsx inside App.tsx's left sidebar ("Canal", folds to a column of icons and remembers
 /// it like gc.sidebarCollapsed). Track effects edit the channel; sync, fades and framing edit the selected native clip.
 /// The EQ draws the selected track's live spectrum (<see cref="SpectrumTap"/>, FFT on the UI thread). Native
 /// differences: multiple clips per track, offline status; Avalonia Fluent controls and Segoe icons follow the
@@ -37,7 +37,7 @@ public partial class MainWindow
     readonly Border GrBar = new() { Width = 0, HorizontalAlignment = HorizontalAlignment.Right, Background = Palette.Accent, CornerRadius = new CornerRadius(3) };
     readonly Border GrTrack = new() { Height = 6, Background = Palette.App, CornerRadius = new CornerRadius(3) };
     readonly StackPanel fineControls = new() { Spacing = 14, IsVisible = false };
-    readonly Button fineButton = new() { Content = "▸ Ajuste fino", Classes = { "ghost" }, FontSize = 11, Padding = new Thickness(8, 6),
+    readonly Button fineButton = new() { Content = "▸ " + Loc.T("insp.fine"), Classes = { "ghost" }, FontSize = 11, Padding = new Thickness(8, 6),
         HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, Margin = new Thickness(-8, 0) };
     string? inspectorTrack;
     readonly Dictionary<string, (StackPanel Body, Control? Action, SectionHeader Header)> inspectorSections = [];
@@ -81,7 +81,7 @@ public partial class MainWindow
     {
         if (collapseAll == null) return;
         bool all = inspectorSections.Keys.All(collapsedSections.Contains);
-        ToolTip.SetTip(collapseAll, all ? "Mostrar todas las secciones" : "Colapsar todas las secciones");
+        ToolTip.SetTip(collapseAll, all ? Loc.T("insp.sections.show") : Loc.T("insp.sections.hide"));
         collapseAllIcon.Data = (Geometry)Application.Current!.FindResource(all ? "ExpandAllIcon" : "CollapseAllIcon")!;
     }
 
@@ -95,24 +95,26 @@ public partial class MainWindow
         return new Border { Background = Palette.Hover, CornerRadius = new CornerRadius(5), Padding = new Thickness(6, 2), Margin = new Thickness(0, 0, 4, 4), Child = row };
     }
 
-    /// <summary>App.tsx's left aside: the "Toma" header with "Ocultar panel", or the folded column of icons.</summary>
+    /// <summary>App.tsx's left aside: the "Canal" header with Loc.T("insp.hide"), or the folded column of icons.</summary>
     void InitInspectorBar()
     {
         var scroll = (Control)InspectorBar.Child!;
         InspectorBar.Child = null;
         var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto"), Height = 44, Margin = new Thickness(16, 0, 6, 0) };
         header.Children.Add(new TextBlock { Classes = { "icon" }, Text = "", FontSize = 14, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
-        var title = new TextBlock { Text = "Toma", FontSize = 13, FontWeight = FontWeight.Medium, VerticalAlignment = VerticalAlignment.Center };
+        var title = new TextBlock { Text = Loc.T("insp.title"), FontSize = 13, FontWeight = FontWeight.Medium, VerticalAlignment = VerticalAlignment.Center };
         Grid.SetColumn(title, 1); header.Children.Add(title);
-        var hide = RailButton("", "Ocultar panel", () => SetInspectorCollapsed(true));
+        var hide = RailButton("", Loc.T("insp.hide"), () => SetInspectorCollapsed(true));
+        shortcutTips.Add((hide, Loc.T("insp.hide"), "leftPanel"));
         hide.Foreground = Palette.Faint;
         Grid.SetColumn(hide, 3); header.Children.Add(hide);
         var top = new Border { BorderBrush = Palette.Line, BorderThickness = new Thickness(0, 0, 0, 1), Child = header };
         DockPanel.SetDock(top, Dock.Top);
         inspectorExpanded.Children.Add(top); inspectorExpanded.Children.Add(scroll);
-        foreach (var (glyph, tip) in new[] { ("", "Mostrar la toma"), ("", "Toma") })
+        foreach (var (glyph, tip) in new[] { ("", Loc.T("insp.rail.show")), ("", Loc.T("insp.title")) })
         {
             var b = RailButton(glyph, tip, () => SetInspectorCollapsed(false));
+            shortcutTips.Add((b, tip, "leftPanel"));
             b.Foreground = Palette.Faint; inspectorCollapsed.Children.Add(b);
         }
         InspectorBar.Child = new Panel { Children = { inspectorExpanded, inspectorCollapsed } };
@@ -148,7 +150,7 @@ public partial class MainWindow
     LiveClip? SelectedInspectorClip => sel?.Clips.FirstOrDefault(c => c.Clip.Id == Timeline.SelectedClipId)
         ?? sel?.ShownClip ?? sel?.Clips.FirstOrDefault();
 
-    static string AmountLabel(double a) => a < .2 ? "Muy suave" : a < .45 ? "Suave" : a < .7 ? "Media" : a < .9 ? "Fuerte" : "Muy fuerte";
+    static string AmountLabel(double a) => Loc.T(a < .2 ? "insp.amount.0" : a < .45 ? "insp.amount.1" : a < .7 ? "insp.amount.2" : a < .9 ? "insp.amount.3" : "insp.amount.4");
     static string Db(double v) => $"{v:+0.0;-0.0;0.0} dB";
     static string Ms(double v) => $"{v:+0.###############;-0.###############;0} ms";
     static string Sec(double v) => $"{v:0.00} s";
@@ -158,6 +160,13 @@ public partial class MainWindow
         var b = new Button { Classes = { "ghost" }, Content = new TextBlock { Text = glyph, Classes = { "icon" }, FontSize = 12 }, MinHeight = 28, Padding = new Thickness(4) };
         ToolTip.SetTip(b, tip); b.Click += (_, _) => click(); return b;
     }
+    /// <summary>Sections are keyed (and remembered folded) by their Spanish id; this is the text shown.</summary>
+    static string SectionTitle(string id) => Loc.T(id switch
+    {
+        "Mezcla" => "insp.section.mix", "Saturación" => "insp.section.sat", "Compresor" => "insp.section.comp", "EQ" => "insp.section.eq",
+        "Reverb" => "insp.section.reverb", "Delay" => "insp.section.delay", "Sincronización" => "insp.section.sync", "Clip" => "insp.section.clip",
+        "Encuadre" => "insp.section.frame", _ => id,
+    });
     StackPanel Section(string title, string icon, Func<bool>? on = null, Action<bool>? power = null, Control? action = null)
     {
         var content = new StackPanel { Spacing = 14, Margin = new Thickness(16, 2, 16, 16) };
@@ -165,7 +174,7 @@ public partial class MainWindow
         var border = new Border { Classes = { "section" }, Child = outer, Background = Palette.Panel,
             BorderThickness = new Thickness(0, 0, 0, 1), CornerRadius = new CornerRadius(0),
             Padding = new Thickness(0), Margin = new Thickness(-14, 0) };
-        var header = new SectionHeader(title, icon);
+        var header = new SectionHeader(SectionTitle(title), icon);
         var sectionIcon = header.Icon;
         inspectorSections[title] = (content, action, header);
         header.Toggled += () => { SetSectionCollapsed(title, !collapsedSections.Contains(title)); SaveCollapsedSections(); };
@@ -183,7 +192,7 @@ public partial class MainWindow
                 toggle.Content = powerLabel;
                 toggle.Background = on() ? Palette.Accent : Brushes.Transparent;
                 toggle.Foreground = on() ? Palette.App : Palette.Faint;
-                ToolTip.SetTip(toggle, (on() ? "Apagar " : "Prender ") + (title == "EQ" ? "el EQ" : title == "Saturación" ? "la saturación" : title == "Compresor" ? "el compresor" : title == "Reverb" ? "el envío a la reverb" : "el envío al delay"));
+                ToolTip.SetTip(toggle, Loc.T("insp.power." + (title switch { "EQ" => "eq", "Saturación" => "sat", "Compresor" => "comp", "Reverb" => "reverb", _ => "delay" }) + (on() ? ".off" : ".on")));
             });
         }
         header.SetTrailing(action, powerButton);
@@ -219,7 +228,7 @@ public partial class MainWindow
         {
             double v = get();
             knob.Set(v); valueText.Text = value(v); detailText.Text = detail(v);
-            ToolTip.SetTip(knob, $"{label}: {value(v)} (arrastrá o usá la rueda · doble click: {value(reset)})");
+            ToolTip.SetTip(knob, Loc.T("insp.knob.tip", label, value(v), value(reset)));
         });
     }
 
@@ -280,7 +289,7 @@ public partial class MainWindow
         takeName.PointerEntered += (_, _) => takeNamePencil.Opacity = takeName.IsFocused ? 0 : 1;
         takeName.PointerExited += (_, _) => takeNamePencil.Opacity = 0;
         takeName.GotFocus += (_, _) => takeNamePencil.Opacity = 0;
-        ToolTip.SetTip(takeName, "Nombre de la toma (clic para cambiarlo)");
+        ToolTip.SetTip(takeName, Loc.T("insp.name.tip"));
         takeName.Margin = new Thickness(4, 0, 0, 0);
         Grid.SetColumn(takeName, 1); header.Children.Add(takeName);
         // Avalonia raises TextChanged after the fact (outside syncing), so filling the box must not count as an edit.
@@ -297,26 +306,26 @@ public partial class MainWindow
         takeFacts.Children.Add(FactBadge("\uE916", takeLength));
         takeFacts.Children.Add(FactBadge("\uE8D6", takeFormat));
         takeFacts.Children.Add(FactBadge("", takeChannels));
-        noSelection.Children.Add(new TextBlock { Text = "Seleccioná una toma", FontSize = 14, Foreground = Palette.Dim, TextAlignment = TextAlignment.Center });
+        noSelection.Children.Add(new TextBlock { Text = Loc.T("insp.none"), FontSize = 14, Foreground = Palette.Dim, TextAlignment = TextAlignment.Center });
         noSelection.Children.Add(noSelectionHint);
         Inspector.Children.Add(noSelection);
         takeHead.Child = new StackPanel { Children = { header, takeInfo, takeFacts } };
         Inspector.Children.Add(takeHead);
         var recordHint = new TextBlock { FontSize = 12, Foreground = Palette.Dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
-        recordHint.Inlines!.Add(new Avalonia.Controls.Documents.Run("Con esta pista seleccionada, apretá "));
+        recordHint.Inlines!.Add(new Avalonia.Controls.Documents.Run(Loc.T("insp.empty.a")));
         recordHint.Inlines.Add(new Avalonia.Controls.Documents.Run("R") { FontFamily = Palette.Mono.FontFamily, Foreground = Palette.Fg });
-        recordHint.Inlines.Add(new Avalonia.Controls.Documents.Run(" (o el botón de grabar) y la toma nueva queda en este lugar del timeline."));
+        recordHint.Inlines.Add(new Avalonia.Controls.Documents.Run(Loc.T("insp.empty.b")));
         emptySections.Children.Add(recordHint);
-        emptySections.Children.Add(new TextBlock { Text = "También podés agregar acá una toma del historial desde «Nueva pista».", FontSize = 12, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap });
-        var removeEmpty = RemoveButton("Quitar pista"); removeEmpty.Margin = new Thickness(0, 12, 0, 0);
+        emptySections.Children.Add(new TextBlock { Text = Loc.T("insp.empty.c"), FontSize = 12, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap });
+        var removeEmpty = RemoveButton(Loc.T("insp.removeTrack")); removeEmpty.Margin = new Thickness(0, 12, 0, 0);
         removeEmpty.Click += async (_, _) => await DeleteTimelineSelection(); emptySections.Children.Add(removeEmpty);
         Inspector.Children.Add(emptySections); Inspector.Children.Add(takeSections);
-        var mix = Section("Mezcla", "\uE9E9", action: InspectorIcon("\uE74F", "Silenciar toma", () => Edit(t => t.Channel.Muted = !t.Channel.Muted, "mute")));
-        Slider(mix, "Volumen", 0, 1.5, 0.01, 1, () => sel!.Channel.Volume, v => Edit(t => t.Channel.Volume = v, "volume"), v => $"{v * 100:0}%");
-        Slider(mix, "Paneo", -1, 1, 0.05, 0, () => sel!.Channel.Pan, v => Edit(t => t.Channel.Pan = Math.Abs(v) < 0.04 ? 0 : v, "pan"), v => v == 0 ? "C" : $"{(v < 0 ? "L" : "R")} {Math.Abs(v) * 100:0}");
+        var mix = Section("Mezcla", "\uE9E9", action: InspectorIcon("\uE74F", Loc.T("insp.mute.tip"), () => Edit(t => t.Channel.Muted = !t.Channel.Muted, "mute")));
+        Slider(mix, Loc.T("insp.volume"), 0, 1.5, 0.01, 1, () => sel!.Channel.Volume, v => Edit(t => t.Channel.Volume = v, "volume"), v => $"{v * 100:0}%");
+        Slider(mix, Loc.T("insp.pan"), -1, 1, 0.05, 0, () => sel!.Channel.Pan, v => Edit(t => t.Channel.Pan = Math.Abs(v) < 0.04 ? 0 : v, "pan"), v => v == 0 ? "C" : $"{(v < 0 ? "L" : "R")} {Math.Abs(v) * 100:0}");
         // native only: a track that sounds without a panel (a backing track, a click…)
-        var inVideo = new CheckBox { Content = "En el video", FontSize = 12 };
-        ToolTip.SetTip(inVideo, "La pista tiene su panel en el video. Apagalo para que solo suene (una base, un click…)");
+        var inVideo = new CheckBox { Content = Loc.T("insp.inVideo"), FontSize = 12 };
+        ToolTip.SetTip(inVideo, Loc.T("insp.inVideo.tip"));
         inVideo.IsCheckedChanged += async (_, _) => { if (!syncing && sel != null) await SetInVideo(sel, inVideo.IsChecked == true); };
         inspectorRefresh.Add(() => inVideo.IsChecked = sel!.Track.Video);
         mix.Children.Add(inVideo);
@@ -324,75 +333,75 @@ public partial class MainWindow
         var sat = Section("Saturación", FxIcon.Sat, () => sel!.Channel.Sat.On, on => Edit(t => t.Channel.Sat.On = on, "sat.on"));
         var modes = new StackPanel { Orientation = Orientation.Horizontal };
         sat.Children.Add(new Border { Classes = { "seg" }, HorizontalAlignment = HorizontalAlignment.Left, Child = modes });
-        foreach (var (id, text) in new[] { ("tube", "Válvula"), ("tape", "Cinta") })
+        foreach (var (id, text) in new[] { ("tube", Loc.T("insp.sat.tube")), ("tape", Loc.T("insp.sat.tape")) })
         {
             var b = new ToggleButton { Content = text, Classes = { "seg" } };
             b.Click += (_, _) => Edit(t => { t.Channel.Sat.Mode = id; t.Channel.Sat.On = true; }, "sat.mode");
             inspectorRefresh.Add(() => b.IsChecked = sel!.Channel.Sat.Mode == id); modes.Children.Add(b);
         }
-        EffectKnob(sat, "Vida", 0.3, () => sel!.Channel.Sat.Amount, v => Edit(t => { t.Channel.Sat.Amount = v; t.Channel.Sat.On = true; }, "sat.amount"),
-            v => v < .2 ? "Apenas" : v < .45 ? "Sutil" : v < .7 ? "Con vida" : v < .9 ? "Caliente" : "Al palo", v => $"{v * 100:0}%",
-            "Cuánto empuja la toma contra la válvula o la cinta. Se calibra con el nivel de la toma");
+        EffectKnob(sat, Loc.T("insp.sat.life"), 0.3, () => sel!.Channel.Sat.Amount, v => Edit(t => { t.Channel.Sat.Amount = v; t.Channel.Sat.On = true; }, "sat.amount"),
+            v => Loc.T(v < .2 ? "insp.life.0" : v < .45 ? "insp.life.1" : v < .7 ? "insp.life.2" : v < .9 ? "insp.life.3" : "insp.life.4"), v => $"{v * 100:0}%",
+            Loc.T("insp.sat.hint"));
         var satHint = Help(""); sat.Children.Add(satHint);
-        inspectorRefresh.Add(() => satHint.Text = sel!.Channel.Sat.Mode == "tape" ? "Compacta los golpes, suaviza los agudos ásperos y suma un poco de cuerpo en los graves." : "Armónicos pares: más cálido y redondo, los picos se ablandan sin perder brillo.");
+        inspectorRefresh.Add(() => satHint.Text = sel!.Channel.Sat.Mode == "tape" ? Loc.T("insp.sat.tape.hint") : Loc.T("insp.sat.tube.hint"));
         var comp = Section("Compresor", FxIcon.Comp, () => sel!.Channel.Comp.On, on => CompEdit(c => c.On = on, "on", recalculate: true),
-            InspectorIcon("\uE777", "Volver al estilo por defecto", () => Edit(t =>
+            InspectorIcon("\uE777", Loc.T("insp.comp.reset"), () => Edit(t =>
             {
                 bool on = t.Channel.Comp.On;
                 string preset = InspectorEditing.DefaultCompPreset(SelectedInspectorClip?.Clip, tracks.IndexOf(t) == 1 ? "lead" : "rhythm");
                 t.Track.Channel.Comp = new CompSettings { On = on, Preset = preset }; RecalculateInspectorComp(t);
             }, "comp.reset")));
-        comp.Children.Add(Help("¿Qué estás tocando?"));
+        comp.Children.Add(Help(Loc.T("insp.comp.what")));
         var presets = new UniformGrid { Columns = 3 };
-        foreach (var (id, label) in new[] { ("rhythm", "Rasgueo"), ("arpeggio", "Arpegio"), ("lead", "Punteo") })
+        foreach (var (id, label) in new[] { ("rhythm", Loc.T("insp.comp.rhythm")), ("arpeggio", Loc.T("insp.comp.arpeggio")), ("lead", Loc.T("insp.comp.lead")) })
         {
             var b = new ToggleButton { Content = label, Classes = { "seg", "pick" }, Padding = new Thickness(3, 0), Margin = new Thickness(2, 0) };
             b.Click += (_, _) => CompEdit(c => { c.Preset = id; c.On = true; }, "preset", recalculate: true);
             inspectorRefresh.Add(() => b.IsChecked = sel!.Channel.Comp.Preset == id); presets.Children.Add(b);
         }
         comp.Children.Add(new Border { Classes = { "seg" }, Child = presets });
-        var (knob, amountText, summary) = KnobRow(comp, "Cantidad");
+        var (knob, amountText, summary) = KnobRow(comp, Loc.T("insp.comp.amount"));
         knob.Changed += v => CompEdit(c => { c.Amount = v; c.On = true; }, "amount", recalculate: true);
         var compHint = Help(""); comp.Children.Add(compHint);
         inspectorRefresh.Add(() =>
         {
             var c = sel!.Channel.Comp; knob.Set(c.Amount); knob.IsEnabled = c.Preset != "custom";
-            amountText.Text = c.Preset == "custom" ? "Manual" : AmountLabel(c.Amount);
-            summary.Text = c.Preset == "custom" ? "Ajuste fino a mano" : $"comprime ~{EstimatedCompression(c):0} dB"
-                + (c.Eq.PresenceDb >= 1 ? $" · presencia +{c.Eq.PresenceDb:0.0} dB" : c.Eq.PresenceDb <= -1 ? $" · lugar al punteo {c.Eq.PresenceDb:0.0} dB" : "");
-            ToolTip.SetTip(knob, c.Preset == "custom" ? "Valores a mano: elegí un estilo para volver al control simple" : $"Cantidad: {AmountLabel(c.Amount)}. Mueve todo junto (compresión, ataque, release, EQ) y mantiene el volumen parejo (arrastrá o usá la rueda · doble click: media)");
-            compHint.Text = c.Preset switch { "rhythm" => "Rítmicas y riffs: empareja los golpes, conserva el ataque de la púa y deja lugar al punteo", "arpeggio" => "Arpegios y limpias: iguala las cuerdas, las notas suaves se escuchan y suena abierto", "lead" => "Solos y melodías: más sustain, notas parejas y presencia para que quede adelante", _ => "" };
+            amountText.Text = c.Preset == "custom" ? Loc.T("insp.comp.manual") : AmountLabel(c.Amount);
+            summary.Text = c.Preset == "custom" ? Loc.T("insp.comp.summary.manual") : Loc.T("insp.comp.summary", $"{EstimatedCompression(c):0}")
+                + (c.Eq.PresenceDb >= 1 ? Loc.T("insp.comp.presence.up", $"{c.Eq.PresenceDb:0.0}") : c.Eq.PresenceDb <= -1 ? Loc.T("insp.comp.presence.down", $"{c.Eq.PresenceDb:0.0}") : "");
+            ToolTip.SetTip(knob, c.Preset == "custom" ? Loc.T("insp.comp.manual.tip") : Loc.T("insp.comp.amount.tip", AmountLabel(c.Amount)));
+            compHint.Text = c.Preset switch { "rhythm" => Loc.T("insp.comp.rhythm.hint"), "arpeggio" => Loc.T("insp.comp.arpeggio.hint"), "lead" => Loc.T("insp.comp.lead.hint"), _ => "" };
         });
-        fineButton.Click += (_, _) => { fineControls.IsVisible = !fineControls.IsVisible; fineButton.Content = fineControls.IsVisible ? "▾ Ajuste fino" : "▸ Ajuste fino"; };
+        fineButton.Click += (_, _) => { fineControls.IsVisible = !fineControls.IsVisible; fineButton.Content = fineControls.IsVisible ? "▾ " + Loc.T("insp.fine") : "▸ " + Loc.T("insp.fine"); };
         comp.Children.Add(fineButton); comp.Children.Add(fineControls);
         InspectorSlider Fine(string label, double min, double max, double step, double reset, Func<CompSettings, double> get, Action<CompSettings, double> set, Func<double, string> format, string? hint = null) =>
             Slider(fineControls, label, min, max, step, reset, () => get(sel!.Channel.Comp), v => CompEdit(c => set(c, v), label, manual: true), format, hint);
-        Fine("Umbral", -60, 0, .5, -18, c => c.Threshold, (c, v) => c.Threshold = v, v => $"{v:0.0} dB");
-        Fine("Ratio", 1, 20, .1, 4, c => c.Ratio, (c, v) => c.Ratio = v, v => $"{v:0.0}:1");
-        Fine("Ataque", .1, 100, .1, 10, c => c.Attack * 1000, (c, v) => c.Attack = v / 1000, v => $"{v:0.0} ms");
-        Fine("Release", 10, 1000, 5, 150, c => c.Release * 1000, (c, v) => c.Release = v / 1000, v => $"{v:0} ms");
-        Fine("Knee", 0, 24, .5, 6, c => c.Knee, (c, v) => c.Knee = v, v => $"{v:0.0} dB");
-        Fine("Ganancia", -12, 30, .5, 0, c => c.Makeup, (c, v) => c.Makeup = v, Db, "Make-up: compensa el volumen que saca la compresión");
-        Fine("Corte de graves", 10, 300, 5, 10, c => c.Eq.HpfHz, (c, v) => c.Eq.HpfHz = v, v => v <= 10 ? "Off" : $"{v:0} Hz");
-        Fine("Barro (280 Hz)", -6, 6, .5, 0, c => c.Eq.MudDb, (c, v) => c.Eq.MudDb = v, Db);
-        var presence = Fine("Presencia (2,5 kHz)", -6, 6, .5, 0, c => c.Eq.PresenceDb, (c, v) => c.Eq.PresenceDb = v, Db, "Positivo: la guitarra pasa adelante. Negativo: le deja lugar a otra");
-        inspectorRefresh.Add(() => presence.Label.Text = $"Presencia ({sel!.Channel.Comp.Eq.PresenceHz / 1000:0.0} kHz)");
-        Fine("Brillo (9 kHz)", -6, 6, .5, 0, c => c.Eq.AirDb, (c, v) => c.Eq.AirDb = v, Db);
-        var limit = new CheckBox { Content = "Limitar picos", FontSize = 12 };
-        ToolTip.SetTip(limit, "Un limitador después del compresor frena golpes de púa y notas fuertes");
+        Fine(Loc.T("insp.comp.threshold"), -60, 0, .5, -18, c => c.Threshold, (c, v) => c.Threshold = v, v => $"{v:0.0} dB");
+        Fine(Loc.T("insp.comp.ratio"), 1, 20, .1, 4, c => c.Ratio, (c, v) => c.Ratio = v, v => $"{v:0.0}:1");
+        Fine(Loc.T("insp.comp.attack"), .1, 100, .1, 10, c => c.Attack * 1000, (c, v) => c.Attack = v / 1000, v => $"{v:0.0} ms");
+        Fine(Loc.T("insp.comp.release"), 10, 1000, 5, 150, c => c.Release * 1000, (c, v) => c.Release = v / 1000, v => $"{v:0} ms");
+        Fine(Loc.T("insp.comp.knee"), 0, 24, .5, 6, c => c.Knee, (c, v) => c.Knee = v, v => $"{v:0.0} dB");
+        Fine(Loc.T("insp.comp.makeup"), -12, 30, .5, 0, c => c.Makeup, (c, v) => c.Makeup = v, Db, Loc.T("insp.comp.makeup.hint"));
+        Fine(Loc.T("insp.comp.hpf"), 10, 300, 5, 10, c => c.Eq.HpfHz, (c, v) => c.Eq.HpfHz = v, v => v <= 10 ? "Off" : $"{v:0} Hz");
+        Fine(Loc.T("insp.comp.mud"), -6, 6, .5, 0, c => c.Eq.MudDb, (c, v) => c.Eq.MudDb = v, Db);
+        var presence = Fine(Loc.T("insp.comp.presence", "2,5"), -6, 6, .5, 0, c => c.Eq.PresenceDb, (c, v) => c.Eq.PresenceDb = v, Db, Loc.T("insp.comp.presence.hint"));
+        inspectorRefresh.Add(() => presence.Label.Text = Loc.T("insp.comp.presence", $"{sel!.Channel.Comp.Eq.PresenceHz / 1000:0.0}"));
+        Fine(Loc.T("insp.comp.air"), -6, 6, .5, 0, c => c.Eq.AirDb, (c, v) => c.Eq.AirDb = v, Db);
+        var limit = new CheckBox { Content = Loc.T("insp.comp.limit"), FontSize = 12 };
+        ToolTip.SetTip(limit, Loc.T("insp.comp.limit.tip"));
         limit.IsCheckedChanged += (_, _) => { if (!syncing) CompEdit(c => c.Limit = limit.IsChecked == true, "limit"); };
         inspectorRefresh.Add(() => limit.IsChecked = sel!.Channel.Comp.Limit); fineControls.Children.Add(limit);
-        fineControls.Children.Add(Help("Al mover estos valores el compresor pasa a «Manual». Elegí un estilo para volver al control simple."));
+        fineControls.Children.Add(Help(Loc.T("insp.comp.fine.hint")));
         GrTrack.Child = GrBar;
         var eqHost = Section("EQ", FxIcon.Eq, () => sel!.Channel.Eq.On, on => Edit(t => t.Channel.Eq.On = on, "eq.on"));
         var eq = eqEditor = new EqEditor(); eq.Changed += value => Edit(t => t.Channel.Eq = value, "eq"); eqHost.Children.Add(eq);
         inspectorRefresh.Add(() => eq.Set(sel!.Channel.Eq));
         var reverb = Section("Reverb", FxIcon.Reverb, () => sel!.Channel.ReverbOn, on => Edit(t => t.Channel.ReverbOn = on, "reverb.on"));
-        EffectKnob(reverb, "Envío a reverb", 0, () => sel!.Channel.ReverbSend, v => Edit(t => t.Channel.ReverbSend = v, "reverb.send"), v => $"{v * 100:0}%", SendDb,
-            "Cuánto de esta pista va al bus de reverb (después del fader)");
+        EffectKnob(reverb, Loc.T("insp.reverb.send"), 0, () => sel!.Channel.ReverbSend, v => Edit(t => t.Channel.ReverbSend = v, "reverb.send"), v => $"{v * 100:0}%", SendDb,
+            Loc.T("insp.reverb.hint"));
         var delay = Section("Delay", FxIcon.Delay, () => sel!.Channel.DelayOn, on => Edit(t => t.Channel.DelayOn = on, "delay.on"));
-        EffectKnob(delay, "Envío a delay", 0, () => sel!.Channel.DelaySend, v => Edit(t => { t.Channel.DelaySend = v; t.Channel.DelayOn = true; }, "delay.send"), v => $"{v * 100:0}%", SendDb,
-            "Cuánto de esta pista va al bus de delay (después del fader)");
+        EffectKnob(delay, Loc.T("insp.delay.send"), 0, () => sel!.Channel.DelaySend, v => Edit(t => { t.Channel.DelaySend = v; t.Channel.DelayOn = true; }, "delay.send"), v => $"{v * 100:0}%", SendDb,
+            Loc.T("insp.delay.hint"));
         InitClipInspector();
         UpdateCollapseButton();
     }
@@ -405,27 +414,29 @@ public partial class MainWindow
         double Len() { var w = ClipEditing.Window(C(), M(), Dur()); return Math.Max(.01, w.End - w.Start); }
         var sync = Section("Sincronización", "\uE823");
         void SetSync(double v) => ClipEdit((c, m) => InspectorEditing.SetSync(c, m, v), "sync");
-        var offset = Slider(sync, "Offset de audio", -250, 250, 1, 0, () => C().EffectiveSyncMs(M()), SetSync, Ms,
-            "Corrige la sincronía del audio de esta toma (negativo = antes). Incluye la compensación de latencia; el imán del timeline la respeta");
+        // ±1 s instead of the web's ±250 ms (user request): some interfaces and cameras lag more than that
+        const double SyncRangeMs = 1000;
+        var offset = Slider(sync, Loc.T("insp.sync.offset"), -SyncRangeMs, SyncRangeMs, 1, 0, () => C().EffectiveSyncMs(M()), SetSync, Ms,
+            Loc.T("insp.sync.offset.hint"));
         foreach (int delta in new[] { -5, 5 })
         {
             var b = new Button { Content = delta < 0 ? "−5" : "+5", Classes = { "chip", "mono" }, FontSize = 10.5, Padding = new Thickness(4, 0), MinHeight = 22 };
             b.Click += (_, _) => SetSync(C().EffectiveSyncMs(M()) + delta); offset.Trailing.Children.Add(b);
         }
-        var cameraLatency = Slider(sync, "Latencia de cámara", -250, 250, 5, 80, () => C().EffectiveVideoOffsetMs(M()), v => ClipEdit((c, _) => c.VideoOffsetMs = v, "video-offset"), Ms,
-            "Compensa el retraso de la cámara para que los dedos coincidan con el audio");
+        var cameraLatency = Slider(sync, Loc.T("insp.sync.camera"), -SyncRangeMs, SyncRangeMs, 5, 80, () => C().EffectiveVideoOffsetMs(M()), v => ClipEdit((c, _) => c.VideoOffsetMs = v, "video-offset"), Ms,
+            Loc.T("insp.sync.camera.hint"));
         videoOnly.Add(cameraLatency);
-        var resetClip = InspectorIcon("\uE777", "Restaurar clip (sin recortes ni fades)", () => ClipEdit((c, _) => ClipEditing.Reset(store!.Project, c.Id), "reset"));
+        var resetClip = InspectorIcon("\uE777", Loc.T("insp.clip.reset"), () => ClipEdit((c, _) => ClipEditing.Reset(store!.Project, c.Id), "reset"));
         var clip = Section("Clip", "\uE8C6", action: resetClip);
-        Slider(clip, "Recorte inicio", 0, 10, .01, 0, () => C().TrimStartSec, v => ClipEdit((c, _) => c.TrimStartSec = v, "trim-start"), Sec,
-            "Oculta el principio de la toma sin mover el resto", () => Math.Max(.01, Dur() - C().TrimEndSec - ClipEnvelope.MinClipSec));
-        Slider(clip, "Recorte final", 0, 10, .01, 0, () => C().TrimEndSec, v => ClipEdit((c, _) => c.TrimEndSec = v, "trim-end"), Sec,
+        Slider(clip, Loc.T("insp.clip.trimStart"), 0, 10, .01, 0, () => C().TrimStartSec, v => ClipEdit((c, _) => c.TrimStartSec = v, "trim-start"), Sec,
+            Loc.T("insp.clip.trimStart.hint"), () => Math.Max(.01, Dur() - C().TrimEndSec - ClipEnvelope.MinClipSec));
+        Slider(clip, Loc.T("insp.clip.trimEnd"), 0, 10, .01, 0, () => C().TrimEndSec, v => ClipEdit((c, _) => c.TrimEndSec = v, "trim-end"), Sec,
             maximum: () => Math.Max(.01, Dur() - C().TrimStartSec - ClipEnvelope.MinClipSec));
         ClipEnvelope.FadePair Audio() => ClipEnvelope.FitFades(C().FadeInSec, C().FadeOutSec, Len());
-        Slider(clip, "Fade in (audio)", 0, 10, .01, 0, () => Audio().FadeIn, v => ClipEdit((c, _) => c.FadeInSec = v, "fade-in"), Sec, maximum: Len);
-        Slider(clip, "Fade out (audio)", 0, 10, .01, 0, () => Audio().FadeOut, v => ClipEdit((c, _) => c.FadeOutSec = v, "fade-out"), Sec, maximum: Len);
-        var link = new CheckBox { Content = "El video sigue los fades del audio", FontSize = 12 };
-        ToolTip.SetTip(link, "El video funde a negro junto con el volumen");
+        Slider(clip, Loc.T("insp.clip.fadeIn"), 0, 10, .01, 0, () => Audio().FadeIn, v => ClipEdit((c, _) => c.FadeInSec = v, "fade-in"), Sec, maximum: Len);
+        Slider(clip, Loc.T("insp.clip.fadeOut"), 0, 10, .01, 0, () => Audio().FadeOut, v => ClipEdit((c, _) => c.FadeOutSec = v, "fade-out"), Sec, maximum: Len);
+        var link = new CheckBox { Content = Loc.T("insp.clip.linkFades"), FontSize = 12 };
+        ToolTip.SetTip(link, Loc.T("insp.clip.linkFades.tip"));
         link.IsCheckedChanged += (_, _) =>
         {
             if (syncing) return;
@@ -436,22 +447,22 @@ public partial class MainWindow
         videoOnly.Add(link);
         var video = new StackPanel { Spacing = 10 }; clip.Children.Add(video);
         ClipEnvelope.FadePair Video() => ClipEnvelope.FitFades(C().VideoFadeInSec, C().VideoFadeOutSec, Len());
-        Slider(video, "Fade in (video)", 0, 10, .01, 0, () => Video().FadeIn, v => ClipEdit((c, _) => c.VideoFadeInSec = v, "video-fade-in"), Sec, maximum: Len);
-        Slider(video, "Fade out (video)", 0, 10, .01, 0, () => Video().FadeOut, v => ClipEdit((c, _) => c.VideoFadeOutSec = v, "video-fade-out"), Sec, maximum: Len);
+        Slider(video, Loc.T("insp.clip.vFadeIn"), 0, 10, .01, 0, () => Video().FadeIn, v => ClipEdit((c, _) => c.VideoFadeInSec = v, "video-fade-in"), Sec, maximum: Len);
+        Slider(video, Loc.T("insp.clip.vFadeOut"), 0, 10, .01, 0, () => Video().FadeOut, v => ClipEdit((c, _) => c.VideoFadeOutSec = v, "video-fade-out"), Sec, maximum: Len);
         inspectorRefresh.Add(() => { link.IsChecked = C().LinkVideoFades; video.IsVisible = !AudioOnly && !C().LinkVideoFades;
             resetClip.IsEnabled = C().TrimStartSec > 0 || C().TrimEndSec > 0 || C().FadeInSec > 0 || C().FadeOutSec > 0 || !C().LinkVideoFades && (C().VideoFadeInSec > 0 || C().VideoFadeOutSec > 0); });
-        clip.Children.Add(Help("En el timeline: arrastrá el clip para moverlo, sus bordes para recortar y las esquinas de arriba para los fades."));
+        clip.Children.Add(Help(Loc.T("insp.clip.hint")));
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-        var mirror = InspectorIcon("\uE8AB", "Espejar horizontalmente", () => ClipEdit((c, _) => c.Framing.Mirror = !c.Framing.Mirror, "mirror"));
-        actions.Children.Add(mirror); actions.Children.Add(InspectorIcon("\uE777", "Resetear encuadre", () => ClipEdit((c, _) => InspectorEditing.ResetFrame(c), "framing")));
+        var mirror = InspectorIcon("\uE8AB", Loc.T("insp.frame.mirror"), () => ClipEdit((c, _) => c.Framing.Mirror = !c.Framing.Mirror, "mirror"));
+        actions.Children.Add(mirror); actions.Children.Add(InspectorIcon("\uE777", Loc.T("insp.frame.reset"), () => ClipEdit((c, _) => InspectorEditing.ResetFrame(c), "framing")));
         var frame = Section("Encuadre", "\uE7A8", action: actions);
         videoOnly.Add((Control)frame.Parent!.Parent!); // the whole card
         inspectorRefresh.Add(() => mirror.Foreground = C().Framing.Mirror ? Palette.Accent : Palette.Dim);
-        Slider(frame, "Zoom", 1, 2.5, .01, 1, () => C().Framing.Zoom, v => ClipEdit((c, _) => InspectorEditing.Frame(c, zoom: v), "framing"), v => $"{v:0.00}×");
-        frame.Children.Add(Help("Arrastrá el panel en el video para mover el encuadre; la rueda del mouse hace zoom."));
-        var remove = RemoveButton("Quitar del timeline"); remove.Margin = new Thickness(0, 16, 0, 0);
+        Slider(frame, Loc.T("insp.frame.zoom"), 1, 2.5, .01, 1, () => C().Framing.Zoom, v => ClipEdit((c, _) => InspectorEditing.Frame(c, zoom: v), "framing"), v => $"{v:0.00}×");
+        frame.Children.Add(Help(Loc.T("insp.frame.hint")));
+        var remove = RemoveButton(Loc.T("insp.removeClip")); remove.Margin = new Thickness(0, 16, 0, 0);
         remove.Click += async (_, _) => await DeleteTimelineSelection(); takeSections.Children.Add(remove);
-        takeSections.Children.Add(Help("El archivo queda guardado; la volvés a usar desde Historial."));
+        takeSections.Children.Add(Help(Loc.T("insp.removeClip.hint")));
     }
 
     /// <summary>The web's full-width "Quitar pista" / "Quitar del timeline" button with its MinusCircle icon.</summary>
@@ -483,18 +494,18 @@ public partial class MainWindow
             takeNumber.Text = sel == null ? "" : (tracks.IndexOf(sel) + 1).ToString();
             var c = SelectedInspectorClip;
             noSelection.IsVisible = sel == null;
-            noSelectionHint.Text = tracks.Any(t => t.Clips.Count > 0) ? "Hacé click en una pista o en su panel del video." : "Todavía no hay tomas grabadas.";
+            noSelectionHint.Text = tracks.Any(t => t.Clips.Count > 0) ? Loc.T("insp.none.hint") : Loc.T("insp.none.empty");
             takeHead.IsVisible = sel != null;
             takeBadge.Background = c != null ? Palette.AccentSoft : Palette.Hover;
             takeNumber.Foreground = c != null ? Palette.Accent : Palette.Dim;
-            takeInfo.Text = sel == null ? "" : c == null ? "Pista vacía" : c.Offline ? "Sin conexión: falta el archivo de audio" : "";
+            takeInfo.Text = sel == null ? "" : c == null ? Loc.T("insp.trackEmpty") : c.Offline ? Loc.T("clip.offline") : "";
             takeInfo.IsVisible = takeInfo.Text != "";
             takeFacts.IsVisible = c is { Offline: false };
             if (c is { Offline: false })
             {
                 takeLength.Text = $"{c.LengthSec:0.0} s";
                 takeFormat.Text = $"WAV {c.Audio!.SampleRate / 1000.0:0} kHz";
-                takeChannels.Text = "estéreo";
+                takeChannels.Text = Loc.T("insp.stereo");
             }
             emptySections.IsVisible = sel != null && c == null;
             takeSections.IsVisible = c != null;
