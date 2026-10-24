@@ -14,7 +14,7 @@ public partial class MainWindow
         Live.UpdateCamera(cap, camera.Mirror);
         bool recording = RecordingTake;
         int? beat = recording ? engine.CountdownBeat : null;
-        Live.SetState(recording && beat == null, beat, Math.Max(0, engine.PositionSec));
+        Live.SetState(recording && beat == null, beat, Math.Max(0, engine.PositionSec - engine.RecordStartSec));
         Live.SetAudio(engine.DriverName, engine.InputGainDb);
         string? err = cap?.Error;
         if (err == cameraErrorShown) return;

@@ -24,6 +24,7 @@ static class Shortcuts
         new("click", Loc.T("sc.group.transport"), Loc.T("sc.click"), [G(Key.C)]),
         new("countIn", Loc.T("sc.group.transport"), Loc.T("sc.countIn"), [G(Key.C, KeyModifiers.Shift)]),
         new("tap", Loc.T("sc.group.transport"), Loc.T("sc.tap"), [G(Key.T)]),
+        new("tuner", Loc.T("sc.group.transport"), Loc.T("sc.tuner"), [G(Key.A)]),
         new("mute", Loc.T("sc.group.tracks"), Loc.T("sc.mute"), [G(Key.M)]),
         new("solo", Loc.T("sc.group.tracks"), Loc.T("sc.solo"), [G(Key.S)]),
         new("arm", Loc.T("sc.group.tracks"), Loc.T("sc.arm"), [G(Key.R)]),

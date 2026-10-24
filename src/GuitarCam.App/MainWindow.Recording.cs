@@ -21,7 +21,9 @@ namespace GuitarCam.App;
 /// Native only: tracks are armed by hand (● in their header or mixer strip), several at once, each recording
 /// from its own input (<see cref="Track.Input"/>), one take per track on the same sample; a track with clips
 /// loses them to its take and stays silent meanwhile. Without one armed the target is the web's pick. The
-/// camera's video goes to the first armed track that is in the video. Targets are always tinted red.
+/// camera's video goes to the first armed track that is in the video. Targets are always tinted red. Recording
+/// starts at the playhead (the web always starts at 0): the count-in leads into it and the take lands there,
+/// replacing only what it covers on a track with clips (<see cref="TakeRecording.AddTake"/>).
 /// </summary>
 public partial class MainWindow
 {
@@ -189,6 +191,7 @@ public partial class MainWindow
             return;
         }
         bool countIn = CountInToggle.IsChecked == true;
+        double startSec = engine.PositionSec;
         recFirstTake = TakeRecording.IsFirstTake(p);
         double syncMs = TakeRecorder.ComputeSyncMs(recFirstTake, countIn, engine.ClickOn, OverdubOffsetMs, engine.GetLatencyInfo().AppliedMs);
         var cam = !AudioOnly && camera.Capture is { HasSignal: true } c ? c : null;
@@ -205,7 +208,8 @@ public partial class MainWindow
                 Audio = $"{ProjectStore.MediaDir}/{id}.wav",
                 Video = i == videoAt ? $"{ProjectStore.MediaDir}/{id}.mp4" : null,
                 TrackId = targets[i]?.Id,
-                AtSec = syncMs / 1000,
+                AtSec = startSec + syncMs / 1000,
+                StartSec = startSec,
                 SyncMs = syncMs,
                 VideoOffsetMs = camera.LatencyMs,
                 Mirror = camera.Mirror,
@@ -217,7 +221,7 @@ public partial class MainWindow
         try
         {
             foreach (var t in takes) store.BeginRecording(t.Journal);
-            engine.StartRecording(targets.Select((t, i) => (InputRoute.Parse(t?.Input), store.Resolve(takes[i].Journal.Audio)!)).ToList(), countIn);
+            engine.StartRecording(targets.Select((t, i) => (InputRoute.Parse(t?.Input), store.Resolve(takes[i].Journal.Audio)!)).ToList(), countIn, startSec: startSec);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
         {
@@ -251,6 +255,7 @@ public partial class MainWindow
                 silenced.RecordMuted = true;
                 recSilenced.Add(silenced);
             }
+        Timeline.RecordingStartSec = startSec;
         Timeline.RecordingLanes = targets.Select(t => t == null ? tracks.Count : p.Tracks.IndexOf(t)).ToHashSet();
         Status(notice ?? "");
         RefreshRecording();
@@ -302,7 +307,7 @@ public partial class MainWindow
             recTakes = [];
             armedKey = "";
             Timeline.RecordingLanes = null;
-            Timeline.SetPlayhead(0, true); // back to the start with the playhead, like the web
+            Timeline.SetPlayhead(takes[0].Journal.StartSec, true); // back to where the take started (the web: to 0)
             RefreshRecording();
         }
         try
@@ -331,7 +336,7 @@ public partial class MainWindow
             foreach (var (t, r) in kept)
             {
                 t.Journal.SyncMs = r.SyncMs;
-                t.Journal.AtSec = r.SyncMs / 1000;
+                t.Journal.AtSec = t.Journal.StartSec + r.SyncMs / 1000;
             }
             var trackIds = new List<string>();
             await EditTimeline(p =>

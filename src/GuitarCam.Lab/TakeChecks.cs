@@ -67,6 +67,19 @@ static class TakeChecks
         Check(p.FindMedia(old.MediaId) is { } kept && kept.Extra?.ContainsKey("lastTimelineClip") == true,
             "la toma reemplazada queda en el historial con su clip");
 
+        // from the playhead (punch-in): only the stretch the take covers goes
+        var longMedia = new Media { Id = "med_long", Name = "larga", DurationSec = 20 };
+        var punched = new Track { Name = "Solo", Clips = [new Clip { MediaId = longMedia.Id }] };
+        var pp = new Project { Tracks = [punched] };
+        pp.Media.Add(longMedia);
+        j = new ProjectStore.RecordingJournal { MediaId = "med_p", Name = "Solo", Audio = "media/med_p.wav", TrackId = punched.Id, StartSec = 8, AtSec = 8 - 0.012, SyncMs = -12 };
+        TakeRecording.AddTake(pp, j, 4, 48000, 2, 9);
+        var parts = punched.Clips.Where(c => c.MediaId == longMedia.Id).Select(c => ClipEditing.Window(c, longMedia)).OrderBy(w => w.Start).ToList();
+        Check(parts.Count == 2 && Math.Abs(parts[0].End - 7.988) < 1e-6 && Math.Abs(parts[1].Start - 11.988) < 1e-6,
+            "desde el cabezal: la toma vieja queda antes y después del tramo grabado");
+        Check(punched.Clips[^1].MediaId == "med_p" && Math.Abs(punched.Clips[^1].AtSec - 7.988) < 1e-9,
+            "desde el cabezal: la toma nueva cae donde arrancó, arriba de todo");
+
         // several armed tracks at once: consecutive numbers, each take on its own track, each input saved
         var a = new Track { Name = "Pista 1", Input = "1" };
         var b = new Track { Name = "Pista 2", Input = "3-4" };

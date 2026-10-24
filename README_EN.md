@@ -22,17 +22,19 @@ It is designed to be used with the guitar strapped on: one-key shortcuts, big bu
 
 - **Records** audio over ASIO (input and output in the same callback, with monitoring) and video from a
   camera (DirectShow or DroidCam over IP). Each take is written to disk as it happens, so a crash does not lose it.
-- **Edits on a timeline**: multiple tracks, clips you can move, trim, split and duplicate, fades, range
-  delete, unlimited undo and redo, and import of outside audio (WAV, MP3, FLAC, OGG, M4A, AIFF).
+- **Edits on a timeline**: multiple tracks, clips you can move, trim, split and duplicate, fades, clip gain
+  with its own volume curve, range delete, unlimited undo and redo, and import of outside audio (WAV, MP3, FLAC,
+  OGG, M4A, AIFF). Recording starts at the playhead, so you can redo just one part.
 - **Mixes** with a per-track effects chain: saturation ("Vida", tube or tape), a compressor with presets
   (Strumming / Arpeggio / Lead), a 6-band EQ with live spectrum, and sends to reverb and delay, plus a master
   limiter, pan templates and a full mixer.
 - **Composes the video**: a panel per track with cover-fit, zoom, pan and mirror, 16:9 / 9:16 / 1:1 aspect
   ratios, side-by-side or stacked layout, and a color tab (filters, adjustments, effects and templates).
 - **Exports** to MP4 (offline mix + FFmpeg, with progress and cancellation) or, in **Audio only** mode, to
-  24-bit WAV or 320 kbps MP3. What you see in the preview is what gets exported.
+  24-bit WAV or 320 kbps MP3; optionally each track in its own WAV too (stems). What you see in the preview
+  is what gets exported.
 - **Metronome** with time signature, tempo, tap tempo, count-in and six click sounds; latency calibration
-  with a cable or by playing.
+  with a cable or by playing. A **tuner** and a master **LUFS** meter in the transport bar.
 - **Never loses anything**: atomic autosave 1.5 s after every edit, copies in `historial/` to go back,
   recovery of interrupted recordings and a project manager with a Recycle Bin.
 - Configurable language, theme and keyboard shortcuts.
@@ -76,6 +78,7 @@ Spanish by default; the language is chosen in Settings.
 | R | arm / disarm the selected track |
 | Home | back to the start |
 | C / Shift+C / T | click / count-in / tap tempo |
+| A | tuner |
 | M / S | mute / solo the track |
 | F | fit all |
 | X | timeline / mixer |
@@ -86,6 +89,8 @@ Spanish by default; the language is chosen in Settings.
 | Ctrl+S | save now |
 | B / P | show or hide the take panel / the project panel |
 | Wheel, Shift+wheel, Alt+wheel | scroll, zoom, track height |
+
+On the selected clip, a click on its volume line adds a point; points drag, and a double-click removes one.
 
 ## How it is built
 

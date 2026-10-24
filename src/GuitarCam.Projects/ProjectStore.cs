@@ -360,6 +360,8 @@ public sealed class ProjectStore : IDisposable
         public string? Video { get; set; }
         public string? TrackId { get; set; }
         public double AtSec { get; set; }
+        /// <summary>Where the playhead was when the take started: its first sample lands there (plus <see cref="SyncMs"/>).</summary>
+        public double StartSec { get; set; }
         public double SyncMs { get; set; }
         public double VideoOffsetMs { get; set; } = 80;
         /// <summary>"Espejar imagen en vivo" when the take started: the clip shows mirrored, like the monitor.</summary>

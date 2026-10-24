@@ -101,6 +101,70 @@ public static class AudioExporter
         }
     }
 
+    /// <summary>
+    /// Writes one WAV per track that sounds in the mix (native only, "stems"), each alone through its own chain and
+    /// sends without the master limiter (<see cref="MixRenderer.Render"/> with <c>only</c>), all from 0 and as long as
+    /// the mix so they line up when dropped into another program. 32-bit float, so a stem louder than 0 dBFS (no
+    /// limiter) never clips. They go to "&lt;name&gt; - stems" next to the export ("(2)", "(3)"… when it exists and
+    /// is not being overwritten); each file is written as a hidden .part and renamed. Returns the folder and the count.
+    /// </summary>
+    public static async Task<(string Folder, int Count)> ExportStemsAsync(ExportJobSpec job, string exportFullPath,
+        Action<double>? onProgress = null, CancellationToken ct = default)
+    {
+        var audible = MixRenderer.Audible(job.MixTracks).ToList();
+        if (audible.Count == 0)
+            throw new ExportException(Texts.T("err.export.noTracks", "Necesitás al menos un canal en el timeline para exportar."));
+        string parent = Path.GetDirectoryName(exportFullPath)!;
+        string baseName = Path.GetFileNameWithoutExtension(exportFullPath) + " - stems";
+        string folder = Path.Combine(parent, baseName);
+        for (int k = 2; Directory.Exists(folder) && !job.Overwrite; k++) folder = Path.Combine(parent, $"{baseName} ({k})");
+        Directory.CreateDirectory(folder);
+
+        double duration = Math.Max(1.0, MixRenderer.MixDurationSec(job.MixTracks, job.SampleRate));
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (int s = 0; s < audible.Count; s++)
+        {
+            ct.ThrowIfCancellationRequested();
+            int idx = audible[s];
+            string name = StemName(s + 1, job.MixTracks[idx].Name, used);
+            string path = Path.Combine(folder, name);
+            string part = Path.Combine(folder, $".{name}.part");
+            try
+            {
+                int at = s;
+                var (l, r) = await Task.Run(() => MixRenderer.Render(job.MixTracks, job.MixBus, duration, job.SampleRate,
+                    f => onProgress?.Invoke((at + f * 0.95) / audible.Count), ct, only: idx), ct).ConfigureAwait(false);
+                await Task.Run(() => Mp4Exporter.WriteFloatStereoWav(part, l, r, job.SampleRate), ct).ConfigureAwait(false);
+                try
+                {
+                    File.Move(part, path, overwrite: true);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    throw new ExportException(Texts.T("err.export.replace", "No se pudo reemplazar {0}: puede que esté abierto en otro programa.", name));
+                }
+            }
+            finally
+            {
+                Mp4Exporter.TryDelete(part);
+            }
+            onProgress?.Invoke((s + 1.0) / audible.Count);
+        }
+        return (folder, audible.Count);
+    }
+
+    /// <summary>"01 Guitarra.wav": the number keeps the timeline's order; characters Windows refuses become "_".</summary>
+    static string StemName(int number, string trackName, HashSet<string> used)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        string clean = new string((trackName ?? "").Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray()).Trim().TrimEnd('.');
+        string name = $"{number:00} {(clean.Length == 0 ? Texts.T("export.stem.track", "Pista") : clean)}";
+        if (name.Length > 80) name = name[..80].TrimEnd();
+        string file = name + ".wav";
+        for (int k = 2; !used.Add(file); k++) file = $"{name} ({k}).wav";
+        return file;
+    }
+
     /// <summary>24-bit PCM, what every editor, phone and DAW opens. The mix comes out of the master limiter, so clamping only guards rounding.</summary>
     static void WritePcm24StereoWav(string path, float[] left, float[] right, int sampleRate)
     {

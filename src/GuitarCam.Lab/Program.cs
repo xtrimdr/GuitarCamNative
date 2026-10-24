@@ -26,6 +26,8 @@ static class Program
                 "click" => DspCommands.Click(a),
                 "comprobar-dsp" => DspCommands.Check(a),
                 "espectro" => DspCommands.Spectrum(a),
+                "lufs" => DspCommands.Lufs(a),
+                "afinar" => DspCommands.Tune(a),
                 "camara" => CameraCommands.Run(a),
                 "sistema" => SystemCommands.Run(a),
                 "proyecto" => ProjectCommands.Run(a),
@@ -66,10 +68,13 @@ static class Program
               mezclar   carpeta-proyecto|entrada.wav [--salida mezcla.wav] [--segundos N]
                                            renderiza la mezcla completa offline (sin la demora del limitador)
               exportar  [carpeta-proyecto] [--salida nombre] [--carpeta destino] [--calidad alta|estandar|borrador]
-                        [--reemplazar] [--prueba]
-                                           exporta el proyecto a MP4 con mezcla offline y FFmpeg
+                        [--reemplazar] [--prueba] [--audio wav|mp3] [--stems]
+                                           exporta el proyecto a MP4 (o la mezcla en WAV / MP3) con mezcla offline y FFmpeg;
+                                           --stems deja además un WAV por pista en "<nombre> - stems"
               click     [--salida clicks.wav] [--bpm 100]
                                            escribe todos los sonidos de click a un WAV para escucharlos
+              lufs      archivo.wav|mp3        volumen integrado (EBU R128) del archivo, como el medidor LUFS del master
+              afinar    archivo.wav [--en segundos]   la nota que oye el afinador en ese momento del archivo
               espectro  [entrada.wav] [--hz 1000] [--nivel -6]
                                            el espectro en vivo del EQ (FFT de 8192 después del EQ, como la web);
                                            sin WAV, comprueba un seno contra el AnalyserNode de Web Audio
@@ -96,6 +101,7 @@ static class Program
               proyecto editar carpeta inicio|fijar-corte|restaurar|quitar-clip clip | quitar-pista pista
               proyecto editar carpeta nueva-pista | agregar-toma medio [--pista pista]
               proyecto editar carpeta borrar-rango pista desde --hasta fin   saca ese tramo de los clips de la pista (queda el hueco)
+              proyecto editar carpeta ganancia clip dB | curva clip "seg:dB,..."   volumen del clip y su curva (seg desde el inicio de la toma)
               proyecto verificar-tomas     verifica a qué pista va una toma nueva, su nombre y su canal
               proyecto importar-audio carpeta archivo [--en segundos] [--pista id]   copia un audio de afuera a media/ y lo pone en una pista
               proyecto verificar-importar  verifica la importación de audio (formato, nombres, archivos rotos)

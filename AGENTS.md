@@ -29,7 +29,7 @@ y la captura de referencia de la interfaz, en [docs/captura.png](docs/captura.pn
 |---|---|
 | Textos de la interfaz, mensajes de estado, tooltips | **Español rioplatense, con voseo** ("Abrí", "Elegí", "usá", "probalo") |
 | Comandos y opciones de `gclab` | Español (`grabar --segundos 15 --vida 0.3`) |
-| README, PENDIENTES, esta guía | Español |
+| README, PENDIENTES, HECHO, esta guía | Español |
 | Identificadores, comentarios y `<summary>` en el código | Inglés |
 | Mensajes de commit | Inglés, en imperativo, una línea descriptiva ("Decode real video in the preview with FFmpeg") |
 | Valores que se guardan en el JSON | Inglés (`"tube"`, `"tape"`, `"side-by-side"`, `"rhythm"`…) |
@@ -326,6 +326,11 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
   se intercambia con el clip de abajo, como en la web. Shift+arrastrar sobre una pista marca un rango (solo nativa,
   pedido del usuario) y Supr o "Borrar el rango" del clic derecho lo saca de sus clips (`ClipEditing.DeleteRange`),
   dejando el hueco; la selección se va con un clic, Esc o una edición.
+  Ganancia por clip (solo nativa): `Clip.GainDb` (slider del inspector) y `Clip.GainCurve`, puntos en dB contados desde
+  el sample 0 de la toma (`ClipGainCurve`, así siguen pegados a las notas al mover, recortar o dividir). El clip
+  seleccionado muestra su línea (blanca, puntos de acento): clic en la línea agrega un punto, se arrastra, doble clic
+  lo saca. Reproducción y exportación la evalúan cada 64 muestras con rampa (`LiveClip.Curve` es una copia que el
+  hilo de audio lee sin locks: toda edición asigna una lista nueva y llama a `RefreshCurve`).
 - **Video | Solo audio** (solo nativa, pedido del usuario; `MainWindow.Mode.cs`, `ProjectSettings.Mode`): el
   interruptor de la barra de título y del "Nuevo proyecto" del gestor. En solo audio el timeline (o el mixer) se
   mueve al lugar de la preview (`AudioArea`) y la fila de abajo se cierra; la cámara se suelta
@@ -336,7 +341,10 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 - **Armar para grabar** (solo nativa, pedido del usuario): el ● de cada encabezado de pista y de cada tira del
   mixer (o R, sobre la pista seleccionada) elige dónde graba Shift+R (`armedIds` en `MainWindow.Recording.cs`: null = la elección de la web, vacía = ninguna;
   sin pista armada, Grabar queda deshabilitado, en video y en solo audio). Se pueden armar varias y R las graba a la vez, una toma y un WAV por pista desde el
-  mismo sample; las pistas destino siempre se tiñen de rojo (`TimelineView.ArmedIndices`). Cada pista armada
+  mismo sample; las pistas destino siempre se tiñen de rojo (`TimelineView.ArmedIndices`). Se graba **desde el
+  cabezal** (solo nativa; la web arranca en 0): la cuenta lleva hasta ahí, la toma cae ahí
+  (`RecordingJournal.StartSec`) y, en una pista con clips, desde el cabezal reemplaza solo el tramo que cubre
+  (desde 0, toda la pista, como antes). Cada pista armada
   muestra su entrada (`Track.Input`, "3" o "3-4"; null = 1-2 de Configuración) en un chip que abre el menú de
   entradas. El motor abre todas las entradas del driver y tiene un `InputTap` por pista armada (su
   `InputProcessor`, medidor, monitoreo por software sin repetir entradas, y su `TakeRecorder`). El video de la
@@ -346,6 +354,12 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
   esquina del timeline (`ClearMutesButton` / `ClearSolosButton`; por ellas la columna mide 324 como mínimo y no 264) y
   en la barra del mixer; prendidas si alguna pista tiene uno, un clic los saca todos en un paso de deshacer
   (`ClearAllToggles`).
+- **Afinador y LUFS** (solo nativa, `MainWindow.Meters.cs`): en la barra de transporte, después de Monitor, la celda
+  "Afinador" (A) muestra la nota y abre un panel (`Controls/TunerView`) con la aguja; escucha la primera pista armada o
+  la entrada 1-2 (`PlaybackEngine.Pitch`, YIN en el `Tick` solo mientras está prendido). A la derecha, la celda "LUFS"
+  con el integrado del master de la pasada actual (`LoudnessMeter`, BS.1770; empieza de nuevo con cada play o un clic).
+- **Stems** (solo nativa): la casilla del diálogo de exportar (MP4 o audio) deja además "<nombre> - stems" con un
+  WAV float por pista que suena, cada una sola con sus envíos y sin el limitador (`AudioExporter.ExportStemsAsync`).
 - **Plantillas de paneo** (pedido del usuario; en la web son chips sueltos con el slider "Apertura" en la barra del
   mixer): un solo desplegable "Paneo" (`BuildPanMenu`) con la apertura arriba (30 % por defecto, la web arranca en 60)
   y las plantillas con su descripción; elegir una la aplica y cierra el menú.
@@ -412,6 +426,7 @@ Comportamiento del `StereoMeter`: ataque instantáneo, caída de 24 dB/s, pico r
 | rueda / Shift o Ctrl+rueda / Alt+rueda | desplazar / zoom en el puntero / alto de pista |
 | clic en la regla, doble clic en un carril | mover el playhead |
 | B / P | mostrar / ocultar el panel de la toma (izquierda) / el del proyecto (derecha) |
+| A | afinador (abre / cierra su panel) |
 
 - **Los atajos son configurables** (solo nativa, pedido del usuario): la tabla de acciones con sus teclas por
   defecto es `Shortcuts.cs` y Configuración → "Atajos de teclado" las cambia (se guardan en `config.json`,
@@ -461,7 +476,8 @@ Escribí como el código que ya está:
 3. Hacen falta una interfaz ASIO y un proyecto con tomas para probar de verdad. Si no los tenés, decí qué no pudiste probar.
 4. Al revisar capturas de pantalla: las de GDI dan alfa 0 en píxeles negros y algunos visores los pintan
    blancos. Mirá el RGB, no el alfa.
-5. Al terminar un ítem de [PENDIENTES.md](PENDIENTES.md), pasalo a **Hecho** con la fecha (AAAA-MM-DD) y
-   una línea de qué se hizo y dónde. Ideas nuevas van ahí, en su sección.
+5. Al terminar un ítem de [PENDIENTES.md](PENDIENTES.md), sacalo de ahí y agregalo arriba de todo en
+   [HECHO.md](HECHO.md) con la fecha (AAAA-MM-DD) y una línea de qué se hizo y dónde. Ideas nuevas van en
+   PENDIENTES, en su sección. HECHO.md es historial: no hace falta leerlo de entrada.
 6. Si cambiás atajos, comandos de `gclab` o la estructura, actualizá el README.
 7. No subas WAV ni binarios (`*.wav`, `bin/`, `obj/` están en `.gitignore`). No hagas commit ni push si el usuario no lo pide.

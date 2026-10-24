@@ -121,6 +121,7 @@ public partial class MainWindow : Window
         InitProjectBar();
         InitMixer();
         InitTopBar();
+        InitMeters();
         InitShortcutTips();
 
         AddHandler(KeyDownEvent, OnKey, RoutingStrategies.Tunnel);
@@ -426,7 +427,7 @@ public partial class MainWindow : Window
         [
             (UndoButton, Loc.T("title.undo"), "undo"), (RedoButton, Loc.T("title.redo"), "redo"), (TimelineFitButton, Loc.T("timeline.fit.tip"), "fit"),
             (ToStartButton, Loc.T("transport.start.tip"), "toStart"), (CountInToggle, Loc.T("transport.countin.tip"), "countIn"),
-            (ClickToggle, Loc.T("transport.click.tip"), "click"), (ViewSwitch, Loc.T("transport.view.tip"), "mixer"), (FitButton, Loc.T("transport.fit.tip"), "fit"),
+            (ClickToggle, Loc.T("transport.click.tip"), "click"), (TunerToggle, Loc.T("transport.tuner.tip"), "tuner"), (ViewSwitch, Loc.T("transport.view.tip"), "mixer"), (FitButton, Loc.T("transport.fit.tip"), "fit"),
         ]);
         ApplyShortcutTips();
         Shortcuts.Changed += ApplyShortcutTips;
@@ -530,6 +531,9 @@ public partial class MainWindow : Window
             case "tap":
                 Tempo.Tap();
                 break;
+            case "tuner":
+                TunerToggle.IsChecked = TunerToggle.IsChecked != true;
+                break;
             case "mute" when sel != null:
                 Edit(t => t.Channel.Muted = !t.Channel.Muted, "mute");
                 break;
@@ -585,6 +589,7 @@ public partial class MainWindow : Window
         TickCamera();
         TickTopBar();
         TickInspectorSpectrum();
+        TickMeters();
         if (Settings.IsVisible) Settings.Meter.Push(m.InL, m.InR);
         if (engine.IsOpen) ShowDsp(engine.LoadPercent);
 

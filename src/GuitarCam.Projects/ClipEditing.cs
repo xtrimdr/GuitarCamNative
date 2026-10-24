@@ -290,9 +290,22 @@ public static class ClipEditing
         return copy.Id;
     }
 
+    /// <summary>Clip gain in dB, within <see cref="Clip.MinGainDb"/>..<see cref="Clip.MaxGainDb"/>.</summary>
+    public static void SetGain(Project p, string id, double db) =>
+        Find(p, id).Clip.GainDb = Math.Clamp(double.IsFinite(db) ? db : 0, Clip.MinGainDb, Clip.MaxGainDb);
+
+    /// <summary>Replaces the clip's volume curve (a new list, sorted and clamped like <see cref="Clip"/>'s Normalize).</summary>
+    public static void SetCurve(Project p, string id, IEnumerable<GainPoint> points)
+    {
+        var c = Find(p, id).Clip;
+        c.GainCurve = [.. points.Where(g => double.IsFinite(g.Sec) && double.IsFinite(g.Db)).OrderBy(g => g.Sec)
+            .Select(g => new GainPoint { Sec = g.Sec, Db = Math.Clamp(g.Db, ClipGainCurve.MinDb, ClipGainCurve.MaxDb) })];
+    }
+
     public static void Reset(Project p, string id)
     {
         var (_, c) = Find(p, id);
-        c.TrimStartSec = c.TrimEndSec = c.FadeInSec = c.FadeOutSec = c.VideoFadeInSec = c.VideoFadeOutSec = 0;
+        c.TrimStartSec = c.TrimEndSec = c.FadeInSec = c.FadeOutSec = c.VideoFadeInSec = c.VideoFadeOutSec = c.GainDb = 0;
+        c.GainCurve = [];
     }
 }

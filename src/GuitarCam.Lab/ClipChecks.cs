@@ -19,13 +19,17 @@ static class ClipChecks
         var original = new Clip { MediaId = media.Id, AtSec = 0.92 };
         Clip Drag(Clip c, ClipEditMode mode, double dx, bool free = false, double head = 0, params ClipEnvelope.ClipWindow[] others) =>
             ClipEditing.Drag(c, media, mode, dx, 100, head, 0.5, free, others);
+        // with a grid a move goes in grid steps and nothing else pulls it; the magnets work with the grid off
+        Clip Magnet(double dx, double head, params ClipEnvelope.ClipWindow[] others) =>
+            ClipEditing.Drag(original, media, ClipEditMode.Move, dx, 100, head, 0, false, others);
         var moved = Drag(original, ClipEditMode.Move, 0.41);
         Check(Near(moved.AtSec, 1.42) && Near(ClipEditing.Window(moved, media).Anchor, 1.5), "el anclaje cae en grilla y conserva 80 ms de sincronía");
         Check(Near(original.AtSec, 0.92) && media.SyncMs == -80, "calcular un gesto no muta el clip ni la grabación");
         Check(Near(Drag(original, ClipEditMode.Move, 0.413, true).AtSec, 1.333), "Alt evita todos los imanes");
-        Check(Near(Drag(original, ClipEditMode.Move, 0.41, false, 1.44).AtSec, 1.36), "el cabezal gana sobre la grilla dentro de 8 píxeles");
+        Check(Near(Magnet(0.41, 1.44).AtSec, 1.36), "sin grilla, el cabezal imanta dentro de 8 píxeles");
+        Check(Near(Drag(original, ClipEditMode.Move, 0.41, false, 1.44).AtSec, 1.42), "con grilla, el cabezal no tira");
         var other = ClipEnvelope.Window(3, 4.05);
-        Check(Near(Drag(original, ClipEditMode.Move, 3, false, 0, other).AtSec, 3.97), "el anclaje se imanta al borde de otro clip");
+        Check(Near(Magnet(3, 0, other).AtSec, 3.97), "sin grilla, el anclaje se imanta al borde de otro clip");
         Check(Near(ClipEditing.Window(Drag(original, ClipEditMode.Move, -100, true), media).End, 0.1), "siempre quedan 0,1 segundos visibles al cruzar cero");
         var cut = new Clip { MediaId = media.Id, AtSec = -2, TrimStartSec = 0.5 };
         Check(Near(Drag(cut, ClipEditMode.TrimStart, 0.2, true).TrimStartSec, 2.2), "recorte positivo incorpora la parte cortada por cero");
@@ -173,6 +177,34 @@ static class ClipChecks
         ClipEditing.DeleteRange(rq, rq.Tracks[0].Id, 3, 6);
         var qr = ClipEditing.Window(rq.Tracks[0].Clips[1], media);
         Check(rq.Tracks[0].Clips.Count == 2 && Near(qr.Start, 6) && Near(qr.End, 10), "con un recorte previo también se corta en el lugar justo");
+        // clip gain and volume curve (native only)
+        ClipGainCurve.Point[] pts = [new(1, 0), new(3, -12)];
+        Check(ClipGainCurve.DbAt(pts, 0) == 0 && ClipGainCurve.DbAt(pts, 2) == -6 && ClipGainCurve.DbAt(pts, 9) == -12 && ClipGainCurve.DbAt([], 5) == 0,
+            "curva: se mantiene antes y después, recta en dB entre puntos, plana sin puntos");
+        Check(ClipGainCurve.Gain(ClipGainCurve.MinDb) == 0 && Near(ClipGainCurve.Gain(-6), Math.Pow(10, -0.3)), "curva: abajo de todo es silencio");
+        var curved = new Clip { MediaId = media.Id, GainDb = 40, GainCurve = [new() { Sec = 4, Db = -99 }, new() { Sec = 2, Db = 3 }, new() { Sec = double.NaN, Db = 0 }] };
+        var raw = new Project { Tracks = [new Track { Clips = [curved] }] };
+        raw.Media.Add(media);
+        var curvedProject = ProjectStore.Parse(System.Text.Json.JsonSerializer.Serialize(raw, ProjectStore.Json));
+        curved = curvedProject.Tracks[0].Clips[0];
+        Check(curved.GainDb == Clip.MaxGainDb && curved.GainCurve.Count == 2 && curved.GainCurve[0].Sec == 2 && curved.GainCurve[1].Db == ClipGainCurve.MinDb,
+            "curva: al abrir se ordena, se descarta lo roto y se acota");
+        string curvedRight = ClipEditing.Split(curvedProject, curved.Id, 3);
+        var rightClip = ClipEditing.Find(curvedProject, curvedRight).Clip;
+        Check(rightClip.GainCurve.Count == 2 && rightClip.GainCurve[0].Sec == 2 && !ReferenceEquals(rightClip.GainCurve, curved.GainCurve),
+            "curva: al dividir, cada pedazo se queda con la curva entera (sigue pegada a la toma)");
+        ClipEditing.Reset(curvedProject, curved.Id);
+        Check(curved.GainDb == 0 && curved.GainCurve.Count == 0, "restaurar el clip saca la ganancia y la curva");
+
+        // the render follows the curve: full level before the dip, silence at the bottom, half way in between
+        const int sr = 1000;
+        var ones = Enumerable.Repeat(1f, 4 * sr).ToArray();
+        var spec = new MixClipSpec { Left = ones, Right = ones, GainCurve = [new(1, 0), new(2, ClipGainCurve.MinDb), new(3, ClipGainCurve.MinDb)] };
+        var bl = new float[4 * sr];
+        var br = new float[4 * sr];
+        TrackDspChain.SampleClips([spec], 0, bl.Length, sr, bl, br);
+        Check(Math.Abs(bl[500] - 1) < 1e-4 && bl[2500] == 0 && Math.Abs(bl[1500] - (float)ClipGainCurve.Gain(ClipGainCurve.MinDb / 2)) < 0.01,
+            "el render sigue la curva (antes, en el fondo y a mitad de la bajada)");
         Console.WriteLine($"Edición de clips: {n} comprobaciones correctas (sin modificar archivos).");
         return 0;
     }

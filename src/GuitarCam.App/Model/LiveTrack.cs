@@ -63,7 +63,18 @@ public sealed class MediaAudio
 /// </summary>
 public sealed class LiveClip
 {
-    public Clip Clip { get; set; }
+    Clip clip;
+    /// <summary>Re-pointing it (a timeline edit, an undo) also takes the clip's volume curve.</summary>
+    public Clip Clip
+    {
+        get => clip;
+        set { clip = value; RefreshCurve(); }
+    }
+    /// <summary>The clip's volume curve as the audio thread reads it: swapped whole, never changed in place.</summary>
+    public ClipGainCurve.Point[] Curve { get; private set; } = [];
+
+    /// <summary>Takes the curve again after an edit that changed it on the same clip (the inspector edits in place).</summary>
+    public void RefreshCurve() => Curve = clip.CurvePoints();
     public Media? Media { get; set; }
     public MediaAudio? Audio { get; }
     public bool Offline => Audio == null;
@@ -83,7 +94,8 @@ public sealed class LiveClip
 
     public LiveClip(Clip clip, Media? media, MediaAudio? audio)
     {
-        Clip = clip;
+        this.clip = clip;
+        RefreshCurve();
         Media = media;
         Audio = audio;
     }
@@ -375,17 +387,25 @@ public sealed class LiveTrack
             long originFrame = (long)Math.Round(w.Origin * sampleRate);
             var fades = c.AudioFades;
             float cg = c.Gain;
+            var curve = c.Curve;
+            float k = 1, dk = 0;
             float[] left = a.L;
             float[] right = a.R;
 
             for (int i = 0; i < n; i++)
             {
                 long f = posFrame + i;
+                if (curve.Length > 0 && i % ClipGainCurve.Step == 0)
+                {
+                    double t = (f - originFrame) * invSr;
+                    k = (float)ClipGainCurve.GainAt(curve, t);
+                    dk = ((float)ClipGainCurve.GainAt(curve, t + ClipGainCurve.Step * invSr) - k) / ClipGainCurve.Step;
+                }
                 if (f < startFrame || f >= endFrame) continue;
                 long src = f - originFrame;
                 if (src < 0 || src >= left.Length) continue;
                 double timeSec = f * invSr;
-                float env = (float)ClipEnvelope.GainAt(timeSec, w.Start, w.End, fades.FadeIn, fades.FadeOut) * cg;
+                float env = (float)ClipEnvelope.GainAt(timeSec, w.Start, w.End, fades.FadeIn, fades.FadeOut) * cg * (k + dk * (i % ClipGainCurve.Step));
                 bl[i] += left[src] * env;
                 br[i] += right[src] * env;
             }

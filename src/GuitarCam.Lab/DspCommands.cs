@@ -301,6 +301,7 @@ static class DspCommands
                         FadeInSec = c.FadeInSec,
                         FadeOutSec = c.FadeOutSec,
                         GainDb = c.GainDb,
+                        GainCurve = c.CurvePoints(),
                         SyncMs = c.EffectiveSyncMs(m),
                     });
                 }
@@ -342,6 +343,7 @@ static class DspCommands
 
                 trackSpecs.Add(new MixTrackSpec
                 {
+                    Name = t.Name,
                     Clips = clips,
                     Volume = ch.Volume,
                     Pan = ch.Pan,
@@ -545,11 +547,82 @@ static class DspCommands
         allOk &= b3Ok;
         Console.WriteLine($"{"TrackDspChain.Reset + colas buses",-36} {Db(maxResetDiff > 0 ? 20 * Math.Log10(maxResetDiff) : double.NegativeInfinity),12} {"exacto",10}  {(b3Ok ? "igual" : "DISTINTO")}");
 
+        // Tuner: a guitar-like tone (harmonics, the fundamental not the loudest) reads the right note and cents
+        foreach (var (hz, note) in new[] { (82.41, "E2"), (110.0, "A2"), (196.0, "G3"), (329.63, "E4"), (61.74, "B1"), (446.0, "A4") })
+        {
+            var tap = new PitchTap(sr48);
+            var tone = new float[8192];
+            for (int i = 0; i < tone.Length; i++)
+            {
+                double t = i / (double)sr48;
+                tone[i] = (float)(0.1 * Math.Sin(2 * Math.PI * hz * t) + 0.2 * Math.Sin(4 * Math.PI * hz * t) + 0.08 * Math.Sin(6 * Math.PI * hz * t));
+            }
+            tap.Write(tone, tone);
+            var got = tap.Read();
+            double want = TunerReading.FromHz(hz).Cents;
+            bool pitchOk = got is { } g && $"{g.Note}{g.Octave}" == note && Math.Abs(g.Cents - want) < 1.5;
+            allOk &= pitchOk;
+            Console.WriteLine($"{$"Afinador {hz:0.00} Hz",-36} {(got is { } r ? $"{r.Note}{r.Octave} {r.Cents:+0.0;-0.0}c" : "nada"),12} {$"{note} {want:+0.0;-0.0}c",10}  {(pitchOk ? "igual" : "DISTINTO")}");
+        }
+        var silent = new PitchTap(sr48);
+        silent.Write(new float[8192], new float[8192]);
+        bool gateOk = silent.Read() == null;
+        allOk &= gateOk;
+        Console.WriteLine($"{"Afinador en silencio",-36} {"nada",12} {"nada",10}  {(gateOk ? "igual" : "DISTINTO")}");
+
+        // LUFS (EBU Tech 3341 case 1): a 1 kHz sine at -23 dBFS on both channels reads -23 LUFS; with half of it
+        // silent, the relative gate leaves the silence out and it still reads -23
+        var sine = new float[sr48 * 20];
+        for (int i = 0; i < sine.Length; i++) sine[i] = (float)(Math.Pow(10, -23 / 20.0) * Math.Sin(2 * Math.PI * 1000 * i / sr48));
+        double lufs = LoudnessMeter.Measure(sine, sine, sr48);
+        var gapped = (float[])sine.Clone();
+        Array.Clear(gapped, 0, gapped.Length / 2);
+        double lufsGated = LoudnessMeter.Measure(gapped, gapped, sr48);
+        bool lufsOk = Math.Abs(lufs + 23) < 0.1 && Math.Abs(lufsGated + 23) < 0.1;
+        allOk &= lufsOk;
+        Console.WriteLine($"{"LUFS seno 1 kHz -23 dBFS (y con silencio)",-36} {$"{lufs:0.00} / {lufsGated:0.00}",12} {"-23.00",10}  {(lufsOk ? "igual" : "DISTINTO")}");
+
         Console.WriteLine();
         Console.WriteLine(allOk
             ? "Todo bien."
             : "Alguna comprobación falló.");
         return allOk ? 0 : 3;
+    }
+
+    /// <summary>gclab lufs: the integrated loudness of a file, measured like the master's LUFS cell.</summary>
+    public static int Lufs(Args a)
+    {
+        string file = a.Positional.ElementAtOrDefault(0) ?? throw new ArgumentException("lufs: falta el archivo.");
+        var audio = AudioLoader.Load(file, 48000);
+        double lufs = LoudnessMeter.Measure(audio.Left, audio.Right, audio.SampleRate);
+        Console.WriteLine(double.IsFinite(lufs) ? $"{lufs:0.0} LUFS integrado ({audio.Left.Length / (double)audio.SampleRate:0.0} s)" : "Silencio: no llega a -70 LUFS.");
+        return 0;
+    }
+
+    /// <summary>gclab afinar: what the tuner hears at a moment of a file (its first 4096 samples from --en).</summary>
+    public static int Tune(Args a)
+    {
+        string file = a.Positional.ElementAtOrDefault(0) ?? throw new ArgumentException("afinar: falta el archivo.");
+        var audio = AudioLoader.Load(file, 48000);
+        int from = (int)(a.Double("en", 0) * audio.SampleRate);
+        if (from + 4096 > audio.Left.Length) throw new ArgumentException("afinar: el archivo termina antes.");
+        var tap = new PitchTap(audio.SampleRate);
+        tap.Write(audio.Left.AsSpan(from, 4096), audio.Right.AsSpan(from, 4096));
+        Console.WriteLine(tap.Read() is { } r ? $"{r.Note}{r.Octave} {r.Cents:+0.0;-0.0;0.0} cents ({r.Hz:0.00} Hz)" : "No hay una nota clara.");
+        return 0;
+    }
+
+    /// <summary>--stems: one WAV per track that sounds, next to the export, like the window's "Stems" option.</summary>
+    static void ExportStems(ExportJobSpec job, string exportPath)
+    {
+        string last = "";
+        var (folder, count) = AudioExporter.ExportStemsAsync(job, exportPath, f =>
+        {
+            string line = $"  [Stems] {Math.Floor(f * 10) * 10:0}%";
+            if (line != last) Console.WriteLine(last = line);
+        }).GetAwaiter().GetResult();
+        Console.WriteLine($"Stems: {count} en {folder}");
+        foreach (var f in Directory.GetFiles(folder, "*.wav").Order()) Console.WriteLine($"  {Path.GetFileName(f)}");
     }
 
     public static int Export(Args a)
@@ -609,6 +682,7 @@ static class DspCommands
                             FadeInSec = c.FadeInSec,
                             FadeOutSec = c.FadeOutSec,
                             GainDb = c.GainDb,
+                            GainCurve = c.CurvePoints(),
                             SyncMs = c.EffectiveSyncMs(m),
                         });
                     }
@@ -652,6 +726,7 @@ static class DspCommands
 
                 mixTracks.Add(new MixTrackSpec
                 {
+                    Name = trk.Name,
                     Clips = clips,
                     Volume = ch.Volume,
                     Pan = ch.Pan,
@@ -708,6 +783,7 @@ static class DspCommands
                     if (line != last) Console.WriteLine(last = line);
                 }).GetAwaiter().GetResult();
                 Console.WriteLine($"Exportado: {ares.FullPath} ({Mp4Exporter.FormatBytes(ares.Bytes)}, {ares.DurationSec:0.0} s en {ares.ElapsedSec:0.0} s)");
+                if (a.Flag("stems")) ExportStems(job, ares.FullPath);
                 return 0;
             }
             var res = Mp4Exporter.ExportAsync(job, prog =>
@@ -720,6 +796,7 @@ static class DspCommands
             }).GetAwaiter().GetResult();
 
             Console.WriteLine($"Exportado: {res.FullPath} ({Mp4Exporter.FormatBytes(res.Bytes)}, {res.DurationSec:0.0} s en {res.ElapsedSec:0.0} s)");
+            if (a.Flag("stems")) ExportStems(job, res.FullPath);
 
             if (testMode)
             {

@@ -11,6 +11,8 @@ public sealed class MixClipSpec
     public double FadeInSec { get; init; }
     public double FadeOutSec { get; init; }
     public double GainDb { get; init; }
+    /// <summary>The clip's volume curve (<see cref="ClipGainCurve"/>); empty = flat.</summary>
+    public ClipGainCurve.Point[] GainCurve { get; init; } = [];
     public double SyncMs { get; init; }
 
     public ClipEnvelope.ClipWindow GetWindow(int sampleRate)
@@ -23,6 +25,8 @@ public sealed class MixClipSpec
 
 public sealed class MixTrackSpec
 {
+    /// <summary>The track's name, for its stem file.</summary>
+    public string Name { get; init; } = "";
     public IReadOnlyList<MixClipSpec> Clips { get; init; } = [];
     public double Volume { get; init; } = 1;
     public double Pan { get; init; }
@@ -162,17 +166,26 @@ public sealed class TrackDspChain
             long originFrame = (long)Math.Round(w.Origin * sampleRate);
             var fades = ClipEnvelope.Fades(w, c.FadeInSec, c.FadeOutSec).Audio;
             float clipGain = (float)Math.Pow(10.0, c.GainDb / 20.0);
+            var curve = c.GainCurve;
+            float k = 1, dk = 0;
             float[] left = c.Left;
             float[] right = c.Right.Length == left.Length ? c.Right : left;
 
             for (int i = 0; i < n; i++)
             {
                 long f = posFrame + i;
+                // same steps as the live engine (LiveTrack), so the export sounds like playback
+                if (curve.Length > 0 && i % ClipGainCurve.Step == 0)
+                {
+                    double t = (f - originFrame) * invSr;
+                    k = (float)ClipGainCurve.GainAt(curve, t);
+                    dk = ((float)ClipGainCurve.GainAt(curve, t + ClipGainCurve.Step * invSr) - k) / ClipGainCurve.Step;
+                }
                 if (f < startFrame || f >= endFrame) continue;
                 long src = f - originFrame;
                 if (src < 0 || src >= left.Length) continue;
                 double timeSec = f * invSr;
-                float env = (float)ClipEnvelope.GainAt(timeSec, w.Start, w.End, fades.FadeIn, fades.FadeOut) * clipGain;
+                float env = (float)ClipEnvelope.GainAt(timeSec, w.Start, w.End, fades.FadeIn, fades.FadeOut) * clipGain * (k + dk * (i % ClipGainCurve.Step));
                 dstL[i] += left[src] * env;
                 dstR[i] += right[src] * env;
             }
@@ -304,7 +317,8 @@ public sealed class MixGraphBus
         Span<float> rl,
         Span<float> rr,
         Span<float> dl,
-        Span<float> dr)
+        Span<float> dr,
+        bool limit = true)
     {
         Reverb.Process(rl, rr);
         Delay.Process(dl, dr);
@@ -325,7 +339,7 @@ public sealed class MixGraphBus
         ReverbMeterR = rPkR;
         DelayMeterL = dPkL;
         DelayMeterR = dPkR;
-        Limiter.Process(masterL, masterR);
+        if (limit) Limiter.Process(masterL, masterR);
     }
 }
 
@@ -359,17 +373,32 @@ public static class MixRenderer
         return maxEnd;
     }
 
+    /// <summary>The tracks that sound in the mix (mute and solo as the mixer has them): the ones that get a stem.</summary>
+    public static IEnumerable<int> Audible(IReadOnlyList<MixTrackSpec> tracks)
+    {
+        bool anySolo = tracks.Any(t => t.Solo);
+        for (int i = 0; i < tracks.Count; i++)
+            if (tracks[i].Clips.Count > 0 && !tracks[i].Muted && (!anySolo || tracks[i].Solo)) yield return i;
+    }
+
+    /// <summary>
+    /// Renders the mix. With <paramref name="only"/> it renders that track alone (a stem, native only): its chain and
+    /// its sends through the reverb and delay returns, without the master limiter, so the stems add up to the mix
+    /// before the limiter and none is squashed by it.
+    /// </summary>
     public static (float[] Left, float[] Right) Render(
         IReadOnlyList<MixTrackSpec> tracks,
         MixBusSpec busSpec,
         double durationSec,
         int sampleRate = 48000,
         Action<double>? onProgress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        int only = -1)
     {
         var bus = new MixGraphBus(sampleRate);
         bus.Configure(busSpec, glideDelay: false);
-        int latency = bus.Limiter.Latency;
+        bool limit = only < 0;
+        int latency = limit ? bus.Limiter.Latency : 0;
         int frames = Math.Max(1, (int)Math.Ceiling(durationSec * sampleRate));
         int totalFrames = frames + latency;
 
@@ -378,14 +407,17 @@ public static class MixRenderer
             if (t.Solo) { anySolo = true; break; }
 
         var active = new List<(MixClipSpec[] Clips, TrackDspChain Chain)>();
-        foreach (var t in tracks)
+        for (int k = 0; k < tracks.Count; k++)
         {
+            var t = tracks[k];
             bool mute = t.Muted || (anySolo && !t.Solo);
-            if (mute || t.Clips.Count == 0) continue;
+            if (only >= 0 ? k != only : mute || t.Clips.Count == 0) continue;
             var chain = new TrackDspChain(sampleRate);
             chain.Configure(t);
+            if (only >= 0) chain.Muted = chain.Solo = false;
             active.Add((t.Clips.ToArray(), chain));
         }
+        if (only >= 0) anySolo = false;
 
         var outL = new float[frames];
         var outR = new float[frames];
@@ -416,7 +448,7 @@ public static class MixRenderer
                 chain.ProcessFilledBuffer(n, anySolo, ml, mr, rl, rr, dl, dr, out _, out _, out _);
             }
 
-            bus.ProcessReturnsAndLimiter(ml, mr, rl, rr, dl, dr);
+            bus.ProcessReturnsAndLimiter(ml, mr, rl, rr, dl, dr, limit);
 
             for (int i = 0; i < n; i++)
             {

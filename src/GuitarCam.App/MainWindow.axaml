@@ -266,6 +266,21 @@
               <TextBlock Classes="metro-label" Text="{loc:T transport.monitor}" />
             </StackPanel>
           </ToggleButton>
+          <!-- the tuner (native only): the cell shows the note, the panel over it the needle -->
+          <ToggleButton x:Name="TunerToggle" Classes="cell" CornerRadius="6" MinWidth="52">
+            <StackPanel>
+              <TextBlock x:Name="TunerNote" Classes="mono metro-value" Text="♪" HorizontalAlignment="Center" />
+              <TextBlock Classes="metro-label" Text="{loc:T transport.tuner}" />
+            </StackPanel>
+          </ToggleButton>
+          <Popup x:Name="TunerPopup" PlacementTarget="{Binding #TunerToggle}" Placement="Top" VerticalOffset="-8" IsLightDismissEnabled="False">
+            <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8" Padding="12,10">
+              <StackPanel Spacing="6">
+                <TextBlock Classes="label" Text="{loc:T tuner.title}" />
+                <c:TunerView x:Name="Tuner" />
+              </StackPanel>
+            </Border>
+          </Popup>
         </StackPanel>
 
         <Border Grid.Column="1" Classes="metro">
@@ -341,6 +356,13 @@
         </Border>
 
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="16,0,0,0">
+          <!-- the master's integrated loudness while it plays (native only); a click starts it over -->
+          <Button x:Name="LufsCell" Classes="cell" CornerRadius="6" MinWidth="56">
+            <StackPanel>
+              <TextBlock x:Name="LufsText" Classes="mono metro-value" Text="—" HorizontalAlignment="Center" />
+              <TextBlock Classes="metro-label" Text="LUFS" HorizontalAlignment="Center" />
+            </StackPanel>
+          </Button>
           <Border x:Name="ViewSwitch" Classes="seg" ToolTip.Tip="{loc:T transport.view.tip}">
             <StackPanel Orientation="Horizontal">
               <Button x:Name="TimelineViewButton" Classes="seg on" Height="32" Padding="12,0" Content="{loc:T transport.view.timeline}" />

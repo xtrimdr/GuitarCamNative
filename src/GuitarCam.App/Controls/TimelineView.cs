@@ -16,6 +16,8 @@ namespace GuitarCam.App.Controls;
 /// Native differences: an empty lane is just empty (the user asked to drop the web's dashed box and its "Apretá R" hint);
 /// drag previews are local and commit on release (the window applies them in place, still playing);
 /// multiple clips per track swap only with the clip under the pointer. Thumbnails are not ported yet.
+/// The selected clip shows its volume line (clip gain + <see cref="Clip.GainCurve"/>, native only): a click on it
+/// adds a point, a point drags in time and level, a double click removes it.
 /// </summary>
 public sealed class TimelineView : Control
 {
@@ -134,6 +136,8 @@ public sealed class TimelineView : Control
         set { recordingLanes = value; CancelGesture(); ClampScroll(); InvalidateVisual(); }
     }
     bool Recording => recordingLanes != null;
+    /// <summary>Where the take being recorded starts (the playhead when recording started): its red bar grows from there.</summary>
+    public double RecordingStartSec { get; set; }
     bool RecordingInto(int lane) => recordingLanes?.Contains(lane) == true;
     int ExtraRows => RecordingInto(tracks.Count) ? 1 : 0;
     IReadOnlySet<int> armed = new HashSet<int>();
@@ -395,6 +399,112 @@ public sealed class TimelineView : Control
     LiveClip? ClipAt(int i, double x) => i >= 0 && i < tracks.Count
         ? tracks[i].Clips.LastOrDefault(c => { var w = Window(c); return x >= X(w.Start) && x <= X(w.End); }) : null;
 
+    // --- clip volume curve (native only) -----------------------------------------------------------
+
+    /// <summary>The point being dragged in a "curve" gesture.</summary>
+    int curvePoint = -1;
+    /// <summary>Pixels around a curve point or the line that still grab it.</summary>
+    const double CurveGrab = 5;
+
+    Rect ClipRect(int lane, ClipEnvelope.ClipWindow w) => new(X(w.Start), LaneY(lane) + 5, Math.Max(2, X(w.End) - X(w.Start)), laneH - 10);
+    static double CurveY(Rect r, double db) => r.Top + 3 + (ClipGainCurve.MaxDb - Math.Clamp(db, ClipGainCurve.MinDb, ClipGainCurve.MaxDb))
+        / (ClipGainCurve.MaxDb - ClipGainCurve.MinDb) * (r.Height - 6);
+    static double CurveDb(Rect r, double y) => Math.Clamp(ClipGainCurve.MaxDb - (y - r.Top - 3) / Math.Max(1, r.Height - 6)
+        * (ClipGainCurve.MaxDb - ClipGainCurve.MinDb), ClipGainCurve.MinDb, ClipGainCurve.MaxDb);
+    /// <summary>The live clip's curve, or the preview's while it is dragged.</summary>
+    static ClipGainCurve.Point[] CurveOf(LiveClip c, Clip model) => ReferenceEquals(model, c.Clip) ? c.Curve : model.CurvePoints();
+    /// <summary>What the line shows at a timeline time: the clip gain plus the curve.</summary>
+    static double LevelAt(Clip model, ClipGainCurve.Point[] pts, ClipEnvelope.ClipWindow w, double sec) => model.GainDb + ClipGainCurve.DbAt(pts, sec - w.Origin);
+    bool CurveEditable(int lane, LiveClip c) => lane == Selected && c.Clip.Id == SelectedClipId && !c.Offline && !Recording;
+
+    void DrawCurve(DrawingContext ctx, LiveClip c, Clip model, ClipEnvelope.ClipWindow w, Rect r, bool editable)
+    {
+        var pts = CurveOf(c, model);
+        var geo = new StreamGeometry();
+        using (var g = geo.Open())
+        {
+            g.BeginFigure(new Point(r.Left, CurveY(r, LevelAt(model, pts, w, w.Start))), false);
+            foreach (var pt in pts)
+                if (w.Origin + pt.Sec > w.Start && w.Origin + pt.Sec < w.End)
+                    g.LineTo(new Point(X(w.Origin + pt.Sec), CurveY(r, model.GainDb + pt.Db)));
+            g.LineTo(new Point(r.Right, CurveY(r, LevelAt(model, pts, w, w.End))));
+            g.EndFigure(false);
+        }
+        // over an accent wave the selected line goes in the text color, its points in the accent
+        ctx.DrawGeometry(null, editable ? Palette.Pen(Palette.Fg, 1.5) : Palette.Pen(Palette.Alpha(Palette.DimColor, 0.7), 1), geo);
+        if (!editable) return;
+        foreach (var pt in pts)
+        {
+            double x = X(w.Origin + pt.Sec);
+            if (x < r.Left - 4 || x > r.Right + 4) continue;
+            ctx.DrawRectangle(Palette.Accent, Palette.Pen(Palette.App), new Rect(x - 4, CurveY(r, model.GainDb + pt.Db) - 4, 8, 8), 2, 2);
+        }
+    }
+
+    /// <summary>The curve point under the pointer on an editable clip, or -1.</summary>
+    int CurvePointAt(int lane, LiveClip c, Point p)
+    {
+        if (!CurveEditable(lane, c)) return -1;
+        var w = Window(c);
+        var r = ClipRect(lane, w);
+        var pts = c.Curve;
+        for (int k = pts.Length - 1; k >= 0; k--)
+            if (Math.Abs(p.X - X(w.Origin + pts[k].Sec)) <= CurveGrab && Math.Abs(p.Y - CurveY(r, c.Clip.GainDb + pts[k].Db)) <= CurveGrab) return k;
+        return -1;
+    }
+
+    /// <summary>True when the pointer is on the volume line of an editable clip (away from its trim edges).</summary>
+    bool OnCurve(int lane, LiveClip c, Point p)
+    {
+        if (!CurveEditable(lane, c)) return false;
+        var w = Window(c);
+        var r = ClipRect(lane, w);
+        return p.X > r.Left + 8 && p.X < r.Right - 8 && Math.Abs(p.Y - CurveY(r, LevelAt(c.Clip, c.Curve, w, Sec(p.X)))) <= CurveGrab;
+    }
+
+    /// <summary>Starts dragging a point of the selected clip's curve; a new one is added where the line was clicked.</summary>
+    void StartCurve(int lane, LiveClip c, int point, PointerPressedEventArgs e)
+    {
+        dragged = c;
+        original = ClipEditing.Copy(c.Clip);
+        preview = ClipEditing.Copy(c.Clip);
+        bool added = point < 0;
+        if (added)
+        {
+            double sec = Sec(lastPointer.X) - Window(c).Origin;
+            var point0 = new GainPoint { Sec = Math.Round(sec, 3), Db = Math.Round(ClipGainCurve.DbAt(c.Curve, sec), 1) };
+            preview.GainCurve = [.. preview.GainCurve.Append(point0).OrderBy(g => g.Sec)];
+            point = preview.GainCurve.IndexOf(point0);
+        }
+        curvePoint = point;
+        StartGesture("curve", e);
+        fromIndex = overIndex = lane;
+        moved = added; // a new point is an edit even if it does not move
+    }
+
+    void DragCurve()
+    {
+        if (dragged == null || original == null || preview == null || curvePoint < 0 || curvePoint >= preview.GainCurve.Count) return;
+        var w = Window(dragged, original);
+        var r = ClipRect(fromIndex, w);
+        var list = preview.GainCurve.Select(g => new GainPoint { Sec = g.Sec, Db = g.Db, Extra = g.Extra }).ToList();
+        double lo = (curvePoint > 0 ? list[curvePoint - 1].Sec : w.Start - w.Origin) + 0.001;
+        double hi = (curvePoint < list.Count - 1 ? list[curvePoint + 1].Sec : w.End - w.Origin) - 0.001;
+        double sec = Sec(lastPointer.X) - w.Origin;
+        list[curvePoint].Sec = Math.Round(hi > lo ? Math.Clamp(sec, lo, hi) : lo, 3);
+        // the point holds the curve's part: the line shows it on top of the clip gain
+        list[curvePoint].Db = Math.Round(Math.Clamp(CurveDb(r, lastPointer.Y) - preview.GainDb, ClipGainCurve.MinDb, ClipGainCurve.MaxDb), 1);
+        preview.GainCurve = list;
+    }
+
+    /// <summary>Double click on a point: the curve without it, committed like any clip edit.</summary>
+    void RemoveCurvePoint(LiveClip c, int point)
+    {
+        var value = ClipEditing.Copy(c.Clip);
+        value.GainCurve.RemoveAt(point);
+        ClipEditCommitted?.Invoke(value, null, null);
+    }
+
     public override void Render(DrawingContext ctx)
     {
         if (fitMode && Bounds.Width > HeaderW)
@@ -494,7 +604,7 @@ public sealed class TimelineView : Control
     {
         double y = LaneY(lane);
         if (lane == tracks.Count) ctx.FillRectangle(Palette.Alpha(Palette.RecColor, 0.14 * 0.4), new Rect(HeaderW, y, W - HeaderW, laneH));
-        double x0 = X(0), x1 = X(Playhead);
+        double x0 = X(RecordingStartSec), x1 = X(Playhead);
         if (x1 > x0) ctx.DrawRectangle(Palette.Alpha(Palette.RecColor, 0.2), Palette.Pen(Palette.Alpha(Palette.RecColor, 0.5)), new Rect(x0, y + 6, x1 - x0, laneH - 12), 4, 4);
         if (lane == tracks.Count) ctx.DrawLine(Palette.Pen(Palette.Line), new Point(HeaderW, y + laneH - 0.5), new Point(W, y + laneH - 0.5));
     }
@@ -695,6 +805,8 @@ public sealed class TimelineView : Control
             }
             if (f.FadeIn > 0) Fade(x0 + f.FadeIn * pps, x0, x0);
             if (f.FadeOut > 0) Fade(x1 - f.FadeOut * pps, x1, x1);
+            bool editable = sel && Selected >= 0 && Selected < tracks.Count && tracks[Selected] == t && CurveEditable(Selected, c);
+            if (!c.Offline && (editable || model.GainDb != 0 || model.GainCurve.Count > 0)) DrawCurve(ctx, c, model, w, clip, editable);
             if (sel || clip.Contains(lastPointer))
             {
                 ctx.DrawRectangle(Palette.Accent, Palette.Pen(Palette.App), new Rect(x0 + Math.Max(5, f.FadeIn * pps) - 5, clip.Top, 10, 10), 2, 2);
@@ -1056,6 +1168,13 @@ public sealed class TimelineView : Control
         else if (p.X >= HeaderW)
         {
             var clip = ClipAt(i, p.X);
+            // a double click on a curve point removes it; anywhere else it moves the playhead
+            if (e.ClickCount == 2 && clip != null && HitHandle(clip, p) == ClipEditMode.Move && CurvePointAt(i, clip, p) is var gone and >= 0)
+            {
+                RemoveCurvePoint(clip, gone);
+                e.Handled = true;
+                return;
+            }
             if (e.ClickCount == 2)
             {
                 SelectClip(i, clip?.Clip.Id);
@@ -1065,6 +1184,16 @@ public sealed class TimelineView : Control
             if (clip == null)
             {
                 Select(tracks[i].Clips.Count == 0 ? i : -1);
+                return;
+            }
+            if (HitHandle(clip, p) == ClipEditMode.Move && CurvePointAt(i, clip, p) is var point and >= 0)
+            {
+                StartCurve(i, clip, point, e);
+                return;
+            }
+            if (HitHandle(clip, p) == ClipEditMode.Move && OnCurve(i, clip, p))
+            {
+                StartCurve(i, clip, -1, e);
                 return;
             }
             SelectClip(i, clip.Clip.Id);
@@ -1154,6 +1283,11 @@ public sealed class TimelineView : Control
             double pan = Math.Clamp(originalPan - (lastPointer.Y - down.Y) / 80, -1, 1);
             ChannelRequested?.Invoke(tracks[fromIndex], null, Math.Abs(pan) < 0.04 ? 0 : pan);
         }
+        else if (gesture == "curve")
+        {
+            if (Math.Abs(dxPx) >= 2 || Math.Abs(lastPointer.Y - down.Y) >= 2) moved = true;
+            if (moved) DragCurve();
+        }
         else if (gesture == "range")
         {
             double at = Math.Max(0, ClipEditing.Snap(Sec(lastPointer.X), Grid, (modifiers & KeyModifiers.Alt) != 0));
@@ -1212,6 +1346,7 @@ public sealed class TimelineView : Control
             else ClearRange();
         }
         if (kind == "clip" && changed && value != null) ClipEditCommitted?.Invoke(value, target, swap);
+        if (kind == "curve" && changed && value != null) ClipEditCommitted?.Invoke(value, null, null);
         if (kind == "reorder" && changed && from != to) ReorderRequested?.Invoke(from, to);
         e.Handled = true;
     }
@@ -1241,6 +1376,7 @@ public sealed class TimelineView : Control
         capturedPointer = null;
         dragged = null;
         original = preview = null;
+        curvePoint = -1;
         swapId = null;
         swapping = false;
         fromIndex = overIndex = -1;
@@ -1287,6 +1423,17 @@ public sealed class TimelineView : Control
                 double pan = tracks[i].Channel.Pan;
                 string value = Math.Abs(pan) < 0.01 ? "C" : $"{(pan < 0 ? "L" : "R")}{Math.Abs(pan) * 100:0}";
                 tip = Loc.T("tl.tip.pan", value);
+            }
+            else if (lastPointer.X >= HeaderW && ClipAt(i, lastPointer.X) is { } onPoint && HitHandle(onPoint, lastPointer) == ClipEditMode.Move
+                && CurvePointAt(i, onPoint, lastPointer) is var point and >= 0)
+            {
+                tip = Loc.T("tl.tip.curvePoint", $"{onPoint.Clip.GainDb + onPoint.Curve[point].Db:+0.0;-0.0;0.0}");
+                cursor = StandardCursorType.SizeAll;
+            }
+            else if (lastPointer.X >= HeaderW && ClipAt(i, lastPointer.X) is { } lined && HitHandle(lined, lastPointer) == ClipEditMode.Move && OnCurve(i, lined, lastPointer))
+            {
+                tip = Loc.T("tl.tip.curve", $"{LevelAt(lined.Clip, lined.Curve, Window(lined), Sec(lastPointer.X)):+0.0;-0.0;0.0}");
+                cursor = StandardCursorType.Cross;
             }
             else if (lastPointer.X >= HeaderW && ClipAt(i, lastPointer.X) is { } clip)
             {

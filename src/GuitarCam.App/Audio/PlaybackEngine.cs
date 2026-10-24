@@ -17,7 +17,9 @@ namespace GuitarCam.App.Audio;
 /// optional software monitoring), runs count-in + recording on the same sample clock via <see cref="TakeRecorder"/>,
 /// and runs round-trip latency calibration (<see cref="CalibrationSession"/>).
 /// Native only: every driver input is open, and each armed track has an <see cref="InputTap"/> with its own
-/// input; all of them record at once, one WAV each, starting on the same sample.
+/// input; all of them record at once, one WAV each, starting on the same sample. The tuner listens to the first
+/// armed input (else 1-2) through <see cref="Pitch"/>, and the master's loudness goes to <see cref="Loudness"/>
+/// while it plays: the callback only copies and filters, the reading happens on the UI's tick.
 /// </summary>
 public sealed class PlaybackEngine : IDisposable
 {
@@ -43,7 +45,9 @@ public sealed class PlaybackEngine : IDisposable
 
     DelayParams lastDelay = DelayParams.Defaults;
     double bpm = 120;
-    long position; // timeline frame (negative during recording count-in)
+    long position; // timeline frame (before recStartFrame, maybe negative, during recording count-in)
+    /// <summary>Timeline frame where the take's first sample goes: the playhead when recording started.</summary>
+    long recStartFrame;
     double playStartSec;
     volatile bool playing;
     volatile bool recording;
@@ -52,6 +56,8 @@ public sealed class PlaybackEngine : IDisposable
     volatile InputTap[] taps = [];
     volatile CalibrationSession? activeCalibration;
     int recCountInBeats;
+    /// <summary>First beat of the project's grid at or after <see cref="recStartFrame"/>: where the click goes after the count-in.</summary>
+    long recFirstBeat;
     bool recUsedCountIn;
     bool recUsedClick;
     long recStartTimestamp;
@@ -80,7 +86,7 @@ public sealed class PlaybackEngine : IDisposable
     public bool Playing => playing;
     public bool Recording => recording;
     /// <summary>
-    /// Stopwatch time at which the take's first sample (timeline 0) was captured, 0 until then (still counting
+    /// Stopwatch time at which the take's first sample (timeline 0) was captured (timeline at the take start), 0 until then (still counting
     /// in). The camera's video counts its frames from it.
     /// </summary>
     public long RecordingStartTimestamp => Interlocked.Read(ref recStartTimestamp);
@@ -163,14 +169,21 @@ public sealed class PlaybackEngine : IDisposable
     }
 
     public MixGraphBus Buses => buses;
+    /// <summary>The tuner's ring: the first armed input, or input 1-2 when none is armed.</summary>
+    public PitchTap Pitch { get; } = new(SampleRate);
+    /// <summary>The master's loudness (after the limiter, without the click), measured while it plays.</summary>
+    public LoudnessMeter Loudness { get; } = new(SampleRate);
     public ReverbBus Reverb => buses.Reverb;
     public DelayBus Delay => buses.Delay;
     public MasterLimiter Limiter => buses.Limiter;
 
     public double LoadPercent { get; private set; }
 
-    /// <summary>Current timeline position in seconds (clamped to &gt;= 0 during count-in, like <c>App.tsx:1068</c>).</summary>
-    public double PositionSec => Math.Max(0.0, Interlocked.Read(ref position) / (double)SampleRate);
+    /// <summary>Current timeline position in seconds (held at the take's start during count-in, like <c>App.tsx:1068</c> holds it at 0).</summary>
+    public double PositionSec => Math.Max(recording ? Interlocked.Read(ref recStartFrame) : 0, Interlocked.Read(ref position)) / (double)SampleRate;
+
+    /// <summary>Where the take being recorded starts in the timeline.</summary>
+    public double RecordStartSec => Interlocked.Read(ref recStartFrame) / (double)SampleRate;
 
     /// <summary>During a recording count-in, returns the 1-based beat index (1..countInBeats); otherwise <c>null</c>.</summary>
     public int? CountdownBeat
@@ -179,9 +192,10 @@ public sealed class PlaybackEngine : IDisposable
         {
             if (!recording) return null;
             long pos = Interlocked.Read(ref position);
-            if (pos >= 0 || recCountInBeats <= 0) return null;
+            long recStart = Interlocked.Read(ref recStartFrame);
+            if (pos >= recStart || recCountInBeats <= 0) return null;
             double beatLen = SampleRate * 60.0 / bpm;
-            long startFrame = -(long)Math.Round(recCountInBeats * beatLen);
+            long startFrame = recStart - (long)Math.Round(recCountInBeats * beatLen);
             int beat = (int)((pos - startFrame) / beatLen) + 1;
             return Math.Clamp(beat, 1, recCountInBeats);
         }
@@ -377,9 +391,10 @@ public sealed class PlaybackEngine : IDisposable
     /// <summary>
     /// Starts recording one take per input on the shared ASIO sample clock, each to its WAV.
     /// When <paramref name="useCountIn"/> is true, plays <paramref name="countInBeats"/> beats of count-in
-    /// before timeline frame 0; at frame 0, backing tracks, click, and disk capture start on the exact same sample.
+    /// before <paramref name="startSec"/> (the playhead; 0 like the web); there, backing tracks, click, and disk
+    /// capture start on the exact same sample. The count-in counts from the start, the click after it follows the grid.
     /// </summary>
-    public void StartRecording(IReadOnlyList<(InputRoute? Route, string WavPath)> takes, bool useCountIn = true, int countInBeats = 4)
+    public void StartRecording(IReadOnlyList<(InputRoute? Route, string WavPath)> takes, bool useCountIn = true, int countInBeats = 4, double startSec = 0)
     {
         if (io == null) throw new InvalidOperationException(Loc.T("engine.openFirst"));
         if (recording || activeCalibration != null) return;
@@ -410,15 +425,18 @@ public sealed class PlaybackEngine : IDisposable
         Interlocked.Exchange(ref recStartTimestamp, 0);
 
         double beatLen = SampleRate * 60.0 / bpm;
-        long startFrame = beats > 0 ? -(long)Math.Round(beats * beatLen) : 0;
-        nextBeat = -beats;
+        long recStart = (long)(Math.Max(0, startSec) * SampleRate);
+        long startFrame = recStart - (beats > 0 ? (long)Math.Round(beats * beatLen) : 0);
+        recFirstBeat = (long)Math.Ceiling(recStart / beatLen - 1e-6);
+        nextBeat = beats > 0 ? -beats : recFirstBeat;
+        Interlocked.Exchange(ref recStartFrame, recStart);
         click = null;
         clickPos = 0;
 
         var cur = taps;
         for (int i = 0; i < cur.Length; i++) cur[i].Recorder = recorders[i];
         Interlocked.Exchange(ref position, startFrame);
-        playStartSec = 0;
+        playStartSec = recStart / (double)SampleRate;
         recording = true;
         playing = true;
     }
@@ -446,7 +464,8 @@ public sealed class PlaybackEngine : IDisposable
         recording = false;
         playing = false;
         click = null;
-        Interlocked.Exchange(ref position, 0);
+        // back to where the take started, like the web goes back to 0
+        Interlocked.Exchange(ref position, Interlocked.Read(ref recStartFrame));
         foreach (var t in cur) t.Recorder = null;
 
         double latencyMs = GetLatencyInfo().AppliedMs;
@@ -575,6 +594,8 @@ public sealed class PlaybackEngine : IDisposable
         }
         var curTaps = taps;
         for (int i = 0; i < curTaps.Length; i++) curTaps[i].Process(input, n, inProcL, inProcR);
+        if (curTaps.Length > 0) Pitch.Write(curTaps[0].BlockL, curTaps[0].BlockR);
+        else Pitch.Write(procL, procR);
 
         var cal = activeCalibration;
         if (cal != null)
@@ -614,8 +635,9 @@ public sealed class PlaybackEngine : IDisposable
             long pos = Interlocked.Read(ref position);
             bool isRec = recording;
 
-            // During recording count-in (pos < 0), backing tracks and disk recording start only once f >= 0.
-            int playOffset = pos < 0 ? (int)Math.Min(n, -pos) : 0;
+            // During recording count-in (pos < recStart), backing tracks and disk recording start only once f >= recStart.
+            long recStart = isRec ? recStartFrame : 0;
+            int playOffset = pos < recStart ? (int)Math.Min(n, recStart - pos) : 0;
             int playCount = n - playOffset;
 
             if (playCount > 0)
@@ -652,6 +674,7 @@ public sealed class PlaybackEngine : IDisposable
             }
 
             buses.ProcessReturnsAndLimiter(ml, mr, rl, rr, dl, dr);
+            Loudness.Process(ml, mr);
 
             double beatLen = SampleRate * 60.0 / bpm;
             int limLatency = buses.Limiter.Latency;
@@ -662,9 +685,10 @@ public sealed class PlaybackEngine : IDisposable
             for (int i = 0; i < n; i++)
             {
                 long f = pos + i;
-                bool inCountIn = isRec && f < 0;
+                // count-in beats are negative and counted back from the take's start; the rest follow the grid
+                bool inCountIn = isRec && nextBeat < 0;
                 bool wantClick = inCountIn ? recUsedCountIn : ClickOn;
-                long beatFrame = (long)Math.Round(nextBeat * beatLen) + limLatency;
+                long beatFrame = (inCountIn ? recStart : 0) + (long)Math.Round(nextBeat * beatLen) + limLatency;
 
                 if (f >= beatFrame)
                 {
@@ -675,6 +699,7 @@ public sealed class PlaybackEngine : IDisposable
                         clickPos = 0;
                     }
                     nextBeat++;
+                    if (inCountIn && nextBeat == 0) nextBeat = recFirstBeat;
                 }
 
                 float c = 0;

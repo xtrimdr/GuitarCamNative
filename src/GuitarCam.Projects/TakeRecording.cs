@@ -12,6 +12,8 @@ namespace GuitarCam.Projects;
 /// if the live image was (the web's mirror: liveMirror). Native differences: without a camera the take is
 /// audio only and a new track is created without a video panel (the web refuses to record without one), and a
 /// track armed by hand can already have clips: the take replaces them (they stay in Historial, undo brings them back).
+/// A take started from the playhead (punch-in, <see cref="ProjectStore.RecordingJournal.StartSec"/> &gt; 0) replaces only
+/// the stretch it covers, like <see cref="ClipEditing.DeleteRange"/>; one started at 0 still replaces the whole track.
 /// </summary>
 public static class TakeRecording
 {
@@ -57,14 +59,16 @@ public static class TakeRecording
     static string Role(int slot) => slot == 0 ? "base" : slot == 1 ? "solo" : "extra";
 
     /// <summary>
-    /// Adds the recorded WAV as a media and a clip at its sync correction (recording starts at timeline 0).
+    /// Adds the recorded WAV as a media and a clip where recording started plus its sync correction.
     /// Returns the track that got it. A target that was removed meanwhile counts as no target; one with clips
-    /// (armed by hand) loses them to the take.
+    /// (armed by hand) loses them to the take: all of them from 0, only the covered stretch from the playhead.
     /// </summary>
     public static Track AddTake(Project p, ProjectStore.RecordingJournal j, double durationSec, int sampleRate, int channels, int takeNumber)
     {
         var target = p.Tracks.Find(t => t.Id == j.TrackId);
-        if (target != null)
+        if (target != null && j.StartSec > 0)
+            ClipEditing.DeleteRange(p, target.Id, j.AtSec, j.AtSec + durationSec);
+        else if (target != null)
             foreach (var c in target.Clips.ToList()) ClipEditing.RemoveClip(p, c.Id);
         int slot = Slot(p, target);
         var media = new Media

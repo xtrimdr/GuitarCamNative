@@ -1,4 +1,5 @@
 using GuitarCam.Audio;
+using Dsp = GuitarCam.Audio.Dsp;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -202,6 +203,8 @@ public sealed class ExportSettings
     public string Quality { get; set; } = "alta";
     /// <summary>wav | mp3: the last "Exportar audio" format (native only).</summary>
     public string AudioFormat { get; set; } = "wav";
+    /// <summary>Native only: each track that sounds also goes to its own WAV next to the export ("stems").</summary>
+    public bool Stems { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 
@@ -375,7 +378,18 @@ public sealed class Clip
         Framing ??= new();
         if (SyncMs is { } sync && !double.IsFinite(sync)) SyncMs = null;
         if (VideoOffsetMs is { } video && !double.IsFinite(video)) VideoOffsetMs = null;
+        if (!double.IsFinite(GainDb)) GainDb = 0;
+        GainDb = Math.Clamp(GainDb, MinGainDb, MaxGainDb);
+        GainCurve = (GainCurve ?? []).Where(g => g != null && double.IsFinite(g.Sec) && double.IsFinite(g.Db))
+            .OrderBy(g => g.Sec).ToList();
+        foreach (var g in GainCurve) g.Db = Math.Clamp(g.Db, Dsp.ClipGainCurve.MinDb, Dsp.ClipGainCurve.MaxDb);
     }
+
+    /// <summary>Range of <see cref="GainDb"/> (the inspector's slider).</summary>
+    public const double MinGainDb = -24, MaxGainDb = 12;
+
+    /// <summary>The curve as the audio thread reads it: a new array, never changed afterwards.</summary>
+    public Dsp.ClipGainCurve.Point[] CurvePoints() => GainCurve.Select(g => new Dsp.ClipGainCurve.Point(g.Sec, g.Db)).ToArray();
     /// <summary>Hidden from the start / end of the media, without moving the rest.</summary>
     public double TrimStartSec { get; set; }
     public double TrimEndSec { get; set; }
@@ -387,7 +401,20 @@ public sealed class Clip
     public double VideoFadeOutSec { get; set; }
     /// <summary>Clip gain, before the track's channel strip.</summary>
     public double GainDb { get; set; }
+    /// <summary>
+    /// Native only: the clip's volume curve on top of <see cref="GainDb"/> (<see cref="Dsp.ClipGainCurve"/>), in
+    /// seconds from the media's sample 0. Empty = flat. Edits assign a new list (the audio thread reads a copy).
+    /// </summary>
+    public List<GainPoint> GainCurve { get; set; } = [];
     public Framing Framing { get; set; } = new();
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+/// <summary>A point of a clip's volume curve: seconds from the media's sample 0 and dB (<see cref="Dsp.ClipGainCurve"/>).</summary>
+public sealed class GainPoint
+{
+    public double Sec { get; set; }
+    public double Db { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 

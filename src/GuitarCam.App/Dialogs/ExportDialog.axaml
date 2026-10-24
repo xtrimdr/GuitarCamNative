@@ -221,6 +221,8 @@
                          HorizontalAlignment="Right" VerticalAlignment="Center" />
             </Grid>
             <TextBlock x:Name="QualityDescText" FontSize="11" Foreground="{StaticResource Faint}" />
+            <!-- native only: each track to its own WAV next to the export -->
+            <CheckBox x:Name="StemsCheck" Content="{loc:T exp.stems}" FontSize="12" ToolTip.Tip="{loc:T exp.stems.tip}" />
           </StackPanel>
 
           <!-- Warning / Collision banner -->

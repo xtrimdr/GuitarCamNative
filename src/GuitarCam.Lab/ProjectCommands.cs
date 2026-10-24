@@ -92,6 +92,12 @@ static class ProjectCommands
             case "restaurar": ClipEditing.Reset(p, id); break;
             case "dividir": Console.WriteLine(ClipEditing.Split(p, id, double.Parse(value, System.Globalization.CultureInfo.InvariantCulture))); break;
             case "duplicar": Console.WriteLine(ClipEditing.Duplicate(p, id)); break;
+            case "ganancia": ClipEditing.SetGain(p, id, double.Parse(value, System.Globalization.CultureInfo.InvariantCulture)); break;
+            case "curva":
+                // "segundos:dB" separated by commas, seconds from the start of the recording; empty = flat
+                ClipEditing.SetCurve(p, id, value.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(pt => pt.Split(':'))
+                    .Select(pt => new GainPoint { Sec = double.Parse(pt[0], System.Globalization.CultureInfo.InvariantCulture), Db = double.Parse(pt[1], System.Globalization.CultureInfo.InvariantCulture) }));
+                break;
             case "borrar-rango":
                 Console.WriteLine($"{ClipEditing.DeleteRange(p, id, double.Parse(value, System.Globalization.CultureInfo.InvariantCulture), a.Double("hasta", 0))} clip(s) cambiados");
                 break;
@@ -100,7 +106,7 @@ static class ProjectCommands
                 {
                     "mover" => ClipEditMode.Move, "recortar-inicio" => ClipEditMode.TrimStart,
                     "recortar-final" => ClipEditMode.TrimEnd, "fade-in" => ClipEditMode.FadeIn, "fade-out" => ClipEditMode.FadeOut,
-                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; duplicar|a-pista|inicio|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar"),
+                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar|a-pista|inicio|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar"),
                 };
                 var (_, clip) = ClipEditing.Find(p, id);
                 double dx = double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);

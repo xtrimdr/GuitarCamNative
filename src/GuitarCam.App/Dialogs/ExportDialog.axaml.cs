@@ -63,6 +63,11 @@ public sealed partial class ExportDialog : UserControl
     bool audio;
     AudioFormat audioFormat = AudioFormat.Wav;
     AudioExportProgress audioProgress = new(AudioExportStage.Mix, 0, 0);
+    /// <summary>The export is done and the stems are being written ("Stems", native only).</summary>
+    bool stemsRunning;
+    double stemsFraction;
+    /// <summary>"4 stems en «Canción - stems»" for the done screen; null without stems.</summary>
+    string? doneStems;
     string Ext => audio ? AudioExporter.Extension(audioFormat) : ".mp4";
 
     // Setup state
@@ -304,6 +309,7 @@ public sealed partial class ExportDialog : UserControl
         string? savedFolder = string.IsNullOrWhiteSpace(p?.Settings.Export.Dir) ? null : p.Settings.Export.Dir;
         var savedQuality = Mp4Exporter.ParseQuality(p?.Settings.Export.Quality);
         if (initial == null) audioFormat = AudioExporter.ParseFormat(p?.Settings.Export.AudioFormat);
+        if (initial == null) StemsCheck.IsChecked = p?.Settings.Export.Stems == true;
 
         SetFileNameInput(initial?.FileName ?? defaultName);
         folder = initial != null ? initial.OutDir : savedFolder;
@@ -563,6 +569,8 @@ public sealed partial class ExportDialog : UserControl
         runningStartedUtc = DateTime.UtcNow;
         runningProgress = new ExportProgress(ExportStage.Mix, 0, 0, null, 0);
         audioProgress = new AudioExportProgress(AudioExportStage.Mix, 0, 0);
+        bool withStems = StemsCheck.IsChecked == true;
+        (stemsRunning, stemsFraction, doneStems) = (false, 0, null);
 
         UpdatePhaseVisibility();
         RenderRunning();
@@ -593,8 +601,21 @@ public sealed partial class ExportDialog : UserControl
                 }),
                 cts.Token);
 
+            currentStore.Project.Settings.Export.Stems = withStems;
             RecordExport(currentStore.Project, opts, res, audio ? format : null);
             ExportCompleted?.Invoke(res);
+            if (withStems)
+            {
+                stemsRunning = true;
+                RenderRunning();
+                var (stemFolder, count) = await AudioExporter.ExportStemsAsync(job, res.FullPath, f => Dispatcher.UIThread.Post(() =>
+                {
+                    if (phase != Phase.Running) return;
+                    stemsFraction = f;
+                    RenderRunning();
+                }), cts.Token);
+                doneStems = Loc.T("exp.done.stems", count, Path.GetFileName(stemFolder));
+            }
 
             OpenDone(new ExportedVideo(
                 res.FileName,
@@ -619,6 +640,7 @@ public sealed partial class ExportDialog : UserControl
         }
         finally
         {
+            stemsRunning = false;
             if (exportCts == cts) exportCts = null;
             progressTimer.Stop();
         }
@@ -631,6 +653,16 @@ public sealed partial class ExportDialog : UserControl
         ToolTip.SetTip(HeaderSubtitle, Path.Combine(runningFolder, runningFileName));
 
         double elapsed = Math.Max(runningProgress.ElapsedSec, (DateTime.UtcNow - runningStartedUtc).TotalSeconds);
+        if (stemsRunning)
+        {
+            // the export itself is done: one more step, a file per track
+            ProgressPctText.Text = $"{(int)Math.Floor(stemsFraction * 100)}%";
+            ProgressTimeText.Text = Loc.T("exp.elapsed", Mp4Exporter.FormatTime(elapsed));
+            double w = ProgressBarTrack.Bounds.Width > 0 ? ProgressBarTrack.Bounds.Width : 470;
+            ProgressBarFill.Width = Math.Clamp(stemsFraction * w, 0, w);
+            RenderSteps([(Loc.T(audio ? "exp.step.saving" : "exp.step.rendering"), null, false), (Loc.T("exp.step.stems"), null, true)], 1, stemsFraction);
+            return;
+        }
         if (audio)
         {
             RenderAudioRunning(elapsed);
@@ -836,6 +868,7 @@ public sealed partial class ExportDialog : UserControl
         var parts = new List<string>();
         if (doneBytes is > 0) parts.Add(Mp4Exporter.FormatBytes(doneBytes.Value));
         if (doneVideo.ElapsedSec is { } el) parts.Add(Loc.T("exp.done.in", Loc.T(audio ? "exp.done.exported" : "exp.done.rendered"), Mp4Exporter.FormatTime(el)));
+        if (doneVideo.ElapsedSec != null && doneStems != null) parts.Add(doneStems);
         DoneMetaText.Text = string.Join(" · ", parts);
     }
 
@@ -1106,6 +1139,7 @@ public sealed partial class ExportDialog : UserControl
                     FadeInSec = c.FadeInSec,
                     FadeOutSec = c.FadeOutSec,
                     GainDb = c.GainDb,
+                    GainCurve = c.CurvePoints(),
                     SyncMs = c.EffectiveSyncMs(m),
                 });
             }
@@ -1140,6 +1174,7 @@ public sealed partial class ExportDialog : UserControl
 
             mixTracks.Add(new MixTrackSpec
             {
+                Name = trk.Name,
                 Clips = mixClips,
                 Volume = ch.Volume,
                 Pan = ch.Pan,

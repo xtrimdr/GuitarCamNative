@@ -22,17 +22,19 @@ de **grabar → mezclar → exportar**.
 
 - **Graba** audio por ASIO (entrada y salida en un mismo callback, con monitoreo) y video desde una cámara
   (DirectShow o DroidCam por IP). Cada toma se escribe a disco mientras ocurre, así que un corte no la pierde.
-- **Edita en un timeline**: varias pistas, clips que se mueven, recortan, dividen y duplican, fades, rango
-  de borrado, deshacer y rehacer ilimitados, e importación de audio de afuera (WAV, MP3, FLAC, OGG, M4A, AIFF).
+- **Edita en un timeline**: varias pistas, clips que se mueven, recortan, dividen y duplican, fades, ganancia
+  por clip con su curva de volumen, rango de borrado, deshacer y rehacer ilimitados, e importación de audio de
+  afuera (WAV, MP3, FLAC, OGG, M4A, AIFF). Se graba desde donde esté el cabezal, para regrabar solo un pedazo.
 - **Mezcla** con una cadena de efectos por pista: saturación ("Vida", válvula o cinta), compresor con
   presets (Rasgueo / Arpegio / Punteo), EQ de 6 bandas con espectro en vivo, y envíos a reverb y delay,
   más limitador master, paneo con plantillas y un mixer completo.
 - **Compone el video**: un panel por pista con cover-fit, zoom, paneo y espejo, relaciones 16:9 / 9:16 / 1:1,
   disposición lado a lado o apilada, y una pestaña de color (filtros, ajustes, efectos y plantillas).
 - **Exporta** a MP4 (mezcla offline + FFmpeg, con progreso y cancelación) o, en el modo **Solo audio**, a
-  WAV de 24 bits o MP3 de 320 kbps. Lo que ves en la vista previa es lo que se exporta.
+  WAV de 24 bits o MP3 de 320 kbps; si querés, además cada pista en su WAV (stems). Lo que ves en la vista
+  previa es lo que se exporta.
 - **Metrónomo** con compás, tempo, tap tempo, cuenta previa y seis sonidos de click; calibración de latencia
-  con cable o tocando.
+  con cable o tocando. **Afinador** y medidor de **LUFS** del master en la barra de transporte.
 - **No pierde nada**: autoguardado atómico 1,5 s después de cada edición, copias en `historial/` para volver
   atrás, recuperación de grabaciones interrumpidas y un gestor de proyectos con Papelera.
 - Idiomas, tema y atajos de teclado configurables.
@@ -75,6 +77,7 @@ Todos se pueden cambiar en ⚙ Configuración → Atajos de teclado (menos Esc).
 | R | armar / desarmar la pista seleccionada |
 | Inicio | volver al principio |
 | C / Shift+C / T | click / cuenta previa / tap tempo |
+| A | afinador |
 | M / S | mute / solo de la pista |
 | F | ver todo |
 | X | timeline / mixer |
@@ -85,6 +88,9 @@ Todos se pueden cambiar en ⚙ Configuración → Atajos de teclado (menos Esc).
 | Ctrl+S | guardar ya |
 | B / P | mostrar u ocultar el panel de la toma / del proyecto |
 | Rueda, Shift+rueda, Alt+rueda | desplazar, zoom, alto de pista |
+
+En el clip seleccionado, un clic sobre su línea de volumen agrega un punto; los puntos se arrastran y un
+doble clic los saca.
 
 ## Cómo está hecho
 
@@ -134,15 +140,17 @@ la consola, sin abrir la ventana.
 | `click` | escribe todos los sonidos de click a un WAV |
 | `sistema [--segundos 5]` | CPU, GPU y RAM, y si FFmpeg está en el PATH |
 | `espectro [toma.wav]` | el espectro en vivo del EQ |
-| `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas y reinicio de la cadena |
+| `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas, reinicio de la cadena, afinador y LUFS |
+| `lufs archivo` / `afinar archivo [--en segundos]` | volumen integrado de un archivo / la nota que oye el afinador en ese momento |
 | `camara [listar]` | las cámaras que ve FFmpeg y sus formatos |
 | `camara grabar [--dispositivo X \| --ip 192.168.1.50:4747] [--segundos 5]` | graba video como una toma y lo revisa con ffprobe |
 | `camara verificar-corte` | corta una grabación a la mitad y comprueba que el video quede |
 | `exportar [proyecto] [--calidad alta\|estandar\|borrador] [--salida nombre]` | exporta el MP4 |
 | `exportar proyecto --audio wav\|mp3` | exporta solo la mezcla |
+| `exportar proyecto … --stems` | además, un WAV por pista en `<nombre> - stems` |
 | `proyecto abrir\|clips\|versiones\|volver carpeta` | abre un proyecto, lista pistas y clips, y recorre el historial |
 | `proyecto toma\|cortar carpeta [--camara]` | graba un tono como la ventana / lo corta sin cerrar, para probar la recuperación |
-| `proyecto editar carpeta mover\|recortar-inicio\|recortar-final\|fade-in\|fade-out clip delta` | edita un clip como en el timeline (más: `a-pista`, `dividir`, `duplicar`, `quitar-clip`, `nueva-pista`…) |
+| `proyecto editar carpeta mover\|recortar-inicio\|recortar-final\|fade-in\|fade-out clip delta` | edita un clip como en el timeline (más: `a-pista`, `dividir`, `duplicar`, `ganancia`, `curva`, `quitar-clip`, `nueva-pista`…) |
 | `proyecto encuadre\|sincronia\|formato\|modo carpeta …` | encuadre del clip, ajuste de sincronía, formato del video y modo Video / Solo audio |
 | `proyecto importar-audio carpeta archivo` | copia un audio de afuera a `media/` y lo pone en una pista |
 | `proyecto historial carpeta` | tomas en uso y no usadas, exportaciones y actividad |

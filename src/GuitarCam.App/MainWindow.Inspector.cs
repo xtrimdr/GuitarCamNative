@@ -246,6 +246,7 @@ public partial class MainWindow
         if (syncing || restoring || store == null || store.ReadOnly || SelectedInspectorClip is not { } live) return;
         undo.Checkpoint(store.Project, $"clip:{live.Clip.Id}:{key}");
         edit(live.Clip, live.Media);
+        live.RefreshCurve();
         engine.RefreshClipTiming();
         MarkDirty(); UpdateUndoButtons(); RefreshInspectorText();
         Timeline.LengthSec = tracks.Count == 0 ? 0 : tracks.Max(t => t.EndSec);
@@ -428,6 +429,8 @@ public partial class MainWindow
         videoOnly.Add(cameraLatency);
         var resetClip = InspectorIcon("\uE777", Loc.T("insp.clip.reset"), () => ClipEdit((c, _) => ClipEditing.Reset(store!.Project, c.Id), "reset"));
         var clip = Section("Clip", "\uE8C6", action: resetClip);
+        Slider(clip, Loc.T("insp.clip.gain"), GuitarCam.Projects.Clip.MinGainDb, GuitarCam.Projects.Clip.MaxGainDb, .5, 0, () => C().GainDb, v => ClipEdit((c, _) => c.GainDb = v, "gain"), Db,
+            Loc.T("insp.clip.gain.hint"));
         Slider(clip, Loc.T("insp.clip.trimStart"), 0, 10, .01, 0, () => C().TrimStartSec, v => ClipEdit((c, _) => c.TrimStartSec = v, "trim-start"), Sec,
             Loc.T("insp.clip.trimStart.hint"), () => Math.Max(.01, Dur() - C().TrimEndSec - ClipEnvelope.MinClipSec));
         Slider(clip, Loc.T("insp.clip.trimEnd"), 0, 10, .01, 0, () => C().TrimEndSec, v => ClipEdit((c, _) => c.TrimEndSec = v, "trim-end"), Sec,
@@ -450,7 +453,7 @@ public partial class MainWindow
         Slider(video, Loc.T("insp.clip.vFadeIn"), 0, 10, .01, 0, () => Video().FadeIn, v => ClipEdit((c, _) => c.VideoFadeInSec = v, "video-fade-in"), Sec, maximum: Len);
         Slider(video, Loc.T("insp.clip.vFadeOut"), 0, 10, .01, 0, () => Video().FadeOut, v => ClipEdit((c, _) => c.VideoFadeOutSec = v, "video-fade-out"), Sec, maximum: Len);
         inspectorRefresh.Add(() => { link.IsChecked = C().LinkVideoFades; video.IsVisible = !AudioOnly && !C().LinkVideoFades;
-            resetClip.IsEnabled = C().TrimStartSec > 0 || C().TrimEndSec > 0 || C().FadeInSec > 0 || C().FadeOutSec > 0 || !C().LinkVideoFades && (C().VideoFadeInSec > 0 || C().VideoFadeOutSec > 0); });
+            resetClip.IsEnabled = C().GainDb != 0 || C().GainCurve.Count > 0 || C().TrimStartSec > 0 || C().TrimEndSec > 0 || C().FadeInSec > 0 || C().FadeOutSec > 0 || !C().LinkVideoFades && (C().VideoFadeInSec > 0 || C().VideoFadeOutSec > 0); });
         clip.Children.Add(Help(Loc.T("insp.clip.hint")));
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         var mirror = InspectorIcon("\uE8AB", Loc.T("insp.frame.mirror"), () => ClipEdit((c, _) => c.Framing.Mirror = !c.Framing.Mirror, "mirror"));
