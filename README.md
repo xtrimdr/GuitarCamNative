@@ -7,6 +7,10 @@ Está pensada para usarse con la guitarra colgada: atajos de una tecla, botones 
 de **grabar → mezclar → exportar**. Las herramientas de estudio (clips, efectos, mixer) están al servicio
 del video, no al revés.
 
+![El timeline, con un panel de video por toma](docs/screenshot-timeline.png)
+
+![El mixer, con una tira por pista, los retornos de reverb y delay y el master](docs/screenshot-mixer.png)
+
 ## Qué hace
 
 - **Graba** audio por ASIO (entrada y salida en un mismo callback, con monitoreo) y video desde una cámara
