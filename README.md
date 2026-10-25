@@ -12,14 +12,14 @@ sirve para hacer música sin video).
 Está pensada para usarse con la guitarra colgada: atajos de una tecla, botones grandes y un camino corto
 de **grabar → mezclar → exportar**.
 
-![El timeline en modo Video: un panel por toma, carpetas de pistas con su color, el inspector del canal y la pestaña de color](docs/screenshots/timeline.png)
+![El timeline en modo Video: un panel por toma, carpetas de pistas con su color, los knobs de cada pista y la pestaña de color](docs/screenshots/timeline-es.png)
 
 | | |
 |---|---|
-| ![El mixer sonando: carpetas como VCA, retornos de reverb y delay y el master](docs/screenshots/mixer.png) | ![Formato vertical 9:16 apilado, listo para Reels, Shorts y TikTok](docs/screenshots/vertical.png) |
-| **El mixer**: una tira por pista, las carpetas como VCA, los retornos de reverb y delay y el master. | **Vertical 9:16** para Reels, Shorts y TikTok, con un look de color aplicado. |
-
-![El modo Solo audio: pistas con sus knobs de efecto y el EQ con el espectro en vivo](docs/screenshots/audio.png)
+| ![El mixer sonando: carpetas como VCA, retornos de reverb y delay y el master](docs/screenshots/mixer-es.png) | ![La vista Mastering: la cadena del master de izquierda a derecha y el volumen de salida](docs/screenshots/master-es.png) |
+| **El mixer**: una tira por pista, las carpetas como VCA, los retornos de reverb y delay y el master. | **Mastering**: Look, limpieza, multibanda, color, Cinta, Ancho, soft clip y limitador, con el Destino de volumen y "Sugerime". |
+| ![Formato vertical 9:16 con el diseño Vertical: el video a lo alto y el timeline y el mixer al lado](docs/screenshots/vertical-es.png) | ![El modo Solo audio: pistas con sus knobs de efecto y el EQ con el espectro en vivo](docs/screenshots/audio-es.png) |
+| **Vertical 9:16** con el diseño Vertical: el video a lo alto y el timeline y el mixer al lado. | **Solo audio**: pistas con sus knobs de efecto y el EQ con el espectro en vivo. |
 
 *Las capturas son del proyecto de demo; las imágenes de los paneles son fotos de [Unsplash](https://unsplash.com).*
 
