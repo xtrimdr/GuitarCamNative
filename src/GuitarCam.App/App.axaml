@@ -578,5 +578,13 @@
       <Setter Property="OffContent" Value="" />
       <Setter Property="MinWidth" Value="0" />
     </Style>
+    <!-- a flyout whose content draws its own card (the track color and icon picker): no second frame around it -->
+    <Style Selector="FlyoutPresenter.bare">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="MaxWidth" Value="10000" />
+      <Setter Property="MaxHeight" Value="10000" />
+    </Style>
   </Application.Styles>
 </Application>

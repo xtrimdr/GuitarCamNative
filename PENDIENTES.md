@@ -43,6 +43,10 @@ _Ideas y mejoras para la nativa._
 - [ ] Transiciones entre clips y entre layouts
 - [ ] Recorte y encuadre animados (zoom/paneo que cambian con el tiempo)
 
+#### 5. Toasts (pedido 2026-10-24)
+- [x] Sistema de toasts y `--probar` (hecho, ver [HECHO.md](HECHO.md))
+- [ ] Decidir con el usuario qué avisos, además de "Para probar", salen como toast y cuáles quedan solo en la campanita
+
 ### Sugerencias (para decidir)
 
 _Ideas que surgieron charlando. Todas apuntan al video._

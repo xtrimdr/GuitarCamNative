@@ -54,13 +54,15 @@
                    Text="{loc:T about.desc}" />
 
         <Border Classes="section" Padding="12,10">
-          <Grid x:Name="Info" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="16">
+          <Grid x:Name="Info" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="16">
             <TextBlock Classes="label" Text="AUDIO" VerticalAlignment="Center" />
             <TextBlock Grid.Column="1" x:Name="AudioText" Classes="dim mono" HorizontalAlignment="Right" />
             <TextBlock Grid.Row="1" Classes="label" Text="{loc:T about.ui}" VerticalAlignment="Center" />
             <TextBlock Grid.Row="1" Grid.Column="1" x:Name="UiText" Classes="dim mono" HorizontalAlignment="Right" />
             <TextBlock Grid.Row="2" Classes="label" Text="VIDEO" VerticalAlignment="Center" />
             <TextBlock Grid.Row="2" Grid.Column="1" x:Name="VideoText" Classes="dim mono" Text="{loc:T about.ffmpeg}" HorizontalAlignment="Right" />
+            <TextBlock Grid.Row="3" Classes="label" Text="{loc:T about.icons}" VerticalAlignment="Center" />
+            <TextBlock Grid.Row="3" Grid.Column="1" Classes="dim mono" Text="IconOven (MIT)" HorizontalAlignment="Right" />
           </Grid>
         </Border>
 

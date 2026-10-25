@@ -41,9 +41,12 @@ public partial class MainWindow : Window
 
     public MainWindow() : this(null) { }
 
-    public MainWindow(string? dir)
+    /// <param name="dir">A project folder to open directly (otherwise it starts on the manager).</param>
+    /// <param name="testNote">What to try in this build (<c>--probar</c>): a sticky toast at start.</param>
+    public MainWindow(string? dir, string? testNote = null)
     {
         InitializeComponent();
+        if (testNote != null) Opened += (_, _) => Toast(testNote, Loc.T("toast.test.title"), sticky: true);
 
         TitleBar.PointerPressed += (_, e) =>
         {
@@ -121,6 +124,7 @@ public partial class MainWindow : Window
         InitImport();
 
         InitInspector();
+        InitTrackLook();
         InitProjectBar();
         InitMixer();
         InitTopBar();
@@ -203,6 +207,13 @@ public partial class MainWindow : Window
 
     // messages go to the bell in the title bar; Status("") (the old "clear") is ignored there
     void Status(string s) => Bell.Add(s);
+
+    /// <summary>A message worth seeing now: a toast, and in the bell like every other one.</summary>
+    void Toast(string s, string? title = null, bool sticky = false)
+    {
+        Bell.Add(s);
+        Toasts.Show(s, title, sticky);
+    }
 
     // --- saving ----------------------------------------------------------------------------------
 

@@ -456,6 +456,14 @@ static class UndoChecks
         Check(history.Redo(p) && p.Tracks[0].Clips[0].SyncMs == 25 && p.Tracks[0].Clips[0].VideoOffsetMs == -40
             && Math.Abs(p.Tracks[0].Clips[0].AtSec - 1.105) < 1e-9,
             "rehacer sincronía recupera ambos overrides y el ajuste de anclaje");
+        history.Checkpoint(p, "track:color");
+        p.Tracks[0].Color = "#fb923c";
+        p.Tracks[0].Icon = "electric-guitar";
+        Check(history.Undo(p) && p.Tracks[0].Color == null && p.Tracks[0].Icon == null, "deshacer saca el color y el ícono de la pista");
+        Check(history.Redo(p) && p.Tracks[0].Color == "#fb923c" && p.Tracks[0].Icon == "electric-guitar", "rehacer los vuelve a poner");
+        var looks = ProjectStore.Parse("""{"tracks":[{"color":"#FB923C","icon":" drum-kit "},{"color":"naranja","icon":""},{"color":"#12345z"}]}""");
+        Check(looks.Tracks[0].Color == "#fb923c" && looks.Tracks[0].Icon == "drum-kit", "color en minúsculas e ícono sin espacios");
+        Check(looks.Tracks[1].Color == null && looks.Tracks[1].Icon == null && looks.Tracks[2].Color == null, "un color o ícono roto queda sin color / sin ícono");
         Console.WriteLine($"Deshacer/rehacer: {checks} comprobaciones correctas (sin modificar archivos).");
         return 0;
     }

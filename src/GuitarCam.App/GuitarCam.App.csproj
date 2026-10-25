@@ -25,6 +25,8 @@
     <AvaloniaResource Include="Assets\GuitarCam.ico" />
     <AvaloniaResource Include="Assets\GuitarCam-64.png" />
     <AvaloniaResource Include="Assets\Lang\*.json" />
+    <!-- the instrument icons' license travels with the exe -->
+    <None Include="Assets\Icons\IconOven-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

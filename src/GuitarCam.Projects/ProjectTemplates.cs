@@ -32,7 +32,7 @@ public sealed class ProjectTemplate
         if (s.Delay != null) p.Settings.Delay = ProjectLibrary.Clone(s.Delay);
         if (s.Color != null) p.Settings.Color = ProjectLibrary.Clone(s.Color);
         if (s.VideoFx != null) p.Settings.VideoFx = ProjectLibrary.Clone(s.VideoFx);
-        foreach (var t in Tracks) p.Tracks.Add(new Track { Name = t.Name, Channel = ProjectLibrary.Clone(t.Channel) });
+        foreach (var t in Tracks) p.Tracks.Add(new Track { Name = t.Name, Color = t.Color, Icon = t.Icon, Channel = ProjectLibrary.Clone(t.Channel) });
         p.Normalize();
     }
 
@@ -55,6 +55,9 @@ public sealed class ProjectTemplate
 public sealed class TemplateTrack
 {
     public string Name { get; set; } = "";
+    /// <summary>The track's color and icon (<see cref="Track.Color"/>, <see cref="Track.Icon"/>).</summary>
+    public string? Color { get; set; }
+    public string? Icon { get; set; }
     public Channel Channel { get; set; } = new();
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }

@@ -438,7 +438,8 @@ public partial class MainWindow
             box.Background = armed && !selected ? Palette.Alpha(Palette.RecColor, 0.08)
                 : selected ? Palette.Raised : hover ? Palette.Alpha(Palette.RaisedColor, 0.6) : Palette.Panel;
             box.BorderBrush = armed ? Palette.Alpha(Palette.RecColor, 0.5) : selected ? Palette.Alpha(Palette.AccentColor, 0.4) : Palette.Line;
-            top.Background = selected ? Palette.Accent : Brushes.Transparent;
+            // a track with a color shows it along the card's top edge; selected, the accent takes its place
+            top.Background = selected ? Palette.Accent : TrackIcons.ColorOf(t.Track) is { } c ? Palette.Alpha(c, 1) : Brushes.Transparent;
         }
         mx.Refresh.Add(Paint);
 
@@ -456,14 +457,10 @@ public partial class MainWindow
             input.IsVisible = armed;
             emptyHint.IsVisible = empty && !armed;
         });
-        var badge = new Border { Width = 20, Height = 20, CornerRadius = new CornerRadius(4), VerticalAlignment = VerticalAlignment.Center,
-            Child = new TextBlock { Text = (index + 1).ToString(), Classes = { "mono" }, FontSize = 10, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
-        mx.Refresh.Add(() =>
-        {
-            bool s = sel == t;
-            badge.Background = s ? Palette.AccentSoft : Palette.Hover;
-            ((TextBlock)badge.Child!).Foreground = s ? Palette.Accent : Palette.Dim;
-        });
+        double badgeSize = wide ? 24 : 18;
+        var badge = new TrackBadge { Width = badgeSize, Height = badgeSize, VerticalAlignment = VerticalAlignment.Center };
+        badge.Clicked += () => ShowTrackLook(t, badge);
+        mx.Refresh.Add(() => badge.Set(t.Track, tracks.IndexOf(t) + 1, sel == t));
         double btn = wide ? 28 : 24;
         var mute = StripToggle("M", Shortcuts.Tip("Mute", "mute"), btn, () => t.Channel.Muted, false, () => EditTrack(t, x => x.Channel.Muted = !x.Channel.Muted, "mute"));
         var solo = StripToggle("S", Shortcuts.Tip("Solo", "solo"), btn, () => t.Channel.Solo, true, () => EditTrack(t, x => x.Channel.Solo = !x.Channel.Solo, "solo"));

@@ -27,7 +27,8 @@ It is designed to be used with the guitar strapped on: one-key shortcuts, big bu
   OGG, M4A, AIFF). Recording starts at the playhead, so you can redo just one part.
 - **Mixes** with a per-track effects chain: saturation ("Vida", tube or tape), a compressor with presets
   (Strumming / Arpeggio / Lead), a 6-band EQ with live spectrum, and sends to reverb and delay, plus a master
-  limiter, pan templates and a full mixer.
+  limiter, pan templates and a full mixer. Each track gets its own color and an instrument icon (guitars, bass,
+  drums, synths, strings, winds, percussion…), shown in the timeline, the inspector and the mixer.
 - **Composes the video**: a panel per track with cover-fit, zoom, pan and mirror, 16:9 / 9:16 / 1:1 aspect
   ratios, side-by-side or stacked layout, and a color tab (filters, adjustments, effects and templates).
 - **Exports** to MP4 (offline mix + FFmpeg, with progress and cancellation) or, in **Audio only** mode, to

@@ -23,9 +23,7 @@ public partial class MainWindow
     readonly StackPanel noSelection = new() { Margin = new Thickness(10, 32), Spacing = 4 };
     readonly TextBlock noSelectionHint = new() { FontSize = 12, Foreground = Palette.Faint, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap };
     readonly Grid takeHeader = new() { ColumnDefinitions = new ColumnDefinitions("24,*,Auto") };
-    readonly Border takeBadge = new() { CornerRadius = new CornerRadius(4), Height = 24, VerticalAlignment = VerticalAlignment.Center };
-    readonly TextBlock takeNumber = new() { Classes = { "mono" }, Foreground = Palette.Accent, FontSize = 12, FontWeight = FontWeight.SemiBold,
-        HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+    readonly TrackBadge takeBadge = new() { Width = 24, Height = 24, VerticalAlignment = VerticalAlignment.Center };
     readonly TextBox takeName = new() { Classes = { "title" } };
     readonly TextBlock takeNamePencil = new() { Classes = { "icon" }, Text = "\uE70F", FontSize = 11, Foreground = Palette.Faint, Margin = new Thickness(0, 0, 8, 0),
         VerticalAlignment = VerticalAlignment.Center, Opacity = 0, IsHitTestVisible = false };
@@ -285,7 +283,8 @@ public partial class MainWindow
         catch (System.Text.Json.JsonException) { }
         InitInspectorBar();
         var header = takeHeader;
-        takeBadge.Child = takeNumber; header.Children.Add(takeBadge);
+        takeBadge.Clicked += () => { if (sel != null) ShowTrackLook(sel, takeBadge); };
+        header.Children.Add(takeBadge);
         takeName.InnerRightContent = takeNamePencil;
         takeName.PointerEntered += (_, _) => takeNamePencil.Opacity = takeName.IsFocused ? 0 : 1;
         takeName.PointerExited += (_, _) => takeNamePencil.Opacity = 0;
@@ -494,13 +493,11 @@ public partial class MainWindow
         try
         {
             takeName.Text = sel?.Track.Name ?? "";
-            takeNumber.Text = sel == null ? "" : (tracks.IndexOf(sel) + 1).ToString();
             var c = SelectedInspectorClip;
             noSelection.IsVisible = sel == null;
             noSelectionHint.Text = tracks.Any(t => t.Clips.Count > 0) ? Loc.T("insp.none.hint") : Loc.T("insp.none.empty");
             takeHead.IsVisible = sel != null;
-            takeBadge.Background = c != null ? Palette.AccentSoft : Palette.Hover;
-            takeNumber.Foreground = c != null ? Palette.Accent : Palette.Dim;
+            takeBadge.Set(sel?.Track, sel == null ? 0 : tracks.IndexOf(sel) + 1, c != null);
             takeInfo.Text = sel == null ? "" : c == null ? Loc.T("insp.trackEmpty") : c.Offline ? Loc.T("clip.offline") : "";
             takeInfo.IsVisible = takeInfo.Text != "";
             takeFacts.IsVisible = c is { Offline: false };

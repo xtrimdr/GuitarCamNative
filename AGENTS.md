@@ -65,6 +65,7 @@ src/
   GuitarCam.Lab        gclab.exe: consola para probar audio, DSP y proyectos sin la ventana.
 tools/make-icon.ps1    dibuja el ícono (Assets/GuitarCam.ico: exe, ventana y barra de tareas; Assets/GuitarCam-64.png: logo de la barra de título).
 tools/make-shortcut.ps1  crea el acceso directo del escritorio al exe.
+tools/make-track-icons.py  genera Controls/TrackIcons.Data.cs con los íconos de instrumentos (IconOven, MIT).
 ```
 
 Reglas:
@@ -83,7 +84,8 @@ Reglas:
 Tres capas:
 
 - **Media**: grabaciones y archivos importados. **Nunca se reescriben.**
-- **Track**: el canal (volumen, paneo, mute/solo, saturación, compresor…) y si lleva panel de video.
+- **Track**: el canal (volumen, paneo, mute/solo, saturación, compresor…), si lleva panel de video, y su color
+  (`Color`, "#rrggbb") e ícono de instrumento (`Icon`), null = sin color / con su número.
 - **Clip**: un pedazo de un media puesto en una pista (`AtSec`, `TrimStartSec`, `TrimEndSec`, `GainDb`, encuadre).
 
 Convenciones:
@@ -215,7 +217,9 @@ borde 0,45 / 0,9). El hover del acento es `#4fdcf1`. El tema es siempre oscuro (
   glifo en `Text` (`&#xE768;`). No agregues paquetes de íconos ni imágenes para íconos. Excepción: los
   íconos de los efectos (Vida/saturación, compresor, EQ, reverb, delay) salen siempre de `FxIcon`
   (`FxIcon.Sat`…), que dibuja los trazos de lucide de la web (`fxIcons.ts`). Usalo en todo lugar que
-  muestre un efecto, para que el inspector y el mixer no vuelvan a tener íconos distintos.
+  muestre un efecto, para que el inspector y el mixer no vuelvan a tener íconos distintos. Otra excepción: los
+  íconos de instrumentos de las pistas (pedido del usuario) salen de `TrackIcons`, con los trazos de IconOven (MIT,
+  24×24 como lucide; licencia en `Assets/Icons/IconOven-LICENSE.txt`, generados con `tools/make-track-icons.py`).
 - Escala usada (no inventes tamaños intermedios):
 
 | Tamaño | Uso |
@@ -281,7 +285,7 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 - Maximizada, Windows corre la ventana 8 px afuera de cada borde de la pantalla (por la barra de título
   propia). La grilla raíz lleva `Margin="{Binding $parent[Window].OffScreenMargin}"` para compensarlo; no
   lo saques o se cortan los costados y la barra de transporte.
-- **Avisos** = la campanita de la barra de título (`Controls/NotificationBell`, a la izquierda del tema). `Status(texto)` agrega el mensaje a su lista (los últimos 50, el más nuevo arriba); un punto de acento marca los sin leer y abrirla los marca como leídos. Nada se escribe en el centro de la barra de título ni en diálogos.
+- **Avisos** = la campanita de la barra de título (`Controls/NotificationBell`, a la izquierda del tema). `Status(texto)` agrega el mensaje a su lista (los últimos 50, el más nuevo arriba); un punto de acento marca los sin leer y abrirla los marca como leídos. Nada se escribe en el centro de la barra de título ni en diálogos. **Toasts** (`Controls/ToastHost`, solo nativa, pedido del usuario): `Toast(texto)` es para lo que conviene ver en el momento; sale abajo a la derecha, encima de todo, se va sola a los 6 s (el puntero encima la frena) y también queda en la campanita. Una fija (`sticky`) se va solo con su ×: la usa `--probar "texto"` ("Para probar"), que el agente pasa al abrir la app después de cada cambio.
 - **Inspector**: número + nombre editable de la toma (`TextBox.title`), los datos del archivo como badges
   (`Hover`, mono) y un botón que pliega o despliega **todas** las secciones (pedido del usuario; en la web
   solo los efectos). Después, una tarjeta (`Border.section`) por bloque, cada una con ícono +
@@ -317,18 +321,24 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 - **Preview**: los paneles se calculan con `PanelLayout.Compute` sobre un lienzo de 1080 px de alto,
   **la misma cuenta que usa la exportación** (port de `panelLayout.js`). Lo que se ve tiene que ser lo que
   se exporta. Encuadre: cover-fit + zoom/paneo/espejo del clip. Etiqueta con el nombre de la pista abajo a la izquierda.
-- **Encabezados de pista** (solo nativa, pedido del usuario): la columna se ensancha arrastrando su manija (una franja de
-  `GripW` = 8 px adentro del borde derecho, con dos rayitas por pista; nunca pisa un clip en 0 s) (324–460, se recuerda en `headerWidth`; las filas se arman para 264 y el sobrante va al volumen). Con carriles más altos aparecen debajo, de a
+- **Encabezados de pista** (solo nativa, pedido del usuario): la columna se ensancha arrastrando su manija (una sola franja de
+  `GripW` = 8 px adentro del borde derecho, de todo el alto, con dos rayitas en el medio; nunca pisa un clip en 0 s) (324–460, se recuerda en `headerWidth`; las filas se arman para 264 y el sobrante va al volumen). Con carriles más altos aparecen debajo, de a
   una fila de 22 px, Vida · Comp · Reverb · Delay (ícono `FxIcon`, clic prende/apaga, arrastrar el slider cambia la
   cantidad, doble clic la restablece), también en pistas vacías (`TimelineView.EffectRequested`). Tocar cualquier
   parte del encabezado (la manija o un control, menos "quitar") selecciona la pista. Al reordenar con la manija, la
   pista sigue al puntero por encima de las demás y el resto se desliza a su lugar (`shownSlot`, `Slide`; la web salta).
+- **Color e ícono de pista** (solo nativa, pedido del usuario): cada pista tiene una insignia (`TrackIcons.DrawBadge`,
+  `Controls/TrackBadge`) con su ícono de instrumento (o su número si no tiene) teñida con su color (o el acento), la
+  misma en el encabezado del timeline, en el inspector y en el mixer. Tocarla abre el selector (`MainWindow.TrackLook.cs`):
+  12 colores (`TrackIcons.Colors`, guardados en hex) y los íconos por categoría; el color deja el selector abierto y el
+  ícono lo cierra. Con color, los clips de la pista se tiñen (relleno, borde y onda) y la tira del mixer lo lleva arriba.
+  Los colores de pista son datos del usuario, no tokens: no se usan para estados de la interfaz.
 - **Timeline**: clips como en la web: fondo `Hover` al 40 %, borde `Line` (acento al 60 % si está
   seleccionado), onda `Dim` (acento si está seleccionado, `Faint` si la pista no suena), sin el nombre
   adentro; un clip sin archivo, gris con "Sin conexión…". Con video y carriles de 52 px o más, la tira de
   miniaturas (`Video/VideoThumbnails.cs`) con la onda blanca abajo sobre un degradé, como `Filmstrip` de la web. Pista
   seleccionada con barra de acento de 2 px a la izquierda del encabezado; playhead de acento con triángulo.
-  Bordes de clip (solo nativa, pedido del usuario): en cada lado una manija chica partida a la mitad del clip
+  Bordes de clip (solo nativa, pedido del usuario): en cada lado dos rayitas finas, una por mitad del clip
   (`DrawEdgeHandles`): la de arriba, donde termina el fade, mueve el fade; la de abajo, en el borde, recorta. El
   cursor lo dice (diagonal como la línea del fade, ↔ para recortar) y se ilumina la manija que vas a agarrar.
   Varios clips por pista (solo nativa): Alt+X divide en el cabezal y D duplica (`ClipEditing.Split` /
@@ -494,6 +504,9 @@ Escribí como el código que ya está:
 2. Probá el motor/proyecto con `gclab` y la ventana con
    `src\GuitarCam.App\bin\Debug\net10.0-windows\GuitarCam.exe` (arranca en el gestor de proyectos;
    con una carpeta de proyecto como argumento la abre directo).
+   **Al terminar cada cambio, compilá ese exe y abrilo** (`dotnet build` de la solución, pedido del usuario): así lo
+   prueba sin pedirlo. Abrilo con `--probar "texto"`: qué tiene que probar, corto y concreto (sale como toast fijo). Si la app está abierta y bloquea los DLL, avisale que la
+   cierre y volvé a compilar; no la cierres vos.
 3. Hacen falta una interfaz ASIO y un proyecto con tomas para probar de verdad. Si no los tenés, decí qué no pudiste probar.
 4. Al revisar capturas de pantalla: las de GDI dan alfa 0 en píxeles negros y algunos visores los pintan
    blancos. Mirá el RGB, no el alfa.

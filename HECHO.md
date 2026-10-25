@@ -3,8 +3,15 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
-- 2026-10-24: **manijas en el timeline**: la columna de las pistas se ensancha solo desde su manija (franja de 8 px adentro
-  del borde, con dos rayitas; antes compartía píxeles con el recorte de un clip en 0 s), y cada clip tiene manijas chicas en
+- 2026-10-24: **color e ícono por pista**: `Track.Color` / `Track.Icon` (también en las plantillas) y una insignia
+  (`TrackIcons.DrawBadge`, `Controls/TrackBadge`) en el encabezado del timeline, el inspector y el mixer; tocarla abre el
+  selector (`MainWindow.TrackLook.cs`) con 12 colores y 53 íconos de instrumentos en 5 categorías: IconOven (MIT),
+  generados con `tools/make-track-icons.py` en `Controls/TrackIcons.Data.cs`. Con color, los clips se tiñen.
+- 2026-10-24: **toasts y `--probar`**: `Controls/ToastHost` muestra avisos abajo a la derecha, encima de todo (también del
+  gestor y los diálogos); se van solos a los 6 s salvo con el puntero encima, y los fijos esperan su ×. `MainWindow.Toast`
+  los manda también a la campanita. `GuitarCam.exe --probar "texto"` abre con un toast fijo "Para probar" (`App.ParseArgs`).
+- 2026-10-24: **manijas en el timeline**: la columna de las pistas se ensancha solo desde su manija (una franja de 8 px adentro
+  del borde, de todo el alto; antes compartía píxeles con el recorte de un clip en 0 s), y cada clip tiene manijas chicas en
   los bordes: mitad de arriba = fade, mitad de abajo = recorte, con el cursor que corresponde (`TimelineView.DrawEdgeHandles`,
   `HitHandle`, `OnGrip`).
 - 2026-10-24: **parar con fundido**: Espacio y ■ paran con el mismo fundido de 10 ms (smoothstep) que play, los saltos y el

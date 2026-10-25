@@ -364,7 +364,7 @@ public static partial class ProjectLibrary
             var ch = JsonSerializer.Deserialize<Channel>(JsonSerializer.Serialize(t.Channel, ProjectStore.Json), ProjectStore.Json)!;
             ch.Muted = ch.Solo = false;
             string n = TakePrefix.Replace(t.Name, "").Trim();
-            return new TemplateTrack { Name = n.Length > 0 ? n : $"Pista {i + 1}", Channel = ch };
+            return new TemplateTrack { Name = n.Length > 0 ? n : $"Pista {i + 1}", Color = t.Color, Icon = t.Icon, Channel = ch };
         }).ToList(),
         Settings = new TemplateSettings
         {

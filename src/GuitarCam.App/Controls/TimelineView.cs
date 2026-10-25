@@ -29,8 +29,13 @@ public sealed class TimelineView : Control
     const double MinorLabelPx = 30;
     const double BaseHeaderH = 64; // the header's fixed part (name, volume, pan); taller lanes add effect rows under it
     const double FxRowH = 22;
-    /// <summary>Width of the track-header column; dragged from its right edge (native only).</summary>
+    /// <summary>Width of the track-header column; dragged from its grip at the right edge (native only).</summary>
     public double HeaderW { get; private set; } = MinHeaderW;
+    /// <summary>The column's resize grip: a strip inside the header, so it never shares pixels with a clip at 0 s.</summary>
+    const double GripW = 8;
+    /// <summary>Where the header's right-aligned controls end, left of the grip.</summary>
+    double HeaderRight => HeaderW - GripW;
+    bool OnGrip(Point p) => p.Y >= RulerH && p.X >= HeaderRight && p.X < HeaderW;
     public event Action<double>? HeaderWidthChanged;
     double originalHeaderW;
     int fxRow;
@@ -52,7 +57,7 @@ public sealed class TimelineView : Control
 
     int FxRowCount => laneH >= BaseHeaderH + FxRowH ? Math.Min(FxRows.Length, (int)((laneH - BaseHeaderH) / FxRowH)) : 0;
     Rect FxToggleRect(int i, int k) => new(48, LaneY(i) + BaseHeaderH + k * FxRowH, 74, 20);
-    Rect FxSliderRect(int i, int k) => new(126, LaneY(i) + BaseHeaderH + k * FxRowH, Math.Max(20, HeaderW - 58 - 126), 20);
+    Rect FxSliderRect(int i, int k) => new(126, LaneY(i) + BaseHeaderH + k * FxRowH, Math.Max(20, HeaderRight - 58 - 126), 20);
     (int Row, bool Slider)? FxHit(int i, Point p)
     {
         for (int k = 0; k < FxRowCount; k++)
@@ -153,6 +158,8 @@ public sealed class TimelineView : Control
     public event Action<LiveTrack>? ArmRequested;
     /// <summary>The input chip of an armed track was clicked: the window shows the input menu (native only).</summary>
     public event Action<LiveTrack, Point>? InputMenuRequested;
+    /// <summary>The track's badge was clicked: the window shows the color and icon picker there (native only).</summary>
+    public event Action<LiveTrack, Point>? LookRequested;
     public event Action<Clip, string?, string?>? ClipEditCommitted;
     public event Action<int, int>? ReorderRequested;
     public event Action<string>? RemoveTrackRequested;
@@ -560,7 +567,23 @@ public sealed class TimelineView : Control
             string text = swapId == null ? Loc.T("timeline.moveTo", tracks[overIndex].Track.Name) : Loc.T("timeline.swapWith", tracks[overIndex].Track.Name);
             ctx.DrawText(text, 11, Palette.Accent, new Point(Math.Max(HeaderW + 10, W - 280), r.Y + 8), Palette.UiBold);
         }
+        DrawColumnGrip(ctx, H);
         ctx.DrawLine(Palette.Pen(Palette.Line), new Point(HeaderW - 0.5, 0), new Point(HeaderW - 0.5, H));
+    }
+
+    /// <summary>
+    /// The column's resize grip: one strip for every track, the whole height under the ruler, with two short lines
+    /// in the middle of the view. It lights up while the pointer is on it or dragging it.
+    /// </summary>
+    void DrawColumnGrip(DrawingContext ctx, double H)
+    {
+        bool lit = gesture == "header" || gesture == null && OnGrip(lastPointer);
+        var strip = new Rect(HeaderRight, RulerH, GripW, Math.Max(0, H - RulerH));
+        ctx.FillRectangle(lit ? Palette.Hover : Palette.Panel, strip);
+        var grip = lit ? Palette.Accent : Palette.Faint;
+        double gx = HeaderW - GripW / 2, gy = Math.Round(strip.Center.Y);
+        ctx.FillRectangle(grip, new Rect(gx - 2, gy - 10, 1, 20));
+        ctx.FillRectangle(grip, new Rect(gx + 1, gy - 10, 1, 20));
     }
 
     /// <summary>
@@ -752,16 +775,20 @@ public sealed class TimelineView : Control
         sel = sel && (SelectedClipId == null || c.Clip.Id == SelectedClipId);
         if (x1 < HeaderW || x0 > W) return;
         var clip = new Rect(x0, y + 5, Math.Max(2, x1 - x0), laneH - 10);
-        var color = c.Offline ? Color.Parse("#71717a") : Palette.AccentColor;
+        // a track with a color tints its clips with it (native only); without one they stay as in the web
+        var tint = TrackIcons.ColorOf(t.Track);
+        var color = c.Offline ? Color.Parse("#71717a") : tint ?? Palette.AccentColor;
         bool silent = t.Channel.Muted || tracks.Any(o => o.Channel.Solo) && !t.Channel.Solo;
         // the clip being carried to another track stays dimmed where it was until it is dropped
         bool carried = dragged == c && overIndex >= 0 && overIndex != fromIndex && !swapping;
         using var opacity = ctx.PushOpacity((!c.Offline && silent ? 0.5 : 1) * (carried ? 0.35 : 1));
         // the web shows the filmstrip from SHOW_THUMBS_AT; audio-only media (native only) keeps the plain clip
         bool thumbs = showVideo && t.Track.Video && !c.Offline && laneH >= ShowThumbsAt && c.VideoPath != null;
-        var fill = c.Offline ? Palette.Alpha(color, silent ? 0.05 : sel ? 0.16 : 0.10) : thumbs ? null : Palette.Alpha(Palette.HoverColor, 0.4);
+        var fill = c.Offline ? Palette.Alpha(color, silent ? 0.05 : sel ? 0.16 : 0.10) : thumbs ? null
+            : tint != null ? Palette.Alpha(color, sel ? 0.24 : 0.14) : Palette.Alpha(Palette.HoverColor, 0.4);
         var border = Palette.Pen(c.Offline ? Palette.Alpha(color, sel ? 0.9 : 0.45)
-            : sel ? Palette.Alpha(Palette.AccentColor, 0.6) : Palette.Line, c.Offline && sel ? 1.5 : 1);
+            : sel ? Palette.Alpha(color, tint != null ? 0.95 : 0.6) : tint != null ? Palette.Alpha(color, 0.45) : Palette.Line,
+            (c.Offline || tint != null) && sel ? 1.5 : 1);
         ctx.DrawRectangle(fill, border, clip, 5, 5);
         using (ctx.PushClip(new RoundedRect(clip, 5)))
         {
@@ -791,7 +818,8 @@ public sealed class TimelineView : Control
                     ctx.DrawRectangle(null, border, clip.Deflate(0.5), 4.5, 4.5); // over the frames, inside the clip
                 }
                 var geo = Waveform(c, model, w, thumbs ? clip.Bottom - clip.Height * 0.55 : y + 6, y + laneH - 6, W);
-                var wave = silent ? Palette.Faint : sel ? Palette.Accent : thumbs ? Palette.Alpha(Colors.White, 0.85) : Palette.Alpha(Palette.DimColor, 0.8);
+                var wave = silent ? Palette.Faint : thumbs && !sel ? Palette.Alpha(Colors.White, 0.85)
+                    : tint != null ? Palette.Alpha(color, sel ? 1 : 0.8) : sel ? Palette.Accent : Palette.Alpha(Palette.DimColor, 0.8);
                 ctx.DrawGeometry(null, Palette.Pen(wave, 1), geo);
             }
             var f = ClipEnvelope.FitFades(model.FadeInSec, model.FadeOutSec, w.End - w.Start);
@@ -812,11 +840,7 @@ public sealed class TimelineView : Control
             if (f.FadeOut > 0) Fade(x1 - f.FadeOut * pps, x1, x1);
             bool editable = sel && Selected >= 0 && Selected < tracks.Count && tracks[Selected] == t && CurveEditable(Selected, c);
             if (!c.Offline && (editable || model.GainDb != 0 || model.GainCurve.Count > 0)) DrawCurve(ctx, c, model, w, clip, editable);
-            if (sel || clip.Contains(lastPointer))
-            {
-                ctx.DrawRectangle(Palette.Accent, Palette.Pen(Palette.App), new Rect(x0 + Math.Max(5, f.FadeIn * pps) - 5, clip.Top, 10, 10), 2, 2);
-                ctx.DrawRectangle(Palette.Accent, Palette.Pen(Palette.App), new Rect(x1 - Math.Max(5, f.FadeOut * pps) - 5, clip.Top, 10, 10), 2, 2);
-            }
+            if (sel || clip.Contains(lastPointer)) DrawEdgeHandles(ctx, c, clip, x0 + f.FadeIn * pps, x1 - f.FadeOut * pps);
             if (w.AnchorCut > 0.0005)
             {
                 for (double sy = clip.Top - 6; sy < clip.Bottom; sy += 6)
@@ -831,6 +855,29 @@ public sealed class TimelineView : Control
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// The clip's edge handles (native only): on each side a small tab split at the clip's middle. The top one sits
+    /// where the fade ends and drags the fade; the bottom one sits on the edge and trims. The one under the pointer
+    /// (or being dragged) lights up, so the two gestures never look alike.
+    /// </summary>
+    void DrawEdgeHandles(DrawingContext ctx, LiveClip c, Rect clip, double fadeInX, double fadeOutX)
+    {
+        double mid = clip.Center.Y, quarter = clip.Height / 4;
+        var lit = dragged == c ? dragMode : gesture == null && clip.Contains(lastPointer) ? HitHandle(c, lastPointer) : ClipEditMode.Move;
+        // a thin 2 px tick centered in its half: faint at rest, taller and in full color when it is the one you would grab
+        void Tick(double x, double cy, ClipEditMode mode, Color color)
+        {
+            bool on = lit == mode;
+            double h = Math.Min(on ? 14 : 8, quarter * 2 - 4);
+            if (h < 3) return;
+            ctx.FillRectangle(Palette.Alpha(color, on ? 1 : 0.35), new Rect(Math.Round(x) - 1, Math.Round(cy - h / 2), 2, Math.Round(h)), 1);
+        }
+        Tick(Math.Max(clip.Left + 3, fadeInX), mid - quarter, ClipEditMode.FadeIn, Palette.AccentColor);
+        Tick(Math.Min(clip.Right - 3, fadeOutX), mid - quarter, ClipEditMode.FadeOut, Palette.AccentColor);
+        Tick(clip.Left + 3, mid + quarter, ClipEditMode.TrimStart, Palette.FgColor);
+        Tick(clip.Right - 3, mid + quarter, ClipEditMode.TrimEnd, Palette.FgColor);
     }
 
     /// <summary>
@@ -908,11 +955,12 @@ public sealed class TimelineView : Control
         return geo;
     }
 
-    Rect ArmRect(int i) => new(HeaderW - 122, LaneY(i) + 8, 24, 24);
-    Rect InputRect(int i) => new(HeaderW - 166, LaneY(i) + 8, 40, 24);
-    Rect MuteRect(int i) => new(HeaderW - 94, LaneY(i) + 8, 24, 24);
-    Rect SoloRect(int i) => new(HeaderW - 66, LaneY(i) + 8, 24, 24);
-    Rect RemoveRect(int i) => new(HeaderW - 38, LaneY(i) + 8, 24, 24);
+    Rect BadgeRect(int i) => new(26, LaneY(i) + 8, 24, 24);
+    Rect ArmRect(int i) => new(HeaderRight - 122, LaneY(i) + 8, 24, 24);
+    Rect InputRect(int i) => new(HeaderRight - 166, LaneY(i) + 8, 40, 24);
+    Rect MuteRect(int i) => new(HeaderRight - 94, LaneY(i) + 8, 24, 24);
+    Rect SoloRect(int i) => new(HeaderRight - 66, LaneY(i) + 8, 24, 24);
+    Rect RemoveRect(int i) => new(HeaderRight - 38, LaneY(i) + 8, 24, 24);
     // a wider column gives its extra width to the volume slider and moves the pan knob with it
     double Extra => HeaderW - LayoutHeaderW;
     Rect VolumeRect(int i) => new(52, LaneY(i) + 40, 92 + Extra, 20);
@@ -934,19 +982,16 @@ public sealed class TimelineView : Control
             ctx.FillRectangle(Palette.Faint, new Rect(8, y + 13 + k * 5, 2, 2));
             ctx.FillRectangle(Palette.Faint, new Rect(13, y + 13 + k * 5, 2, 2));
         }
-        var badge = new Rect(26, y + 10, 20, 20);
-        ctx.DrawRectangle(Palette.Hover, null, badge, 5, 5);
-        var num = Palette.Text((i + 1).ToString(), 11, Palette.Dim, Palette.Mono);
-        ctx.DrawText(num, new Point(badge.Center.X - num.Width / 2, badge.Center.Y - num.Height / 2));
+        TrackIcons.DrawBadge(ctx, BadgeRect(i), t.Track, i + 1, false, 5);
         // an armed track shows its input left of the ●, so the name gets shorter
         bool chip = isArmed && !Recording && InputLabel != null;
-        double nameW = chip ? InputRect(i).X - 56 : HeaderW - 180;
+        double nameW = chip ? InputRect(i).X - 62 : HeaderRight - 186;
         if (RecordingInto(i))
         {
-            ctx.DrawText(Loc.T("timeline.recording"), 13, Palette.Rec, new Point(52, y + 11), Palette.Ui, HeaderW - 180);
+            ctx.DrawText(Loc.T("timeline.recording"), 13, Palette.Rec, new Point(58, y + 11), Palette.Ui, HeaderRight - 186);
             ctx.DrawEllipse(Palette.Rec, null, new Point(RemoveRect(i).Center.X, y + 20), 4, 4);
         }
-        else ctx.DrawText(t.Track.Name, 12.5, Palette.Fg, new Point(52, y + 11), Palette.UiBold, nameW);
+        else ctx.DrawText(t.Track.Name, 12.5, Palette.Fg, new Point(58, y + 11), Palette.UiBold, nameW);
         if (chip) DrawInputChip(ctx, InputRect(i), InputLabel!(t));
 
         if (!RecordingInto(i) && lastPointer.Y >= y && lastPointer.Y < y + laneH)
@@ -1000,7 +1045,7 @@ public sealed class TimelineView : Control
     {
         double y = LaneY(i);
         if (y + laneH < RulerH || y > Bounds.Height) return;
-        double mh = laneH - 20, mx = HeaderW - 10;
+        double mh = laneH - 20, mx = HeaderRight - 10;
         DrawMeterBar(ctx, new Rect(mx, y + 10, 4, mh), tracks[i].ShowL);
         DrawMeterBar(ctx, new Rect(mx + 6, y + 10, 4, mh), tracks[i].ShowR);
     }
@@ -1097,7 +1142,7 @@ public sealed class TimelineView : Control
         }
         if (!buttons.IsLeftButtonPressed) return;
         ClearRange();
-        if (p.X >= HeaderW - 3 && p.X <= HeaderW + 4)
+        if (OnGrip(p))
         {
             originalHeaderW = HeaderW;
             StartGesture("header", e);
@@ -1127,6 +1172,12 @@ public sealed class TimelineView : Control
         if (p.X < HeaderW && RemoveRect(i).Contains(p))
         {
             RemoveTrackRequested?.Invoke(tracks[i].Track.Id);
+            return;
+        }
+        if (p.X < HeaderW && BadgeRect(i).Contains(p))
+        {
+            LookRequested?.Invoke(tracks[i], BadgeRect(i).BottomLeft + new Point(0, 4));
+            e.Handled = true;
             return;
         }
         if (p.X < HeaderW && ArmRect(i).Contains(p))
@@ -1225,20 +1276,26 @@ public sealed class TimelineView : Control
         Select(index);
     }
 
+    /// <summary>Px from a clip's edge (or a fade tab, ±half of it) that grab its handle.</summary>
+    const double EdgeGrab = 9;
+
     ClipEditMode HitHandle(LiveClip clip, Point p)
     {
         var w = Window(clip);
         double left = X(w.Start), right = X(w.End);
         var c = DisplayClip(clip);
         var f = ClipEnvelope.FitFades(c.FadeInSec, c.FadeOutSec, w.End - w.Start);
-        double top = LaneY(tracks.ToList().FindIndex(t => t.Clips.Contains(clip))) + 5;
-        if (p.Y <= top + 10)
+        // the top half of an edge (or of the tab where a fade ends) drags the fade; the bottom half trims
+        double mid = LaneY(tracks.ToList().FindIndex(t => t.Clips.Contains(clip))) + laneH / 2;
+        if (p.Y < mid)
         {
-            if (Math.Abs(p.X - (right - Math.Max(5, f.FadeOut * pps))) <= 6) return ClipEditMode.FadeOut;
-            if (Math.Abs(p.X - (left + Math.Max(5, f.FadeIn * pps))) <= 6) return ClipEditMode.FadeIn;
+            double fadeOut = Math.Min(right - 4, right - f.FadeOut * pps), fadeIn = Math.Max(left + 4, left + f.FadeIn * pps);
+            if (right - p.X < EdgeGrab || Math.Abs(p.X - fadeOut) <= EdgeGrab / 2) return ClipEditMode.FadeOut;
+            if (p.X - left < EdgeGrab || Math.Abs(p.X - fadeIn) <= EdgeGrab / 2) return ClipEditMode.FadeIn;
+            return ClipEditMode.Move;
         }
-        if (p.X - left < 8) return ClipEditMode.TrimStart;
-        if (right - p.X < 8) return ClipEditMode.TrimEnd;
+        if (p.X - left < EdgeGrab) return ClipEditMode.TrimStart;
+        if (right - p.X < EdgeGrab) return ClipEditMode.TrimEnd;
         return ClipEditMode.Move;
     }
 
@@ -1422,7 +1479,7 @@ public sealed class TimelineView : Control
         int i = (int)Math.Floor((lastPointer.Y - RulerH + scrollY) / laneH);
         string? tip = null;
         var cursor = StandardCursorType.Arrow;
-        if (lastPointer.X >= HeaderW - 3 && lastPointer.X <= HeaderW + 4)
+        if (OnGrip(lastPointer))
         {
             tip = Loc.T("tl.tip.headerWidth");
             cursor = StandardCursorType.SizeWestEast;
@@ -1432,6 +1489,7 @@ public sealed class TimelineView : Control
         else if (i >= 0 && i < tracks.Count)
         {
             if (lastPointer.X < 24) { tip = Loc.T("tl.tip.reorder"); cursor = StandardCursorType.Hand; }
+            else if (BadgeRect(i).Contains(lastPointer)) { tip = Loc.T("look.tip"); cursor = StandardCursorType.Hand; }
             else if (ArmRect(i).Contains(lastPointer))
                 tip = armed.Contains(i) ? Loc.T("tl.tip.armed", Shortcuts.Paren("record"))
                     : tracks[i].Clips.Count == 0 ? Loc.T("tl.tip.arm.empty") + Shortcuts.Note("arm", Loc.T("tl.note.arm"))
@@ -1482,7 +1540,13 @@ public sealed class TimelineView : Control
                     && new Rect(X(w.Start) + 10, LaneY(i) + laneH - 24,
                         Palette.Text($"{w.AnchorCut:0.00} s", 10.5, Palette.Accent, Palette.Mono).Width + 22, 16).Contains(lastPointer))
                     tip = Loc.T("tl.tip.beforeZero");
-                cursor = mode == ClipEditMode.Move ? StandardCursorType.Hand : StandardCursorType.SizeWestEast;
+                cursor = mode switch
+                {
+                    // the diagonal follows the fade line: / for a fade in, \ for a fade out
+                    ClipEditMode.FadeIn => StandardCursorType.TopRightCorner, ClipEditMode.FadeOut => StandardCursorType.TopLeftCorner,
+                    ClipEditMode.TrimStart => StandardCursorType.LeftSide, ClipEditMode.TrimEnd => StandardCursorType.RightSide,
+                    _ => StandardCursorType.Hand,
+                };
             }
         }
         ToolTip.SetTip(this, tip);

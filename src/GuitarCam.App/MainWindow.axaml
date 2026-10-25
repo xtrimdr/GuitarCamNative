@@ -382,5 +382,7 @@
     <d:ExportDialog Grid.RowSpan="5" Grid.ColumnSpan="2" x:Name="Export" IsVisible="False" AutomationProperties.Name="{loc:T export.name}" />
     <d:SettingsDialog Grid.RowSpan="5" Grid.ColumnSpan="2" x:Name="Settings" IsVisible="False" />
     <d:AboutDialog Grid.RowSpan="5" Grid.ColumnSpan="2" x:Name="About" IsVisible="False" />
+    <!-- toasts float over everything (the manager and the dialogs too), above the transport bar -->
+    <c:ToastHost Grid.RowSpan="5" Grid.ColumnSpan="2" x:Name="Toasts" Margin="0,0,16,68" />
   </Grid>
 </Window>

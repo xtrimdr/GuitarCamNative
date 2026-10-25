@@ -240,6 +240,10 @@ public sealed class Track
     /// null = the input of Configuración. Native only.
     /// </summary>
     public string? Input { get; set; }
+    /// <summary>The track's color as "#rrggbb", tinting its badge and clips; null = no color (the accent). Native only.</summary>
+    public string? Color { get; set; }
+    /// <summary>The track's instrument icon id ("electric-guitar", "drum-kit"…); null = its number. Native only.</summary>
+    public string? Icon { get; set; }
     public Channel Channel { get; set; } = new();
     public List<Clip> Clips { get; set; } = [];
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
@@ -247,6 +251,8 @@ public sealed class Track
     internal void Normalize()
     {
         Input = GuitarCam.Audio.InputRoute.Parse(Input)?.Key;
+        Color = Color is { Length: 7 } hex && hex[0] == '#' && hex.Skip(1).All(Uri.IsHexDigit) ? hex.ToLowerInvariant() : null;
+        Icon = string.IsNullOrWhiteSpace(Icon) || Icon.Length > 64 ? null : Icon.Trim();
         Channel ??= new();
         Channel.Normalize();
         Clips ??= [];

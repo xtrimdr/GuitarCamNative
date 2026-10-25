@@ -90,7 +90,7 @@ static class Program
               proyecto abrir    carpeta    abre un proyecto nativo y muestra pistas, avisos e historial
               proyecto versiones carpeta   lista las versiones guardadas, de más nueva a más vieja
               proyecto volver   carpeta n  restaura la versión n y conserva el estado actual en el historial
-              proyecto verificar-deshacer  verifica fotos, agrupación de sliders y rehacer sin modificar archivos
+              proyecto verificar-deshacer  verifica fotos, agrupación de sliders, rehacer y color e ícono de pista sin modificar archivos
               proyecto verificar-clips     verifica anclaje, imanes, recortes, fades y operaciones de pistas
               proyecto clips carpeta       lista los IDs de pistas y clips para editar desde la consola
               proyecto encuadre carpeta clip [--zoom 1.5] [--panx 0.2] [--pany -0.3] [--espejar] [--restaurar]

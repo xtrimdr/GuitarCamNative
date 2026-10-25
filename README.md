@@ -27,7 +27,8 @@ de **grabar → mezclar → exportar**.
   afuera (WAV, MP3, FLAC, OGG, M4A, AIFF). Se graba desde donde esté el cabezal, para regrabar solo un pedazo.
 - **Mezcla** con una cadena de efectos por pista: saturación ("Vida", válvula o cinta), compresor con
   presets (Rasgueo / Arpegio / Punteo), EQ de 6 bandas con espectro en vivo, y envíos a reverb y delay,
-  más limitador master, paneo con plantillas y un mixer completo.
+  más limitador master, paneo con plantillas y un mixer completo. Cada pista lleva su color y un ícono de
+  instrumento (guitarras, bajo, batería, synths, cuerdas, vientos, percusión…), en el timeline, el inspector y el mixer.
 - **Compone el video**: un panel por pista con cover-fit, zoom, paneo y espejo, relaciones 16:9 / 9:16 / 1:1,
   disposición lado a lado o apilada, y una pestaña de color (filtros, ajustes, efectos y plantillas).
 - **Exporta** a MP4 (mezcla offline + FFmpeg, con progreso y cancelación) o, en el modo **Solo audio**, a
@@ -64,7 +65,7 @@ src\GuitarCam.App\bin\Debug\net10.0-windows\GuitarCam.exe
 ```
 
 La app arranca en el gestor de **Proyectos** (lista, buscador, plantillas, renombrar, duplicar, Papelera).
-Con una carpeta de proyecto como argumento, la abre directo. `tools\make-shortcut.ps1` crea un acceso
+Con una carpeta de proyecto como argumento, la abre directo. Con `--probar "texto"` muestra ese texto en un aviso fijo ("Para probar") al abrir. `tools\make-shortcut.ps1` crea un acceso
 directo en el escritorio. Los ajustes se guardan en `%APPDATA%\GuitarCam Studio`.
 
 ## Atajos principales
