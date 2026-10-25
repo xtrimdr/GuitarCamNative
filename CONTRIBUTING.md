@@ -27,7 +27,7 @@ mantenedor** antes de entrar al proyecto.
 
 ### Reglas del código
 
-La guía completa está en [AGENTS.md](AGENTS.md); lo esencial:
+La guía completa está en [AGENTS.md](AGENTS.md) (y, para la ventana, en [src/GuitarCam.App/AGENTS.md](src/GuitarCam.App/AGENTS.md) y [docs/interfaz.md](docs/interfaz.md)); lo esencial:
 
 - **Audio en tiempo real**: dentro del callback de ASIO no se asigna memoria, no se bloquea, no hay locks ni
   disco ni UI.
@@ -65,7 +65,7 @@ Before opening the PR: `dotnet build` must pass **with no new warnings**; test w
 what you could not test if you lack an ASIO interface or a camera); keep PRs small and focused; do not commit
 audio, video or binaries.
 
-Code rules (full guide in [AGENTS.md](AGENTS.md), in Spanish): no allocations, locks, disk or UI inside the
+Code rules (full guide in [AGENTS.md](AGENTS.md) and, for the window, [src/GuitarCam.App/AGENTS.md](src/GuitarCam.App/AGENTS.md); in Spanish): no allocations, locks, disk or UI inside the
 real-time audio callback; dependencies point down (`App → Projects → Audio`); UI text is in Spanish and every
 new string needs a key in every `Assets/Lang/*.json`; code identifiers and comments are in English; no new
 NuGet packages without discussing them first.

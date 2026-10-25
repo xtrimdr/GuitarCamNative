@@ -165,6 +165,12 @@ public sealed class ColorGrade
     public double Temperature { get; set; }
     public double Tint { get; set; }
     public double Fade { get; set; }
+    /// <summary>The white point (-100..100), like CapCut's "Blancos".</summary>
+    public double Whites { get; set; }
+    /// <summary>The black point (-100..100): deeper or more open blacks.</summary>
+    public double Blacks { get; set; }
+    /// <summary>Opens or closes the mid-tones keeping blacks and whites (-100..100), like CapCut's "Sensación de luz".</summary>
+    public double Light { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
     /// <summary>Same ranges as normalizeGrade (colorGrade.js): unknown looks become "none".</summary>
@@ -178,6 +184,7 @@ public sealed class ColorGrade
         Saturation = N(Saturation, -100, 0); Vibrance = N(Vibrance, -100, 0);
         Temperature = N(Temperature, -100, 0); Tint = N(Tint, -100, 0);
         Fade = N(Fade, 0, 0);
+        Whites = N(Whites, -100, 0); Blacks = N(Blacks, -100, 0); Light = N(Light, -100, 0);
     }
 }
 
@@ -249,6 +256,10 @@ public sealed class Track
     public string? Icon { get; set; }
     /// <summary>The <see cref="Folder"/> the track is in; null = at the root. Native only.</summary>
     public string? FolderId { get; set; }
+    /// <summary>Its own lane height as a multiple of the height every track shares (the timeline's slider), so the slider
+    /// still scales a track made taller or shorter; null = 1. The lane stays within <see cref="MinHeight"/>..<see cref="MaxHeight"/> px. Native only.</summary>
+    public double? HeightScale { get; set; }
+    public const double MinHeight = 40, MaxHeight = 320;
     public Channel Channel { get; set; } = new();
     public List<Clip> Clips { get; set; } = [];
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
@@ -258,12 +269,16 @@ public sealed class Track
         Input = GuitarCam.Audio.InputRoute.Parse(Input)?.Key;
         Icon = string.IsNullOrWhiteSpace(Icon) || Icon.Length > 64 ? null : Icon.Trim();
         Color = NormalizeColor(Color);
+        HeightScale = NormalizeHeight(HeightScale, 0.1, 8);
         Channel ??= new();
         Channel.Normalize();
         Clips ??= [];
         Clips.RemoveAll(c => c == null);
         foreach (var c in Clips) c.Normalize();
     }
+
+    /// <summary>A row height (or height scale) inside its limits, or null when it is missing or broken.</summary>
+    internal static double? NormalizeHeight(double? h, double min, double max) => h is { } v && double.IsFinite(v) ? Math.Clamp(v, min, max) : null;
 
     /// <summary>"#rrggbb" in lower case, or null for anything else.</summary>
     internal static string? NormalizeColor(string? color) =>
@@ -290,6 +305,12 @@ public sealed class Folder
     public double Volume { get; set; } = 1;
     public bool Muted { get; set; }
     public bool Solo { get; set; }
+    /// <summary>Its own row height in the timeline (px, <see cref="MinHeight"/>..<see cref="MaxHeight"/>); null = the usual one.</summary>
+    public double? Height { get; set; }
+    public const double MinHeight = 34, MaxHeight = 160;
+    /// <summary>Its folded row height (its mini map) as a multiple of the tracks' shared height, so the vertical zoom
+    /// still scales it, like <see cref="Track.HeightScale"/>; null = 1. Native only.</summary>
+    public double? HeightScale { get; set; }
     /// <summary>
     /// How many tracks come before it in <see cref="Project.Tracks"/>. With children it is the first child's index
     /// (<see cref="TrackFolders.Normalize"/> keeps it so); an empty folder needs it to keep its place.

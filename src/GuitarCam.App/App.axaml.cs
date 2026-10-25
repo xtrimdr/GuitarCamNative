@@ -13,6 +13,7 @@ public partial class App : Application
         Loc.Load();
         UiTheme.Apply(UiTheme.Read(), persist: false);
         Shortcuts.Load();
+        SaveMode.Load();
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var (dir, note) = ParseArgs(desktop.Args ?? []);

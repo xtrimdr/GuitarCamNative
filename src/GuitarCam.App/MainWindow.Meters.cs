@@ -56,7 +56,7 @@ public partial class MainWindow
         };
         // with the slider focused the keys land in the popup: shortcuts (A to close, Space…) still work
         TunerPanel.AddHandler(KeyDownEvent, (s, e) => { if (!e.Handled) OnKey(s, e); }, RoutingStrategies.Bubble);
-        TunerPanel.AddHandler(KeyUpEvent, (_, e) => transportKeys.Remove(e.Key), RoutingStrategies.Tunnel);
+        TunerPanel.AddHandler(KeyUpEvent, OnTransportKeyUp, RoutingStrategies.Tunnel);
         LufsCell.Click += (_, _) =>
         {
             engine.Loudness.Reset();

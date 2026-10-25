@@ -28,6 +28,7 @@ static class Program
                 "espectro" => DspCommands.Spectrum(a),
                 "lufs" => DspCommands.Lufs(a),
                 "afinar" => DspCommands.Tune(a),
+                "looks" => VideoCommands.Looks(a),
                 "camara" => CameraCommands.Run(a),
                 "sistema" => SystemCommands.Run(a),
                 "proyecto" => ProjectCommands.Run(a),
@@ -80,6 +81,10 @@ static class Program
               espectro  [entrada.wav] [--hz 1000] [--nivel -6]
                                            el espectro en vivo del EQ (FFT de 8192 después del EQ, como la web);
                                            sin WAV, comprueba un seno contra el AnalyserNode de Web Audio
+              looks     [--look id] [--salida look.cube] [--blancos 0] [--negros 0] [--luz 0]
+                                           lista los looks de color con cómo cambian unos colores de prueba y comprueba
+                                           que queden en rango; con --look y --salida escribe ese look como LUT .cube
+                                           (none = sin look), con los ajustes Blancos, Negros y Sensación de luz (-100..100)
               camara    [listar]           lista las cámaras (DirectShow) y sus formatos; * = la que elige la app
               camara grabar [--dispositivo X | --ip 192.168.1.50:4747] [--resolucion native|1080p|720p|480p]
                         [--segundos 5] [--salida camara.mp4]

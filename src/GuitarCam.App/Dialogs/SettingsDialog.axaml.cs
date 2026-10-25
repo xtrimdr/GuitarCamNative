@@ -23,7 +23,9 @@ namespace GuitarCam.App.Dialogs;
 /// <see cref="LiveCamera"/> (the cameras are the ones FFmpeg lists through DirectShow). Like the web, gain,
 /// channels, monitoring, the fine adjustment and the camera settings live only in memory, and the
 /// calibration is stored per input + output pair. The "Atajos de teclado" tab is native only (the web's keys are
-/// fixed): it edits <see cref="Shortcuts"/>; a click on a key waits for the next press, Esc cancels.
+/// fixed): it edits <see cref="Shortcuts"/>; a click on a key waits for the next press, Esc cancels. The timeline's
+/// wheel gestures wait for a wheel turn instead, and take the modifiers held during it.
+/// "Guardado" is native only too: it picks <see cref="SaveMode"/>.
 /// </summary>
 public sealed partial class SettingsDialog : UserControl
 {
@@ -39,14 +41,17 @@ public sealed partial class SettingsDialog : UserControl
     bool reopening;
     bool filling;
 
-    readonly StackPanel audioPage = new(), cameraPage = new(), syncPage = new(), shortcutsPage = new(), languagePage = new();
+    readonly StackPanel audioPage = new(), cameraPage = new(), syncPage = new(), shortcutsPage = new(), languagePage = new(), savePage = new();
     /// <summary>The action waiting for a key in "Atajos de teclado", and what the last change took from another one.</summary>
-    string? capturing;
+    string? capturing, capturingWheel;
     string? shortcutNote;
     readonly ComboBox driverBox = Combo(), outputBox = Combo();
     readonly List<ToggleButton> modeButtons = [];
     readonly InspectorSlider gain;
     readonly InspectorSlider transportFade;
+    readonly List<ToggleButton> saveModeButtons = [];
+    readonly InspectorSlider saveMinutes;
+    readonly TextBlock saveHelp = Help("");
     readonly TextBlock outputHelp = Help("");
     readonly TextBlock bufferText = new() { FontSize = 12, Foreground = Palette.Dim, Classes = { "mono" }, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
     readonly Button panelButton = new() { Classes = { "btn", "outline" }, Height = 28, Padding = new Thickness(10, 0), FontSize = 12, Content = Loc.T("set.panelButton") };
@@ -82,8 +87,11 @@ public sealed partial class SettingsDialog : UserControl
         SyncTab.Click += (_, _) => ShowTab("sync");
         ShortcutsTab.Click += (_, _) => ShowTab("shortcuts");
         LanguageTab.Click += (_, _) => ShowTab("language");
+        SaveTab.Click += (_, _) => ShowTab("save");
         BuildLanguage();
+        saveMinutes = BuildSave();
         Shortcuts.Changed += BuildShortcuts;
+        AddHandler(PointerWheelChangedEvent, OnCaptureWheel, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         PointerPressed += (_, e) => { if (e.Source == this) HideDialog(); };
         SizeChanged += (_, _) => Panel.Height = Math.Min(640, Bounds.Height * 0.88);
 
@@ -285,6 +293,12 @@ public sealed partial class SettingsDialog : UserControl
     public bool HandleKey(KeyEventArgs e)
     {
         if (!IsVisible) return false;
+        if (capturingWheel != null)
+        {
+            if (e.Key == Key.Escape) StopCapture();
+            e.Handled = true;
+            return true;
+        }
         if (capturing is { } id)
         {
             if (e.Key == Key.Escape) StopCapture();
@@ -311,9 +325,11 @@ public sealed partial class SettingsDialog : UserControl
         SyncTab.Classes.Set("active", id == "sync");
         ShortcutsTab.Classes.Set("active", id == "shortcuts");
         LanguageTab.Classes.Set("active", id == "language");
+        SaveTab.Classes.Set("active", id == "save");
         StopCapture();
+        if (id == "save") RefreshSave();
         if (id == "shortcuts") { shortcutNote = null; BuildShortcuts(); }
-        Body.Content = id switch { "camera" => cameraPage, "sync" => syncPage, "shortcuts" => shortcutsPage, "language" => languagePage, _ => audioPage };
+        Body.Content = id switch { "camera" => cameraPage, "sync" => syncPage, "shortcuts" => shortcutsPage, "language" => languagePage, "save" => savePage, _ => audioPage };
         Refresh();
     }
 
@@ -542,8 +558,22 @@ public sealed partial class SettingsDialog : UserControl
 
     void StopCapture()
     {
-        if (capturing == null) return;
-        capturing = null;
+        if (capturing == null && capturingWheel == null) return;
+        capturing = capturingWheel = null;
+        BuildShortcuts();
+    }
+
+    /// <summary>While a wheel gesture waits, a turn with Ctrl, Shift or Alt held is its new modifiers (a plain turn
+    /// is the scroll, so it doesn't count and the page scrolls as usual).</summary>
+    void OnCaptureWheel(object? sender, PointerWheelEventArgs e)
+    {
+        if (capturingWheel is not { } id) return;
+        var mods = e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Shift | KeyModifiers.Alt);
+        if (mods == KeyModifiers.None) return;
+        e.Handled = true;
+        capturingWheel = null;
+        var taken = Shortcuts.AssignWheel(id, mods);
+        shortcutNote = taken != null ? Loc.T("set.shortcut.taken", Shortcuts.WheelLabel(id), taken, Shortcuts.Wheel.First(a => a.Id == id).Name) : null;
         BuildShortcuts();
     }
 
@@ -569,13 +599,55 @@ public sealed partial class SettingsDialog : UserControl
         languagePage.Children.Add(Card(s));
     }
 
+    /// <summary>"Guardado" (native only): when edits reach the project, see <see cref="SaveMode"/>; applied at once.</summary>
+    InspectorSlider BuildSave()
+    {
+        var modes = new UniformGrid { Columns = 3 };
+        foreach (var (mode, text, tip) in new[]
+        {
+            (SaveMode.OnEdit, Loc.T("set.save.onEdit"), Loc.T("set.save.onEdit.tip")),
+            (SaveMode.Interval, Loc.T("set.save.interval"), Loc.T("set.save.interval.tip")),
+            (SaveMode.Manual, Loc.T("set.save.manual"), Loc.T("set.save.manual.tip")),
+        })
+        {
+            var b = new ToggleButton { Content = text, Tag = mode, Classes = { "seg" }, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center };
+            ToolTip.SetTip(b, tip);
+            b.Click += (_, _) => { SaveMode.Set(mode, SaveMode.Minutes); RefreshSave(); };
+            saveModeButtons.Add(b);
+            modes.Children.Add(b);
+        }
+        var minutes = new InspectorSlider(Loc.T("set.save.minutes"), SaveMode.MinMinutes, SaveMode.MaxMinutes, 1, SaveMode.DefaultMinutes,
+            v => Loc.T("set.save.minutes.value", $"{v:0}"),
+            v => { SaveMode.Set(SaveMode.Mode, (int)Math.Round(v)); RefreshSave(); });
+        var s = Section(Loc.T("set.save.section"));
+        s.Children.Add(Field(Loc.T("set.save.when"), new Border { Classes = { "seg" }, Child = modes }));
+        s.Children.Add(minutes);
+        s.Children.Add(saveHelp);
+        s.Children.Add(Help(Loc.T("set.save.always")));
+        savePage.Children.Add(Card(s));
+        return minutes;
+    }
+
+    void RefreshSave()
+    {
+        foreach (var b in saveModeButtons) b.IsChecked = (string)b.Tag! == SaveMode.Mode;
+        saveMinutes.IsVisible = SaveMode.Mode == SaveMode.Interval;
+        saveMinutes.Set(SaveMode.Minutes);
+        saveHelp.Text = SaveMode.Mode switch
+        {
+            SaveMode.Interval => Loc.T("set.save.interval.help", SaveMode.Minutes),
+            SaveMode.Manual => Shortcuts.Label("save") is { Length: > 0 } key ? Loc.T("set.save.manual.help", key) : Loc.T("set.save.manual.help.nokey"),
+            _ => Loc.T("set.save.onEdit.help"),
+        };
+    }
+
     /// <summary>"Atajos de teclado": one card per group, a row per action with its key; rebuilt on every change.</summary>
     void BuildShortcuts()
     {
         shortcutsPage.Children.Clear();
-        var resetAll = new Button { Content = Loc.T("set.sc.resetAll"), Classes = { "link" }, IsEnabled = Shortcuts.All.Any(a => !Shortcuts.IsDefault(a.Id)) };
+        var resetAll = new Button { Content = Loc.T("set.sc.resetAll"), Classes = { "link" }, IsEnabled = !Shortcuts.AllDefault };
         ToolTip.SetTip(resetAll, Loc.T("set.sc.resetAll.tip"));
-        resetAll.Click += (_, _) => { shortcutNote = null; capturing = null; Shortcuts.ResetAll(); };
+        resetAll.Click += (_, _) => { shortcutNote = null; capturing = capturingWheel = null; Shortcuts.ResetAll(); };
         var intro = Section(Loc.T("settings.tab.shortcuts"), resetAll);
         intro.Children.Add(Help(Loc.T("set.sc.help")));
         if (shortcutNote != null) intro.Children.Add(Warning(shortcutNote));
@@ -584,36 +656,55 @@ public sealed partial class SettingsDialog : UserControl
         {
             var s = Section(group.Key);
             s.Spacing = 6;
-            foreach (var a in group) s.Children.Add(ShortcutRow(a));
+            foreach (var a in group)
+                s.Children.Add(ShortcutRow(a.Id, a.Name, Shortcuts.Label(a.Id), capturing == a.Id, "set.sc.press",
+                    () => { capturing = capturing == a.Id ? null : a.Id; capturingWheel = null; }, () => Shortcuts.Reset(a.Id)));
             shortcutsPage.Children.Add(Card(s));
         }
+        var wheel = Section(Loc.T("sc.group.wheel"));
+        wheel.Spacing = 6;
+        wheel.Children.Add(Help(Loc.T("set.sc.wheel.help")));
+        var scrollName = new TextBlock { Text = Loc.T("sc.wheelScroll"), FontSize = 12, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center };
+        wheel.Children.Add(Row(scrollName, ReverseToggle(Shortcuts.WheelScroll)));
+        foreach (var a in Shortcuts.Wheel)
+            wheel.Children.Add(ShortcutRow(a.Id, a.Name, Shortcuts.WheelLabel(a.Id), capturingWheel == a.Id, "set.sc.wheel.press",
+                () => { capturingWheel = capturingWheel == a.Id ? null : a.Id; capturing = null; }, () => Shortcuts.ResetWheel(a.Id), ReverseToggle(a.Id)));
+        shortcutsPage.Children.Add(Card(wheel));
     }
 
-    Control ShortcutRow(Shortcuts.Action a)
+    /// <summary>"Invertir": turns one wheel gesture around, apart from the others.</summary>
+    ToggleButton ReverseToggle(string id)
     {
-        bool waiting = capturing == a.Id;
-        string label = Shortcuts.Label(a.Id);
+        var b = new ToggleButton { Content = Loc.T("set.sc.wheel.reverse"), Classes = { "chip" }, Height = 30, Padding = new Thickness(10, 0), IsChecked = Shortcuts.WheelReversed(id) };
+        ToolTip.SetTip(b, Loc.T("set.sc.wheel.reverse.tip"));
+        b.Click += (_, _) => { Shortcuts.SetWheelReversed(id, b.IsChecked == true); BuildShortcuts(); };
+        return b;
+    }
+
+    Control ShortcutRow(string id, string text, string label, bool waiting, string pressKey, System.Action toggle, System.Action resetTo, Control? extra = null)
+    {
         var key = new Button
         {
             Classes = { "chip" }, FontFamily = Palette.Mono.FontFamily, MinWidth = 120, Height = 30, Padding = new Thickness(10, 0), HorizontalContentAlignment = HorizontalAlignment.Center,
-            Content = waiting ? Loc.T("set.sc.press") : label.Length > 0 ? label : Loc.T("set.sc.none"),
+            Content = waiting ? Loc.T(pressKey) : label.Length > 0 ? label : Loc.T("set.sc.none"),
         };
         key.Classes.Set("on", waiting);
         if (!waiting && label.Length == 0) key.Foreground = Palette.Faint;
-        ToolTip.SetTip(key, Loc.T(waiting ? "set.sc.press.tip" : "set.sc.change.tip"));
+        ToolTip.SetTip(key, Loc.T(waiting ? pressKey + ".tip" : "set.sc.change.tip"));
         key.Click += (_, _) =>
         {
-            capturing = capturing == a.Id ? null : a.Id;
+            toggle();
             shortcutNote = null;
             BuildShortcuts();
             Focus();
         };
-        var reset = Act("", Loc.T("set.sc.reset.tip"), () => { shortcutNote = null; Shortcuts.Reset(a.Id); });
-        reset.IsVisible = !Shortcuts.IsDefault(a.Id);
+        var reset = Act("", Loc.T("set.sc.reset.tip"), () => { shortcutNote = null; resetTo(); });
+        reset.IsVisible = !Shortcuts.IsDefault(id);
         var right = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         right.Children.Add(reset);
+        if (extra != null) right.Children.Add(extra);
         right.Children.Add(key);
-        var name = new TextBlock { Text = a.Name, FontSize = 12, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+        var name = new TextBlock { Text = text, FontSize = 12, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
         return Row(name, right);
     }
 

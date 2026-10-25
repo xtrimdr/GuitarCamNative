@@ -125,6 +125,7 @@ public partial class MainWindow
     /// </summary>
     void ShowInputMenu(LiveTrack t, Control anchor, Point? point = null)
     {
+        if (point == null && PressClosedMenuOf(anchor)) return;
         if (store == null || store.ReadOnly || RecordingBusy) return;
         string? check(string? value) => t.Track.Input == value ? "" : null;
         MenuItem Pick(string label, string? value, string? hint = null) =>
@@ -149,7 +150,7 @@ public partial class MainWindow
         {
             menu.Placement = PlacementMode.Bottom;
             menu.MaxHeight = Math.Min(320, Bounds.Height - 16);
-            menu.Open(anchor);
+            OpenAnchoredMenu(menu, anchor);
         }
     }
 

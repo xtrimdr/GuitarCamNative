@@ -8,23 +8,33 @@
   <UserControl.Styles>
     <!-- project rows: the time ago swaps for the actions on hover / focus -->
     <Style Selector="Border.row">
-      <Setter Property="Margin" Value="8,0" />
+      <Setter Property="Margin" Value="8,1" />
       <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="Transparent" />
       <Setter Property="Background" Value="Transparent" />
     </Style>
     <Style Selector="Border.row.highlight">
       <Setter Property="Background" Value="{StaticResource Raised}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
     </Style>
     <Style Selector="Border.row.deleting">
       <Setter Property="Background" Value="{StaticResource RecSoft}" />
     </Style>
     <Style Selector="Border.row.live:pointerover, Border.row.live:focus-within">
       <Setter Property="Background" Value="{StaticResource Raised}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
     </Style>
-    <Style Selector="Border.row StackPanel.actions">
+    <!-- the row's actions sit together in a small toolbar, like a floating group -->
+    <Style Selector="Border.actions">
       <Setter Property="IsVisible" Value="False" />
+      <Setter Property="Background" Value="{StaticResource Panel}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="2" />
     </Style>
-    <Style Selector="Border.row:pointerover StackPanel.actions, Border.row:focus-within StackPanel.actions">
+    <Style Selector="Border.row:pointerover Border.actions, Border.row:focus-within Border.actions">
       <Setter Property="IsVisible" Value="True" />
     </Style>
     <Style Selector="Border.row:pointerover TextBlock.ago, Border.row:focus-within TextBlock.ago">

@@ -203,6 +203,7 @@ public partial class MainWindow
             {
                 bool lit = tracks.Any(t => solo ? t.Channel.Solo : t.Channel.Muted) || Folders.Any(f => solo ? f.Solo : f.Muted);
                 b.IsEnabled = store != null && !store.ReadOnly && !restoring && tracks.Any(t => t.Clips.Count > 0);
+                b.Classes.Set("lit", lit);
                 b.Background = lit ? (solo ? Palette.Fg : Palette.Accent) : Brushes.Transparent;
                 b.BorderBrush = lit ? (solo ? Palette.Fg : Palette.Accent) : Palette.Line;
                 ((TextBlock)b.Content!).Foreground = lit ? Palette.App : Palette.Faint;
@@ -479,7 +480,7 @@ public partial class MainWindow
             input.IsVisible = armed;
             emptyHint.IsVisible = empty && !armed;
         });
-        double badgeSize = wide ? 24 : 18;
+        double badgeSize = wide ? 28 : 22;
         var badge = new TrackBadge { Width = badgeSize, Height = badgeSize, VerticalAlignment = VerticalAlignment.Center };
         badge.Clicked += () => ShowTrackLook(t, badge);
         mx.Refresh.Add(() => badge.Set(t.Track, tracks.IndexOf(t) + 1, sel == t));
@@ -559,6 +560,7 @@ public partial class MainWindow
             mx.Refresh.Add(() =>
             {
                 bool on = t.Channel.Comp.On;
+                c.Classes.Set("lit", on);
                 c.Background = on ? Palette.AccentSoft : Brushes.Transparent;
                 c.BorderBrush = on ? Palette.Alpha(Palette.AccentColor, 0.5) : Palette.Line;
                 cText.Foreground = on ? Palette.Accent : Palette.Faint;
@@ -621,11 +623,12 @@ public partial class MainWindow
         sat.Body.Children.Add(Row(satKnob, satSide));
 
         // Comp
-        var lim = new Button { Content = "LIM", Classes = { "mono" }, FontSize = 10, FontWeight = FontWeight.Bold, Height = 24, MinHeight = 24, Padding = new Thickness(5, 0), CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1) };
+        var lim = new Button { Content = "LIM", Classes = { "chip", "mono" }, FontSize = 10, FontWeight = FontWeight.Bold, Height = 24, MinHeight = 24, Padding = new Thickness(5, 0), CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1) };
         lim.Click += (_, _) => StripComp(t, c => c.Limit = !c.Limit, "limit");
         mx.Refresh.Add(() =>
         {
             var c = t.Channel.Comp;
+            lim.Classes.Set("lit", c.Limit && c.On);
             lim.Background = c.Limit && c.On ? Palette.AccentSoft : Brushes.Transparent;
             lim.Foreground = c.Limit && c.On ? Palette.Accent : Palette.Faint;
             lim.BorderBrush = c.Limit && c.On ? Palette.Alpha(Palette.AccentColor, 0.6) : c.Limit ? Palette.Alpha(Palette.FaintColor, 0.6) : Palette.Line;
@@ -783,6 +786,7 @@ public partial class MainWindow
             bool lit = on();
             glyph.Foreground = state.Foreground = lit ? Palette.App : Palette.Faint;
             state.Text = lit ? "ON" : "OFF";
+            power.Classes.Set("lit", lit);
             power.Background = lit ? Palette.Accent : Brushes.Transparent;
             power.BorderBrush = lit ? Palette.Accent : Palette.Line;
             ToolTip.SetTip(power, tip(lit));
@@ -841,10 +845,11 @@ public partial class MainWindow
         return s;
     }
 
-    /// <summary>Port of ToggleBtn: M lights in the accent, S in white.</summary>
+    /// <summary>Port of ToggleBtn: M lights in the accent, S in white. Like every strip button it takes no keyboard
+    /// focus, so Space and Enter stay shortcuts after a click in the mixer.</summary>
     Button StripToggle(string text, string tip, double size, Func<bool> on, bool solo, Action click)
     {
-        var b = new Button { Classes = { "chip" }, Width = size, Height = size, MinHeight = size, Padding = new Thickness(0), CornerRadius = new CornerRadius(4),
+        var b = new Button { Classes = { "chip" }, Focusable = false, Width = size, Height = size, MinHeight = size, Padding = new Thickness(0), CornerRadius = new CornerRadius(4),
             HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
             Content = new TextBlock { Text = text, Classes = { "mono" }, FontSize = 10, FontWeight = FontWeight.Bold } };
         ToolTip.SetTip(b, tip);
@@ -852,6 +857,7 @@ public partial class MainWindow
         mx.Refresh.Add(() =>
         {
             bool lit = on();
+            b.Classes.Set("lit", lit);
             b.Background = lit ? (solo ? Palette.Fg : Palette.Accent) : Brushes.Transparent;
             b.BorderBrush = lit ? (solo ? Palette.Fg : Palette.Accent) : Palette.Line;
             ((TextBlock)b.Content!).Foreground = lit ? Palette.App : Palette.Faint;
@@ -863,12 +869,13 @@ public partial class MainWindow
     Button ArmToggle(LiveTrack t, double size)
     {
         var dot = new Avalonia.Controls.Shapes.Ellipse { Width = 9, Height = 9 };
-        var b = new Button { Classes = { "chip" }, Width = size, Height = size, MinHeight = size, Padding = new Thickness(0), CornerRadius = new CornerRadius(4),
+        var b = new Button { Classes = { "chip" }, Focusable = false, Width = size, Height = size, MinHeight = size, Padding = new Thickness(0), CornerRadius = new CornerRadius(4),
             HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center, Content = dot };
         b.Click += (_, _) => ToggleArm(t);
         mx.Refresh.Add(() =>
         {
             bool lit = Timeline.ArmedIndices.Contains(tracks.IndexOf(t));
+            b.Classes.Set("lit", lit);
             b.Background = lit ? Palette.Rec : Brushes.Transparent;
             b.BorderBrush = lit ? Palette.Rec : Palette.Line;
             dot.Fill = lit ? Palette.Fg : Palette.Alpha(Palette.RecColor, 0.7);

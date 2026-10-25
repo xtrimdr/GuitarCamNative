@@ -149,7 +149,10 @@ public sealed record ExportColorSpec(
     double Vibrance = 0,
     double Temperature = 0,
     double Tint = 0,
-    double Fade = 0)
+    double Fade = 0,
+    double Whites = 0,
+    double Blacks = 0,
+    double Light = 0)
 {
     public static readonly ExportColorSpec Defaults = new();
 }

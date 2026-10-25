@@ -43,7 +43,10 @@ public static class PreviewVideoFx
                 c.Vibrance,
                 c.Temperature,
                 c.Tint,
-                c.Fade));
+                c.Fade,
+                c.Whites,
+                c.Blacks,
+                c.Light));
 
     public static ExportVideoFxSpec ToSpec(VideoFx? fx) =>
         fx == null

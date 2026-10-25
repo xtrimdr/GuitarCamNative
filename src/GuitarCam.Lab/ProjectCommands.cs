@@ -104,15 +104,17 @@ static class ProjectCommands
                 Console.WriteLine(TrackFolders.Add(p, id.Length > 0 ? id : null, a.Get("pistas")?.Split(',', StringSplitOptions.RemoveEmptyEntries)));
                 break;
             case "a-carpeta":
-                // pista carpeta|raiz --en n: n = place among folders and tracks without it (default: the folder's end)
+                // pista[,pista…] carpeta|raiz --en n: n = place among folders and tracks without them (default: the folder's end)
                 string? folder = value is "" or "raiz" ? null : value;
-                int at = a.Get("en") is { } en ? int.Parse(en) : folder == null ? TrackFolders.Sequence(p).Count
-                    : TrackFolders.Sequence(p).FindLastIndex(x => x is Track t && t.FolderId == folder || x is Folder f && f.Id == folder);
-                TrackFolders.Move(p, id, at, folder);
+                var moving = id.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                var rest = TrackFolders.Sequence(p).Where(x => x is not Track mt || !moving.Contains(mt.Id)).ToList();
+                int at = a.Get("en") is { } en ? int.Parse(en) : folder == null ? rest.Count
+                    : rest.FindLastIndex(x => x is Track t && t.FolderId == folder || x is Folder f && f.Id == folder) + 1;
+                TrackFolders.Move(p, moving, at, folder);
                 break;
             case "sacar-de-carpeta": TrackFolders.TakeOut(p, id); break;
             case "mover-carpeta": TrackFolders.MoveFolder(p, id, int.Parse(value)); break;
-            case "quitar-carpeta": TrackFolders.Remove(p, id); break;
+            case "quitar-carpeta": TrackFolders.Remove(p, id, a.Flag("con-pistas")); break;
             case "carpeta":
                 var fd = p.Folders.Find(f => f.Id == id) ?? throw new ArgumentException("No encontré esa carpeta.");
                 if (a.Get("nombre") is { } name) fd.Name = name;
@@ -139,7 +141,7 @@ static class ProjectCommands
                 {
                     "mover" => ClipEditMode.Move, "recortar-inicio" => ClipEditMode.TrimStart,
                     "recortar-final" => ClipEditMode.TrimEnd, "fade-in" => ClipEditMode.FadeIn, "fade-out" => ClipEditMode.FadeOut,
-                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar|a-pista|inicio|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar; nueva-carpeta [nombre] --pistas id,id; a-carpeta pista carpeta|raiz [--en n]; sacar-de-carpeta pista; mover-carpeta carpeta n; quitar-carpeta carpeta; carpeta id [--nombre --volumen --mute --solo --plegar]; guardar-plantilla pista [nombre]; usar-plantilla id|nombre"),
+                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar|a-pista|inicio|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar; nueva-carpeta [nombre] --pistas id,id; a-carpeta pista[,pista…] carpeta|raiz [--en n]; sacar-de-carpeta pista; mover-carpeta carpeta n; quitar-carpeta carpeta [--con-pistas]; carpeta id [--nombre --volumen --mute --solo --plegar]; guardar-plantilla pista [nombre]; usar-plantilla id|nombre"),
                 };
                 var (_, clip) = ClipEditing.Find(p, id);
                 double dx = double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
@@ -271,6 +273,13 @@ static class ProjectCommands
         TrackFolders.MoveFolder(p, p.Folders.Find(f => f.Name == "H")!.Id, 0);
         ClipEditing.RemoveTrack(p, p.Tracks.Find(t => t.Name == "D")!.Id);
         Check("una carpeta vacía conserva su lugar: " + Order(p), Order(p) == "[H] [F] ·C ·A [G]");
+        string[] ca = [p.Tracks.Find(t => t.Name == "C")!.Id, p.Tracks.Find(t => t.Name == "A")!.Id];
+        TrackFolders.Move(p, ca, 3, null);
+        Check("C y A juntas fuera de F, al final: " + Order(p), Order(p) == "[H] [F] [G] C A");
+        TrackFolders.Move(p, ca, 3, p.Folders.Find(f => f.Name == "G")!.Id);
+        Check("C y A juntas dentro de G: " + Order(p), Order(p) == "[H] [F] [G] ·C ·A");
+        TrackFolders.Remove(p, p.Folders.Find(f => f.Name == "G")!.Id, withTracks: true);
+        Check("quitar G con sus pistas: " + Order(p), Order(p) == "[H] [F]" && p.Tracks.Count == 0);
         Console.WriteLine(failed == 0 ? "Todo bien." : $"{failed} comprobación(es) fallaron.");
         return failed == 0 ? 0 : 1;
     }

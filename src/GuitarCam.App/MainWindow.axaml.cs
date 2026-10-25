@@ -19,7 +19,7 @@ namespace GuitarCam.App;
 /// <summary>Code-behind studio window: owns editable project data on the UI thread and publishes playback state.</summary>
 public partial class MainWindow : Window
 {
-    /// <summary>Edits are saved this long after the last one.</summary>
+    /// <summary>Edits are saved this long after the last one (in <see cref="SaveMode.OnEdit"/>; also a failed save's retry).</summary>
     static readonly TimeSpan SaveDelay = TimeSpan.FromSeconds(1.5);
 
     readonly PlaybackEngine engine = new();
@@ -61,7 +61,7 @@ public partial class MainWindow : Window
         {
             if (store == null || restoring || Projects.IsVisible || RecordingBusy) return;
             if (Export.TryOpen(store, tracks, out var error)) { engine.Pause(); engine.Seek(0); }
-            else if (error != null) Status(error);
+            else if (error != null) Toast(error);
         };
         Export.ExportCompleted += _ => { MarkDirty(); SaveSoon(); RefreshHistory(); };
         Export.Dismissed += () => Timeline.Focus();
@@ -132,6 +132,7 @@ public partial class MainWindow : Window
         InitShortcutTips();
 
         AddHandler(KeyDownEvent, OnKey, RoutingStrategies.Tunnel);
+        AddHandler(PointerPressedEvent, OnWindowPressCloseMenu, RoutingStrategies.Tunnel, handledEventsToo: true);
 
         Projects.OpenProject = async d =>
         {
@@ -155,6 +156,8 @@ public partial class MainWindow : Window
         timer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) => Tick());
         saveTimer = new DispatcherTimer { Interval = SaveDelay };
         saveTimer.Tick += (_, _) => SaveSoon();
+        SaveMode.Changed += () => ArmSave(restart: false);
+        SaveButton.Click += (_, _) => SaveSoon();
         ShowTrack(null);
 
         Opened += async (_, _) =>
@@ -221,8 +224,35 @@ public partial class MainWindow : Window
     {
         if (store == null || store.ReadOnly) return;
         dirty = true;
-        saveTimer.Stop();
-        saveTimer.Start();
+        ArmSave(restart: true);
+    }
+
+    /// <summary>
+    /// Starts the save timer for <see cref="SaveMode"/>: after each edit it restarts, so a burst saves once; every
+    /// few minutes it counts from the first unsaved edit (later ones don't push it back); by hand it never runs.
+    /// </summary>
+    void ArmSave(bool restart)
+    {
+        if (!dirty) return;
+        switch (SaveMode.Mode)
+        {
+            case SaveMode.Manual:
+                saveTimer.Stop();
+                break;
+            case SaveMode.Interval:
+                var every = TimeSpan.FromMinutes(SaveMode.Minutes);
+                if (saveTimer.IsEnabled && saveTimer.Interval == every) break;
+                saveTimer.Stop();
+                saveTimer.Interval = every;
+                saveTimer.Start();
+                break;
+            default:
+                if (!restart && saveTimer.IsEnabled && saveTimer.Interval == SaveDelay) break;
+                saveTimer.Stop();
+                saveTimer.Interval = SaveDelay;
+                saveTimer.Start();
+                break;
+        }
     }
 
     /// <summary>Serializes here (the project belongs to the UI thread) and writes in the background.</summary>
@@ -249,7 +279,11 @@ public partial class MainWindow : Window
                 {
                     if (st != store) return;
                     Status(Loc.T("main.saveRetry", e.Message));
-                    MarkDirty();
+                    // it retries soon in every mode: what the user asked to save has to get there
+                    dirty = true;
+                    saveTimer.Stop();
+                    saveTimer.Interval = SaveDelay;
+                    saveTimer.Start();
                 });
             }
         }, TaskScheduler.Default);
@@ -396,12 +430,13 @@ public partial class MainWindow : Window
         if (!preserveView) dirty = false;
         engine.SetTracks(list, p.Settings);
         SessionName.Text = p.Name;
-        Title = $"{p.Name} — GuitarCam Studio Native";
+        Title = WindowTitle(p.Name);
         Tempo.Set(p.Settings.Bpm);
         Timeline.Bpm = p.Settings.Bpm;
         Timeline.LengthSec = engine.LengthSec;
         ApplyFolderMix(p, list);
         Timeline.SetTracks(list, p.Folders, preserveView);
+        UpdateResetHeights();
         Preview.SetProject(list, p.Settings);
         RefreshFormat();
         RefreshColorPanel();
@@ -444,7 +479,7 @@ public partial class MainWindow : Window
     {
         shortcutTips.AddRange(
         [
-            (UndoButton, Loc.T("title.undo"), "undo"), (RedoButton, Loc.T("title.redo"), "redo"), (TimelineFitButton, Loc.T("timeline.fit.tip"), "fit"),
+            (SaveButton, Loc.T("title.save.tip"), "save"), (UndoButton, Loc.T("title.undo"), "undo"), (RedoButton, Loc.T("title.redo"), "redo"), (TimelineFitButton, Loc.T("timeline.fit.tip"), "fit"),
             (ToStartButton, Loc.T("transport.start.tip"), "toStart"), (CountInToggle, Loc.T("transport.countin.tip"), "countIn"),
             (ClickToggle, Loc.T("transport.click.tip"), "click"), (TunerToggle, Loc.T("transport.tuner.tip"), "tuner"), (ViewSwitch, Loc.T("transport.view.tip"), "mixer"), (FitButton, Loc.T("transport.fit.tip"), "fit"),
         ]);
@@ -455,6 +490,8 @@ public partial class MainWindow : Window
     void ApplyShortcutTips()
     {
         foreach (var (c, text, action) in shortcutTips) ToolTip.SetTip(c, Shortcuts.Tip(text, action));
+        foreach (var c in new Control[] { ZoomIcon, ZoomSlider }) ToolTip.SetTip(c, Shortcuts.WheelTip(Loc.T("timeline.zoom"), "wheelZoom"));
+        foreach (var c in new Control[] { HeightIcon, TrackHeightSlider }) ToolTip.SetTip(c, Shortcuts.WheelTip(Loc.T("timeline.height"), "wheelHeight"));
         string keys = string.Join(" / ", new[] { Shortcuts.Label("play"), Shortcuts.Label("record") }.Where(k => k.Length > 0));
         ToolTip.SetTip(RecStopButton, keys.Length > 0 ? $"{Loc.T("transport.rec.stop.tip")} ({keys})" : Loc.T("transport.rec.stop.tip"));
         ToolTip.SetTip(PlayButton, Shortcuts.Tip(Loc.T(engine.Playing ? "transport.pause.tip" : "transport.play.head.tip"), "play"));
@@ -518,7 +555,7 @@ public partial class MainWindow : Window
                 await SplitAtPlayhead();
                 return;
             case "delete":
-                await (Timeline.Range != null ? DeleteRangeSelection() : DeleteTimelineSelection());
+                await (Timeline.Range != null ? DeleteRangeSelection() : sel == null && SelectedFolder is { } gone ? RemoveFolder(gone) : DeleteTimelineSelection());
                 break;
             case "play":
                 TogglePlay();
@@ -534,6 +571,9 @@ public partial class MainWindow : Window
                 break;
             case "fit":
                 Timeline.FitAll();
+                break;
+            case "zoom1" or "zoom2" or "zoom3" or "zoom4" or "zoom5":
+                Timeline.ZoomPreset(action[^1] - '1');
                 break;
             case "duplicate":
                 await DuplicateSelection();
@@ -552,6 +592,12 @@ public partial class MainWindow : Window
                 break;
             case "tuner":
                 TunerToggle.IsChecked = TunerToggle.IsChecked != true;
+                break;
+            case "mute" when sel == null && SelectedFolder is { } folder:
+                FolderEdit(folder, x => x.Muted = !x.Muted, "mute");
+                break;
+            case "solo" when sel == null && SelectedFolder is { } folder:
+                FolderEdit(folder, x => x.Solo = !x.Solo, "solo");
                 break;
             case "mute" when sel != null:
                 Edit(t => t.Channel.Muted = !t.Channel.Muted, "mute");
@@ -717,7 +763,7 @@ public partial class MainWindow : Window
         restoring = true;
         MarkDirty();
         saveTimer.Stop();
-        Inspector.IsEnabled = Timeline.IsEnabled = TimelineToolbar.IsEnabled = SessionChip.IsEnabled = false;
+        Inspector.IsEnabled = Timeline.IsEnabled = TimelineToolbar.IsEnabled = TimelineFooter.IsEnabled = SessionChip.IsEnabled = false;
         UpdateUndoButtons();
         try
         {
@@ -744,6 +790,7 @@ public partial class MainWindow : Window
                 st.Project.Tracks = tracks.Select(t => t.Track).ToList();
                 ApplyFolderMix(st.Project, tracks);
                 Timeline.UpdateTracks(tracks, st.Project.Folders);
+                UpdateResetHeights();
                 engine.SetSettings(st.Project.Settings, glideDelay: true);
                 Timeline.Bpm = st.Project.Settings.Bpm;
                 Timeline.InvalidateVisual();
@@ -763,7 +810,7 @@ public partial class MainWindow : Window
         finally
         {
             restoring = false;
-            Timeline.IsEnabled = TimelineToolbar.IsEnabled = SessionChip.IsEnabled = true;
+            Timeline.IsEnabled = TimelineToolbar.IsEnabled = TimelineFooter.IsEnabled = SessionChip.IsEnabled = true;
             Inspector.IsEnabled = sel != null;
             RefreshColorPanel();
             ApplyMode();

@@ -37,50 +37,119 @@
       <Setter Property="FontSize" Value="10.5" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
+    <!-- the project's mode switch, beside the app's name: a recessed track on the bar with the chosen mode lit in
+         the accent (tint, border, text and icon) and the other one dim, so which mode is on reads at a glance -->
+    <Style Selector="Border.mode">
+      <Setter Property="Background" Value="{StaticResource App}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="2" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ToggleButton.mode">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Faint}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ToggleButton.mode:pointerover /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.mode:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Dim}" />
+    </Style>
+    <Style Selector="ToggleButton.mode:checked /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.mode:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.mode:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentSoft}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Accent50}" />
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+    </Style>
+    <Style Selector="ToggleButton.mode:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="ToggleButton.mode:checked:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentSoft}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Accent50}" />
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+    </Style>
+    <Style Selector="ToggleButton.mode:disabled">
+      <Setter Property="Opacity" Value="0.6" />
+    </Style>
   </Window.Styles>
 
   <!-- maximized, Windows pushes a window with our own title bar 8 px past each screen edge: OffScreenMargin
        says how much, so the content stays on screen -->
-  <Grid x:Name="Root" RowDefinitions="44,*,4,280,Auto" ColumnDefinitions="*,Auto" Margin="{Binding $parent[Window].OffScreenMargin}">
+  <Grid x:Name="Root" RowDefinitions="Auto,*,4,280,Auto" ColumnDefinitions="*,Auto" Margin="{Binding $parent[Window].OffScreenMargin}">
 
-    <!-- top bar (also the window's title bar) -->
+    <!-- top bar: two rows so everything fits in a window that is not maximized. The first is the window's title
+         bar (the system buttons sit on its right); the second holds the project's tools, Exportar on the right -->
     <Border x:Name="TitleBar" Grid.ColumnSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
-      <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="12,0,150,0">
-        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <Button x:Name="LogoButton" Classes="ghost" Padding="2" Margin="-2,0" ToolTip.Tip="{loc:T title.about.tip}" AutomationProperties.Name="{loc:T title.about}">
-            <Image Source="/Assets/GuitarCam-64.png" Width="24" Height="24" RenderOptions.BitmapInterpolationMode="HighQuality" />
-          </Button>
-          <TextBlock Text="GuitarCam Studio" FontWeight="SemiBold" FontSize="13.5" VerticalAlignment="Center" />
-          <Border Background="{StaticResource AccentSoft}" CornerRadius="4" Padding="5,1" VerticalAlignment="Center">
-            <TextBlock Text="NATIVE" FontSize="9.5" FontWeight="Bold" LetterSpacing="0.8" Foreground="{StaticResource Accent}" />
-          </Border>
-        </StackPanel>
-
-        <Button Grid.Column="1" x:Name="SessionChip" Classes="ghost" Foreground="{StaticResource Fg}" Height="32" Padding="10,0" VerticalContentAlignment="Center" FontSize="12" Margin="18,0,0,0">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <TextBlock Classes="icon" Text="&#xE8B7;" FontSize="13" Foreground="{StaticResource Dim}" />
-            <TextBlock x:Name="SessionName" Text="{loc:T title.noProject}" FontWeight="SemiBold" MaxWidth="180" TextTrimming="CharacterEllipsis" />
-            <!-- save state (the web's Guardando / Guardado / Error al guardar next to the name) -->
-            <StackPanel x:Name="SaveState" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" IsVisible="False">
-              <Arc x:Name="SaveSpin" Classes="spin" Width="11" Height="11" StrokeThickness="1.5" Stroke="{StaticResource Dim}" IsVisible="False" />
-              <TextBlock x:Name="SaveIcon" Classes="icon" Text="&#xE73E;" FontSize="10" Foreground="{StaticResource Faint}" />
-              <TextBlock x:Name="SaveText" Text="{loc:T title.saved}" FontSize="11" FontWeight="Normal" Foreground="{StaticResource Faint}" />
-            </StackPanel>
-            <TextBlock Classes="icon" Text="&#xE70D;" FontSize="9" Foreground="{StaticResource Faint}" />
+      <Grid RowDefinitions="44,Auto">
+        <Grid ColumnDefinitions="Auto,*,Auto" Margin="12,0,150,0">
+          <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <Button x:Name="LogoButton" Classes="ghost" Padding="2" Margin="-2,0" ToolTip.Tip="{loc:T title.about.tip}" AutomationProperties.Name="{loc:T title.about}">
+              <Image Source="/Assets/GuitarCam-64.png" Width="24" Height="24" RenderOptions.BitmapInterpolationMode="HighQuality" />
+            </Button>
+            <TextBlock Text="GuitarCam Studio" FontWeight="SemiBold" FontSize="13.5" VerticalAlignment="Center" />
+            <Border Background="{StaticResource AccentSoft}" CornerRadius="4" Padding="5,1" VerticalAlignment="Center">
+              <TextBlock Text="NATIVE" FontSize="9.5" FontWeight="Bold" LetterSpacing="0.8" Foreground="{StaticResource Accent}" />
+            </Border>
+            <!-- a copy made by tools\probar.ps1 says which build it is (TestBuild) -->
+            <Border x:Name="TestBuildChip" Background="{StaticResource Hover}" CornerRadius="4" Padding="5,1" VerticalAlignment="Center" IsVisible="False">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <TextBlock Text="{loc:T title.test}" FontSize="9.5" FontWeight="Bold" LetterSpacing="0.8" Foreground="{StaticResource Dim}" />
+                <TextBlock x:Name="TestBuildText" Classes="mono" FontSize="9.5" Foreground="{StaticResource Dim}" />
+              </StackPanel>
+            </Border>
           </StackPanel>
-        </Button>
 
-        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" Margin="8,0,0,0">
-          <!-- the project's mode (native only): video, or solo audio without stage, camera or MP4 -->
-          <Border Classes="seg" Margin="0,0,10,0" VerticalAlignment="Center">
-            <StackPanel Orientation="Horizontal">
-              <ToggleButton x:Name="ModeVideoButton" Classes="seg" ToolTip.Tip="{loc:T mode.video.tip}">
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" Margin="0" VerticalAlignment="Center">
+            <!-- system load, the audio engine's DSP load, camera and FFmpeg (the web's text-[11px] text-faint group;
+                 the DSP load came up here from the transport bar, asked by the user) -->
+            <StackPanel x:Name="SystemInfo" Classes="tstat" Orientation="Horizontal" Spacing="10" Margin="0,0,6,0" VerticalAlignment="Center">
+              <c:SystemMeter x:Name="SysMeter" />
+              <Border x:Name="SysMeterSep" Classes="tsep" />
+              <!-- the audio callback's load, drawn like CPU / GPU / RAM: name, number, bar -->
+              <StackPanel Orientation="Horizontal" Spacing="5" Background="Transparent" ToolTip.Tip="{loc:T title.dsp.tip}">
+                <TextBlock Text="DSP" Foreground="{StaticResource Faint}" />
+                <TextBlock x:Name="DspText" Classes="mono" Foreground="{StaticResource Dim}" Width="26" Text="–" />
+                <Border Width="32" Height="5" CornerRadius="3" Background="{StaticResource Raised}" ClipToBounds="True" VerticalAlignment="Center">
+                  <Border x:Name="DspFill" CornerRadius="3" HorizontalAlignment="Left" Width="0" Background="{StaticResource Accent}" />
+                </Border>
+              </StackPanel>
+              <!-- FFmpeg only shows here when it is missing; its version is in "Acerca de" -->
+              <Border x:Name="FfmpegSep" Classes="tsep" IsVisible="False" />
+              <StackPanel x:Name="FfmpegState" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Background="Transparent" IsVisible="False" ToolTip.Tip="{loc:T title.ffmpeg.looking}">
+                <Ellipse x:Name="FfmpegDot" Width="6" Height="6" Fill="{StaticResource Faint}" VerticalAlignment="Center" />
+                <TextBlock x:Name="FfmpegText" Foreground="{StaticResource Faint}" Text="FFmpeg" />
+              </StackPanel>
+            </StackPanel>
+            <c:NotificationBell x:Name="Bell" VerticalAlignment="Center" />
+            <c:ThemePicker x:Name="ThemePick" VerticalAlignment="Center" />
+            <Button x:Name="SettingsButton" Classes="ghost" ToolTip.Tip="{loc:T settings.title}">
+              <TextBlock Classes="icon" Text="&#xE713;" />
+            </Button>
+          </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="12,0,12,8">
+          <!-- the project's mode (native only): video, or solo audio without stage, camera or MP4; first in the row so
+               the kind of project is the first thing read -->
+          <Border Classes="mode" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <ToggleButton x:Name="ModeVideoButton" Classes="mode" ToolTip.Tip="{loc:T mode.video.tip}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <TextBlock Classes="icon" Text="&#xE714;" FontSize="12" VerticalAlignment="Center" />
                   <TextBlock x:Name="ModeVideoText" Text="{loc:T mode.video}" VerticalAlignment="Center" />
                 </StackPanel>
               </ToggleButton>
-              <ToggleButton x:Name="ModeAudioButton" Classes="seg" ToolTip.Tip="{loc:T mode.audio.tip}">
+              <ToggleButton x:Name="ModeAudioButton" Classes="mode" ToolTip.Tip="{loc:T mode.audio.tip}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <TextBlock Classes="icon" Text="&#xE8D6;" FontSize="12" VerticalAlignment="Center" />
                   <TextBlock x:Name="ModeAudioText" Text="{loc:T mode.audio}" VerticalAlignment="Center" />
@@ -88,48 +157,44 @@
               </ToggleButton>
             </StackPanel>
           </Border>
-          <Button x:Name="UndoButton" Classes="ghost" IsEnabled="False" ToolTip.Tip="{loc:T title.undo}">
-            <TextBlock Classes="icon" Text="&#xE7A7;" />
-          </Button>
-          <Button x:Name="RedoButton" Classes="ghost" IsEnabled="False" ToolTip.Tip="{loc:T title.redo}">
-            <TextBlock Classes="icon" Text="&#xE7A6;" />
-          </Button>
-        </StackPanel>
 
-        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="10" Margin="0,0,14,0" VerticalAlignment="Center">
-          <!-- system load, the audio engine's DSP load, camera and FFmpeg (the web's text-[11px] text-faint group;
-               the DSP load came up here from the transport bar, asked by the user) -->
-          <StackPanel x:Name="SystemInfo" Classes="tstat" Orientation="Horizontal" Spacing="10" Margin="0,0,6,0" VerticalAlignment="Center">
-            <c:SystemMeter x:Name="SysMeter" />
-            <Border x:Name="SysMeterSep" Classes="tsep" />
-            <!-- the audio callback's load, drawn like CPU / GPU / RAM: name, number, bar -->
-            <StackPanel Orientation="Horizontal" Spacing="5" Background="Transparent" ToolTip.Tip="{loc:T title.dsp.tip}">
-              <TextBlock Text="DSP" Foreground="{StaticResource Faint}" />
-              <TextBlock x:Name="DspText" Classes="mono" Foreground="{StaticResource Dim}" Width="26" Text="–" />
-              <Border Width="32" Height="5" CornerRadius="3" Background="{StaticResource Raised}" ClipToBounds="True" VerticalAlignment="Center">
-                <Border x:Name="DspFill" CornerRadius="3" HorizontalAlignment="Left" Width="0" Background="{StaticResource Accent}" />
-              </Border>
+          <Button Grid.Column="1" x:Name="SessionChip" Classes="ghost" Foreground="{StaticResource Fg}" Height="32" Padding="10,0" VerticalContentAlignment="Center" FontSize="12" Margin="12,0,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Classes="icon" Text="&#xE8B7;" FontSize="13" Foreground="{StaticResource Dim}" />
+              <TextBlock x:Name="SessionName" Text="{loc:T title.noProject}" FontWeight="SemiBold" MaxWidth="180" TextTrimming="CharacterEllipsis" />
+              <!-- save state (the web's Guardando / Guardado / Error al guardar next to the name) -->
+              <StackPanel x:Name="SaveState" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" IsVisible="False">
+                <Arc x:Name="SaveSpin" Classes="spin" Width="11" Height="11" StrokeThickness="1.5" Stroke="{StaticResource Dim}" IsVisible="False" />
+                <TextBlock x:Name="SaveIcon" Classes="icon" Text="&#xE73E;" FontSize="10" Foreground="{StaticResource Faint}" />
+                <TextBlock x:Name="SaveText" Text="{loc:T title.saved}" FontSize="11" FontWeight="Normal" Foreground="{StaticResource Faint}" />
+              </StackPanel>
+              <TextBlock Classes="icon" Text="&#xE70D;" FontSize="9" Foreground="{StaticResource Faint}" />
             </StackPanel>
-            <!-- FFmpeg only shows here when it is missing; its version is in "Acerca de" -->
-            <Border x:Name="FfmpegSep" Classes="tsep" IsVisible="False" />
-            <StackPanel x:Name="FfmpegState" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Background="Transparent" IsVisible="False" ToolTip.Tip="{loc:T title.ffmpeg.looking}">
-              <Ellipse x:Name="FfmpegDot" Width="6" Height="6" Fill="{StaticResource Faint}" VerticalAlignment="Center" />
-              <TextBlock x:Name="FfmpegText" Foreground="{StaticResource Faint}" Text="FFmpeg" />
-            </StackPanel>
-          </StackPanel>
-          <c:NotificationBell x:Name="Bell" VerticalAlignment="Center" />
-          <c:ThemePicker x:Name="ThemePick" VerticalAlignment="Center" />
-          <Button x:Name="SettingsButton" Classes="ghost" ToolTip.Tip="{loc:T settings.title}">
-            <TextBlock Classes="icon" Text="&#xE713;" />
           </Button>
-        </StackPanel>
 
-        <Button Grid.Column="5" x:Name="ExportButton" Classes="accent" ToolTip.Tip="{loc:T export.mp4}">
-          <StackPanel Orientation="Horizontal" Spacing="7">
-            <TextBlock Classes="icon" Text="&#xE72D;" FontSize="12" Foreground="{StaticResource AccentFg}" />
-            <TextBlock x:Name="ExportButtonText" Text="{loc:T export.mp4}" />
+          <!-- edit tools, set apart from the project chip by a line -->
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" Margin="6,0,0,0">
+            <Border Classes="tsep" Margin="0,0,8,0" />
+            <!-- save now (native only): what the "Guardado" mode leaves pending, by hand -->
+            <Button x:Name="SaveButton" Classes="ghost" IsEnabled="False" ToolTip.Tip="{loc:T title.save.tip}" AutomationProperties.Name="{loc:T title.save.tip}">
+              <TextBlock Classes="icon" Text="&#xE74E;" />
+            </Button>
+            <Button x:Name="UndoButton" Classes="ghost" IsEnabled="False" ToolTip.Tip="{loc:T title.undo}">
+              <TextBlock Classes="icon" Text="&#xE7A7;" />
+            </Button>
+            <Button x:Name="RedoButton" Classes="ghost" IsEnabled="False" ToolTip.Tip="{loc:T title.redo}">
+              <TextBlock Classes="icon" Text="&#xE7A6;" />
+            </Button>
           </StackPanel>
-        </Button>
+
+          <Button Grid.Column="4" x:Name="ExportButton" Classes="accent" ToolTip.Tip="{loc:T export.mp4}">
+            <StackPanel Orientation="Horizontal" Spacing="7">
+              <!-- a download arrow: the file lands in exports/ -->
+                <TextBlock Classes="icon" Text="&#xE896;" FontSize="13" />
+              <TextBlock x:Name="ExportButtonText" Text="{loc:T export.mp4}" />
+            </StackPanel>
+          </Button>
+        </Grid>
       </Grid>
     </Border>
 
@@ -187,7 +252,7 @@
     <DockPanel Grid.Row="3" x:Name="MixerHost" IsVisible="False" Background="{StaticResource App}" />
     <Grid Grid.Row="3" x:Name="TimelineHost">
       <c:TimelineView x:Name="Timeline" />
-      <!-- the corner above the track headers, like the web: ruler mode, snap, fit and track height -->
+      <!-- the corner above the track headers: ruler mode, snap, fit and clearing mutes / solos -->
       <Grid x:Name="TimelineToolbar" Width="324" Height="32" HorizontalAlignment="Left" VerticalAlignment="Top"
             Background="{StaticResource Panel}" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" Margin="0">
         <!-- ruler mode: notes = bars and beats, clock = minutes and seconds; the active one on AccentSoft -->
@@ -216,21 +281,6 @@
                 ToolTip.Tip="{loc:T timeline.fit.tip}">
           <TextBlock Classes="icon" Text="&#xE9A6;" FontSize="14" />
         </Button>
-        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" Margin="2,0,6,0" VerticalAlignment="Center" ToolTip.Tip="{loc:T timeline.height.tip}">
-          <TextBlock Classes="icon" Text="&#xE8FD;" FontSize="13" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
-          <!-- the web's .slider: 4 px track and a 14 px light thumb -->
-          <Slider x:Name="TrackHeightSlider" Width="44" Minimum="40" Maximum="160" Value="64" TickFrequency="2" IsSnapToTickEnabled="True"
-                  VerticalAlignment="Center" AutomationProperties.Name="{loc:T timeline.height}">
-            <Slider.Resources>
-              <x:Double x:Key="SliderHorizontalThumbWidth">14</x:Double>
-              <x:Double x:Key="SliderHorizontalThumbHeight">14</x:Double>
-              <x:Double x:Key="SliderTrackThemeHeight">4</x:Double>
-              <SolidColorBrush x:Key="SliderThumbBackground" Color="#f4f4f5" />
-              <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#ffffff" />
-              <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="#ffffff" />
-            </Slider.Resources>
-          </Slider>
-        </StackPanel>
         <!-- Cubase's "deactivate all mute / solo states" (native only): lit while any track has one (MainWindow.Timeline.cs) -->
         <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4" Margin="0,0,8,0" VerticalAlignment="Center">
           <Button x:Name="ClearMutesButton" Classes="chip" Width="24" Height="24" MinHeight="24" Padding="0" CornerRadius="4"
@@ -243,6 +293,33 @@
           </Button>
         </StackPanel>
       </Grid>
+      <!-- the zoom bar at the foot of the track headers (asked by the user): horizontal zoom and track height, each
+           with its slider, made big and easy to grab (asked by the user): 6 px track and an 18 px light thumb; wired in MainWindow.Timeline.cs. Its height is TimelineView.FooterH. -->
+      <Border x:Name="TimelineFooter" Width="324" Height="40" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+              Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,1,0">
+        <Border.Resources>
+          <x:Double x:Key="SliderHorizontalThumbWidth">18</x:Double>
+          <x:Double x:Key="SliderHorizontalThumbHeight">18</x:Double>
+          <x:Double x:Key="SliderTrackThemeHeight">6</x:Double>
+          <SolidColorBrush x:Key="SliderThumbBackground" Color="#f4f4f5" />
+          <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#ffffff" />
+          <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="#ffffff" />
+        </Border.Resources>
+        <Grid ColumnDefinitions="Auto,*,Auto,*,Auto" Margin="12,0,6,0">
+          <TextBlock x:Name="ZoomIcon" Classes="icon" Text="&#xE8A3;" FontSize="15" Foreground="{StaticResource Dim}" VerticalAlignment="Center" Margin="0,0,8,0" />
+          <Slider x:Name="ZoomSlider" Grid.Column="1" Minimum="0" Maximum="1" Value="0"
+                  VerticalAlignment="Center" Margin="0,0,16,0" AutomationProperties.Name="{loc:T timeline.zoom}" />
+          <TextBlock x:Name="HeightIcon" Grid.Column="2" Classes="icon" Text="&#xE8FD;" FontSize="15" Foreground="{StaticResource Dim}" VerticalAlignment="Center" Margin="0,0,8,0" />
+          <Slider x:Name="TrackHeightSlider" Grid.Column="3" Minimum="40" Maximum="320" Value="64" TickFrequency="2" IsSnapToTickEnabled="True"
+                  VerticalAlignment="Center" AutomationProperties.Name="{loc:T timeline.height}" />
+          <!-- native only: every track and folder back to the shared height (rows get their own by dragging their bottom edge) -->
+          <Button x:Name="ResetHeightsButton" Grid.Column="4" Classes="ghost" Width="30" Height="30" MinHeight="0" Padding="0" Margin="8,0,0,0"
+                  HorizontalContentAlignment="Center" VerticalContentAlignment="Center" IsEnabled="False"
+                  AutomationProperties.Name="{loc:T timeline.resetHeights}" ToolTip.Tip="{loc:T timeline.resetHeights.tip}">
+            <TextBlock Classes="icon" Text="&#xE72C;" FontSize="14" />
+          </Button>
+        </Grid>
+      </Border>
     </Grid>
 
     <!-- transport bar, always at the bottom (Fender Studio Pro style, asked by the user). The clock, the

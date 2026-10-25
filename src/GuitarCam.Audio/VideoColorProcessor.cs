@@ -11,7 +11,7 @@ public sealed record LetterboxSpec(string Id, string Label, double Ratio);
 /// Port of <c>GuitarCam/src/shared/colorGrade.js</c>, <c>src/shared/videoFx.js</c> and <c>src/video/colorGL.ts</c>.
 /// Shared by the live preview and the FFmpeg MP4 export so that what you see in the preview matches the exported video:
 /// <list type="bullet">
-/// <item><description>18 CapCut-style looks + 9 color adjustments baked into a <c>33³</c> 3D LUT (<see cref="BuildLut"/> / <see cref="LutToCube"/>).</description></item>
+/// <item><description>27 looks (the fitted ones live in <see cref="FittedLooks"/>) + 9 color adjustments baked into a <c>33³</c> 3D LUT (<see cref="BuildLut"/> / <see cref="LutToCube"/>).</description></item>
 /// <item><description>Trilinear 3D LUT interpolation + monochrome film grain (<see cref="Lut3DTable"/> / <see cref="GradeAndGrainBgra"/>), matching WebGL <c>sampler3D</c> (<c>colorGL.ts</c>) and FFmpeg <c>lut3d=interp=trilinear</c>.</description></item>
 /// <item><description>Elliptical panel vignette mask (<see cref="VignetteMask"/> / <see cref="VignettePremulBgra"/>) and cinema letterbox bars (<see cref="LetterboxBar"/>).</description></item>
 /// </list>
@@ -40,6 +40,15 @@ public static class VideoColorProcessor
         new("neon", "Neón"),
         new("scifi", "Sci-fi"),
         new("desert", "Desierto"),
+        new("redonly", "Solo rojo"),
+        new("silver", "Plata"),
+        new("bluenight", "Noche azul"),
+        new("vivid", "Vivo"),
+        new("ice", "Hielo"),
+        new("fresh", "Fresco"),
+        new("clean", "Limpio"),
+        new("moody", "Moody"),
+        new("cream", "Crema"),
     ];
 
     public static readonly IReadOnlyList<LetterboxSpec> LetterboxOptions =
@@ -83,58 +92,59 @@ public static class VideoColorProcessor
             b + sh.B * ws + hi.B * wh);
     }
 
-    static (double H, double S) HueSat(double r, double g, double b)
-    {
-        double max = Math.Max(r, Math.Max(g, b));
-        double min = Math.Min(r, Math.Min(g, b));
-        double d = max - min;
-        if (d < 1e-6) return (0, 0);
-        double h;
-        if (max == r) h = ((g - b) / d) % 6.0;
-        else if (max == g) h = (b - r) / d + 2.0;
-        else h = (r - g) / d + 4.0;
-        h *= 60.0;
-        if (h < 0) h += 360.0;
-        return (h, max > 0 ? d / max : 0);
-    }
-
-    static double HueWeight(double h, double center, double width)
-    {
-        double d = Math.Abs(h - center) % 360.0;
-        if (d > 180.0) d = 360.0 - d;
-        return 1.0 - Smoothstep(width * 0.45, width, d);
-    }
-
     public static bool IsKnownLook(string? look) => look is
         "none" or "brujo" or "sepia" or "bw" or "noir" or "warm" or "cool" or "cine" or "vintage" or
-        "film" or "blockbuster" or "bleach" or "golden" or "night" or "nordic" or "neon" or "scifi" or "desert";
+        "film" or "blockbuster" or "bleach" or "golden" or "night" or "nordic" or "neon" or "scifi" or "desert" or
+        "redonly" or "silver" or "bluenight" or "vivid" or "ice" or "fresh" or "clean" or "moody" or "cream";
 
     public static (double R, double G, double B) ApplyLook(string look, double r, double g, double b)
     {
         switch (look)
         {
             case "brujo":
+                return FittedLooks.Brujo.Apply(r, g, b);
+            case "redonly":
+                return FittedLooks.SoloRojo.Apply(r, g, b);
+            case "silver":
+                return FittedLooks.Plata.Apply(r, g, b);
+            case "bluenight":
+                return FittedLooks.NocheAzul.Apply(r, g, b);
+            case "vivid":
+                return FittedLooks.Vivo.Apply(r, g, b);
+            case "ice":
+                return FittedLooks.Hielo.Apply(r, g, b);
+            case "fresh":
             {
-                double l = Luma(r, g, b);
-                var (h, s) = HueSat(r, g, b);
-                double keep = HueWeight(h, 18, 42) * Smoothstep(0.12, 0.38, s);
-                double t = l;
-                double sr = Mix(0.06, 1.0, t) + 0.035 * Math.Sin(Math.PI * t);
-                double sg = Mix(0.04, 0.95, t) + 0.01 * Math.Sin(Math.PI * t);
-                double sb = Mix(0.03, 0.82, t) - 0.03 * Math.Sin(Math.PI * t);
-                double br = Mix(sr, r, 0.12);
-                double bg = Mix(sg, g, 0.12);
-                double bb = Mix(sb, b, 0.12);
-                double kr = Mix(r, l, 0.2) * 0.96;
-                double kg = Mix(g, l, 0.2) * 0.96;
-                double kb = Mix(b, l, 0.2) * 0.96;
-                br = Mix(br, kr, keep);
-                bg = Mix(bg, kg, keep);
-                bb = Mix(bb, kb, keep);
+                // Brighter mids, a bit more color in the dull parts, clean slightly cool whites.
+                var c = SatK(r, g, b, 1.1);
+                c = SplitTone(c.R, c.G, c.B, (0.0, 0.005, 0.01), (-0.012, 0.0, 0.012));
+                static double Lift(double v) => v + 0.22 * v * (1.0 - v) * (1.0 - v);
+                return (Lift(Clamp01(c.R)), Lift(Clamp01(c.G)), Lift(Clamp01(c.B)));
+            }
+            case "clean":
+            {
+                // Barely there: a gentle S-curve, true blacks and a touch of saturation.
+                var c = SatK(r, g, b, 1.06);
                 return (
-                    0.045 + ContrastK(br, 0.92) * 0.9,
-                    0.045 + ContrastK(bg, 0.92) * 0.9,
-                    0.045 + ContrastK(bb, 0.92) * 0.9);
+                    SCurve(Clamp01(c.R), 0.22),
+                    SCurve(Clamp01(c.G), 0.22),
+                    SCurve(Clamp01(c.B), 0.22));
+            }
+            case "moody":
+            {
+                // Darker and muted, teal-green shadows, neutral-warm highlights and a slightly matte black.
+                var c = SatK(r, g, b, 0.62);
+                c = SplitTone(c.R, c.G, c.B, (-0.04, 0.025, 0.035), (0.03, 0.012, -0.025));
+                static double Tone(double v) => 0.03 + Math.Pow(SCurve(Clamp01(ContrastK(v, 1.12)), 0.3), 1.28) * 0.9;
+                return (Tone(c.R), Tone(c.G), Tone(c.B));
+            }
+            case "cream":
+            {
+                // Soft and creamy: low contrast, lifted blacks, warm highlights, colors toned down but not grey.
+                var c = SatK(r, g, b, 0.82);
+                c = SplitTone(c.R, c.G, c.B, (0.012, 0.006, 0.0), (0.045, 0.025, -0.03));
+                static double Tone(double v) => 0.07 + (ContrastK(Clamp01(v), 0.9) - 0.05) * 0.97;
+                return (Tone(c.R), Tone(c.G), Tone(c.B));
             }
             case "sepia":
                 return (
@@ -284,7 +294,10 @@ public static class VideoColorProcessor
             Vibrance: Num(g.Vibrance, -100, 100, 0),
             Temperature: Num(g.Temperature, -100, 100, 0),
             Tint: Num(g.Tint, -100, 100, 0),
-            Fade: Num(g.Fade, 0, 100, 0));
+            Fade: Num(g.Fade, 0, 100, 0),
+            Whites: Num(g.Whites, -100, 100, 0),
+            Blacks: Num(g.Blacks, -100, 100, 0),
+            Light: Num(g.Light, -100, 100, 0));
     }
 
     /// <summary>Port of <c>isNeutralGrade</c> in <c>src/shared/colorGrade.js</c>.</summary>
@@ -294,7 +307,8 @@ public static class VideoColorProcessor
         if (!n.On) return true;
         if (n.Look != "none" && n.Amount > 0) return false;
         return n.Exposure == 0 && n.Contrast == 0 && n.Highlights == 0 && n.Shadows == 0 &&
-               n.Saturation == 0 && n.Vibrance == 0 && n.Temperature == 0 && n.Tint == 0 && n.Fade == 0;
+               n.Saturation == 0 && n.Vibrance == 0 && n.Temperature == 0 && n.Tint == 0 && n.Fade == 0 &&
+               n.Whites == 0 && n.Blacks == 0 && n.Light == 0;
     }
 
     /// <summary>
@@ -318,6 +332,11 @@ public static class VideoColorProcessor
         double sat = 1.0 + n.Saturation / 100.0;
         double vib = n.Vibrance / 100.0;
         double fade = n.Fade / 100.0;
+        // Whites / blacks move the ends of each channel (monotonic for the whole -100..100 range);
+        // light lifts or lowers the mid-tones on the luma, leaving pure black and white in place.
+        double whites = 0.15 * n.Whites / 100.0;
+        double blacks = 0.12 * n.Blacks / 100.0;
+        double light = 0.35 * n.Light / 100.0;
         bool lin = expo != 1.0 || temp != 0.0 || tint != 0.0;
 
         var data = new float[size * size * size * 3];
@@ -362,6 +381,23 @@ public static class VideoColorProcessor
                             {
                                 double dL = 1.4 * sd * l * (1.0 - l) * (1.0 - l) + 1.4 * hl * l * l * (1.0 - l);
                                 double k = Math.Max(0.0, l + dL) / l;
+                                r *= k;
+                                gg *= k;
+                                b *= k;
+                            }
+                        }
+                        if (whites != 0.0 || blacks != 0.0)
+                        {
+                            r = Clamp01(r + whites * Smoothstep(0.55, 1.0, r) + blacks * (1.0 - Smoothstep(0.0, 0.45, r)));
+                            gg = Clamp01(gg + whites * Smoothstep(0.55, 1.0, gg) + blacks * (1.0 - Smoothstep(0.0, 0.45, gg)));
+                            b = Clamp01(b + whites * Smoothstep(0.55, 1.0, b) + blacks * (1.0 - Smoothstep(0.0, 0.45, b)));
+                        }
+                        if (light != 0.0)
+                        {
+                            double l = Clamp01(Luma(r, gg, b));
+                            if (l > 1e-4)
+                            {
+                                double k = Math.Max(0.0, l + light * l * (1.0 - l)) / l;
                                 r *= k;
                                 gg *= k;
                                 b *= k;

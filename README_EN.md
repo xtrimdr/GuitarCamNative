@@ -62,12 +62,17 @@ in [PENDIENTES.md](PENDIENTES.md) (in Spanish).
 ## Build and run
 
 ```
-dotnet build
-src\GuitarCam.App\bin\Debug\net10.0-windows\GuitarCam.exe
+tools\probar.ps1 "what to try"
 ```
 
+It builds, runs `gclab comprobar-dsp`, copies the app to `%LOCALAPPDATA%\GuitarCam Pruebas\<date>-<commit>` (the last
+5 are kept) and opens it from there, marked "TEST <commit>" in the title bar. Since it never runs from `bin\`, an open
+app does not block the next build. `-Abrir` opens the newest copy without building, `-NoAbrir` only builds and copies,
+`-SinComprobar` skips `gclab`, `-Proyecto folder` opens that project. If a GuitarCam is already open, a dialog asks first whether to close it
+(it saves the project before closing), so the new copy does not open the same project read-only. Plain `dotnet build` still works for building.
+
 The app starts in the **Projects** manager (list, search, templates, rename, duplicate, Recycle Bin). With a
-project folder as an argument, it opens it directly. `tools\make-shortcut.ps1` creates a desktop shortcut.
+project folder as an argument, it opens it directly. `tools\make-shortcut.ps1` creates a desktop shortcut that opens the newest test copy (`probar.ps1 -Abrir`).
 Settings are stored in `%APPDATA%\GuitarCam Studio`.
 
 ## Main shortcuts
@@ -90,9 +95,10 @@ Spanish by default; the language is chosen in Settings.
 | Del | remove the clip (or the empty track) |
 | Ctrl+Z / Ctrl+Y | undo / redo |
 | Ctrl+Shift+N | new track |
+| Ctrl+click / Shift+click on a header | pick several tracks (one by one / a range) to move them together |
 | Ctrl+S | save now |
 | B / P | show or hide the take panel / the project panel |
-| Wheel, Shift+wheel, Alt+wheel | scroll, zoom, track height |
+| Wheel, Shift+wheel, Ctrl+wheel, Alt+wheel | scroll up and down, zoom, scroll sideways, track height (the modifiers can be changed in Settings → Keyboard shortcuts) |
 
 On the selected clip, a click on its volume line adds a point; points drag, and a double-click removes one.
 

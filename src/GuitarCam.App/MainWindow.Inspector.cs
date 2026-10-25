@@ -23,7 +23,7 @@ public partial class MainWindow
     readonly StackPanel noSelection = new() { Margin = new Thickness(10, 32), Spacing = 4 };
     readonly TextBlock noSelectionHint = new() { FontSize = 12, Foreground = Palette.Faint, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap };
     readonly Grid takeHeader = new() { ColumnDefinitions = new ColumnDefinitions("24,*,Auto") };
-    readonly TrackBadge takeBadge = new() { Width = 24, Height = 24, VerticalAlignment = VerticalAlignment.Center };
+    readonly TrackBadge takeBadge = new() { Width = 28, Height = 28, VerticalAlignment = VerticalAlignment.Center };
     readonly TextBox takeName = new() { Classes = { "title" } };
     readonly TextBlock takeNamePencil = new() { Classes = { "icon" }, Text = "\uE70F", FontSize = 11, Foreground = Palette.Faint, Margin = new Thickness(0, 0, 8, 0),
         VerticalAlignment = VerticalAlignment.Center, Opacity = 0, IsHitTestVisible = false };
@@ -188,6 +188,7 @@ public partial class MainWindow
                 powerLabel.Children.Add(new TextBlock { Classes = { "icon" }, Text = "\uE7E8", FontSize = 11, Foreground = on() ? Palette.App : Palette.Faint });
                 powerLabel.Children.Add(new TextBlock { Text = on() ? "ON" : "OFF", FontSize = 10.5, FontWeight = FontWeight.Bold, Foreground = on() ? Palette.App : Palette.Faint });
                 toggle.Content = powerLabel;
+                toggle.Classes.Set("lit", on());
                 toggle.Background = on() ? Palette.Accent : Brushes.Transparent;
                 toggle.Foreground = on() ? Palette.App : Palette.Faint;
                 ToolTip.SetTip(toggle, Loc.T("insp.power." + (title switch { "EQ" => "eq", "Saturación" => "sat", "Compresor" => "comp", "Reverb" => "reverb", _ => "delay" }) + (on() ? ".off" : ".on")));
@@ -479,7 +480,7 @@ public partial class MainWindow
     void ShowTrack(LiveTrack? t)
     {
         sel = t;
-        Inspector.IsEnabled = t != null && !restoring && store?.ReadOnly != true;
+        Inspector.IsEnabled = (t != null || SelectedFolder != null) && !restoring && store?.ReadOnly != true;
         if (inspectorTrack != t?.Track.Id)
         {
             inspectorTrack = t?.Track.Id;
@@ -494,7 +495,10 @@ public partial class MainWindow
         {
             takeName.Text = sel?.Track.Name ?? "";
             var c = SelectedInspectorClip;
-            noSelection.IsVisible = sel == null;
+            var folder = sel == null ? SelectedFolder : null;
+            noSelection.IsVisible = sel == null && folder == null;
+            folderPanel.IsVisible = folder != null;
+            if (folder != null) foreach (var refresh in folderRefresh) refresh();
             noSelectionHint.Text = tracks.Any(t => t.Clips.Count > 0) ? Loc.T("insp.none.hint") : Loc.T("insp.none.empty");
             takeHead.IsVisible = sel != null;
             takeBadge.Set(sel?.Track, sel == null ? 0 : tracks.IndexOf(sel) + 1, c != null);

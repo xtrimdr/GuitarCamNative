@@ -630,7 +630,6 @@ public sealed partial class ProjectsDialog : UserControl
             info.Children.Add(new TextBlock { Text = p.Dir, Classes = { "mono" }, FontSize = 10, Foreground = Res("Faint"), Opacity = 0.8, TextTrimming = TextTrimming.CharacterEllipsis });
 
         var main = new Button { Classes = { "rowmain" }, Content = info, IsEnabled = p.Exists && busy == null };
-        ToolTip.SetTip(main, p.Dir);
         main.Click += async (_, _) => await Open(p);
         main.KeyDown += (_, e) =>
         {
@@ -653,7 +652,7 @@ public sealed partial class ProjectsDialog : UserControl
                 Foreground = Res("Faint"),
                 HorizontalAlignment = HorizontalAlignment.Right,
             });
-            var actions = new StackPanel { Classes = { "actions" }, Orientation = Orientation.Horizontal, Spacing = 2 };
+            var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
             if (p.Exists)
             {
                 actions.Children.Add(RowAction("", Loc.T("proj.rename.tip"), () => SetDraft(new Draft(DraftKind.Rename, p.Name, p.Dir))));
@@ -683,7 +682,7 @@ public sealed partial class ProjectsDialog : UserControl
                 forget.Click += async (_, _) => await Forget(p);
                 actions.Children.Add(forget);
             }
-            right.Children.Add(actions);
+            right.Children.Add(new Border { Classes = { "actions" }, Child = actions });
         }
 
         var grid = new Grid();

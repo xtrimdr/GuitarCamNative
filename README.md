@@ -40,7 +40,8 @@ de **grabar → mezclar → exportar**.
 - **Metrónomo** con compás, tempo, tap tempo, cuenta previa y seis sonidos de click; calibración de latencia
   con cable o tocando. **Afinador** (notas en castellano, flechas que
   te dicen para dónde girar la clavija y sensibilidad ajustable) y medidor de **LUFS** del master en la barra de transporte.
-- **No pierde nada**: autoguardado atómico 1,5 s después de cada edición, copias en `historial/` para volver
+- **No pierde nada**: guardado atómico (solo después de cada edición, cada X minutos o a mano con Ctrl+S o el
+  diskette, a elección en Configuración → Guardado; las tomas se guardan siempre), copias en `historial/` para volver
   atrás, recuperación de grabaciones interrumpidas y un gestor de proyectos con Papelera.
 - Idiomas, tema y atajos de teclado configurables.
 
@@ -63,13 +64,19 @@ planeado y lo que falta está en [PENDIENTES.md](PENDIENTES.md).
 ## Compilar y ejecutar
 
 ```
-dotnet build
-src\GuitarCam.App\bin\Debug\net10.0-windows\GuitarCam.exe
+tools\probar.ps1 "qué probar"
 ```
+
+Compila, corre `gclab comprobar-dsp`, copia la app a `%LOCALAPPDATA%\GuitarCam Pruebas\<fecha>-<commit>` (quedan las
+últimas 5) y la abre desde ahí, con la marca "PRUEBA <commit>" en la barra de título. Como nunca corre desde `bin\`,
+la app abierta no traba la próxima compilación. `-Abrir` abre la última copia sin compilar, `-NoAbrir` solo compila y
+copia, `-SinComprobar` salta `gclab`, `-Proyecto carpeta` abre ese proyecto. Si ya hay un GuitarCam abierto, antes de abrir
+pregunta en un cuadro si lo cierra (guarda el proyecto antes), así la copia nueva no abre el mismo proyecto en solo
+lectura. Si algo falla, dice "NO SE PUEDE PROBAR" y no abre nada. `dotnet build` solo sigue sirviendo para compilar.
 
 La app arranca en el gestor de **Proyectos** (lista, buscador, plantillas, renombrar, duplicar, Papelera).
 Con una carpeta de proyecto como argumento, la abre directo. Con `--probar "texto"` muestra ese texto en un aviso fijo ("Para probar") al abrir. `tools\make-shortcut.ps1` crea un acceso
-directo en el escritorio. Los ajustes se guardan en `%APPDATA%\GuitarCam Studio`.
+directo en el escritorio que abre la última copia de prueba (`probar.ps1 -Abrir`). Los ajustes se guardan en `%APPDATA%\GuitarCam Studio`.
 
 ## Atajos principales
 
@@ -85,17 +92,22 @@ Todos se pueden cambiar en ⚙ Configuración → Atajos de teclado (menos Esc).
 | A | afinador |
 | M / S | mute / solo de la pista |
 | F | ver todo |
+| 1 a 5 | zoom: 1 tiempo / 1 compás / 4 compases / 16 compases / toda la canción |
 | X | timeline / mixer |
 | Alt+X / D | dividir el clip en el cabezal / duplicarlo |
 | Supr | quitar el clip (o la pista vacía) |
 | Ctrl+Z / Ctrl+Y | deshacer / rehacer |
 | Ctrl+Shift+N | nueva pista |
+| Ctrl+clic / Shift+clic en un encabezado | marcar varias pistas (una por una / un rango) para moverlas juntas |
 | Ctrl+S | guardar ya |
 | B / P | mostrar u ocultar el panel de la toma / del proyecto |
-| Rueda, Shift+rueda, Alt+rueda | desplazar, zoom, alto de pista |
+| Rueda, Shift+rueda, Ctrl+rueda, Alt+rueda | subir y bajar, zoom, desplazar a los costados, alto de pista (los modificadores y el sentido de cada uno, con "Invertir", se cambian en Configuración → Atajos de teclado; zoom y alto también con los sliders al pie de los encabezados) |
 
 En el clip seleccionado, un clic sobre su línea de volumen agrega un punto; los puntos se arrastran y un
 doble clic los saca.
+
+Cada pista o carpeta puede tener su propio alto: arrastrá el borde de abajo de su encabezado (doble clic en el borde
+la vuelve al alto general). El botón ↺ al pie de los encabezados iguala todas.
 
 ## Cómo está hecho
 
@@ -146,6 +158,7 @@ la consola, sin abrir la ventana.
 | `sistema [--segundos 5]` | CPU, GPU y RAM, y si FFmpeg está en el PATH |
 | `espectro [toma.wav]` | el espectro en vivo del EQ |
 | `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas, reinicio de la cadena, afinador y LUFS |
+| `looks [--look id] [--salida look.cube] [--blancos n] [--negros n] [--luz n]` | los looks de color con colores de prueba, comprobación de rango y, con `--look`, el LUT `.cube` de ese look con Blancos, Negros y Sensación de luz |
 | `lufs archivo` / `afinar archivo [--en segundos] [--umbral -50]` | volumen integrado de un archivo / la nota que oye el afinador en ese momento, con la sensibilidad de la ventana (dB) |
 | `camara [listar]` | las cámaras que ve FFmpeg y sus formatos |
 | `camara grabar [--dispositivo X \| --ip 192.168.1.50:4747] [--segundos 5]` | graba video como una toma y lo revisa con ffprobe |

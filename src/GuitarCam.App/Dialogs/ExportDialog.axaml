@@ -67,18 +67,19 @@
       <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
-    <Style Selector="Button.btn.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="{StaticResource AccentHover}" />
+    <!-- on the presenter in every state, like Button.accent in App.axaml -->
+    <Style Selector="Button.btn.primary /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
       <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
+    </Style>
+    <Style Selector="Button.btn.danger /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Rec}" />
+      <Setter Property="Foreground" Value="White" />
     </Style>
     <Style Selector="Button.btn.danger">
       <Setter Property="Background" Value="{StaticResource Rec}" />
       <Setter Property="Foreground" Value="White" />
       <Setter Property="FontWeight" Value="SemiBold" />
-    </Style>
-    <Style Selector="Button.btn.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#f26464" />
-      <Setter Property="Foreground" Value="White" />
     </Style>
     <Style Selector="Button.btn:disabled /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Opacity" Value="0.4" />

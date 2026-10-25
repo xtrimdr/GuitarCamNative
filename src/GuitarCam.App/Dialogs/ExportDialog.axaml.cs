@@ -224,7 +224,7 @@ public sealed partial class ExportDialog : UserControl
         var takes = ExtractVideoTakes(store, liveTracks);
         if (audio ? !store.Project.Tracks.Any(t => t.Clips.Count > 0) : takes.Count == 0)
         {
-            statusError = Loc.T("exp.needTrack");
+            statusError = Loc.T(audio || !store.Project.Tracks.Any(t => t.Clips.Count > 0) ? "exp.needTrack" : "exp.needVideo");
             return false;
         }
 
@@ -1238,7 +1238,10 @@ public sealed partial class ExportDialog : UserControl
                 col.Vibrance,
                 col.Temperature,
                 col.Tint,
-                col.Fade),
+                col.Fade,
+                col.Whites,
+                col.Blacks,
+                col.Light),
             VideoFx = new ExportVideoFxSpec(
                 vfx.On,
                 vfx.Vignette,

@@ -36,7 +36,7 @@ public partial class MainWindow
         StopButton.Click += (_, _) => engine.StopTransport();
         ClockButton.Click += (_, _) => SetRulerMode(!Timeline.RulerInBars);
         Tempo.Changed += SetTempo;
-        AddHandler(KeyUpEvent, (_, e) => transportKeys.Remove(e.Key), Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        AddHandler(KeyUpEvent, OnTransportKeyUp, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         Deactivated += (_, _) => transportKeys.Clear();
         if (!Enum.TryParse<ClickSound>(AppConfig.Get("click.sound"), out var sound)) sound = ClickSound.Bip;
         if (!double.TryParse(AppConfig.Get("click.volumeDb"), NumberStyles.Float, CultureInfo.InvariantCulture, out double volume) || !double.IsFinite(volume)) volume = 0;
@@ -44,6 +44,13 @@ public partial class MainWindow
         BuildClickMenu();
         Closed += (_, _) => clickMenu?.Hide();
         RefreshClickMenu();
+    }
+
+    /// <summary>Releasing a transport key ends it here: a focused button clicks on Space's key-up (the last M or S
+    /// clicked in the mixer), so the key that just played or stopped must not reach it.</summary>
+    void OnTransportKeyUp(object? sender, KeyEventArgs e)
+    {
+        if (transportKeys.Remove(e.Key)) e.Handled = true;
     }
 
     void SetTempo(double value)
@@ -99,6 +106,7 @@ public partial class MainWindow
         ToolTip.SetTip(ClickSoundButton, Loc.T("click.sound.now", ClickLabels[(int)engine.ClickSound]));
         for (int i = 0; i < clickChoices.Count; i++)
         {
+            clickChoices[i].Classes.Set("lit", (int)engine.ClickSound == i);
             clickChoices[i].Background = (int)engine.ClickSound == i ? Palette.Alpha(Palette.AccentColor, .14) : Avalonia.Media.Brushes.Transparent;
             clickChoices[i].Foreground = (int)engine.ClickSound == i ? Palette.Accent : Palette.Fg;
         }

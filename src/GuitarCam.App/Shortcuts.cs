@@ -8,7 +8,9 @@ namespace GuitarCam.App;
 /// The keyboard shortcuts (native only, the web's are fixed in App.tsx onKey): one table of actions with their
 /// default keys, the user's changes on top, remembered in the program's config ("shortcuts", only what differs
 /// from the default). Tooltips read their key from here (<see cref="Tip"/>), so a change shows up everywhere.
-/// Esc is not in the table: it always cancels (count-in, gesture, dialogs).
+/// Esc is not in the table: it always cancels (count-in, gesture, dialogs). The timeline's wheel gestures (zoom,
+/// sideways, track height) are a second, smaller table (<see cref="Wheel"/>): their "key" is only the modifiers held
+/// while turning the wheel, remembered apart ("wheel") because a modifier alone is not a <see cref="KeyGesture"/>.
 /// </summary>
 static class Shortcuts
 {
@@ -36,13 +38,40 @@ static class Shortcuts
         new("redo", Loc.T("sc.group.editing"), Loc.T("sc.redo"), [G(Key.Y, KeyModifiers.Control), G(Key.Z, KeyModifiers.Control | KeyModifiers.Shift)]),
         new("save", Loc.T("sc.group.editing"), Loc.T("sc.save"), [G(Key.S, KeyModifiers.Control)]),
         new("fit", Loc.T("sc.group.view"), Loc.T("sc.fit"), [G(Key.F)]),
+        new("zoom1", Loc.T("sc.group.view"), Loc.T("sc.zoom1"), [G(Key.D1), G(Key.NumPad1)]),
+        new("zoom2", Loc.T("sc.group.view"), Loc.T("sc.zoom2"), [G(Key.D2), G(Key.NumPad2)]),
+        new("zoom3", Loc.T("sc.group.view"), Loc.T("sc.zoom3"), [G(Key.D3), G(Key.NumPad3)]),
+        new("zoom4", Loc.T("sc.group.view"), Loc.T("sc.zoom4"), [G(Key.D4), G(Key.NumPad4)]),
+        new("zoom5", Loc.T("sc.group.view"), Loc.T("sc.zoom5"), [G(Key.D5), G(Key.NumPad5)]),
         new("mixer", Loc.T("sc.group.view"), Loc.T("sc.mixer"), [G(Key.X)]),
         new("leftPanel", Loc.T("sc.group.view"), Loc.T("sc.leftPanel"), [G(Key.B)]),
         new("rightPanel", Loc.T("sc.group.view"), Loc.T("sc.rightPanel"), [G(Key.P)]),
     ];
 
+    public sealed record WheelAction(string Id, string Name, KeyModifiers Default);
+
+    /// <summary>The wheel's modifiers in the timeline; the plain wheel always scrolls up and down.</summary>
+    public static readonly WheelAction[] Wheel =
+    [
+        new("wheelZoom", Loc.T("sc.wheelZoom"), KeyModifiers.Shift),
+        new("wheelSideways", Loc.T("sc.wheelSideways"), KeyModifiers.Control),
+        new("wheelHeight", Loc.T("sc.wheelHeight"), KeyModifiers.Alt),
+    ];
+
+    const KeyModifiers Mods = KeyModifiers.Control | KeyModifiers.Shift | KeyModifiers.Alt;
+
     /// <summary>The keys the user changed; an empty array means "sin atajo".</summary>
     static readonly Dictionary<string, KeyGesture[]> custom = [];
+
+    /// <summary>The wheel modifiers the user changed; None means "sin atajo".</summary>
+    static readonly Dictionary<string, KeyModifiers> customWheel = [];
+
+    /// <summary>The plain wheel (up and down) has no modifiers to change, but it can be reversed like the others.</summary>
+    public const string WheelScroll = "wheelScroll";
+
+    /// <summary>The wheel gestures (and <see cref="WheelScroll"/>) the user turned around, each on its own
+    /// ("wheelReverse").</summary>
+    static readonly HashSet<string> reversed = [];
 
     /// <summary>A shortcut changed: tooltips that show keys refresh.</summary>
     public static event System.Action? Changed;
@@ -58,19 +87,94 @@ static class Shortcuts
                     custom[id] = keys.Select(Parse).OfType<KeyGesture>().ToArray();
         }
         catch (JsonException) { }
+        customWheel.Clear();
+        try
+        {
+            var saved = JsonSerializer.Deserialize<Dictionary<string, string>>(AppConfig.Get("wheel") ?? "{}") ?? [];
+            foreach (var (id, mods) in saved)
+                if (Wheel.Any(a => a.Id == id) && Enum.TryParse<KeyModifiers>(mods, out var m))
+                    customWheel[id] = m & Mods;
+        }
+        catch (JsonException) { }
+        reversed.Clear();
+        try
+        {
+            foreach (var id in JsonSerializer.Deserialize<string[]>(AppConfig.Get("wheelReverse") ?? "[]") ?? [])
+                if (id == WheelScroll || Wheel.Any(a => a.Id == id)) reversed.Add(id);
+        }
+        catch (JsonException) { }
     }
 
     public static KeyGesture[] Keys(string id) =>
         custom.TryGetValue(id, out var k) ? k : All.First(a => a.Id == id).Defaults;
 
-    public static bool IsDefault(string id) => !custom.ContainsKey(id);
+    public static bool IsDefault(string id) => !custom.ContainsKey(id) && !customWheel.ContainsKey(id);
+
+    public static bool AllDefault => custom.Count == 0 && customWheel.Count == 0 && reversed.Count == 0;
+
+    /// <summary>-1 if the user reversed this wheel gesture, else 1. Runs on every wheel step, so it doesn't allocate.</summary>
+    public static int WheelSign(string id) => reversed.Contains(id) ? -1 : 1;
+
+    public static bool WheelReversed(string id) => reversed.Contains(id);
+
+    public static void SetWheelReversed(string id, bool on)
+    {
+        if (on) reversed.Add(id);
+        else reversed.Remove(id);
+        Save();
+    }
+
+    public static KeyModifiers WheelMods(string id) =>
+        customWheel.TryGetValue(id, out var m) ? m : Wheel.First(a => a.Id == id).Default;
+
+    /// <summary>The wheel action for the held modifiers (exact match), or null for the plain scroll. Runs on every
+    /// wheel step, so it doesn't allocate.</summary>
+    public static string? FindWheel(KeyModifiers mods)
+    {
+        mods &= Mods;
+        if (mods == KeyModifiers.None) return null;
+        foreach (var a in Wheel)
+            if (WheelMods(a.Id) == mods) return a.Id;
+        return null;
+    }
+
+    /// <summary>Like <see cref="Assign"/> for a wheel gesture: another wheel action with the same modifiers loses them.</summary>
+    public static string? AssignWheel(string id, KeyModifiers mods)
+    {
+        mods &= Mods;
+        string? taken = null;
+        if (mods != KeyModifiers.None)
+            foreach (var a in Wheel)
+                if (a.Id != id && WheelMods(a.Id) == mods)
+                {
+                    SetWheel(a.Id, KeyModifiers.None);
+                    taken = a.Name;
+                }
+        SetWheel(id, mods);
+        Save();
+        return taken;
+    }
+
+    public static void ResetWheel(string id)
+    {
+        var def = Wheel.First(a => a.Id == id).Default;
+        if (FindWheel(def) is { } other && other != id) SetWheel(other, KeyModifiers.None);
+        customWheel.Remove(id);
+        Save();
+    }
+
+    static void SetWheel(string id, KeyModifiers mods)
+    {
+        if (mods == Wheel.First(a => a.Id == id).Default) customWheel.Remove(id);
+        else customWheel[id] = mods;
+    }
 
     /// <summary>The action for a key press, or null. Modifiers have to match exactly (C is click, Shift+C the count-in).</summary>
     public static string? Find(KeyEventArgs e) => Find(e.Key, e.KeyModifiers);
 
     static string? Find(Key key, KeyModifiers mods)
     {
-        mods &= KeyModifiers.Control | KeyModifiers.Shift | KeyModifiers.Alt;
+        mods &= Mods;
         foreach (var a in All)
             if (Keys(a.Id).Any(g => g.Key == key && g.KeyModifiers == mods)) return a.Id;
         return null;
@@ -110,6 +214,8 @@ static class Shortcuts
     public static void ResetAll()
     {
         custom.Clear();
+        customWheel.Clear();
+        reversed.Clear();
         Save();
     }
 
@@ -125,9 +231,11 @@ static class Shortcuts
     static void Save()
     {
         string json = JsonSerializer.Serialize(custom.ToDictionary(p => p.Key, p => p.Value.Select(g => g.ToString()).ToArray()));
+        string wheel = JsonSerializer.Serialize(customWheel.ToDictionary(p => p.Key, p => p.Value.ToString()));
+        string reverse = JsonSerializer.Serialize(reversed.Order().ToArray());
         _ = Task.Run(() =>
         {
-            try { AppConfig.Set("shortcuts", json); }
+            try { AppConfig.Set("shortcuts", json); AppConfig.Set("wheel", wheel); AppConfig.Set("wheelReverse", reverse); }
             catch (Exception x) when (x is IOException or UnauthorizedAccessException) { /* keep this session's keys */ }
         });
         Changed?.Invoke();
@@ -142,13 +250,21 @@ static class Shortcuts
     /// <summary>"Espacio", "Ctrl+Y o Ctrl+Shift+Z"; empty when the action has no key.</summary>
     public static string Label(string id) => string.Join(" o ", Keys(id).Select(Label));
 
-    public static string Label(KeyGesture g)
+    public static string Label(KeyGesture g) => Label(g.KeyModifiers, KeyName(g.Key));
+
+    /// <summary>"Shift+rueda"; empty when the wheel action has no modifiers.</summary>
+    public static string WheelLabel(string id) => WheelMods(id) is var m && m != KeyModifiers.None ? Label(m, Loc.T("sc.key.wheel")) : "";
+
+    /// <summary>"Zoom horizontal (Shift+rueda)", or just the text if the wheel action has no modifiers.</summary>
+    public static string WheelTip(string text, string id) => WheelLabel(id) is { Length: > 0 } k ? $"{text} ({k})" : text;
+
+    static string Label(KeyModifiers mods, string key)
     {
         var parts = new List<string>();
-        if (g.KeyModifiers.HasFlag(KeyModifiers.Control)) parts.Add("Ctrl");
-        if (g.KeyModifiers.HasFlag(KeyModifiers.Alt)) parts.Add("Alt");
-        if (g.KeyModifiers.HasFlag(KeyModifiers.Shift)) parts.Add("Shift");
-        parts.Add(KeyName(g.Key));
+        if (mods.HasFlag(KeyModifiers.Control)) parts.Add("Ctrl");
+        if (mods.HasFlag(KeyModifiers.Alt)) parts.Add("Alt");
+        if (mods.HasFlag(KeyModifiers.Shift)) parts.Add("Shift");
+        parts.Add(key);
         return string.Join("+", parts);
     }
 

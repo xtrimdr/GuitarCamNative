@@ -47,6 +47,14 @@
     <Color x:Key="SystemAccentColorLight1">#4fdcf1</Color>
     <Color x:Key="SystemAccentColorLight2">#7ce5f4</Color>
     <Color x:Key="SystemAccentColorLight3">#a9eef8</Color>
+    <!-- a button without one of our classes (or in a state they don't cover) hovers with the Hover token, not Fluent's grey -->
+    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="Hover" />
+    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="Hover" />
+    <StaticResource x:Key="ToggleButtonBackgroundPointerOver" ResourceKey="Hover" />
+    <StaticResource x:Key="ToggleButtonBackgroundPressed" ResourceKey="Hover" />
+    <!-- the soft glow of a hovered button: the accent (recolored by UiTheme), red on danger buttons -->
+    <DropShadowEffect x:Key="HoverGlow" OffsetX="0" OffsetY="0" BlurRadius="12" Color="#22d3ee" Opacity="0.6" />
+    <DropShadowEffect x:Key="RecGlow" OffsetX="0" OffsetY="0" BlurRadius="12" Color="#ef4444" Opacity="0.6" />
 
     <FontFamily x:Key="Ui">Segoe UI Variable Text, Segoe UI</FontFamily>
     <FontFamily x:Key="Mono">Cascadia Mono, Consolas</FontFamily>
@@ -127,21 +135,21 @@
     <Style Selector="ToggleButton.chip:pressed /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="Transparent" />
     </Style>
-    <!-- recording buttons (TransportBar.tsx): hover keeps their own color -->
-    <Style Selector="Button.chip.rec-stop:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#f25a5a" />
-      <Setter Property="BorderBrush" Value="#f25a5a" />
+    <!-- recording buttons (TransportBar.tsx): hover keeps their own color (the glow is the hover) -->
+    <Style Selector="Button.chip.rec-stop:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.chip.rec-stop:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Rec}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Rec}" />
       <Setter Property="Foreground" Value="White" />
     </Style>
     <Style Selector="Button.chip.discard">
       <Setter Property="Foreground" Value="{StaticResource Dim}" />
     </Style>
-    <Style Selector="Button.chip.discard:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="Button.chip.discard:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.chip.discard:pressed /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource RecSoft}" />
       <Setter Property="BorderBrush" Value="#66ef4444" />
       <Setter Property="Foreground" Value="{StaticResource Rec}" />
     </Style>
-    <Style Selector="Button.chip.count:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="Button.chip.count:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.chip.count:pressed /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource Accent25}" />
       <Setter Property="BorderBrush" Value="{StaticResource Accent50}" />
     </Style>
@@ -151,17 +159,17 @@
       <Setter Property="BorderBrush" Value="{StaticResource Accent40}" />
       <Setter Property="Foreground" Value="{StaticResource Accent}" />
     </Style>
-    <Style Selector="Button.chip.on:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="Button.chip.on:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.chip.on:pressed /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource Accent25}" />
       <Setter Property="BorderBrush" Value="{StaticResource Accent40}" />
       <Setter Property="Foreground" Value="{StaticResource Accent}" />
     </Style>
-    <Style Selector="ToggleButton.chip.inspector-power:checked /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.chip.inspector-power:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="ToggleButton.chip.inspector-power:checked /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.chip.inspector-power:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.chip.inspector-power:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource Accent}" />
       <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
       <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
     </Style>
-    <Style Selector="ToggleButton.chip.inspector-power:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="ToggleButton.chip.inspector-power:not(:checked):pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource Hover}" />
     </Style>
     <!-- disabled: the web fades the whole button (disabled:opacity-35) -->
@@ -367,7 +375,7 @@
     </Style>
 
     <!-- an open popover's button (IconButton active in ui.tsx; the web's border is transparent in the top bar) -->
-    <Style Selector="Button.ghost.on /template/ ContentPresenter#PART_ContentPresenter, Button.ghost.on:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="Button.ghost.on /template/ ContentPresenter#PART_ContentPresenter, Button.ghost.on:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.ghost.on:pressed /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource AccentSoft}" />
       <Setter Property="Foreground" Value="{StaticResource Accent}" />
     </Style>
@@ -388,20 +396,31 @@
       <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="CornerRadius" Value="6" />
-      <Setter Property="Padding" Value="12,6" />
+      <Setter Property="Height" Value="32" />
+      <Setter Property="Padding" Value="14,0" />
       <Setter Property="FontSize" Value="12.5" />
       <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
-    <Style Selector="Button.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="{StaticResource AccentHover}" />
+    <!-- painted on the presenter, like the ON chips: Fluent's resting presenter doesn't pass the button's Foreground
+         to the text (it came out white). No state in the selector, so hover and press keep this exact look: the glow
+         is the response -->
+    <Style Selector="Button.accent /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
       <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
+    </Style>
+    <!-- while recording: still the accent, just faded, instead of Fluent's grey -->
+    <Style Selector="Button.accent:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
+      <Setter Property="Opacity" Value="0.45" />
     </Style>
 
     <!-- "Borrar no usadas" (HistoryPanel.tsx): a faint outline that turns red on hover -->
     <Style Selector="Button.chip.purge">
       <Setter Property="Foreground" Value="{StaticResource Faint}" />
     </Style>
-    <Style Selector="Button.chip.purge:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="Button.chip.purge:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.chip.purge:pressed /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource RecSoft}" />
       <Setter Property="BorderBrush" Value="#66ef4444" />
       <Setter Property="Foreground" Value="{StaticResource Rec}" />
@@ -485,30 +504,29 @@
       <Setter Property="BorderBrush" Value="{StaticResource Line}" />
       <Setter Property="Foreground" Value="{StaticResource Dim}" />
     </Style>
-    <Style Selector="Button.btn.outline:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="Button.btn.outline:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.btn.outline:pressed /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{StaticResource Hover}" />
-      <Setter Property="Foreground" Value="{StaticResource Fg}" />
-    </Style>
-    <Style Selector="Button.btn.outline:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
     </Style>
     <Style Selector="Button.btn.primary">
       <Setter Property="Background" Value="{StaticResource Accent}" />
       <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
-    <Style Selector="Button.btn.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="{StaticResource AccentHover}" />
+    <!-- on the presenter in every state, like Button.accent -->
+    <Style Selector="Button.btn.primary /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
       <Setter Property="Foreground" Value="{StaticResource AccentFg}" />
+    </Style>
+    <Style Selector="Button.btn.danger /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Rec}" />
+      <Setter Property="Foreground" Value="White" />
     </Style>
     <Style Selector="Button.btn.danger">
       <Setter Property="Background" Value="{StaticResource Rec}" />
       <Setter Property="Foreground" Value="White" />
       <Setter Property="FontWeight" Value="SemiBold" />
-    </Style>
-    <Style Selector="Button.btn.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#f26464" />
-      <Setter Property="Foreground" Value="White" />
     </Style>
     <Style Selector="Button.btn:disabled /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Opacity" Value="0.6" />
@@ -548,6 +566,32 @@
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="Foreground" Value="{StaticResource Faint}" />
       <Setter Property="Opacity" Value="0.3" />
+    </Style>
+
+    <!-- a button that paints its own colors from code (lit M / S, arm, power, C / LIM, track color swatches) carries
+         the class lit while lit: the hover / press styles above set the template's presenter, which would cover the
+         button's own Background with Hover grey, so here they keep its colors (the glow is the hover) -->
+    <Style Selector=":is(Button).lit:pointerover /template/ ContentPresenter#PART_ContentPresenter, :is(Button).lit:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{Binding $parent[Button].Background}" />
+      <Setter Property="BorderBrush" Value="{Binding $parent[Button].BorderBrush}" />
+      <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
+    </Style>
+    <!-- every hovered button glows softly (asked by the user); the red ones in red. An effect on the button, not a
+         BoxShadow on its presenter: Avalonia only repaints a presenter's own bounds, which cut the shadow to a dark
+         frame. Last, so no class drops it -->
+    <Style Selector=":is(Button):pointerover">
+      <Setter Property="Effect" Value="{DynamicResource HoverGlow}" />
+    </Style>
+    <Style Selector="Button.danger:pointerover, Button.discard:pointerover, Button.purge:pointerover, Button.rec-stop:pointerover">
+      <Setter Property="Effect" Value="{StaticResource RecGlow}" />
+    </Style>
+    <!-- text never glows: on transparent buttons (whole rows, links, check boxes) the glow would trace the letters.
+         Rows answer with their own hover; a check box glows only its box -->
+    <Style Selector="Button.swatch:pointerover, Button.rowmain:pointerover, Button.tplmain:pointerover, Button.link:pointerover, CheckBox:pointerover, RadioButton:pointerover">
+      <Setter Property="Effect" Value="{x:Null}" />
+    </Style>
+    <Style Selector="CheckBox:pointerover /template/ Border#NormalRectangle">
+      <Setter Property="Effect" Value="{DynamicResource HoverGlow}" />
     </Style>
 
     <!-- Loader2: an open ring that turns -->

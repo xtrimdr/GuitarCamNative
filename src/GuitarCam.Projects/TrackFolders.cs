@@ -57,6 +57,8 @@ public static class TrackFolders
             f.Name ??= "";
             f.Color = Track.NormalizeColor(f.Color);
             f.Volume = double.IsFinite(f.Volume) ? Math.Clamp(f.Volume, 0, 1.5) : 1;
+            f.Height = Track.NormalizeHeight(f.Height, Folder.MinHeight, Folder.MaxHeight);
+            f.HeightScale = Track.NormalizeHeight(f.HeightScale, 0.1, 8);
         }
         foreach (var t in p.Tracks) if (t.FolderId != null && !ids.Contains(t.FolderId)) t.FolderId = null;
 
@@ -134,14 +136,21 @@ public static class TrackFolders
     /// Moves a track to <paramref name="at"/> in the sequence without it, into <paramref name="folderId"/> (null = the
     /// root). The timeline picks a place that matches the folder; anything else is put right by <see cref="Normalize"/>.
     /// </summary>
-    public static void Move(Project p, string trackId, int at, string? folderId)
+    public static void Move(Project p, string trackId, int at, string? folderId) => Move(p, [trackId], at, folderId);
+
+    /// <summary>
+    /// Moves several tracks together, in the order they are now, to <paramref name="at"/> in the sequence without
+    /// them, into <paramref name="folderId"/> (null = the root): they land one after the other.
+    /// </summary>
+    public static void Move(Project p, IReadOnlyCollection<string> trackIds, int at, string? folderId)
     {
-        var t = p.Tracks.Find(x => x.Id == trackId) ?? throw new ArgumentException(Texts.T("err.folder.noTrack", "No encontré esa pista."));
+        var block = p.Tracks.Where(t => trackIds.Contains(t.Id)).ToList();
+        if (block.Count == 0) throw new ArgumentException(Texts.T("err.folder.noTrack", "No encontré esa pista."));
         if (folderId != null && !p.Folders.Any(f => f.Id == folderId)) throw new ArgumentException(Texts.T("err.folder.none", "No encontré esa carpeta."));
         var seq = Sequence(p);
-        seq.Remove(t);
-        t.FolderId = folderId;
-        seq.Insert(Math.Clamp(at, 0, seq.Count), t);
+        seq.RemoveAll(x => x is Track t && block.Contains(t));
+        foreach (var t in block) t.FolderId = folderId;
+        seq.InsertRange(Math.Clamp(at, 0, seq.Count), block);
         Rebuild(p, seq);
     }
 
@@ -182,9 +191,11 @@ public static class TrackFolders
         Rebuild(p, seq);
     }
 
-    /// <summary>Removes a folder; its tracks stay where they are, at the root.</summary>
-    public static void Remove(Project p, string folderId)
+    /// <summary>Removes a folder; its tracks stay where they are, at the root, or go with it (their takes stay in Media).</summary>
+    public static void Remove(Project p, string folderId, bool withTracks = false)
     {
+        if (withTracks)
+            foreach (var id in p.Tracks.Where(t => t.FolderId == folderId).Select(t => t.Id).ToList()) ClipEditing.RemoveTrack(p, id);
         var seq = Sequence(p);
         foreach (var t in p.Tracks) if (t.FolderId == folderId) t.FolderId = null;
         seq.RemoveAll(x => x is Folder f && f.Id == folderId);

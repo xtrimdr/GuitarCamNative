@@ -115,6 +115,7 @@ static class UiTheme
             Brush("Accent40", WithAlpha(accent, 0x66));
             Brush("Accent50", WithAlpha(accent, 0x80));
             Brush("Accent70", WithAlpha(accent, 0xb3));
+            if (r.TryGetResource("HoverGlow", null, out var g) && g is DropShadowEffect glow) glow.Color = accent;
             // the Fluent controls (sliders, switches) read these as dynamic resources
             r["SystemAccentColor"] = accent;
             r["SystemAccentColorDark1"] = Mix(accent, Colors.Black, 0.1);

@@ -39,6 +39,16 @@ _Ideas y mejoras para la nativa._
 #### 4. Edición de video más completa
 - [ ] Color por toma, además del color global
 - [ ] Más filtros y efectos (nitidez, desenfoque, glow, estabilización, chroma key/pantalla verde)
+  Investigación de CapCut y orden propuesto en [docs/filtros-capcut.md](docs/filtros-capcut.md):
+  - [ ] Importar LUT .cube
+  - [ ] HSL de 8 colores; después Curvas y ruedas lift/gamma/gain
+  - [ ] Nitidez y Claridad (las que más usa el usuario en CapCut)
+  - [ ] Look brumoso/pastel (como "Sueño de Mistwood"): en CapCut es un shader de 4 colores con ruido, no un LUT
+  - [ ] Looks que dependen de filtros espaciales: Soñado (con glow) y HDR (con Claridad)
+  - [ ] (Para después, lo pidió el usuario 2026-10-25) Efectos de movimiento: sacudida, zoom y destello al pulso del
+    click, glitch
+  - [ ] Light leak y partículas de luz (bokeh, luciérnagas, chispas) con semilla fija, igual en vista previa y exportación
+  - [ ] VHS, glitch / RGB split, película vieja (polvo, rayas), desenfoque de entrada y salida
 - [ ] Textos y títulos: nombre del tema, créditos, carteles
 - [ ] Transiciones entre clips y entre layouts
 - [ ] Recorte y encuadre animados (zoom/paneo que cambian con el tiempo)

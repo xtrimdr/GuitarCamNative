@@ -46,6 +46,9 @@ public partial class MainWindow
         ("contrast", Loc.T("color.adj.contrast"), -100, null, c => c.Contrast, (c, v) => c.Contrast = v),
         ("highlights", Loc.T("color.adj.highlights"), -100, Loc.T("color.adj.highlights.hint"), c => c.Highlights, (c, v) => c.Highlights = v),
         ("shadows", Loc.T("color.adj.shadows"), -100, Loc.T("color.adj.shadows.hint"), c => c.Shadows, (c, v) => c.Shadows = v),
+        ("whites", Loc.T("color.adj.whites"), -100, Loc.T("color.adj.whites.hint"), c => c.Whites, (c, v) => c.Whites = v),
+        ("blacks", Loc.T("color.adj.blacks"), -100, Loc.T("color.adj.blacks.hint"), c => c.Blacks, (c, v) => c.Blacks = v),
+        ("light", Loc.T("color.adj.light"), -100, Loc.T("color.adj.light.hint"), c => c.Light, (c, v) => c.Light = v),
         ("saturation", Loc.T("color.adj.saturation"), -100, null, c => c.Saturation, (c, v) => c.Saturation = v),
         ("vibrance", Loc.T("color.adj.vibrance"), -100, Loc.T("color.adj.vibrance.hint"), c => c.Vibrance, (c, v) => c.Vibrance = v),
         ("temperature", Loc.T("color.adj.temperature"), -100, Loc.T("color.adj.temperature.hint"), c => c.Temperature, (c, v) => c.Temperature = v),
@@ -177,6 +180,7 @@ public partial class MainWindow
                 label.Children.Add(new TextBlock { Classes = { "icon" }, Text = "", FontSize = 11, Foreground = lit ? Palette.App : Palette.Faint, VerticalAlignment = VerticalAlignment.Center });
                 label.Children.Add(new TextBlock { Text = lit ? "ON" : "OFF", FontSize = 10.5, FontWeight = FontWeight.Bold, Foreground = lit ? Palette.App : Palette.Faint, VerticalAlignment = VerticalAlignment.Center });
                 power.Content = label;
+                power.Classes.Set("lit", lit);
                 power.Background = lit ? Palette.Accent : Brushes.Transparent;
                 power.BorderBrush = lit ? Palette.Accent : Palette.Line;
                 ToolTip.SetTip(power, powerTip?.Invoke(lit));

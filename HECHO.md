@@ -3,6 +3,69 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-25: **knobs de efecto en los encabezados de pista**: Vida · Comp · Reverb · Delay pasan de cuatro filas
+  de slider a una sola fila de knobs que crecen con el alto de la pista y el ancho de la columna (20 a 64 px) y se
+  achican con ella (`TimelineView.FxKnobD`, `DrawFxKnob`); arrastre vertical, ruedita y doble clic para restablecer.
+- 2026-10-25: **íconos de pista nuevos y más grandes**: rellenos, Fluent Emoji High Contrast de base y lo que le
+  falta de Material Design Icons, game-icons y Qlementine (`tools/make-track-icons.py` los pasa a una grilla de 32,
+  licencias en `Assets/Icons/LICENSES.txt`; los ids viejos de IconOven van a su par en `TrackIcons.Legacy`). En el
+  timeline la insignia crece con la columna de encabezados de 28 a 52 (`TimelineView.BadgeSize`) y la columna llega
+  a 640 (antes 460); en el mixer y el inspector pasó a 28 / 22.
+- 2026-10-25: **Looks Fresco, Limpio, Moody y Crema** (los populares que faltaban, ver docs/filtros-capcut.md) y
+  ajustes **Blancos, Negros y Sensación de luz** en Color → Ajustes, horneados en el mismo LUT que la vista previa y la
+  exportación (`VideoColorProcessor.BuildLut`, `ColorGrade.Whites/Blacks/Light`, `gclab looks --blancos --negros --luz`).
+- 2026-10-25: **5 looks nuevos y Brujo más fiel**: Solo rojo, Plata, Noche azul, Vivo y Hielo, que dan el mismo
+  resultado que los filtros de CapCut que usa el usuario con un modelo propio (curva de tono, saturación y giro de
+  tono por color, virado y curvas por canal) ajustado por mínimos cuadrados sobre cuadros reales (`FittedLooks.cs`).
+  Brujo pasó a ese modelo. `gclab looks` los lista, comprueba el rango y escribe un look como `.cube`.
+  Investigación en [docs/filtros-capcut.md](docs/filtros-capcut.md).
+- 2026-10-25: **"+ Nueva pista" fija al pie** de la columna de encabezados, encima de los sliders de zoom
+  (`TimelineView.AddRect`, `DrawAddButton`), en vez de ir debajo de la última pista.
+- 2026-10-25: **varias pistas juntas**: Ctrl+clic / Shift+clic en los encabezados las marca, la manija las arrastra
+  en bloque y el menú "Carpeta" las mueve todas (`TimelineView.Pick`, `TrackFolders.Move` con varias). **Quitar una
+  carpeta** con pistas pregunta si van también (`MainWindow.RemoveFolder`, `gclab … quitar-carpeta --con-pistas`).
+  Arreglos: el resize de una pista ya no hace saltar al resto al soltar, y el lugar donde cae una pista arrastrada se
+  elige por el hueco más cercano con 8 px de "pegue" (`FindDrop`), así se puede sacar la última pista de una carpeta.
+- 2026-10-25: **Barra superior en dos filas** para que entre con la ventana sin maximizar: arriba la barra de título
+  (app, medidores, avisos, tema, ⚙); abajo modo, proyecto, guardar/deshacer y Exportar (`MainWindow.axaml`, `TitleBar`). Exportar, más prolijo: 32 de alto,
+  ícono de descarga, hover más claro (`AccentHover`) y apagado sin volverse gris (`Button.accent` en `App.axaml`).
+- 2026-10-25: **Ctrl+rueda al revés y "Invertir" por gesto**: Ctrl+rueda hacia arriba va a la derecha
+  (`TimelineView.OnPointerWheelChanged`); la ruedita sola, zoom, costados y altura tienen cada uno su "Invertir" en
+  Configuración → Atajos (`Shortcuts.WheelSign`, guardado en `config.json` "wheelReverse").
+- 2026-10-24: **un solo camino para probar**: `tools\probar.ps1` compila, corre `gclab comprobar-dsp`, copia la app a
+  `%LOCALAPPDATA%\GuitarCam Pruebas` y la abre desde ahí (el `bin\` nunca queda bloqueado); la copia lleva
+  `prueba.txt` y la barra de título muestra "PRUEBA <commit>" (`TestBuild.cs`); el acceso directo del escritorio
+  (`make-shortcut.ps1`) abre la última copia; si hay un GuitarCam abierto, un cuadro pregunta si lo cierra (guarda
+  antes, `CloseMainWindow`) para que la copia nueva no abra el proyecto en solo lectura. Se trabaja en `master`, sin ramas ni worktrees (AGENTS.md §6).
+- 2026-10-24: **hover de botones sin gris y con glow**: los botones encendidos que se pintan desde código (M/S, armar,
+  ON, C/LIM, muestras de color, sonido del click) llevan la clase `lit` y conservan su color al pasar el mouse; los
+  `:pressed` que faltaban (acento, primario, peligro, play encendido…) y los grises de Fluent van al token `Hover`;
+  todo botón brilla suave con el acento (`HoverGlow`, un `DropShadowEffect` del botón que recolorea `UiTheme`) o en rojo
+  los de peligro, y los botones de color (Exportar, primario, peligro) ya no cambian de color en hover (`App.axaml`).
+- 2026-10-24: **modo de guardado elegible**: Configuración → Guardado (`SaveMode.cs`, `SettingsDialog.BuildSave`)
+  elige entre guardar al editar, cada X minutos (1–30) o a mano; diskette en la barra de título (`SaveButton`) y estado
+  "Sin guardar" (`TickTopBar`). Tomas, exportaciones y cerrar o cambiar de proyecto guardan siempre.
+- 2026-10-24: **ruedita configurable**: Shift+rueda hace zoom y Ctrl+rueda va a los costados (antes al revés); los
+  modificadores de zoom, costados y altura se eligen en Configuración → Atajos, girando la ruedita con ellos apretados
+  (`Shortcuts.Wheel`, `config.json` "wheel"; tooltips del pie del timeline leídos de ahí).
+- 2026-10-24: **carpeta plegada en el mixer compacto y barra espaciadora**: el nombre de la carpeta ya no ensancha su
+  grupo (`Controls/NoWidth.cs`; nombre y cantidad se recortan juntos en `MainWindow.FolderGroup`); soltar una tecla de
+  transporte no llega al botón enfocado (`OnTransportKeyUp`) y los M / S / ● del mixer no toman el foco.
+- 2026-10-24: **alto propio por pista y carpeta, y zooms fijos**: `Track.HeightScale` (proporción del alto general: el slider las sigue escalando) / `Folder.Height` (arrastrando el borde de
+  abajo del encabezado; doble clic en el borde o el botón ↺ del pie, `ResetHeightsButton`, lo igualan); el timeline mide
+  cada fila con `LaneH` / `RowH` / `FolderRowH`; teclas 1 a 5 = un tiempo, 1, 4 y 16 compases y toda la canción
+  (`TimelineView.ZoomPreset`, atajos `zoom1`…`zoom5`).
+- 2026-10-24: **timeline sin tooltips y ruedita nueva**: se sacaron los tooltips del timeline (trababan el zoom y el
+  scroll y no sumaban); queda el cursor (`TimelineView.UpdateCursor`, cursores armados una vez en `CursorOf`) y se
+  borraron sus textos. Rueda sola: arriba y abajo; Ctrl: zoom; Shift: a los costados; Alt: altura.
+- 2026-10-24: **carpetas más firmes y renombrar en el lugar**: la carpeta se selecciona (timeline y mixer) y el inspector
+  la muestra con nombre, color, volumen y M / S (`InitFolderInspector`); su ícono abre el selector de color (`ShowFolderLook`,
+  `ColorChips` compartido con el de pista); M, S y Supr actúan sobre ella; las pistas de una carpeta van con sangría
+  (`FolderIndent`, 24 px) y la carpeta entera dentro de un recuadro fino de su color (`DrawFolderFrames`, sin riel); doble clic en el nombre de una pista o carpeta lo edita ahí mismo (`MainWindow.Rename.cs`).
+- 2026-10-24: **más zoom en el timeline y barra de zoom**: zoom horizontal hasta 2 px por muestra (la onda dibuja las
+  muestras, `TimelineView.SampleWave`; regla hasta 1 ms y tiempos partidos) y pistas de hasta 320 px; los sliders de zoom
+  horizontal y de altura van al pie de la columna de encabezados (`TimelineFooter`); el volumen del encabezado tiene más
+  presencia (barra gruesa, marca en 100, tapa de fader).
 - 2026-10-24: **carpetas de pistas, plantillas de pista y menú de nueva pista**: `Folder` / `Track.FolderId` y
   `TrackFolders` (Projects: orden como secuencia, mover adentro / afuera, quitar, VCA con `Mix`); el timeline arma filas
   en píxeles (`TimelineView.Relayout`, `FindDrop`) con fila de carpeta, riel de color, plegado y el lugar donde cae la pista
