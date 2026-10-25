@@ -12,14 +12,14 @@ music without video).
 It is designed to be used with the guitar strapped on: one-key shortcuts, big buttons and a short path of
 **record → mix → export**.
 
-![The timeline in Video mode: one panel per take, colored track folders, the channel inspector and the color tab](docs/screenshot-timeline.png)
+![The timeline in Video mode: one panel per take, colored track folders, the channel inspector and the color tab](docs/screenshots/timeline.png)
 
 | | |
 |---|---|
-| ![The mixer while playing: folders as VCAs, reverb and delay returns and the master](docs/screenshot-mixer.png) | ![Vertical 9:16 stacked layout, ready for Reels, Shorts and TikTok](docs/screenshot-vertical.png) |
+| ![The mixer while playing: folders as VCAs, reverb and delay returns and the master](docs/screenshots/mixer.png) | ![Vertical 9:16 stacked layout, ready for Reels, Shorts and TikTok](docs/screenshots/vertical.png) |
 | **The mixer**: one strip per track, folders as VCAs, the reverb and delay returns and the master. | **Vertical 9:16** for Reels, Shorts and TikTok, with a color look applied. |
 
-![Audio only mode: tracks with their effect knobs and the EQ with its live spectrum](docs/screenshot-audio.png)
+![Audio only mode: tracks with their effect knobs and the EQ with its live spectrum](docs/screenshots/audio.png)
 
 *The screenshots show the demo project; the panel images are photos from [Unsplash](https://unsplash.com).*
 

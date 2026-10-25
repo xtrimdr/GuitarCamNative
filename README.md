@@ -12,14 +12,14 @@ sirve para hacer música sin video).
 Está pensada para usarse con la guitarra colgada: atajos de una tecla, botones grandes y un camino corto
 de **grabar → mezclar → exportar**.
 
-![El timeline en modo Video: un panel por toma, carpetas de pistas con su color, el inspector del canal y la pestaña de color](docs/screenshot-timeline.png)
+![El timeline en modo Video: un panel por toma, carpetas de pistas con su color, el inspector del canal y la pestaña de color](docs/screenshots/timeline.png)
 
 | | |
 |---|---|
-| ![El mixer sonando: carpetas como VCA, retornos de reverb y delay y el master](docs/screenshot-mixer.png) | ![Formato vertical 9:16 apilado, listo para Reels, Shorts y TikTok](docs/screenshot-vertical.png) |
+| ![El mixer sonando: carpetas como VCA, retornos de reverb y delay y el master](docs/screenshots/mixer.png) | ![Formato vertical 9:16 apilado, listo para Reels, Shorts y TikTok](docs/screenshots/vertical.png) |
 | **El mixer**: una tira por pista, las carpetas como VCA, los retornos de reverb y delay y el master. | **Vertical 9:16** para Reels, Shorts y TikTok, con un look de color aplicado. |
 
-![El modo Solo audio: pistas con sus knobs de efecto y el EQ con el espectro en vivo](docs/screenshot-audio.png)
+![El modo Solo audio: pistas con sus knobs de efecto y el EQ con el espectro en vivo](docs/screenshots/audio.png)
 
 *Las capturas son del proyecto de demo; las imágenes de los paneles son fotos de [Unsplash](https://unsplash.com).*
 
