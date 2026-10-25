@@ -288,7 +288,7 @@ public sealed class LiveClip
 
 /// <summary>
 /// A track loaded for playback: its clips, the full per-track DSP chain (<see cref="TrackDspChain"/>:
-/// clip fades → saturator → compressor EQ → compressor → 6-band track EQ → panner → fader → post-fader sends)
+/// clip fades → the channel's insert slots → panner → fader → post-fader sends)
 /// and the live meters. Timeline edits re-point <see cref="Track"/> and swap <see cref="Clips"/> for a new list
 /// (never changed in place: the audio thread may be walking the old one), keeping the chain's state.
 /// </summary>
@@ -302,10 +302,6 @@ public sealed class LiveTrack
     public Channel Channel => Track.Channel;
     public IReadOnlyList<LiveClip> Clips { get; set; }
     public TrackDspChain Chain { get; }
-    public Saturator Sat => Chain.Sat;
-    public CompEqFilter CompEq => Chain.CompEq;
-    public Compressor Comp => Chain.Comp;
-    public TrackEq Eq => Chain.Eq;
 
     // engine scratch + meters (written on the audio thread, read by the UI)
     public readonly float[] BufL = new float[TrackDspChain.MaxBlockSize];
@@ -335,6 +331,7 @@ public sealed class LiveTrack
         Clips = clips;
         Chain = new TrackDspChain(sampleRate);
         ApplyAll();
+        started = true;
     }
 
     /// <summary>Level the "Vida" knob is measured against: the first clip with audio (one take per track for now).</summary>
@@ -434,9 +431,10 @@ public sealed class LiveTrack
     }
 
     /// <summary>
-    /// Updates the entire channel strip (saturator, compressor + its 4-stage EQ, 6-band track EQ, fader,
-    /// pan, mute/solo and reverb/delay sends) from the UI thread without audio dropouts or torn coefficients.
-    /// If <paramref name="ch"/> is provided, replaces <c>Track.Channel</c> first.
+    /// Updates the entire channel strip (its insert slots, fader, pan, mute/solo and reverb/delay sends) from the UI
+    /// thread without audio dropouts or torn coefficients: the slots keep their state by id, and a new list of slots
+    /// fades over (<see cref="TrackDspChain.SetInserts"/>). If <paramref name="ch"/> is provided, replaces
+    /// <c>Track.Channel</c> first.
     /// </summary>
     public void ApplyChannel(Channel? ch = null)
     {
@@ -450,76 +448,31 @@ public sealed class LiveTrack
         Chain.ReverbSend = cur.ReverbSend;
         Chain.DelayOn = cur.DelayOn;
         Chain.DelaySend = cur.DelaySend;
-        ApplySat();
-        ApplyComp();
-        ApplyEq();
+        ApplyInserts();
     }
 
     public void ApplyAll() => ApplyChannel();
 
-    public void ApplySat() =>
-        Chain.ApplySat(SatParams.From(Channel.Sat.On, Channel.Sat.Mode == "tape" ? SatMode.Tape : SatMode.Tube, Channel.Sat.Amount, RmsDb));
-
-    public void ApplyComp()
+    /// <summary>Hands the slots to the chain (a spare the edit turned on becomes a slot first).</summary>
+    public void ApplyInserts()
     {
-        var c = Channel.Comp;
-        var eq = new CompEqParams(c.Eq.HpfHz, c.Eq.MudDb, c.Eq.PresenceDb, c.Eq.PresenceHz, c.Eq.AirDb);
-        Chain.ApplyComp(new CompState(
-            c.On,
-            c.Preset,
-            c.Amount,
-            c.Limit,
-            c.Threshold,
-            c.Ratio,
-            c.Attack,
-            c.Release,
-            c.Knee,
-            c.Makeup,
-            eq));
+        Channel.AdoptSpares();
+        Chain.SetInserts(ChannelDsp.Specs(Channel, RmsDb), fade: started);
     }
+
+    /// <summary>False only while the constructor sets the chain up, before the audio thread can run it.</summary>
+    bool started;
 
     /// <summary>
-    /// Recomputes the compressor's threshold, ratio, attack/release, makeup and CompEq from the preset and
-    /// amount against the take's envelope (port of <c>updateComp</c> in <c>compPresets.ts</c>), writes them
-    /// back into <see cref="Channel.Comp"/> and updates the live DSP chain.
+    /// Recomputes a compressor's threshold, ratio, attack/release, makeup and CompEq from its preset and amount against
+    /// the take's envelope (port of <c>updateComp</c> in <c>compPresets.ts</c>), writes them back into
+    /// <paramref name="comp"/> (the channel's first compressor when null) and updates the live DSP chain.
     /// </summary>
-    public double RecalculateCompPreset()
+    public double RecalculateCompPreset(CompSettings? comp = null)
     {
-        var c = Channel.Comp;
-        var env = Envelope ?? CompPresets.Analyze([], sampleRate);
-        var eq = new CompEqParams(c.Eq.HpfHz, c.Eq.MudDb, c.Eq.PresenceDb, c.Eq.PresenceHz, c.Eq.AirDb);
-        var state = CompPresets.UpdateComp(
-            new CompState(c.On, c.Preset, c.Amount, c.Limit, c.Threshold, c.Ratio, c.Attack, c.Release, c.Knee, c.Makeup, eq),
-            env);
-        c.Threshold = state.Threshold;
-        c.Ratio = state.Ratio;
-        c.Attack = state.Attack;
-        c.Release = state.Release;
-        c.Knee = state.Knee;
-        c.Makeup = state.Makeup;
-        c.Eq.HpfHz = state.Eq.HpfHz;
-        c.Eq.MudDb = state.Eq.MudDb;
-        c.Eq.PresenceDb = state.Eq.PresenceDb;
-        c.Eq.PresenceHz = state.Eq.PresenceHz;
-        c.Eq.AirDb = state.Eq.AirDb;
-        Chain.ApplyComp(state);
-        return state.EstGrDb ?? 0;
-    }
-
-    public void ApplyEq()
-    {
-        var eq = Channel.Eq;
-        Span<EqBandSpec> bands = stackalloc EqBandSpec[TrackEq.BandCount];
-        for (int i = 0; i < TrackEq.BandCount; i++)
-        {
-            if (i < eq.Bands.Count)
-            {
-                var b = eq.Bands[i];
-                bands[i] = EqBandSpec.FromStrings(b.On, b.Type, b.Freq, b.Gain, b.Q, b.Slope, TrackEq.DefaultBands[i].Type);
-            }
-            else bands[i] = TrackEq.DefaultBands[i];
-        }
-        Chain.Eq.Set(eq.On, bands);
+        double gr = ChannelDsp.RecalculateComp(comp ?? Channel.Comp, Envelope ?? CompPresets.Analyze([], sampleRate));
+        ApplyInserts();
+        return gr;
     }
 
     /// <summary>

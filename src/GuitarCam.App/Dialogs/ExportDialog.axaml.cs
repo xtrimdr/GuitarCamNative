@@ -1268,33 +1268,6 @@ public sealed partial class ExportDialog : UserControl
             }
 
             var ch = trk.Channel;
-            var satMode = ch.Sat.Mode == "tape" ? SatMode.Tape : SatMode.Tube;
-            var sat = SatParams.From(ch.Sat.On, satMode, ch.Sat.Amount, firstRmsDb ?? -24.0);
-            var compEq = new CompEqParams(ch.Comp.Eq.HpfHz, ch.Comp.Eq.MudDb, ch.Comp.Eq.PresenceDb, ch.Comp.Eq.PresenceHz, ch.Comp.Eq.AirDb);
-            var comp = new CompState(
-                ch.Comp.On,
-                ch.Comp.Preset,
-                ch.Comp.Amount,
-                ch.Comp.Limit,
-                ch.Comp.Threshold,
-                ch.Comp.Ratio,
-                ch.Comp.Attack,
-                ch.Comp.Release,
-                ch.Comp.Knee,
-                ch.Comp.Makeup,
-                compEq);
-
-            var bands = new EqBandSpec[TrackEq.BandCount];
-            for (int i = 0; i < TrackEq.BandCount; i++)
-            {
-                if (i < ch.Eq.Bands.Count)
-                {
-                    var b = ch.Eq.Bands[i];
-                    bands[i] = EqBandSpec.FromStrings(b.On, b.Type, b.Freq, b.Gain, b.Q, b.Slope, TrackEq.DefaultBands[i].Type);
-                }
-                else bands[i] = TrackEq.DefaultBands[i];
-            }
-
             var folder = TrackFolders.Mix(p, trk);
             mixTracks.Add(new MixTrackSpec
             {
@@ -1304,10 +1277,7 @@ public sealed partial class ExportDialog : UserControl
                 Pan = ch.Pan,
                 Muted = ch.Muted || folder.Muted,
                 Solo = ch.Solo || folder.Solo,
-                Sat = sat,
-                Comp = comp,
-                EqOn = ch.Eq.On,
-                EqBands = bands,
+                Inserts = ChannelDsp.Specs(ch, firstRmsDb ?? -24.0),
                 ReverbOn = ch.ReverbOn,
                 ReverbSend = ch.ReverbSend,
                 DelayOn = ch.DelayOn,

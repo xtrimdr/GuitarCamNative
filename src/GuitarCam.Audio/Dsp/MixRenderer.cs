@@ -41,6 +41,8 @@ public sealed class MixTrackSpec
     public CompState Comp { get; init; } = CompState.Defaults;
     public bool EqOn { get; init; }
     public EqBandSpec[] EqBands { get; init; } = TrackEq.DefaultBands;
+    /// <summary>The track's insert slots in order; null = the fixed chain from <see cref="Sat"/>, <see cref="Comp"/> and the EQ.</summary>
+    public IReadOnlyList<InsertSpec>? Inserts { get; init; }
     public bool ReverbOn { get; init; } = true;
     public double ReverbSend { get; init; }
     public bool DelayOn { get; init; } = true;
@@ -60,23 +62,28 @@ public delegate void MixSink(int frame, ReadOnlySpan<float> left, ReadOnlySpan<f
 
 /// <summary>
 /// Per-track DSP chain shared by live ASIO playback (<c>PlaybackEngine</c>) and offline export render
-/// (<see cref="MixRenderer"/>): clips with fade envelopes → <see cref="Saturator"/> →
-/// <see cref="CompEqFilter"/> (pre) → <see cref="Compressor"/> → <see cref="CompEqFilter"/> (post) →
-/// <see cref="TrackEq"/> → Web Audio <c>StereoPannerNode</c> → fader + post-fader reverb/delay sends.
-/// Preallocates its buffers (8192 frames) so <see cref="ProcessBlock"/> never allocates.
+/// (<see cref="MixRenderer"/>): clips with fade envelopes → the track's insert slots (<see cref="ITrackInsert"/>, by
+/// default Vida → compressor with its preset EQ → 6-band EQ) → Web Audio <c>StereoPannerNode</c> → fader + post-fader
+/// reverb/delay sends. Preallocates its buffers (8192 frames) so <see cref="ProcessFilledBuffer"/> never allocates.
+/// The slots are an array the UI replaces whole (<see cref="SetInserts"/>); when the list itself changes (a slot added,
+/// removed or moved) the audio thread dips the track for <see cref="SwapFade"/> samples on each side of the swap, so
+/// the new chain comes in without a click.
 /// </summary>
 public sealed class TrackDspChain
 {
     public const int MaxBlockSize = 8192;
+    /// <summary>5 ms at 48 kHz: the fade out of the old slots and the fade in of the new ones when the list changes.</summary>
+    public const int SwapFade = 240;
 
     readonly int fs;
     readonly float[] bufL = new float[MaxBlockSize];
     readonly float[] bufR = new float[MaxBlockSize];
 
-    public Saturator Sat { get; }
-    public CompEqFilter CompEq { get; }
-    public Compressor Comp { get; }
-    public TrackEq Eq { get; }
+    // what the audio thread runs, and what the UI last asked for (with its slot ids, for Build)
+    ITrackInsert[] inserts = [];
+    volatile ITrackInsert[] wanted = [];
+    string[] wantedIds = [];
+    int fadeOut, fadeIn;
 
     public double Volume { get; set; } = 1;
     public double Pan { get; set; }
@@ -87,19 +94,28 @@ public sealed class TrackDspChain
     public bool DelayOn { get; set; } = true;
     public double DelaySend { get; set; }
     volatile SpectrumTap? spectrum;
-    /// <summary>Post-EQ, pre-fader tap for the EQ editor's live spectrum (the web's per-track analyser); null when nobody reads it.</summary>
+    /// <summary>Post-inserts, pre-fader tap for the EQ editor's live spectrum (the web's per-track analyser); null when nobody reads it.</summary>
     public SpectrumTap? Spectrum { get => spectrum; set => spectrum = value; }
 
     public TrackDspChain(int sampleRate)
     {
         fs = sampleRate;
-        Sat = new Saturator(sampleRate);
-        CompEq = new CompEqFilter(sampleRate);
-        Comp = new Compressor(sampleRate);
-        Eq = new TrackEq(sampleRate);
+        SetInserts(TrackInserts.Legacy(SatParams.From(false, SatMode.Tube, 0.3), CompState.Defaults, false, TrackEq.DefaultBands), fade: false);
     }
 
-    static double F(double v) => (float)v;
+    /// <summary>The inserts the UI last set, in order (the audio thread may still be fading over to them).</summary>
+    public IReadOnlyList<ITrackInsert> Inserts => wanted;
+
+    /// <summary>How late the slots' output comes out, all added up. Zero while every slot is a built-in effect.</summary>
+    public int LatencySamples
+    {
+        get
+        {
+            int n = 0;
+            foreach (var i in wanted) n += i.LatencySamples;
+            return n;
+        }
+    }
 
     public void Configure(MixTrackSpec spec)
     {
@@ -111,44 +127,27 @@ public sealed class TrackDspChain
         ReverbSend = spec.ReverbSend;
         DelayOn = spec.DelayOn;
         DelaySend = spec.DelaySend;
-
-        ApplySat(spec.Sat);
-        ApplyComp(spec.Comp);
-        Eq.Set(spec.EqOn, spec.EqBands);
+        SetInserts(spec.Inserts ?? TrackInserts.Legacy(spec.Sat, spec.Comp, spec.EqOn, spec.EqBands), fade: false);
     }
 
-    public void ApplySat(SatParams p)
+    /// <summary>
+    /// Takes the slots' settings (UI thread): inserts with the same id keep their state; a new list is handed to the audio
+    /// thread whole. <paramref name="fade"/> = false swaps at once, only for a chain the audio thread isn't running yet.
+    /// </summary>
+    public void SetInserts(IReadOnlyList<InsertSpec> specs, bool fade = true)
     {
-        Sat.Set(p with
-        {
-            Drive = F(p.Drive),
-            Bias = F(p.Bias),
-            Tone = F(p.Tone),
-            ToneMix = F(p.ToneMix),
-            Bump = F(p.Bump),
-        });
-    }
-
-    public void ApplyComp(CompState c)
-    {
-        CompEq.Set(c.On, c.Eq);
-        Comp.Bypass = !c.On;
-        Comp.Threshold = F(c.Threshold);
-        Comp.Ratio = F(c.Ratio);
-        Comp.Knee = F(c.Knee);
-        Comp.Attack = F(c.Attack);
-        Comp.Release = F(c.Release);
-        Comp.Makeup = F(c.Makeup);
-        Comp.Limit = c.Limit;
-        Comp.Ceiling = F(CompPresets.TrackLimitCeilingDb);
+        var next = TrackInserts.Build(specs, wanted, wantedIds, fs, out var ids);
+        wantedIds = ids;
+        if (next == wanted) return;
+        wanted = next;
+        if (!fade) inserts = next;
     }
 
     public void Reset()
     {
-        Sat.Reset();
-        CompEq.Reset();
-        Comp.Reset();
-        Eq.Reset();
+        inserts = wanted;
+        fadeOut = fadeIn = 0;
+        foreach (var i in inserts) i.Reset();
     }
 
     /// <summary>The sound of the transitions between a track's clips (<see cref="ClipTransitions"/>), for <see cref="SampleClips"/>.</summary>
@@ -253,10 +252,17 @@ public sealed class TrackDspChain
         var bl = bufL.AsSpan(0, n);
         var br = bufR.AsSpan(0, n);
 
-        Sat.Process(bl, br);
-        CompEq.ProcessWith(Comp, bl, br);
-        grDb = Comp.TakeMeter();
-        Eq.Process(bl, br);
+        var cur = inserts;
+        double reduction = 0;
+        for (int k = 0; k < cur.Length; k++)
+        {
+            cur[k].Process(bl, br);
+            reduction += cur[k].TakeGrDb();
+        }
+        grDb = reduction;
+        if (fadeOut == 0 && fadeIn == 0 && wanted != cur) fadeOut = SwapFade;
+        if (fadeOut > 0) FadeOutAndSwap(bl, br);
+        else if (fadeIn > 0) FadeIn(bl, br);
         spectrum?.Write(bl, br);
 
         bool mute = Muted || (anySolo && !Solo);
@@ -285,6 +291,31 @@ public sealed class TrackDspChain
         }
         peakL = pkL;
         peakR = pkR;
+    }
+
+    /// <summary>The old slots fade to silence; once there, the new ones take over and fade in from the next block.</summary>
+    void FadeOutAndSwap(Span<float> bl, Span<float> br)
+    {
+        for (int i = 0; i < bl.Length; i++)
+        {
+            float g = fadeOut / (float)SwapFade;
+            if (fadeOut > 0) fadeOut--;
+            bl[i] *= g;
+            br[i] *= g;
+        }
+        if (fadeOut > 0) return;
+        inserts = wanted;
+        fadeIn = SwapFade;
+    }
+
+    void FadeIn(Span<float> bl, Span<float> br)
+    {
+        for (int i = 0; i < bl.Length && fadeIn > 0; i++)
+        {
+            float g = 1 - fadeIn-- / (float)SwapFade;
+            bl[i] *= g;
+            br[i] *= g;
+        }
     }
 }
 

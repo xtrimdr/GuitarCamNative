@@ -313,39 +313,6 @@ static class DspCommands
                 }
 
                 var ch = t.Channel;
-                var sat = SatParams.From(
-                    ch.Sat.On,
-                    ch.Sat.Mode == "tape" ? SatMode.Tape : SatMode.Tube,
-                    ch.Sat.Amount,
-                    trackRms);
-                var compEq = new CompEqParams(
-                    ch.Comp.Eq.HpfHz,
-                    ch.Comp.Eq.MudDb,
-                    ch.Comp.Eq.PresenceDb,
-                    ch.Comp.Eq.PresenceHz,
-                    ch.Comp.Eq.AirDb);
-                var comp = new CompState(
-                    ch.Comp.On,
-                    ch.Comp.Preset,
-                    ch.Comp.Amount,
-                    ch.Comp.Limit,
-                    ch.Comp.Threshold,
-                    ch.Comp.Ratio,
-                    ch.Comp.Attack,
-                    ch.Comp.Release,
-                    ch.Comp.Knee,
-                    ch.Comp.Makeup,
-                    compEq);
-                var bands = new EqBandSpec[TrackEq.BandCount];
-                for (int i = 0; i < TrackEq.BandCount; i++)
-                {
-                    if (i < ch.Eq.Bands.Count)
-                    {
-                        var b = ch.Eq.Bands[i];
-                        bands[i] = EqBandSpec.FromStrings(b.On, b.Type, b.Freq, b.Gain, b.Q, b.Slope, TrackEq.DefaultBands[i].Type);
-                    }
-                    else bands[i] = TrackEq.DefaultBands[i];
-                }
 
                 trackSpecs.Add(new MixTrackSpec
                 {
@@ -355,10 +322,7 @@ static class DspCommands
                     Pan = ch.Pan,
                     Muted = ch.Muted,
                     Solo = ch.Solo,
-                    Sat = sat,
-                    Comp = comp,
-                    EqOn = ch.Eq.On,
-                    EqBands = bands,
+                    Inserts = ChannelDsp.Specs(ch, trackRms),
                     ReverbOn = ch.ReverbOn,
                     ReverbSend = ch.ReverbSend,
                     DelayOn = ch.DelayOn,
@@ -399,6 +363,9 @@ static class DspCommands
                 CompState.Defaults with { On = a.Flag("comp"), Preset = a.Get("comp-estilo", "rhythm"), Amount = a.Double("comp-cant", 0.5) },
                 ch,
                 sr);
+            var satParams = SatParams.From(a.Get("sat") != null, a.Get("sat")?.StartsWith("c", StringComparison.OrdinalIgnoreCase) == true ? SatMode.Tape : SatMode.Tube, a.Double("vida", 0.3), rms);
+            bool eqOn = a.Get("eq") != null;
+            var eqBands = a.Get("eq") is { } eqId ? TrackEq.ApplyPreset(eqId) : TrackEq.DefaultBands;
             trackSpecs.Add(new MixTrackSpec
             {
                 Clips =
@@ -415,10 +382,11 @@ static class DspCommands
                 ],
                 Volume = a.Double("volumen", 1),
                 Pan = a.Double("pan", 0),
-                Sat = SatParams.From(a.Get("sat") != null, a.Get("sat")?.StartsWith("c", StringComparison.OrdinalIgnoreCase) == true ? SatMode.Tape : SatMode.Tube, a.Double("vida", 0.3), rms),
+                Sat = satParams,
                 Comp = compState,
-                EqOn = a.Get("eq") != null,
-                EqBands = a.Get("eq") is { } eqId ? TrackEq.ApplyPreset(eqId) : TrackEq.DefaultBands,
+                EqOn = eqOn,
+                EqBands = eqBands,
+                Inserts = a.Get("cadena") is { } chainList ? InsertCommands.Chain(chainList, satParams, compState, eqOn, eqBands) : null,
                 ReverbOn = true,
                 ReverbSend = a.Double("reverb-envio", 0),
                 DelayOn = true,
@@ -648,6 +616,7 @@ static class DspCommands
 
         allOk &= MasterChecks(sr48);
         allOk &= TransposeCommands.Check();
+        allOk &= InsertCommands.Check();
 
         Console.WriteLine();
         Console.WriteLine(allOk
@@ -947,14 +916,6 @@ static class DspCommands
                 }
 
                 var ch = trk.Channel;
-                var sat = SatParams.From(ch.Sat.On, ch.Sat.Mode == "tape" ? SatMode.Tape : SatMode.Tube, ch.Sat.Amount, trackRms);
-                var compEq = new CompEqParams(ch.Comp.Eq.HpfHz, ch.Comp.Eq.MudDb, ch.Comp.Eq.PresenceDb, ch.Comp.Eq.PresenceHz, ch.Comp.Eq.AirDb);
-                var comp = new CompState(ch.Comp.On, ch.Comp.Preset, ch.Comp.Amount, ch.Comp.Limit, ch.Comp.Threshold, ch.Comp.Ratio, ch.Comp.Attack, ch.Comp.Release, ch.Comp.Knee, ch.Comp.Makeup, compEq);
-                var bands = new EqBandSpec[TrackEq.BandCount];
-                for (int i = 0; i < TrackEq.BandCount; i++)
-                    bands[i] = i < ch.Eq.Bands.Count
-                        ? EqBandSpec.FromStrings(ch.Eq.Bands[i].On, ch.Eq.Bands[i].Type, ch.Eq.Bands[i].Freq, ch.Eq.Bands[i].Gain, ch.Eq.Bands[i].Q, ch.Eq.Bands[i].Slope, TrackEq.DefaultBands[i].Type)
-                        : TrackEq.DefaultBands[i];
 
                 var folder = TrackFolders.Mix(p, trk);
                 mixTracks.Add(new MixTrackSpec
@@ -965,10 +926,7 @@ static class DspCommands
                     Pan = ch.Pan,
                     Muted = ch.Muted || folder.Muted,
                     Solo = ch.Solo || folder.Solo,
-                    Sat = sat,
-                    Comp = comp,
-                    EqOn = ch.Eq.On,
-                    EqBands = bands,
+                    Inserts = ChannelDsp.Specs(ch, trackRms),
                     ReverbOn = ch.ReverbOn,
                     ReverbSend = ch.ReverbSend,
                     DelayOn = ch.DelayOn,

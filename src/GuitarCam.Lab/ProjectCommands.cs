@@ -30,6 +30,7 @@ static class ProjectCommands
             "importar-audio" => ImportAudio(dir, a),
             "editar" => EditClips(dir, a),
             "historial" => HistoryCommands.Run(dir, a),
+            "insertos" => InsertCommands.Run(dir, a),
             "encuadre" => Frame(dir, a),
             "sincronia" => Sync(dir, a),
             "formato" => Format(dir, a),

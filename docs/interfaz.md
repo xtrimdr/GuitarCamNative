@@ -121,6 +121,11 @@ Ese es el diseño **Clásico**. Para el **Vertical**, ver el apartado que sigue.
   que pliega o despliega **todas** las secciones.
 - Una tarjeta (`Border.section`) por bloque, con ícono + etiqueta en mayúscula y, si se puede apagar, un ON/OFF a la
   derecha. Apagada → controles al 40 % de opacidad, pero se pueden seguir tocando.
+- **Los efectos son la cadena de slots del canal** (`RebuildInspectorChain`, pedido del usuario): entre Mezcla y Reverb,
+  una sección por slot en el orden en que suena (Saturación, Compresor, EQ; un tipo repetido se numera, "EQ 2", y
+  recuerda su propio plegado), con el ⋯ del slot (`SlotMenuButton`) y una manija de puntos (`GripDots`) para
+  arrastrarla; al final, "+ Efecto". Se rearma solo cuando cambia la pista o la lista (sus refrescos van aparte, en
+  `chainRefresh`); el espectro en vivo va en el primer EQ. Reverb, Delay y Transponer no son slots y quedan fijos.
 - La cantidad principal de cada efecto va en el knob grande (`EffectKnob`: Vida, envío a reverb, envío a delay); los
   ajustes finos siguen en sliders.
 - Con su encabezado "Toma" se pliega a una columna de íconos de 44, como la barra del proyecto, y se recuerda.
@@ -410,6 +415,14 @@ tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
   (`FxNarrowW`) en vez de recortar controles.
 - En las tiras amplias la cabecera (● M S) y el paneo quedan fijos y solo scrollean los efectos, cada uno en su
   panel; en las compactas el ● va debajo del nombre, porque ● M S C no entran en una fila.
+- **Slots de efectos** (tira amplia, `WideFx`): un panel por slot del canal en el orden en que suena (`SatPanel`,
+  `CompPanel`, `EqPanel`; un tipo repetido se numera, "EQ 2"). El ⋯ del título (`SlotMenuButton`) sube, baja, duplica o
+  saca el slot; también se arrastra de su barra de título (`Controls/SlotDrag.cs`, animado como el reordenar pistas
+  del timeline: los demás se corren para hacerle lugar, al soltar se acomoda y recién ahí cambia el orden). "+ Efecto" (`AddSlotButton`) agrega uno al final, ya prendido. El gráfico de cada EQ abre sus bandas en
+  un flyout (`ShowSlotEq`). La barra "Comprime" va en el primer compresor y muestra lo de toda la cadena. La tira
+  compacta y las perillas del timeline son un atajo al primer slot de cada tipo; si no hay ninguno, prenderlo ahí lo
+  vuelve a poner en su lugar de siempre (`Channel.AdoptSpares`). Cada cambio de la lista es un paso de deshacer
+  y reconstruye las tiras (la clave de `RefreshMixer` lleva los ids de los slots).
 - **Mastering** (`MainWindow.Master.cs`): la tercera vista del selector Timeline · Mixer · Mastering (la X sigue
   alternando timeline / mixer). Usa el lugar del mixer (`MixerHost`, con su altura y su lugar en solo audio): esconde
   la cabecera y las tiras y muestra la cadena. El botón "Master" del canal master (en acento con el master prendido)

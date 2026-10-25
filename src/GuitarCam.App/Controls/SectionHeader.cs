@@ -14,7 +14,7 @@ namespace GuitarCam.App.Controls;
 /// </summary>
 public sealed class SectionHeader : Border
 {
-    readonly Grid row = new() { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto,Auto") };
+    readonly Grid row = new() { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*,Auto,Auto") };
     readonly TextBlock chevron = new() { Classes = { "icon" }, Text = "", Foreground = Palette.Faint, FontSize = 10, Width = 16, VerticalAlignment = VerticalAlignment.Center };
     readonly TextBlock label;
     bool hover;
@@ -35,9 +35,9 @@ public sealed class SectionHeader : Border
         Cursor = new Cursor(StandardCursorType.Hand);
         Focusable = true;
         Avalonia.Automation.AutomationProperties.SetName(this, title.ToUpperInvariant());
-        row.Children.Add(chevron);
-        Grid.SetColumn(Icon, 1); row.Children.Add(Icon);
-        Grid.SetColumn(label, 2); row.Children.Add(label);
+        Grid.SetColumn(chevron, 1); row.Children.Add(chevron);
+        Grid.SetColumn(Icon, 2); row.Children.Add(Icon);
+        Grid.SetColumn(label, 3); row.Children.Add(label);
         Child = row;
         Paint();
     }
@@ -45,9 +45,12 @@ public sealed class SectionHeader : Border
     /// <summary>Puts the header's buttons on the right: an action (reset, mute…) and the ON/OFF power button.</summary>
     public void SetTrailing(Control? action, Control? power)
     {
-        if (action != null) { Grid.SetColumn(action, 3); row.Children.Add(action); }
-        if (power != null) { Grid.SetColumn(power, 4); row.Children.Add(power); }
+        if (action != null) { Grid.SetColumn(action, 4); row.Children.Add(action); }
+        if (power != null) { Grid.SetColumn(power, 5); row.Children.Add(power); }
     }
+
+    /// <summary>A handle before the chevron (an effect slot's grip): it takes its own presses, so they don't fold the section.</summary>
+    public void SetGrip(Control grip) { Grid.SetColumn(grip, 0); row.Children.Add(grip); }
 
     public void SetCollapsed(bool collapsed)
     {

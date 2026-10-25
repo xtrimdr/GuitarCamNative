@@ -15,7 +15,8 @@ namespace GuitarCam.Projects;
 public sealed class Project
 {
     public const string FormatId = "guitarcam-project";
-    public const int CurrentVersion = 1;
+    /// <summary>2: the channel's effects are insert slots (<see cref="Channel.Inserts"/>) instead of fixed sat/comp/eq.</summary>
+    public const int CurrentVersion = 2;
 
     public string Format { get; set; } = FormatId;
     public int Version { get; set; } = CurrentVersion;
@@ -492,28 +493,204 @@ public sealed class Folder
 }
 
 /// <summary>The channel strip of a track: stays with the track when its clips change.</summary>
+/// <summary>
+/// A track's mixer channel. Its effects are insert slots (<see cref="Inserts"/>, native only) that can be added,
+/// removed, repeated and reordered; a new channel brings Vida → compressor → EQ, the chain that was fixed before.
+/// <see cref="Sat"/>, <see cref="Comp"/> and <see cref="Eq"/> are the first slot of each kind (what the inspector, the
+/// timeline knobs and the compact strip edit). A kind with no slot gives a spare that isn't heard; turning it on
+/// (<see cref="AdoptSpares"/>) puts it back in the chain where it went by default.
+/// Projects of version 1 saved <c>sat</c>, <c>comp</c> and <c>eq</c> as fields: they come in through the
+/// <c>Old*</c> properties and become the three slots in that order, so they sound the same.
+/// </summary>
 public sealed class Channel
 {
     public double Volume { get; set; } = 1;
     public double Pan { get; set; }
     public bool Muted { get; set; }
     public bool Solo { get; set; }
-    public SatSettings Sat { get; set; } = new();
-    public CompSettings Comp { get; set; } = new();
-    public EqSettings Eq { get; set; } = new();
+    /// <summary>The insert slots, in the order the sound goes through them.</summary>
+    public List<InsertSlot>? Inserts { get; set; } = DefaultInserts();
     public bool ReverbOn { get; set; } = true;
     public double ReverbSend { get; set; }
     public bool DelayOn { get; set; } = true;
     public double DelaySend { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
+    // version 1's fixed effects, read only to turn them into slots (never written: null after Upgrade)
+    [JsonPropertyName("sat")] public SatSettings? OldSat { get; set; }
+    [JsonPropertyName("comp")] public CompSettings? OldComp { get; set; }
+    [JsonPropertyName("eq")] public EqSettings? OldEq { get; set; }
+
+    SatSettings? spareSat;
+    CompSettings? spareComp;
+    EqSettings? spareEq;
+
+    /// <summary>The first Vida slot (or the spare, when the channel has none).</summary>
+    [JsonIgnore]
+    public SatSettings Sat
+    {
+        get => First(InsertSlot.SatKind)?.Sat ?? (spareSat ??= new());
+        set => Put(InsertSlot.SatKind, s => s.Sat = value);
+    }
+
+    /// <summary>The first compressor slot (or the spare).</summary>
+    [JsonIgnore]
+    public CompSettings Comp
+    {
+        get => First(InsertSlot.CompKind)?.Comp ?? (spareComp ??= new());
+        set => Put(InsertSlot.CompKind, s => s.Comp = value);
+    }
+
+    /// <summary>The first EQ slot (or the spare).</summary>
+    [JsonIgnore]
+    public EqSettings Eq
+    {
+        get => First(InsertSlot.EqKind)?.Eq ?? (spareEq ??= new());
+        set => Put(InsertSlot.EqKind, s => s.Eq = value);
+    }
+
+    /// <summary>The slots, with a version 1 channel turned into slots first.</summary>
+    [JsonIgnore]
+    public List<InsertSlot> Slots
+    {
+        get
+        {
+            Upgrade();
+            return Inserts!;
+        }
+    }
+
+    public static List<InsertSlot> DefaultInserts() =>
+        [InsertSlot.New(InsertSlot.SatKind), InsertSlot.New(InsertSlot.CompKind), InsertSlot.New(InsertSlot.EqKind)];
+
+    public InsertSlot? Slot(string id) => Slots.Find(s => s.Id == id);
+
+    /// <summary>True when <paramref name="slot"/> is the first of its kind: the one the inspector and the timeline edit.</summary>
+    public bool IsMain(InsertSlot slot) => First(slot.Type) == slot;
+
+    InsertSlot? First(string kind) => Slots.Find(s => s.Type == kind);
+
+    void Put(string kind, Action<InsertSlot> set)
+    {
+        var slot = First(kind);
+        if (slot == null)
+        {
+            slot = InsertSlot.New(kind);
+            Slots.Insert(DefaultPlace(kind), slot);
+        }
+        set(slot);
+        slot.Normalize();
+    }
+
+    /// <summary>Where a slot of <paramref name="kind"/> goes back by default: after the slots that came before it in the old fixed chain.</summary>
+    public int DefaultPlace(string kind)
+    {
+        int rank = Array.IndexOf(Dsp.TrackInserts.DefaultOrder, kind);
+        var slots = Slots;
+        int at = 0;
+        for (int i = 0; i < slots.Count; i++)
+        {
+            int r = Array.IndexOf(Dsp.TrackInserts.DefaultOrder, slots[i].Type);
+            if (r >= 0 && r <= rank) at = i + 1;
+        }
+        return at;
+    }
+
+    /// <summary>
+    /// A spare that was turned on (the inspector or a knob edited a kind the channel had no slot for) becomes a slot
+    /// again, at its default place. Returns true when the slots changed. UI thread, after an edit.
+    /// </summary>
+    public bool AdoptSpares()
+    {
+        bool changed = false;
+        if (spareSat is { On: true } s) { spareSat = null; Put(InsertSlot.SatKind, x => x.Sat = s); changed = true; }
+        if (spareComp is { On: true } c) { spareComp = null; Put(InsertSlot.CompKind, x => x.Comp = c); changed = true; }
+        if (spareEq is { On: true } e) { spareEq = null; Put(InsertSlot.EqKind, x => x.Eq = e); changed = true; }
+        return changed;
+    }
+
+    void Upgrade()
+    {
+        if (OldSat == null && OldComp == null && OldEq == null)
+        {
+            Inserts ??= DefaultInserts();
+            return;
+        }
+        Inserts =
+        [
+            InsertSlot.New(InsertSlot.SatKind, sat: OldSat ?? new()),
+            InsertSlot.New(InsertSlot.CompKind, comp: OldComp ?? new()),
+            InsertSlot.New(InsertSlot.EqKind, eq: OldEq ?? new()),
+        ];
+        OldSat = null;
+        OldComp = null;
+        OldEq = null;
+    }
+
     internal void Normalize()
     {
-        Sat ??= new();
-        Comp ??= new();
-        Comp.Eq ??= new();
-        Eq ??= new();
-        Eq.Normalize();
+        Upgrade();
+        Inserts!.RemoveAll(s => s == null);
+        foreach (var s in Inserts) s.Normalize();
+        // two slots with one id would share one effect in the engine
+        var seen = new HashSet<string>();
+        foreach (var s in Inserts)
+            if (!seen.Add(s.Id)) { s.Id = Ids.New("fx"); seen.Add(s.Id); }
+        AdoptSpares();
+    }
+}
+
+/// <summary>
+/// One insert slot of a <see cref="Channel"/>: its kind and the settings of that kind (the others stay null). A kind
+/// this version doesn't know (a future plugin slot) is kept as it came, through <see cref="Extra"/>, and not heard.
+/// </summary>
+public sealed class InsertSlot
+{
+    public const string SatKind = Dsp.TrackInserts.Sat, CompKind = Dsp.TrackInserts.Comp, EqKind = Dsp.TrackInserts.Eq;
+
+    public string Id { get; set; } = Ids.New("fx");
+    /// <summary>sat | comp | eq</summary>
+    public string Type { get; set; } = EqKind;
+    public SatSettings? Sat { get; set; }
+    public CompSettings? Comp { get; set; }
+    public EqSettings? Eq { get; set; }
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+
+    [JsonIgnore] public bool Known => Dsp.TrackInserts.IsKind(Type);
+
+    /// <summary>Whether it sounds: its kind's own ON.</summary>
+    [JsonIgnore]
+    public bool On
+    {
+        get => Type switch { SatKind => Sat?.On == true, CompKind => Comp?.On == true, EqKind => Eq?.On == true, _ => false };
+        set
+        {
+            Normalize();
+            switch (Type)
+            {
+                case SatKind: Sat!.On = value; break;
+                case CompKind: Comp!.On = value; break;
+                case EqKind: Eq!.On = value; break;
+            }
+        }
+    }
+
+    public static InsertSlot New(string kind, SatSettings? sat = null, CompSettings? comp = null, EqSettings? eq = null)
+    {
+        var s = new InsertSlot { Type = kind, Sat = sat, Comp = comp, Eq = eq };
+        s.Normalize();
+        return s;
+    }
+
+    internal void Normalize()
+    {
+        if (string.IsNullOrEmpty(Id)) Id = Ids.New("fx");
+        switch (Type)
+        {
+            case SatKind: Sat ??= new(); Comp = null; Eq = null; break;
+            case CompKind: Comp ??= new(); Comp.Eq ??= new(); Sat = null; Eq = null; break;
+            case EqKind: Eq ??= new(); Eq.Normalize(); Sat = null; Comp = null; break;
+        }
     }
 }
 

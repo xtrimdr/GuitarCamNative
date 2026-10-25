@@ -116,7 +116,8 @@ public sealed class ProjectStore : IDisposable
     /// <summary>Older versions of the format get upgraded here, one step at a time.</summary>
     static void Migrate(Project p)
     {
-        // version 1 is the first one: nothing to do yet
+        // 1 -> 2: the channels' sat/comp/eq became insert slots; Channel.Normalize already turned them (so a project
+        // opened read-only sounds right too), here it only gets the new number
         p.Version = Project.CurrentVersion;
     }
 

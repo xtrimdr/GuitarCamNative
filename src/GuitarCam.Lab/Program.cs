@@ -70,7 +70,10 @@ static class Program
                         [--delay slapback|corchea|punteada|pingpong|ambiente] [--bpm 120]
                                            aplica efectos de pista y buses a un WAV
               mezclar   carpeta-proyecto|entrada.wav [--salida mezcla.wav] [--segundos N]
-                                           renderiza la mezcla completa offline (sin la demora del limitador)
+                        [--sat valvula|cinta] [--vida 0.3] [--comp] [--comp-estilo rhythm|arpeggio|lead] [--comp-cant 0.5]
+                        [--eq rhythm|lead|acoustic|front] [--cadena vida,comp,eq]
+                                           renderiza la mezcla completa offline (sin la demora del limitador); con un WAV,
+                                           --cadena arma los slots de la pista en ese orden (se pueden repetir: eq,vida,eq)
               exportar  [carpeta-proyecto] [--salida nombre] [--carpeta destino] [--calidad alta|estandar|borrador]
                         [--reemplazar] [--prueba] [--audio wav|mp3] [--stems]
                         [--destino project|reels|youtube|ig-square|ig-portrait] [--volumen como-esta|youtube|…]
@@ -169,6 +172,9 @@ static class Program
               proyecto verificar-tomas     verifica a qué pista va una toma nueva, su nombre y su canal
               proyecto importar-audio carpeta archivo [--en segundos] [--pista id]   copia un audio de afuera a media/ y lo pone en una pista
               proyecto verificar-importar  verifica la importación de audio (formato, nombres, archivos rotos)
+              proyecto insertos carpeta pista [agregar vida|comp|eq [--en n] | quitar n | mover n m | duplicar n | prender n | apagar n]
+                                           los slots de efectos de la pista (número o id), en el orden en que suenan; sin
+                                           operación, los lista. Como el menú de cada efecto en la tira ancha del mixer
               proyecto historial carpeta   tomas (en uso / no usadas), exportaciones y actividad, como la pestaña Historial
               proyecto historial carpeta quitar|usar medio | borrar-no-usadas | borrar-exportacion n
               proyecto verificar-historial verifica el registro de tomas, la Papelera y las frases de la actividad

@@ -115,6 +115,14 @@ public static class TakeRecording
     {
         var d = new Channel();
         d.Normalize();
-        return JsonSerializer.Serialize(c, ProjectStore.Json) == JsonSerializer.Serialize(d, ProjectStore.Json);
+        return Shape(c) == Shape(d);
+    }
+
+    /// <summary>The channel as JSON without its slots' ids, which every new channel draws at random.</summary>
+    static string Shape(Channel c)
+    {
+        var copy = ProjectLibrary.Clone(c);
+        foreach (var s in copy.Slots) s.Id = "";
+        return JsonSerializer.Serialize(copy, ProjectStore.Json);
     }
 }

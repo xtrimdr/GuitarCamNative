@@ -119,11 +119,19 @@ El callback de ASIO (`AsioDuplex.ProcessBlock`, `PlaybackEngine.Process`) corre 
 - Motor a 48 kHz (`PlaybackEngine.SampleRate`); los medios se remuestrean con `AudioLoader`. Si un cambio sube mucho la
   carga "DSP x %" de la barra de título, decilo.
 
-Cadena por pista: clips (fades, ganancia; el audio ya transpuesto si la pista tiene Transponer) → saturación → EQ del preset antes → compresor → EQ del preset después → EQ
-de pista → paneo → fader → suma; del fader salen los envíos post-fader a reverb y delay, que vuelven al master →
+Cadena por pista: clips (fades, ganancia; el audio ya transpuesto si la pista tiene Transponer) → los **slots de
+efectos** del canal en su orden (`Channel.Inserts`; por defecto saturación → compresor con su EQ de preset antes y
+después → EQ de pista, que se pueden sacar, repetir y reordenar) → paneo → fader → suma; del fader salen los envíos post-fader a reverb y delay, que vuelven al master →
 limitador. El click va por fuera del limitador, atrasado la misma latencia. `TrackDspChain` y `MixGraphBus`
 (`GuitarCam.Audio/Dsp/MixRenderer.cs`) los usan igual la reproducción y la exportación: no los dupliques.
 `gclab comprobar-dsp` corre las comprobaciones del DSP.
+
+Slots: cada efecto es un `ITrackInsert` (`GuitarCam.Audio/Dsp/TrackInserts.cs`); un VST3 tiene que ser un tipo de slot
+más. `TrackDspChain.SetInserts` reusa el efecto de cada slot por su id (no pierde el estado al editar) y, si cambia la
+lista, el hilo de audio funde 5 ms de salida y 5 ms de entrada. La conversión canal → motor es una sola,
+`ChannelDsp.Specs` (en vivo, exportación y gclab); las ediciones de la lista, `ChannelInserts`. La pestaña Canal y la
+tira amplia muestran la cadena entera (cada slot editado por su id); `Channel.Sat/Comp/Eq` son el primer slot de cada
+tipo, el atajo de las perillas del timeline y la tira compacta.
 
 ## 5. Estilo de código
 

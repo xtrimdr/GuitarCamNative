@@ -3,6 +3,15 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-25: Efectos en slots por canal (etapa 1 de los plugins). Cada efecto es un `ITrackInsert`
+  (`GuitarCam.Audio/Dsp/TrackInserts.cs`) y `TrackDspChain` corre una lista que la UI reemplaza entera: reusa el efecto
+  de cada slot por id y, si cambia la lista, funde 5 ms y 5 ms sin clic. El canal guarda `inserts` (proyecto versión 2);
+  los `sat`/`comp`/`eq` de la versión 1 pasan a tres slots en ese orden y suenan idéntico (`Channel`, `InsertSlot` en
+  `Model.cs`; `ChannelDsp`, `ChannelInserts`). En la tira amplia del mixer, un panel por slot con ⋯ (subir, bajar,
+  duplicar, sacar), "+ Efecto", arrastre para reordenar (`Controls/SlotDrag.cs`) y las bandas de cada EQ en un
+  flyout (`MainWindow.Mixer.cs`). La pestaña Canal también es la cadena: una sección por slot, con ⋯, manija para
+  arrastrar y "+ Efecto" (`RebuildInspectorChain` en `MainWindow.Inspector.cs`). gclab: `proyecto insertos`,
+  `mezclar --cadena` y las comprobaciones "Slots" de `comprobar-dsp` (`InsertCommands.cs`).
 - 2026-10-25: Release 0.9.5 en GitHub con su instalador. `tools\make-installer.ps1` ahora le pone la versión al exe y
   publica en una carpeta limpia; el instalador lleva los DLL de FFmpeg de la preview (`ffmpeg\`).
 - 2026-10-25: Transiciones entre clips de una pista (Corte / Fundido cruzado / Pasar por negro, 0,1 a 3 s, 0,5 por

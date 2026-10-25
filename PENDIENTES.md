@@ -24,19 +24,8 @@ _Ideas y mejoras para la nativa._
   usa tal cual) y importar el audio de un video
 - [ ] Transponer: probar si conviene un modo "fino" en cents. Límite conocido: dos armónicos a menos de ~7 Hz (la 3ª
   de un acorde grave) mantienen su batido original
-- [ ] Efectos en slots por canal (etapa 1 de los plugins, solo efectos internos; pedido 2026-10-25). Hoy cada efecto
-  es su clase, pero la cadena es fija: el orden está en `TrackDspChain.ProcessFilledBuffer` y `Channel` tiene un
-  campo por efecto (`Sat`, `Comp`, `Eq`). Plan:
-  - Interfaz de insert en `GuitarCam.Audio` (`Process(l, r)`, `Reset()`, `LatencySamples`, medidor opcional,
-    estado guardable), pensada ya para que un VST sea un tipo de slot más (ver el punto 2)
-  - `TrackDspChain` con una lista de inserts que se reemplaza entera (como `LiveTrack[]`), sin locks en el callback;
-    el compresor con su EQ de preset pasa a ser un insert con la misma forma
-  - Modelo: `Channel.Inserts` (`{ type, on, params }`), subir `Project.CurrentVersion` y migrar `Sat`/`Comp`/`Eq` a
-    tres slots en el orden de hoy: un proyecto viejo suena idéntico
-  - Foco: un canal nuevo trae la cadena de hoy (Vida, compresor, EQ); agregar, sacar, repetir o reordenar es opcional
-    en la tira del mixer, sin pasos de más para quien no lo toca
-  - La reverb y el delay siguen como buses compartidos con envíos (no son inserts)
-  - `gclab`: armar y probar cadenas de slots; `comprobar-dsp` verifica que la cadena migrada dé lo mismo que la fija
+- [x] Efectos en slots por canal, etapa 1 con los efectos internos (hecho, ver [HECHO.md](HECHO.md)). Queda para la
+  etapa 2: compensar la latencia de los slots (hoy todos dan 0) y el estado guardable de un plugin
 - [ ] Mejorar el mixer: más sends/buses, grupos, medidores más completos
 - …y más: ir sumando acá
 
