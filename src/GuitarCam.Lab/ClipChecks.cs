@@ -25,6 +25,8 @@ static class ClipChecks
         var moved = Drag(original, ClipEditMode.Move, 0.41);
         Check(Near(moved.AtSec, 1.42) && Near(ClipEditing.Window(moved, media).Anchor, 1.5), "el anclaje cae en grilla y conserva 80 ms de sincronía");
         Check(Near(original.AtSec, 0.92) && media.SyncMs == -80, "calcular un gesto no muta el clip ni la grabación");
+        var offGrid = Drag(new Clip { MediaId = media.Id, AtSec = 0.72 }, ClipEditMode.Move, 0.41);
+        Check(Near(offGrid.AtSec, 1.22) && Near(ClipEditing.Window(offGrid, media).Anchor, 1.3), "fuera de grilla, se mueve un paso y conserva su desfasaje");
         Check(Near(Drag(original, ClipEditMode.Move, 0.413, true).AtSec, 1.333), "Alt evita todos los imanes");
         Check(Near(Magnet(0.41, 1.44).AtSec, 1.36), "sin grilla, el cabezal imanta dentro de 8 píxeles");
         Check(Near(Drag(original, ClipEditMode.Move, 0.41, false, 1.44).AtSec, 1.42), "con grilla, el cabezal no tira");

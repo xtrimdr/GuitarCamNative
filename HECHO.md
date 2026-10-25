@@ -3,6 +3,24 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-25: **avisa al cerrar con cambios sin guardar**: en los modos cada X minutos o a mano (o si un guardado
+  falló) cerrar la ventana pregunta Guardar y cerrar / Cerrar sin guardar / Cancelar, y si no puede guardar no cierra.
+  `Dialogs/UnsavedDialog`, `Closing` en `MainWindow.axaml.cs`.
+- 2026-10-25: **mover con grilla conserva el desfasaje**: un clip (o varios) que no está justo en la grilla se
+  mueve de a pasos enteros sin saltar a la línea, así cae igual de corrido en otro compás; Alt sigue siendo libre.
+  `ClipEditing.Drag`, caso nuevo en `gclab proyecto verificar-clips`.
+- 2026-10-25: **rectángulo de selección de clips**: arrastrar en vacío sobre las pistas marca los clips que toca
+  (Ctrl suma); moverlos los lleva juntos en el tiempo, cada uno en su pista, y Supr los borra a todos, en un solo paso
+  para deshacer. `Controls/TimelineView.cs` (`boxed`, `StartCarry`), `MainWindow.Timeline.cs` (`ClipsMoved`).
+- 2026-10-25: **el limitador, fuera de la caja del master**: la vista Mastering separa en una caja lo que prende el ON
+  del master (Limpieza a Soft clip, que se atenúa entera con el master apagado) y deja afuera "Salida" (Limitador →
+  Volumen), que trabaja siempre; el estado apagado dice "la mezcla va directo a la salida". `MainWindow.Master.cs`.
+- 2026-10-25: **limitador y medidor en pico real**: el Techo pasa a dBTP con −1 por defecto (lo que piden las
+  redes; el AAC del MP4 clipeaba con −0,3 por muestra). `TruePeak` sobremuestrea ×4 con el filtro de BS.1770 y el
+  `MasterLimiter` lo usa como detector además de cada muestra; el panel Volumen muestra "Pico real" en dBTP (rojo si
+  pasa del Techo), la exportación sin limitador frena en el pico real y `gclab masterizar` lo informa. Se guarda con
+  otra clave (`limCeilingDbtp`): los proyectos de antes arrancan en −1. Comprobaciones en `comprobar-dsp`.
+
 - 2026-10-25: **Transponer por pista**: slider en Mezcla del inspector (−12 a +12 semitonos, `Track.Transpose`) que
   cambia el tono sin cambiar el largo, así sigue en sincronía con el video. `PitchShifter` corre el espectro de cada
   cuadro (85 ms, FFT ×4) sin estirar ni remuestrear y rearma las fases desde los bins más fuertes (PVDR + phase

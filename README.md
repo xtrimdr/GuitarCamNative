@@ -129,9 +129,10 @@ Todos se pueden cambiar en ⚙ Configuración → Atajos de teclado (menos Esc).
 | 1 a 5 | zoom: 1 tiempo / 1 compás / 4 compases / 16 compases / toda la canción |
 | X | timeline / mixer |
 | Alt+X / D | dividir el clip en el cabezal / duplicarlo |
-| Supr | quitar el clip (o la pista vacía) |
+| Supr | quitar el clip (o los marcados, o la pista vacía) |
 | Ctrl+Z / Ctrl+Y | deshacer / rehacer |
 | Ctrl+Shift+N | nueva pista |
+| Arrastrar en vacío sobre las pistas (Ctrl: sumar) | marcar varios clips con un rectángulo para moverlos o borrarlos juntos |
 | Ctrl+clic / Shift+clic en un encabezado | marcar varias pistas (una por una / un rango) para moverlas juntas |
 | Ctrl+S | guardar ya |
 | B / P | mostrar u ocultar el panel de la toma / del proyecto |

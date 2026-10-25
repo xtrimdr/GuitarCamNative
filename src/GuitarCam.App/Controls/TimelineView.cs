@@ -128,6 +128,19 @@ public sealed partial class TimelineView : Control
     /// <summary>The clip is over another track with Ctrl held: it swaps instead of landing at a new time.</summary>
     bool swapping;
     /// <summary>
+    /// The clips caught by the selection box (a drag over the empty part of the lanes; with Ctrl it adds to them), by id
+    /// (asked by the user, to move several at once). Moving one of them moves them all by the same time, each on its own
+    /// track, and Delete removes them all. Any plain selection clears it.
+    /// </summary>
+    readonly HashSet<string> boxed = [];
+    /// <summary>What was boxed before a Ctrl+box started: the box adds to it.</summary>
+    readonly HashSet<string> boxBase = [];
+    /// <summary>Where the box started: seconds, and px from the top of the content (it stays put while the view scrolls).</summary>
+    double boxSec, boxTop;
+    /// <summary>The other boxed clips carried along with the grabbed one: each one as it was, and where it would land.</summary>
+    readonly List<(LiveClip Clip, Clip Original)> carriedAlong = [];
+    readonly Dictionary<LiveClip, Clip> carriedPreview = [];
+    /// <summary>
     /// The range selected with Shift+drag on one track (native only), to delete what is inside it. It stays after the
     /// mouse is released until another click, Esc, an edit or the delete itself.
     /// </summary>
@@ -257,11 +270,11 @@ public sealed partial class TimelineView : Control
         VideoThumbnails.Ready += InvalidateVisual;
         dragScroll = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Input, (_, _) =>
         {
-            if (gesture is not ("clip" or "reorder" or "scrub" or "range")) return;
+            if (gesture is not ("clip" or "reorder" or "scrub" or "range" or "box")) return;
             double oldX = scrollX, oldY = scrollY;
             if (lastPointer.Y < RulerH + 36) scrollY -= Math.Ceiling((RulerH + 36 - lastPointer.Y) / 4);
             else if (lastPointer.Y > Bounds.Height - 36) scrollY += Math.Ceiling((lastPointer.Y - Bounds.Height + 36) / 4);
-            if (gesture is "clip" or "scrub" or "range")
+            if (gesture is "clip" or "scrub" or "range" or "box")
             {
                 if (lastPointer.X > Bounds.Width - 16) scrollX += Math.Max(2, (lastPointer.X - Bounds.Width + 16) / 2);
                 else if (lastPointer.X < HeaderW + 16) scrollX = Math.Max(0, scrollX - Math.Max(2, (HeaderW + 16 - lastPointer.X) / 2));
@@ -318,6 +331,7 @@ public sealed partial class TimelineView : Control
         liftedId = null;
         liftedAlso.Clear();
         picked.Clear();
+        boxed.Clear();
         pickAnchor = null;
         Relayout();
         if (!preserveView) SetFit(true);
@@ -335,6 +349,7 @@ public sealed partial class TimelineView : Control
         tracks = list;
         SetFolders(folderList);
         picked.RemoveWhere(id => !list.Any(t => t.Track.Id == id));
+        boxed.RemoveWhere(id => !list.Any(t => t.Clips.Any(c => c.Clip.Id == id)));
         Relayout();
         if (shownTop.Count > 0) slide.Start();
         var live = list.SelectMany(t => t.Clips).ToHashSet();
@@ -363,6 +378,95 @@ public sealed partial class TimelineView : Control
         picked.Clear();
         if (ids.Count > 1) foreach (var id in ids) picked.Add(id);
         InvalidateVisual();
+    }
+
+    /// <summary>The clips caught by the selection box, by id (empty or one = a plain selection).</summary>
+    public IReadOnlyCollection<string> BoxedClipIds => boxed.Count > 1 ? boxed : [];
+    /// <summary>The boxed clips were dragged: each one as it lands, the grabbed one first.</summary>
+    public event Action<IReadOnlyList<Clip>>? ClipsMoved;
+
+    /// <summary>Boxes these clips together again (after the window moved them), keeping the selected one.</summary>
+    public void BoxClips(IReadOnlyCollection<string> ids)
+    {
+        boxed.Clear();
+        if (ids.Count > 1) boxed.UnionWith(ids);
+        InvalidateVisual();
+    }
+
+    /// <summary>A press on the empty part of the lanes: a drag from here draws the selection box.</summary>
+    void StartBox(PointerPressedEventArgs e)
+    {
+        boxBase.Clear();
+        if ((modifiers & KeyModifiers.Control) != 0)
+        {
+            boxBase.UnionWith(boxed);
+            if (SelectedClipId != null) boxBase.Add(SelectedClipId);
+        }
+        boxSec = Sec(Math.Max(HeaderW, lastPointer.X));
+        boxTop = lastPointer.Y - RulerH + scrollY;
+        StartGesture("box", e);
+    }
+
+    /// <summary>The selection box in view px, from where it started to the pointer.</summary>
+    Rect BoxRect()
+    {
+        double x0 = X(boxSec), y0 = boxTop + RulerH - scrollY, x1 = Math.Max(HeaderW, lastPointer.X), y1 = lastPointer.Y;
+        return new Rect(Math.Min(x0, x1), Math.Min(y0, y1), Math.Abs(x1 - x0), Math.Abs(y1 - y0));
+    }
+
+    /// <summary>Boxes what was boxed before (with Ctrl) plus every clip the box touches on a visible track.</summary>
+    void UpdateBox()
+    {
+        var b = BoxRect();
+        boxed.Clear();
+        boxed.UnionWith(boxBase);
+        for (int i = 0; i < tracks.Count; i++)
+        {
+            if (hidden.Contains(tracks[i].Track.Id)) continue;
+            foreach (var c in tracks[i].Clips)
+                if (ClipRect(i, Window(c)).Intersects(b)) boxed.Add(c.Clip.Id);
+        }
+    }
+
+    /// <summary>The box was let go: the first boxed clip (top track, earliest) becomes the selected one, for the inspector.</summary>
+    void EndBox()
+    {
+        foreach (var r in rows)
+        {
+            if (r.Folder != null) continue;
+            var first = tracks[r.Track].Clips.Where(c => boxed.Contains(c.Clip.Id)).MinBy(c => Window(c).Start);
+            if (first == null) continue;
+            if (boxed.Count == 1) { SelectClip(r.Track, first.Clip.Id); return; }
+            SelectedClipId = first.Clip.Id;
+            SelectOne(r.Track);
+            return;
+        }
+        InvalidateVisual();
+    }
+
+    /// <summary>Grabbing a boxed clip by its body carries the other boxed ones with it.</summary>
+    void StartCarry(LiveClip grabbed)
+    {
+        carriedAlong.Clear();
+        carriedPreview.Clear();
+        foreach (var t in tracks)
+            foreach (var c in t.Clips)
+                if (c != grabbed && boxed.Contains(c.Clip.Id)) carriedAlong.Add((c, ClipEditing.Copy(c.Clip)));
+    }
+
+    /// <summary>The grabbed clip moved (and snapped): the carried ones move by the same time, none ending before 0.</summary>
+    void DragCarried()
+    {
+        if (dragged == null || original == null || preview == null) return;
+        double shift = preview.AtSec - original.AtSec;
+        foreach (var (c, o) in carriedAlong) shift = Math.Max(shift, ClipEnvelope.MinClipSec - Window(c, o).End);
+        preview.AtSec = ClipEditing.ToSample(original.AtSec + shift);
+        foreach (var (c, o) in carriedAlong)
+        {
+            var v = ClipEditing.Copy(o);
+            v.AtSec = ClipEditing.ToSample(o.AtSec + shift);
+            carriedPreview[c] = v;
+        }
     }
 
     /// <summary>A Ctrl or Shift click on a track's header: adds it or takes it out, or picks the range from the anchor.</summary>
@@ -396,6 +500,7 @@ public sealed partial class TimelineView : Control
     public void Select(int i)
     {
         picked.Clear();
+        boxed.Clear();
         pickAnchor = i >= 0 && i < tracks.Count ? tracks[i].Track.Id : null;
         SelectOne(i);
     }
@@ -794,7 +899,8 @@ public sealed partial class TimelineView : Control
         TrackHeightChanged?.Invoke(laneH);
         InvalidateVisual();
     }
-    Clip DisplayClip(LiveClip clip) => dragged == clip && preview != null && overIndex == fromIndex ? preview : clip.Clip;
+    Clip DisplayClip(LiveClip clip) => dragged == clip && preview != null && overIndex == fromIndex ? preview
+        : carriedPreview.TryGetValue(clip, out var along) ? along : clip.Clip;
     ClipEnvelope.ClipWindow Window(LiveClip clip, Clip? value = null)
     {
         var c = value ?? DisplayClip(clip);
@@ -931,6 +1037,8 @@ public sealed partial class TimelineView : Control
             if (recordingLanes != null)
                 foreach (int r in recordingLanes) DrawRecordingBar(ctx, r, W);
             DrawStripGuides(ctx, W, H);
+            if (gesture == "box" && moved)
+                ctx.DrawRectangle(Palette.Alpha(Palette.AccentColor, 0.08), Palette.Pen(Palette.Alpha(Palette.AccentColor, 0.7)), BoxRect());
         }
         DrawRuler(ctx, W);
         DrawStrip(ctx, W);
@@ -1446,7 +1554,7 @@ public sealed partial class TimelineView : Control
         double lh = RowH(t.Track);
         var w = Window(c, model);
         double x0 = X(w.Start), x1 = X(w.End);
-        sel = sel && (SelectedClipId == null || c.Clip.Id == SelectedClipId);
+        sel = sel && (SelectedClipId == null || c.Clip.Id == SelectedClipId) || boxed.Contains(c.Clip.Id);
         if (x1 < HeaderW || x0 > W) return;
         var clip = new Rect(x0, y + 5, Math.Max(2, x1 - x0), lh - 10);
         // a track with a color tints its clips with it (native only); without one they stay as in the web
@@ -1998,8 +2106,9 @@ public sealed partial class TimelineView : Control
                 // The header asks for the track menu (no clip); the lane, for the clip under the pointer.
                 var clip = p.X > HeaderW ? ClipAt(i, p.X) : null;
                 SelectedClipId = clip?.Clip.Id ?? tracks[i].Clips.FirstOrDefault(c => c.Clip.Id == SelectedClipId)?.Clip.Id;
-                // on a picked track the others stay picked, so the menu's folder entries move them all
-                if (picked.Count > 1 && picked.Contains(tracks[i].Track.Id)) SelectOne(i);
+                // on a picked track the others stay picked, so the menu's folder entries move them all; on a boxed
+                // clip the others stay boxed, so the menu acts on them all
+                if (picked.Count > 1 && picked.Contains(tracks[i].Track.Id) || clip != null && boxed.Count > 1 && boxed.Contains(clip.Clip.Id)) SelectOne(i);
                 else Select(i);
                 ClipContextRequested?.Invoke(tracks[i], clip, p);
             }
@@ -2035,7 +2144,9 @@ public sealed partial class TimelineView : Control
         }
         if (i < 0 || i >= tracks.Count)
         {
-            Select(-1);
+            // under the last track a drag also draws the selection box
+            if ((modifiers & KeyModifiers.Control) == 0 || p.X < HeaderW) Select(-1);
+            if (p.X >= HeaderW && row == null) StartBox(e);
             return;
         }
         // Ctrl on a header picks or drops that track, Shift picks the range up to it (to move them together)
@@ -2142,7 +2253,9 @@ public sealed partial class TimelineView : Control
             }
             if (clip == null)
             {
-                Select(tracks[i].Clips.Count == 0 ? i : -1);
+                // a drag from here draws the selection box; with Ctrl it adds to what is selected
+                if ((modifiers & KeyModifiers.Control) == 0) Select(tracks[i].Clips.Count == 0 ? i : -1);
+                StartBox(e);
                 return;
             }
             if (HitHandle(clip, p) == ClipEditMode.Move && CurvePointAt(i, clip, p) is var point and >= 0)
@@ -2155,11 +2268,18 @@ public sealed partial class TimelineView : Control
                 StartCurve(i, clip, -1, e);
                 return;
             }
-            SelectClip(i, clip.Clip.Id);
+            dragMode = HitHandle(clip, p);
+            // a boxed clip grabbed by its body carries the other boxed ones; its edges trim it alone
+            if (boxed.Count > 1 && boxed.Contains(clip.Clip.Id) && dragMode == ClipEditMode.Move)
+            {
+                SelectedClipId = clip.Clip.Id;
+                SelectOne(i);
+                StartCarry(clip);
+            }
+            else SelectClip(i, clip.Clip.Id);
             dragged = clip;
             original = ClipEditing.Copy(clip.Clip);
             preview = ClipEditing.Copy(clip.Clip);
-            dragMode = HitHandle(clip, p);
             StartGesture("clip", e);
             return;
         }
@@ -2242,6 +2362,7 @@ public sealed partial class TimelineView : Control
     {
         if (SelectedFolderId == id && Selected < 0) return;
         picked.Clear();
+        boxed.Clear();
         Selected = -1;
         SelectedClipId = null;
         SelectedFolderId = id;
@@ -2288,7 +2409,7 @@ public sealed partial class TimelineView : Control
         moved = false;
         capturedPointer = e.Pointer;
         e.Pointer.Capture(this);
-        if (kind is "clip" or "reorder" or "scrub" or "range") dragScroll.Start();
+        if (kind is "clip" or "reorder" or "scrub" or "range" or "box") dragScroll.Start();
         e.Handled = true;
     }
 
@@ -2394,7 +2515,8 @@ public sealed partial class TimelineView : Control
             if (!moved && Math.Abs(dxPx) < 3 && Math.Abs(lastPointer.Y - down.Y) < 3) return;
             bool wasMoved = moved;
             moved = true;
-            if (gesture == "reorder")
+            if (gesture == "box") UpdateBox();
+            else if (gesture == "reorder")
             {
                 var d = FindDrop();
                 // a lifted folder folds its children away; then each new place makes room again
@@ -2412,6 +2534,14 @@ public sealed partial class TimelineView : Control
                     Relayout();
                     slide.Start();
                 }
+            }
+            else if (dragged != null && original != null && carriedAlong.Count > 0)
+            {
+                // the boxed clips move in time together, each on its own track (no swapping, no landing elsewhere)
+                overIndex = fromIndex;
+                preview = ClipEditing.Drag(original, dragged.Media, dragMode, dxPx / pps, pps, Playhead, Grid, (modifiers & KeyModifiers.Alt) != 0,
+                    tracks.SelectMany(t => t.Clips).Where(c => c != dragged && !boxed.Contains(c.Clip.Id)).Select(c => Window(c)), dragged.LengthSec);
+                DragCarried();
             }
             else if (dragged != null && original != null)
             {
@@ -2447,6 +2577,8 @@ public sealed partial class TimelineView : Control
         var movedFolder = dragFolder;
         var movedTracks = dragIds.ToList();
         bool gathers = dragGathers;
+        List<Clip>? together = kind == "clip" && carriedAlong.Count > 0 && value != null ? [value, .. carriedPreview.Values] : null;
+        string? grabbedId = dragged?.Clip.Id;
         // the new height is applied while the dragged one still holds: applied after, the rows below went back to the
         // old height for a moment and glided from there, so everything jumped on release
         if (kind == "row-height" && changed && heightDrag is { } rh) RowHeightRequested?.Invoke(rh.Id, rh.H);
@@ -2458,7 +2590,11 @@ public sealed partial class TimelineView : Control
             else ClearRange();
         }
         if (kind is "marker" or "loop") StripReleased(kind, changed);
-        if (kind == "clip" && changed && value != null) ClipEditCommitted?.Invoke(value, target, swap);
+        if (kind == "box" && changed) EndBox();
+        // a click on a boxed clip without moving it leaves just that one selected
+        if (together != null && !changed) SelectClip(from, grabbedId);
+        else if (together != null) ClipsMoved?.Invoke(together);
+        else if (kind == "clip" && changed && value != null) ClipEditCommitted?.Invoke(value, target, swap);
         if (kind == "curve" && changed && value != null) ClipEditCommitted?.Invoke(value, null, null);
         if (kind == "reorder" && changed && landed is { } l && (l != from0 || gathers))
         {
@@ -2512,6 +2648,8 @@ public sealed partial class TimelineView : Control
         capturedPointer = null;
         dragged = null;
         original = preview = null;
+        carriedAlong.Clear();
+        carriedPreview.Clear();
         curvePoint = -1;
         swapId = null;
         swapping = false;

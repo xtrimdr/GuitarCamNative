@@ -76,10 +76,8 @@ del limitador y el limitador al final, trabajando poco.
 - [ ] **Etapa 2: Soft clip + limitador nuevo + volumen final en el master**
   - Soft clip: hecho (perilla "Recorte" y medidor, ADAA en vez de sobremuestreo; ver [HECHO.md](HECHO.md)). Falta: con
     un volumen final alto, repartir solo entre clipper y limitador.
-  - Limitador con techo en **−1 dB de pico real** (hoy se mide por muestra; Empuje, Techo y Release ya se ajustan
-    en la tarjeta, ver [HECHO.md](HECHO.md)). El AAC del MP4 puede clipear con −0,3.
   - El destino de LUFS (Como está / YouTube / Instagram / TikTok…) pasa al master, para escucharlo al mezclar.
-  - Medición: LUFS integrado y de corto plazo, pico y reducción por banda ya están en la vista; falta el pico real.
+  - Limitador y medición en pico real: hecho (ver [HECHO.md](HECHO.md)).
 - [ ] **Etapa 3: looks y "Sugerime"**
   - Looks (Natural, Pegadito, Brillante, Cálido, Al frente, Domar la púa…) con una perilla "Cuánto" que mueve todo.
     "Domar la púa" trabaja 2–5 kHz (puede pedir una cuarta banda solo para ese look).

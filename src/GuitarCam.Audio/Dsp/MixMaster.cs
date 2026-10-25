@@ -54,10 +54,10 @@ public static class MixMaster
         var (end, cut) = TailEnd(preL, preR, content, sampleRate);
 
         // the limiter as the master card has it: Empuje is where the gain starts, a loudness target moves it from there;
-        // with the limiter off nothing holds the peaks, so the gain stops where the loudest one touches the Techo
+        // with the limiter off nothing holds the peaks, so the gain stops where the loudest true peak touches the Techo
         var mp = bus.Master;
         double gain = mp.LimOn ? Math.Clamp(double.IsFinite(mp.LimDriveDb) ? mp.LimDriveDb : 0, 0, MasterParams.DriveMaxDb) : 0;
-        double maxGain = mp.LimOn ? MaxGainDb : Math.Min(MaxGainDb, mp.LimCeilingDb - PeakDb(preL, preR, end));
+        double maxGain = mp.LimOn ? MaxGainDb : Math.Min(MaxGainDb, mp.LimCeilingDb - TruePeak.MeasureDb(preL, preR, end));
         var (l, r) = Limit(preL, preR, end, gain, sampleRate, cut, mp);
         double lufs = LoudnessMeter.Measure(l, r, sampleRate);
         if (targetLufs is { } t && double.IsFinite(t) && double.IsFinite(lufs))
@@ -92,13 +92,6 @@ public static class MixMaster
         if (last < 0) return (content, false);
         int pad = (int)(TailPadSec * sampleRate);
         return last + 1 + pad >= len ? (len, true) : (last + 1 + pad, false);
-    }
-
-    static double PeakDb(float[] l, float[] r, int frames)
-    {
-        float pk = 0;
-        for (int i = 0; i < Math.Min(frames, Math.Min(l.Length, r.Length)); i++) pk = Math.Max(pk, Math.Max(Math.Abs(l[i]), Math.Abs(r[i])));
-        return pk > 0 ? 20 * Math.Log10(pk) : -120;
     }
 
     /// <summary>

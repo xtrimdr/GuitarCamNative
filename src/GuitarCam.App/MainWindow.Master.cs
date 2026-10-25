@@ -16,6 +16,8 @@ namespace GuitarCam.App;
 /// glance: Limpieza (low cut, mud) → Multibanda (three bands, a single "Cuánto" knob each) → Color (lows, presence,
 /// air, tilt) → Cinta → Ancho (width, lows in mono) → Soft clip → Limitador (Empuje, Techo, Release) → Volumen (LUFS,
 /// peak and how far from −14), as in <see cref="MasterChain"/> and <see cref="MixGraphBus"/>. Every stage has its ON.
+/// The master's ON only reaches up to the soft clip, so those stages sit in a box under it (dimmed while it is off)
+/// and the limiter and the meter stand outside it as Salida, which works either way (asked by the user).
 /// The view is as tall as the chain and does not resize: there is nothing more to show. Nothing is measured: each band follows its own level as it plays (<see cref="MasterBandComp"/>),
 /// so a knob is heard the moment it moves.
 /// </summary>
@@ -159,13 +161,14 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// A head (title, what the master is doing, ON) over the chain left to right, one panel per stage in the order the
-    /// sound goes through them, with arrows between: Limpieza → Multibanda → Color → Limitador.
+    /// Two groups left to right, in the order the sound goes: the master's box (title, what it is doing, ON, and a
+    /// panel per stage from Limpieza to Soft clip) and, outside it, Salida (Limitador → Volumen), which the master's ON
+    /// does not touch. Arrows between the panels.
     /// </summary>
     Control MasterBody()
     {
         bool editable = store is { ReadOnly: false };
-        var body = new StackPanel { Spacing = 12, HorizontalAlignment = HorizontalAlignment.Left };
+        var suite = new StackPanel { Spacing = 12 };
 
         var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
         head.Children.Add(new TextBlock { Classes = { "label" }, Text = Loc.T("master.title").ToUpperInvariant(), VerticalAlignment = VerticalAlignment.Center });
@@ -175,13 +178,13 @@ public partial class MainWindow
         on.IsEnabled = editable;
         on.Height = on.MinHeight = 30;
         Grid.SetColumn(on, 2); head.Children.Add(on);
-        body.Children.Add(head);
+        suite.Children.Add(head);
 
         var chain = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        static TextBlock Arrow() => new() { Classes = { "icon" }, Text = "", FontSize = 14, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center };
         void Add(Control panel)
         {
-            if (chain.Children.Count > 0)
-                chain.Children.Add(new TextBlock { Classes = { "icon" }, Text = "", FontSize = 14, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center });
+            if (chain.Children.Count > 0 && chain.Children[^1] is not TextBlock) chain.Children.Add(Arrow());
             chain.Children.Add(panel);
         }
 
@@ -245,6 +248,16 @@ public partial class MainWindow
         masterClipShown = double.NaN;
         Add(StagePanel(null, Loc.T("master.stage.clip"), Loc.T("master.stage.clip.tip"), () => MasterSet.ClipOn,
             () => MasterEdit(m => m.ClipOn = !m.ClipOn, "clipOn"), clip));
+        suite.Children.Add(chain);
+        var suiteChain = chain;
+        masterRefresh.Add(() => suiteChain.Opacity = MasterSet.On ? 1 : 0.45);
+
+        // what the master's ON does not reach: the limiter and the meter, after the box
+        var outHead = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, MinHeight = 30 };
+        outHead.Children.Add(new TextBlock { Classes = { "label" }, Text = Loc.T("master.out").ToUpperInvariant(), VerticalAlignment = VerticalAlignment.Center });
+        outHead.Children.Add(new TextBlock { FontSize = 11, Foreground = Palette.Faint, Text = Loc.T("master.out.note"), VerticalAlignment = VerticalAlignment.Center });
+        chain = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        chain.Children.Add(Arrow());
 
         // 7. the limiter, with its own ON apart from the master's
         var lim = new StackPanel { Spacing = 10 };
@@ -252,7 +265,7 @@ public partial class MainWindow
         limKnobs.Children.Add(MasterKnob(Loc.T("master.lim.drive"), 0, MasterParams.DriveMaxDb, 0, () => MasterSet.LimDriveDb, () => FmtDb(MasterSet.LimDriveDb),
             v => MasterEdit(m => m.LimDriveDb = Math.Round(v * 2) / 2, "limDrive"), Loc.T("master.lim.drive.tip")));
         limKnobs.Children.Add(MasterKnob(Loc.T("master.lim.ceiling"), MasterLimiter.CeilingMinDb, 0, MasterLimiter.CeilingDb, () => MasterSet.LimCeilingDb,
-            () => $"{MasterSet.LimCeilingDb:0.0} dB", v => MasterEdit(m => m.LimCeilingDb = Math.Round(v * 10) / 10, "limCeiling"), Loc.T("master.lim.ceiling.tip")));
+            () => $"{MasterSet.LimCeilingDb:0.0} dBTP", v => MasterEdit(m => m.LimCeilingDb = Math.Round(v * 10) / 10, "limCeiling"), Loc.T("master.lim.ceiling.tip")));
         limKnobs.Children.Add(MasterKnob(Loc.T("master.lim.release"), 0, 1, LimReleaseMap.To(MasterLimiter.ReleaseMs), () => LimReleaseMap.To(MasterSet.LimReleaseMs),
             () => $"{MasterSet.LimReleaseMs:0} ms", v => MasterEdit(m => m.LimReleaseMs = Math.Round(LimReleaseMap.From(v)), "limRelease"), Loc.T("master.lim.release.tip")));
         lim.Children.Add(limKnobs);
@@ -281,7 +294,19 @@ public partial class MainWindow
         masterShortShown = masterIntShown = masterPeakShown = double.NaN;
         Add(MeterPanel(Loc.T("master.stage.meter"), Loc.T("master.stage.meter.tip"), meter));
 
-        body.Children.Add(chain);
+        // the box's padding and border, so the Salida panels line up with the stages
+        const double BoxPad = 10;
+        var box = new Border
+        {
+            Padding = new Thickness(BoxPad), BorderBrush = Palette.Line, BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8), Child = suite,
+        };
+        var output = new StackPanel { Spacing = 12, Margin = new Thickness(0, BoxPad + 1, 0, 0) };
+        output.Children.Add(outHead);
+        output.Children.Add(chain);
+        var body = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, HorizontalAlignment = HorizontalAlignment.Left };
+        body.Children.Add(box);
+        body.Children.Add(output);
         return body;
     }
 
@@ -399,7 +424,7 @@ public partial class MainWindow
 
     /// <summary>
     /// The Volumen panel: short-term and integrated LUFS of the master (the same <see cref="LoudnessMeter"/> as the
-    /// transport's LUFS cell, so they start over together each pass), the pass's peak and how far from −14 LUFS.
+    /// transport's LUFS cell, so they start over together each pass), the pass's true peak and how far from −14 LUFS.
     /// Texts change only by 0,1, so it does not allocate every frame.
     /// </summary>
     void TickVolume()
@@ -424,8 +449,9 @@ public partial class MainWindow
         double peak = masterOutPeak > 0 ? 20 * Math.Log10(masterOutPeak) : double.NegativeInfinity;
         if (masterPeakText != null && Changed(peak, ref masterPeakShown))
         {
-            masterPeakText.Text = double.IsFinite(peak) ? $"{peak:0.0} dB" : "—";
-            masterPeakText.Foreground = peak > -0.05 ? Palette.Rec : Palette.Fg;
+            masterPeakText.Text = double.IsFinite(peak) ? $"{peak:0.0} dBTP" : "—";
+            // over the Techo (plus the meter's rounding) is what the AAC could clip
+            masterPeakText.Foreground = peak > MasterSet.LimCeilingDb + 0.05 ? Palette.Rec : Palette.Fg;
         }
     }
 

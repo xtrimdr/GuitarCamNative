@@ -6,8 +6,8 @@ namespace GuitarCam.App;
 /// <summary>
 /// When edits reach guitarcam.json, chosen in Configuración → "Guardado" and kept in config.json ("save.mode",
 /// "save.minutes"): right after each edit (the old behavior, the default), every few minutes, or only by hand
-/// (Ctrl+S or the disk in the title bar). Takes, exports, closing and switching projects always save, whatever
-/// the mode: losing a take is the worst thing that can happen.
+/// (Ctrl+S or the disk in the title bar). Takes, exports and switching projects always save, whatever the mode:
+/// losing a take is the worst thing that can happen. Closing with pending edits asks first (<see cref="Dialogs.UnsavedDialog"/>).
 /// </summary>
 public static class SaveMode
 {

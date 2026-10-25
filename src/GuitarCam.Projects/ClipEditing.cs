@@ -30,8 +30,12 @@ public static class ClipEditing
 
     // JavaScript Math.round: half ties go toward positive infinity, including negative offsets.
     static double JsRound(double v) => Math.Floor(v + 0.5);
-    static double Milliseconds(double v) => JsRound(v * 1000) / 1000;
-    static double Fixed3(double v) => Math.Round(v, 3, MidpointRounding.AwayFromZero);
+    /// <summary>
+    /// The finest step a clip moves, trims or fades by: one sample at the engine's 48 kHz. It was the millisecond, which
+    /// at the deepest zoom (96 000 px/s) is 96 px, far coarser than the grid's finest lines, even moving free with Alt.
+    /// </summary>
+    const double SamplesPerSec = 48000;
+    public static double ToSample(double sec) => JsRound(sec * SamplesPerSec) / SamplesPerSec;
     static double Limit(double v, double max) => Math.Max(0, Math.Min(max, v));
     public static double Snap(double sec, double grid, bool free) => free || grid <= 0 ? sec : JsRound(sec / grid) * grid;
 
@@ -49,9 +53,11 @@ public static class ClipEditing
                 double shift = dx;
                 if (!free)
                 {
-                    // Native only: with a grid the clip moves in grid steps and edges don't pull it. Near the start the
-                    // edges of every take cluster there, and mixing both magnets made the clip jump between them.
-                    if (grid > 0) shift = Snap(w.Anchor + dx, grid, false) - w.Anchor;
+                    // Native only: with a grid the clip moves in whole grid steps and edges don't pull it. Near the start
+                    // the edges of every take cluster there, and mixing both magnets made the clip jump between them.
+                    // The step is relative (asked by the user): a clip off the grid keeps its offset and lands a bar (or
+                    // a beat) away, as played; putting it on the grid is a free move with Alt.
+                    if (grid > 0) shift = Snap(dx, grid, false);
                     double best = grid > 0 ? 0 : 8 / Math.Max(0.001, pps); // SNAP_PX in Timeline.tsx.
                     var targets = new List<double> { 0, Math.Max(0, playhead) };
                     foreach (var other in others) { targets.Add(other.Anchor); targets.Add(other.End); }
@@ -65,26 +71,26 @@ public static class ClipEditing
                         }
                 }
                 shift = Math.Max(shift, ClipEnvelope.MinClipSec - w.End);
-                c.AtSec = Milliseconds(c.AtSec + shift);
+                c.AtSec = ToSample(c.AtSec + shift);
                 break;
             case ClipEditMode.TrimStart:
                 double from = dx > 0 ? w.TrimStart + w.Cut : w.TrimStart;
                 double start = Limit(from + dx, w.Dur - c.TrimEndSec - ClipEnvelope.MinClipSec);
-                c.TrimStartSec = Fixed3(free ? start : Limit(Snap(w.Origin + start, grid, false) - w.Origin,
+                c.TrimStartSec = ToSample(free ? start : Limit(Snap(w.Origin + start, grid, false) - w.Origin,
                     w.Dur - c.TrimEndSec - ClipEnvelope.MinClipSec));
                 break;
             case ClipEditMode.TrimEnd:
                 double trim = Limit(c.TrimEndSec - dx, w.Dur - c.TrimStartSec - ClipEnvelope.MinClipSec);
-                c.TrimEndSec = Fixed3(Limit(w.Origin + w.Dur - Snap(w.Origin + w.Dur - trim, grid, free),
+                c.TrimEndSec = ToSample(Limit(w.Origin + w.Dur - Snap(w.Origin + w.Dur - trim, grid, free),
                     w.Dur - c.TrimStartSec - ClipEnvelope.MinClipSec));
                 break;
             case ClipEditMode.FadeIn:
                 double fi = Limit(fades.FadeIn + dx, len - fades.FadeOut);
-                c.FadeInSec = Fixed3(Limit(Snap(w.Start + fi, grid, free) - w.Start, len - fades.FadeOut));
+                c.FadeInSec = ToSample(Limit(Snap(w.Start + fi, grid, free) - w.Start, len - fades.FadeOut));
                 break;
             case ClipEditMode.FadeOut:
                 double fo = Limit(fades.FadeOut - dx, len - fades.FadeIn);
-                c.FadeOutSec = Fixed3(Limit(w.End - Snap(w.End - fo, grid, free), len - fades.FadeIn));
+                c.FadeOutSec = ToSample(Limit(w.End - Snap(w.End - fo, grid, free), len - fades.FadeIn));
                 break;
         }
         return c;
@@ -200,14 +206,22 @@ public static class ClipEditing
     public static void ToStart(Project p, string id, double? durationSec = null)
     {
         var (_, clip) = Find(p, id);
-        clip.AtSec = Milliseconds(clip.AtSec - Window(clip, p.FindMedia(clip.MediaId), durationSec).Anchor);
+        clip.AtSec = ToSample(clip.AtSec - Window(clip, p.FindMedia(clip.MediaId), durationSec).Anchor);
+    }
+
+    /// <summary>Puts a clip's start (its anchor, where the take begins) on the nearest line of the grid.</summary>
+    public static void AlignToGrid(Project p, string id, double grid, double? durationSec = null)
+    {
+        var (_, clip) = Find(p, id);
+        double anchor = Window(clip, p.FindMedia(clip.MediaId), durationSec).Anchor;
+        clip.AtSec = ToSample(clip.AtSec + Snap(anchor, grid, false) - anchor);
     }
 
     public static void FixCut(Project p, string id, double? durationSec = null)
     {
         var (_, clip) = Find(p, id);
         var w = Window(clip, p.FindMedia(clip.MediaId), durationSec);
-        clip.TrimStartSec = Fixed3(w.TrimStart + w.Cut);
+        clip.TrimStartSec = ToSample(w.TrimStart + w.Cut);
     }
 
     /// <summary>
@@ -222,7 +236,7 @@ public static class ClipEditing
         var w = Window(left, p.FindMedia(left.MediaId), durationSec);
         if (atSec < w.Start + ClipEnvelope.MinClipSec || atSec > w.End - ClipEnvelope.MinClipSec)
             throw new ArgumentException(Texts.T("err.clip.splitEdge", "El cabezal tiene que estar adentro del clip, a más de 0,1 s de los bordes."));
-        double trimStart = Fixed3(atSec - w.Origin);
+        double trimStart = ToSample(atSec - w.Origin);
         var right = Copy(left);
         right.Id = Ids.New("clp");
         right.TrimStartSec = trimStart;
@@ -258,20 +272,20 @@ public static class ClipEditing
             {
                 var right = Copy(clip);
                 right.Id = Ids.New("clp");
-                right.TrimStartSec = Fixed3(endSec - w.Origin);
+                right.TrimStartSec = ToSample(endSec - w.Origin);
                 right.FadeInSec = right.VideoFadeInSec = 0;
-                clip.TrimEndSec = Fixed3(w.Dur - (startSec - w.Origin));
+                clip.TrimEndSec = ToSample(w.Dur - (startSec - w.Origin));
                 clip.FadeOutSec = clip.VideoFadeOutSec = 0;
                 track.Clips.Insert(track.Clips.IndexOf(clip) + 1, right);
             }
             else if (keepLeft)
             {
-                clip.TrimEndSec = Fixed3(w.Dur - (startSec - w.Origin));
+                clip.TrimEndSec = ToSample(w.Dur - (startSec - w.Origin));
                 clip.FadeOutSec = clip.VideoFadeOutSec = 0;
             }
             else
             {
-                clip.TrimStartSec = Fixed3(endSec - w.Origin);
+                clip.TrimStartSec = ToSample(endSec - w.Origin);
                 clip.FadeInSec = clip.VideoFadeInSec = 0;
             }
         }
@@ -288,7 +302,7 @@ public static class ClipEditing
         var w = Window(clip, p.FindMedia(clip.MediaId), durationSec);
         var copy = Copy(clip);
         copy.Id = Ids.New("clp");
-        copy.AtSec = Milliseconds(clip.AtSec + w.End - (w.Origin + w.TrimStart));
+        copy.AtSec = ToSample(clip.AtSec + w.End - (w.Origin + w.TrimStart));
         track.Clips.Insert(track.Clips.IndexOf(clip) + 1, copy);
         return copy.Id;
     }

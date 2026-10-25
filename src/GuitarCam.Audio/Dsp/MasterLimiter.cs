@@ -2,14 +2,18 @@ namespace GuitarCam.Audio.Dsp;
 
 /// <summary>
 /// Port of gc-limiter (fxWorklet.ts): look-ahead peak limiter for the master bus, the output never
-/// exceeds the ceiling. Latency = <c>lookahead</c> samples. Native only: the ceiling and the release can change while
+/// exceeds the ceiling. Latency = <c>lookahead</c> samples. Native only: the ceiling is in true peak (dBTP): besides
+/// each sample, a <see cref="TruePeak"/> detector asks for the gain the peaks between samples need, which the AAC of
+/// the MP4 would otherwise push over 0 dB; its answer is <see cref="TruePeak.Delay"/> samples late, so it lands on the
+/// slot of the sample it belongs to while that one is still in the look-ahead. Native only: the ceiling and the release can change while
 /// it plays (<see cref="Set"/>, the master card's Techo and Release), and <see cref="Bypass"/> turns it off without
 /// moving anything in time: the look-ahead delay stays, so the click and the export stay aligned.
 /// </summary>
 public sealed class MasterLimiter
 {
     public const double LookaheadSec = 0.003;
-    public const double CeilingDb = -0.3;
+    /// <summary>dBTP: what the platforms ask for, with room for the AAC encoder's own overshoot.</summary>
+    public const double CeilingDb = -1;
     public const double CeilingMinDb = -6;
     public const double ReleaseMs = 80, ReleaseMinMs = 20, ReleaseMaxMs = 500;
 
@@ -24,6 +28,7 @@ public sealed class MasterLimiter
     double minReq = 1;
     int minAge;
     double g = 1;
+    readonly TruePeak tp = new();
 
     public int Latency => N;
 
@@ -69,6 +74,7 @@ public sealed class MasterLimiter
         minReq = 1;
         minAge = 0;
         g = 1;
+        tp.Reset();
     }
 
     public void Process(Span<float> left, Span<float> right)
@@ -92,6 +98,21 @@ public sealed class MasterLimiter
             bufR[k] = (float)r;
             req[k] = (float)reqIn;
             idx = k + 1 == N ? 0 : k + 1;
+
+            // the peak between samples, for the sample Delay back (still in the line when the look-ahead is longer)
+            double t = tp.Next((float)l, (float)r);
+            if (t > c && N > TruePeak.Delay)
+            {
+                double reqTp = c / t;
+                int s = k - TruePeak.Delay;
+                if (s < 0) s += N;
+                if (reqTp < req[s]) req[s] = (float)reqTp;
+                if (reqTp <= minReq)
+                {
+                    minReq = reqTp;
+                    minAge = TruePeak.Delay;
+                }
+            }
 
             // minimum required gain over the look-ahead window
             if (reqIn <= minReq)

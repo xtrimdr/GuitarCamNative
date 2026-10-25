@@ -187,7 +187,11 @@ public sealed class MasterSettings
     public bool ClipOn { get; set; } = true;
     public double ClipDb { get; set; }
     public double LimDriveDb { get; set; }
-    public double LimCeilingDb { get; set; } = Dsp.MasterLimiter.CeilingDb;
+    /// <summary>
+    /// dBTP. Saved under a new key because the old one (limCeilingDb, −0,3 per sample) meant something else: an older
+    /// project keeps it in <see cref="Extra"/> and starts from −1 dBTP.
+    /// </summary>
+    [JsonPropertyName("limCeilingDbtp")] public double LimCeilingDb { get; set; } = Dsp.MasterLimiter.CeilingDb;
     public double LimReleaseMs { get; set; } = Dsp.MasterLimiter.ReleaseMs;
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 

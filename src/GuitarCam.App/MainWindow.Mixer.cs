@@ -340,7 +340,7 @@ public partial class MainWindow
     {
         var (rl, rr, dl, dr) = engine.TakeReturnMeters();
         double lim = masterLimDb = engine.Limiter.TakeReductionDb();
-        masterOutPeak = Math.Max(masterOutPeak, Math.Max(outL, outR));
+        masterOutPeak = Math.Max(masterOutPeak, engine.TruePeak.TakeMax());
         if (!mixerView || masteringView) return;
         miniTimeline.SetPlayhead(pos, tracks.Count == 0 ? 0 : tracks.Max(t => t.EndSec), RecordingBusy);
         foreach (var t in tracks)

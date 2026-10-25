@@ -593,6 +593,33 @@ static class DspCommands
         allOk &= lufsOk;
         Console.WriteLine($"{"LUFS seno 1 kHz -23 dBFS (y con silencio)",-36} {$"{lufs:0.00} / {lufsGated:0.00}",12} {"-23.00",10}  {(lufsOk ? "igual" : "DISTINTO")}");
 
+        // true peak (BS.1770 Annex 2): a tone at a quarter of the rate with its peaks between samples reads 0 dBTP
+        // although no sample passes −3 dB; a 1 kHz tone at −6 dBFS reads −6
+        var between = new float[sr48];
+        var tone1k = new float[sr48];
+        for (int i = 0; i < between.Length; i++)
+        {
+            between[i] = (float)Math.Sin(2 * Math.PI * (sr48 / 4.0) * i / sr48 + Math.PI / 4);
+            tone1k[i] = (float)(0.5 * Math.Sin(2 * Math.PI * 1000 * i / sr48));
+        }
+        double tpBetween = TruePeak.MeasureDb(between, between, between.Length), tp1k = TruePeak.MeasureDb(tone1k, tone1k, tone1k.Length);
+        bool tpOk = Math.Abs(tpBetween) < 0.3 && Math.Abs(tp1k - 20 * Math.Log10(0.5)) < 0.1;
+        allOk &= tpOk;
+        Console.WriteLine($"{"Pico real: entre muestras / 1 kHz",-36} {$"{tpBetween:0.0} / {tp1k:0.0}",12} {"0 / -6.0",10}  {(tpOk ? "igual" : "DISTINTO")}");
+
+        // the limiter holds the true peak: that tone 6 dB up (its samples under 0 dB, the peaks between them at +6)
+        // plus a 220 Hz one comes out at or under −1 dBTP
+        var hot = new float[sr48 * 2];
+        for (int i = 0; i < hot.Length; i++)
+            hot[i] = (float)(0.7 * Math.Sin(2 * Math.PI * (sr48 / 4.0) * i / sr48 + Math.PI / 4) + 0.6 * Math.Sin(2 * Math.PI * 220 * i / sr48));
+        var hotR = (float[])hot.Clone();
+        var tpLim = new MasterLimiter(sr48, MasterLimiter.LookaheadSamples(sr48));
+        for (int pos = 0; pos < hot.Length; pos += 128) tpLim.Process(hot.AsSpan(pos, Math.Min(128, hot.Length - pos)), hotR.AsSpan(pos, Math.Min(128, hot.Length - pos)));
+        double tpLimited = TruePeak.MeasureDb(hot[tpLim.Latency..], hotR[tpLim.Latency..], hot.Length - tpLim.Latency);
+        bool tpLimOk = tpLimited <= MasterLimiter.CeilingDb + 0.1;
+        allOk &= tpLimOk;
+        Console.WriteLine($"{"Limitador: pico real a la salida",-36} {$"{tpLimited:0.00}",12} {$"<={MasterLimiter.CeilingDb:0.0}",10}  {(tpLimOk ? "igual" : "DISTINTO")}");
+
         // Export master (MixMaster): 2 s of a 220 Hz tone with a reverb send rings past its end, within the limit; a
         // −14 LUFS target lands there under the limiter's ceiling; with no tail and no target it is the plain render
         var tone220 = new float[sr48 * 2];
@@ -604,7 +631,8 @@ static class DspCommands
         float masteredPeak = 0;
         for (int i = 0; i < mastered.Left.Length; i++) masteredPeak = Math.Max(masteredPeak, Math.Max(Math.Abs(mastered.Left[i]), Math.Abs(mastered.Right[i])));
         bool tailOk = mastered.TailSec > 0.2 && mastered.TailSec <= MixMaster.MaxTailSec && Math.Abs(mastered.DurationSec - 2 - mastered.TailSec) < 1e-6;
-        bool masterLufsOk = Math.Abs(mastered.Lufs + 14) < 0.5 && masteredPeak <= ceiling + 1e-4;
+        double masteredTp = TruePeak.MeasureDb(mastered.Left, mastered.Right, mastered.Left.Length);
+        bool masterLufsOk = Math.Abs(mastered.Lufs + 14) < 0.5 && masteredPeak <= ceiling + 1e-4 && masteredTp <= MasterLimiter.CeilingDb + 0.1;
         var plain = MixMaster.Render(noteMix, noteBus, 2, sr48, 0);
         var (plainRef, _) = MixRenderer.Render(noteMix, noteBus, 2, sr48);
         double plainDiff = 0;
@@ -612,7 +640,7 @@ static class DspCommands
         bool plainOk = plain.Left.Length == plainRef.Length && plain.TailSec == 0 && plainDiff < 1e-6;
         allOk &= tailOk && masterLufsOk && plainOk;
         Console.WriteLine($"{"Exportar: cola de reverb (máx 8 s)",-36} {$"{mastered.TailSec:0.00} s",12} {"> 0,2 s",10}  {(tailOk ? "igual" : "DISTINTO")}");
-        Console.WriteLine($"{"Exportar: mezcla a -14 LUFS, pico",-36} {$"{mastered.Lufs:0.0} / {20 * Math.Log10(masteredPeak):0.0}",12} {$"-14 / <={MasterLimiter.CeilingDb:0.0}",10}  {(masterLufsOk ? "igual" : "DISTINTO")}");
+        Console.WriteLine($"{"Exportar: a -14 LUFS, pico real",-36} {$"{mastered.Lufs:0.0} / {masteredTp:0.0}",12} {$"-14 / <={MasterLimiter.CeilingDb:0.0}",10}  {(masterLufsOk ? "igual" : "DISTINTO")}");
         Console.WriteLine($"{"Exportar: sin cola ni LUFS = mezcla",-36} {$"{plainDiff:0.0e0}",12} {"0",10}  {(plainOk ? "igual" : "DISTINTO")}");
 
         allOk &= MasterChecks(sr48);
@@ -674,10 +702,10 @@ static class DspCommands
                 ? $"{names[b],-8} {p.Band(b).Amount * 100,4:0}%  comprime ~{mean[b]:0.0} dB (pico {worst[b]:0.0} dB)"
                 : $"{names[b],-8} {p.Band(b).Amount * 100,4:0}%  no comprime");
         if (p.ClipDb > 0) Console.WriteLine($"Soft clip: recorte {p.ClipDb:0.0} dB, recorta hasta {clipWorst:0.0} dB");
-        Console.WriteLine(p.LimOn ? $"Limitador: empuje {p.LimDriveDb:+0.0} dB, techo {p.LimCeilingDb:0.0} dB, baja hasta {limWorst:0.0} dB" : "Limitador apagado");
+        Console.WriteLine(p.LimOn ? $"Limitador: empuje {p.LimDriveDb:+0.0} dB, techo {p.LimCeilingDb:0.0} dBTP, baja hasta {limWorst:0.0} dB" : "Limitador apagado");
         // the limiter's look-ahead: the output starts that many samples late
         int lat = bus.Limiter.Latency;
-        Console.WriteLine($"LUFS: entra {LoudnessMeter.Measure(audio.Left, audio.Right, sr):0.0}, sale {LoudnessMeter.Measure(l[lat..], r[lat..], sr):0.0}");
+        Console.WriteLine($"LUFS: entra {LoudnessMeter.Measure(audio.Left, audio.Right, sr):0.0}, sale {LoudnessMeter.Measure(l[lat..], r[lat..], sr):0.0}; pico real sale {TruePeak.MeasureDb(l[lat..], r[lat..], l.Length - lat):0.0} dBTP");
         Wav.Write(output, l[lat..], r[lat..], sr);
         Console.WriteLine($"Escrito: {output}");
         return 0;
@@ -1273,18 +1301,16 @@ static class DspCommands
         Console.WriteLine($"{"Multibanda 70%: igual con -10 dB",-36} {string.Join(" / ", quiet.Select(v => $"{v:0.0}")),12} {"± 1 dB",10}  {(sameOk ? "igual" : "DISTINTO")}");
         Console.WriteLine($"{"Multibanda 70%: LUFS entra / sale",-36} {$"{lufsIn:0.0} / {lufsOut:0.0}",12} {"± 1,5",10}  {(levelOk ? "igual" : "DISTINTO")}");
 
-        // limiter off: the export's loudness gain stops where the peak touches the Techo instead of clipping
+        // limiter off: the export's loudness gain stops where the true peak touches the Techo instead of clipping
         {
             var tone = new float[sr * 2];
             for (int i = 0; i < tone.Length; i++) tone[i] = (float)(0.25 * Math.Sin(2 * Math.PI * 220 * i / sr));
             MixTrackSpec[] mix = [new MixTrackSpec { Clips = [new MixClipSpec { Left = tone, Right = tone, DurationSec = 2 }] }];
             var free = MixMaster.Render(mix, new MixBusSpec { Master = MasterParams.Off with { LimOn = false } }, 2, sr, 0, targetLufs: 0);
-            float pk = 0;
-            for (int i = 0; i < free.Left.Length; i++) pk = Math.Max(pk, Math.Abs(free.Left[i]));
-            double pkDb = 20 * Math.Log10(pk);
+            double pkDb = TruePeak.MeasureDb(free.Left, free.Right, free.Left.Length);
             bool offLimOk = pkDb <= MasterLimiter.CeilingDb + 0.01 && pkDb > MasterLimiter.CeilingDb - 0.5;
             ok &= offLimOk;
-            Console.WriteLine($"{"Sin limitador: LUFS 0 frena en techo",-36} {$"{pkDb:0.00} dB",12} {$"{MasterLimiter.CeilingDb:0.00} dB",10}  {(offLimOk ? "igual" : "DISTINTO")}");
+            Console.WriteLine($"{"Sin limitador: LUFS 0 frena en techo",-36} {$"{pkDb:0.00} dBTP",12} {$"{MasterLimiter.CeilingDb:0.00} dBTP",10}  {(offLimOk ? "igual" : "DISTINTO")}");
         }
 
         return ok;

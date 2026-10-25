@@ -33,6 +33,7 @@ public partial class MainWindow : Window
     Task saving = Task.CompletedTask; // writes run in order, one after the other
     Exception? saveFailure;
     bool dirty;
+    bool closeConfirmed; // the unsaved-edits question was answered: the next Closing goes through
     List<LiveTrack> tracks = [];
     LiveTrack? sel;
     bool syncing;
@@ -195,6 +196,37 @@ public partial class MainWindow : Window
                 e.Cancel = true;
                 Status(Loc.T("main.exportBusy"));
                 return;
+            }
+            if (!closeConfirmed && store is { ReadOnly: false } st)
+            {
+                // after each edit a pending save is just written; in the other modes (or if it can't be written) ask
+                if (SaveMode.Mode == SaveMode.OnEdit && saveFailure == null) FlushSave();
+                if (dirty || saveFailure != null)
+                {
+                    e.Cancel = true;
+                    if (Unsaved.IsVisible) return;
+                    var choice = await Unsaved.Ask(st.Project.Name);
+                    if (choice == Dialogs.UnsavedDialog.Choice.Cancel || st != store) return;
+                    if (choice == Dialogs.UnsavedDialog.Choice.Discard)
+                    {
+                        saveTimer.Stop();
+                        await saving;
+                        dirty = false;
+                        saveFailure = null;
+                    }
+                    else
+                    {
+                        FlushSave();
+                        if (dirty || saveFailure != null)
+                        {
+                            Toast(Loc.T("unsaved.saveFail"), sticky: true);
+                            return;
+                        }
+                    }
+                    closeConfirmed = true;
+                    Close();
+                    return;
+                }
             }
             CloseProject();
         };
@@ -508,6 +540,7 @@ public partial class MainWindow : Window
 
     async void OnKey(object? sender, KeyEventArgs e)
     {
+        if (Unsaved.HandleKey(e)) return;
         if (Export.IsVisible)
         {
             Export.HandleKey(e);

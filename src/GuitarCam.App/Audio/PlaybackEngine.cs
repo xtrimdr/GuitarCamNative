@@ -226,6 +226,8 @@ public sealed class PlaybackEngine : IDisposable
     public PitchTap Pitch { get; } = new(SampleRate);
     /// <summary>The master's loudness (after the limiter, without the click), measured while it plays.</summary>
     public LoudnessMeter Loudness { get; } = new(SampleRate);
+    /// <summary>True peak of the master out (after the limiter, without the click), for the Volumen panel.</summary>
+    public TruePeak TruePeak { get; } = new();
     public ReverbBus Reverb => buses.Reverb;
     public DelayBus Delay => buses.Delay;
     public MasterLimiter Limiter => buses.Limiter;
@@ -853,6 +855,7 @@ public sealed class PlaybackEngine : IDisposable
             if (fadeMode != 0) TransportRamp(ref fadeLevel, fadeMode > 0, rampStep, n, ml, mr, rl, rr, dl, dr);
             buses.ProcessReturnsAndLimiter(ml, mr, rl, rr, dl, dr);
             Loudness.Process(ml, mr);
+            TruePeak.Process(ml, mr);
 
             double beatLen = SampleRate * 60.0 / bpm;
             int limLatency = buses.Limiter.Latency;

@@ -166,6 +166,17 @@ public partial class MainWindow
             if (target != null) return ClipEditing.MoveToTrack(p, clip.Id, target, swap);
             return ClipEditing.Find(p, clip.Id).Track.Id;
         }, "clip-edited", clip.Id);
+        Timeline.ClipsMoved += async clips =>
+        {
+            var ids = Timeline.BoxedClipIds.ToList();
+            await EditTimeline(p =>
+            {
+                foreach (var c in clips) ClipEditing.Replace(p, c);
+                return ClipEditing.Find(p, clips[0].Id).Track.Id;
+            }, "clips-moved", clips[0].Id);
+            // the moved clips stay selected together
+            Timeline.BoxClips(ids);
+        };
         Timeline.TrackMoveRequested += async (ids, at, folder) =>
         {
             string keep = sel != null && ids.Contains(sel.Track.Id) ? sel.Track.Id : ids[0];
@@ -309,6 +320,13 @@ public partial class MainWindow
     {
         if (sel == null || store == null) return Task.CompletedTask;
         string trackId = sel.Track.Id;
+        // the clips caught by the selection box go all at once (one step to undo)
+        if (Timeline.BoxedClipIds.ToList() is { Count: > 1 } boxed)
+            return EditTimeline(p =>
+            {
+                foreach (var id in boxed) ClipEditing.RemoveClip(p, id);
+                return trackId;
+            }, "clips-removed");
         string? clipId = Timeline.SelectedClipId ?? sel.Clips.FirstOrDefault()?.Clip.Id;
         return EditTimeline(p =>
         {
@@ -516,6 +534,18 @@ public partial class MainWindow
                 if (copy != null) Timeline.SelectClip(Timeline.Selected, copy);
             }, "D", enabled));
             list.Add(MenuAction(Loc.T("menu.toStart"), () => Command(p => ClipEditing.ToStart(p, id, clip.LengthSec), "clip-moved"), enabled: enabled));
+            // the boxed clips, when this is one of them, are aligned (or removed) all at once
+            var boxed = Timeline.BoxedClipIds.Contains(id) ? Timeline.BoxedClipIds.ToList() : [id];
+            double grid = ClipEditing.GridSeconds(Timeline.SnapMode, Timeline.Bpm);
+            list.Add(MenuAction(Loc.T(boxed.Count > 1 ? "menu.alignGrid.many" : "menu.alignGrid", boxed.Count), async () =>
+            {
+                await EditTimeline(p =>
+                {
+                    foreach (var b in boxed) ClipEditing.AlignToGrid(p, b, grid, tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Clip.Id == b)?.LengthSec);
+                    return track.Track.Id;
+                }, "clip-aligned", id);
+                Timeline.BoxClips(boxed);
+            }, enabled: enabled && grid > 0, tip: grid > 0 ? Loc.T("menu.alignGrid.tip", Timeline.SnapMode == "bar" ? Loc.T("snap.label.1") : Timeline.SnapMode) : Loc.T("menu.alignGrid.off")));
             var w = ClipEditing.Window(clip.Clip, clip.Media, clip.LengthSec);
             list.Add(MenuAction(Loc.T("menu.fixCut"), () => Command(p => ClipEditing.FixCut(p, id, clip.LengthSec), "clip-trimmed"),
                 w.AnchorCut > 0.0005 ? $"{w.AnchorCut:0.00} s" : null, enabled && w.AnchorCut > 0.0005));
@@ -523,7 +553,8 @@ public partial class MainWindow
             list.Add(MenuAction(Loc.T("menu.resetClip"), () => Command(p => ClipEditing.Reset(p, id), "clip-reset"),
                 enabled: enabled && (c.TrimStartSec != 0 || c.TrimEndSec != 0 || c.FadeInSec != 0 || c.FadeOutSec != 0 || c.VideoFadeInSec != 0 || c.VideoFadeOutSec != 0)));
             list.Add(new Separator());
-            list.Add(MenuAction(Loc.T("menu.removeClip"), () => Command(p => ClipEditing.RemoveClip(p, id), "clip-removed"), "Supr", enabled, danger: true));
+            list.Add(MenuAction(boxed.Count > 1 ? Loc.T("menu.removeClips", boxed.Count) : Loc.T("menu.removeClip"),
+                () => boxed.Count > 1 ? DeleteTimelineSelection() : Command(p => ClipEditing.RemoveClip(p, id), "clip-removed"), "Supr", enabled, danger: true));
             list.Add(new MenuItem { IsEnabled = false, Header = new TextBlock
             {
                 Text = Loc.T(track.Clips.Count > 1 ? "menu.clipKept.many" : "menu.clipKept.last"), FontSize = 10.5,

@@ -37,6 +37,9 @@ Todo lo que se describe acá lo decidió el usuario: no lo cambies sin preguntar
 - Al lado del nombre, el estado del guardado (`TickTopBar`): Guardando / Guardado / Sin guardar / Error al guardar /
   Solo lectura. "Sin guardar" sale cuando Configuración → Guardado (`SaveMode`) guarda cada X minutos o a mano; el
   diskette antes de deshacer (`SaveButton`, el atajo "save") guarda ya y está apagado si no hay nada pendiente.
+- Cerrar la ventana con cambios sin guardar (modo cada X minutos o a mano, o un guardado que falló) pregunta
+  "¿Guardo los cambios?" (`Dialogs/UnsavedDialog`): Guardar y cerrar (Enter), Cerrar sin guardar, Cancelar (Esc).
+  Si el guardado falla, no cierra. Después de cada edición no pregunta: lo pendiente se escribe y cierra.
 - Una copia hecha por `tools\probar.ps1` lleva un `prueba.txt` al lado del exe (commit, con o sin cambios, hora):
   `TestBuild` lo lee y la barra muestra, después de NATIVE, el badge "PRUEBA a1b2c3d + cambios" (`TestBuildChip`,
   fondo `Hover`, la hora en el tooltip) y el título de la ventana lo repite. Sin ese archivo no aparece nada.
@@ -135,6 +138,13 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   la exportación (`ExportTakeSpec.Panel`).
 - **Arrastrar a otra pista** cambia la pista **y el tiempo** a la vez: el original queda atenuado y un fantasma
   punteado marca dónde cae (`DrawGhost`). Con Ctrl se intercambia con el clip de abajo.
+- **Mover con grilla** (uno o varios): el clip avanza de a pasos enteros de la grilla y **conserva su desfasaje**: uno
+  que no está justo en el tiempo cae igual de corrido un compás (o un tiempo) más allá, como se tocó
+  (`ClipEditing.Drag`). Para ponerlo en la grilla, Alt lo mueve libre. Sin grilla imantan el cabezal y los bordes.
+- **Selección de varios clips** (pedido del usuario): arrastrar en la parte vacía de las pistas (o debajo de la
+  última) dibuja un rectángulo que marca cada clip que toca; con Ctrl suma a lo marcado (`boxed`, `UpdateBox`). Agarrar
+  uno marcado por el cuerpo mueve todos el mismo tiempo, cada uno en su pista (`StartCarry`, `DragCarried`, evento `ClipsMoved`: un solo paso para deshacer); sus bordes recortan solo ese. Supr los saca a
+  todos. Un clic sin mover, o cualquier selección común, deja uno solo.
 - **Rango**: Shift+arrastrar sobre una pista marca un rango; Supr o "Borrar el rango" del clic derecho lo saca de sus
   clips (`ClipEditing.DeleteRange`) dejando el hueco. "Repetir este rango" lo pasa al rango A–B. La selección se va
   con un clic, Esc o una edición.
@@ -290,19 +300,21 @@ tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
 - **Mastering** (`MainWindow.Master.cs`): la tercera vista del selector Timeline · Mixer · Mastering (la X sigue
   alternando timeline / mixer). Usa el lugar del mixer (`MixerHost`, con su altura y su lugar en solo audio): esconde
   la cabecera y las tiras y muestra la cadena. El botón "Master" del canal master (en acento con el master prendido)
-  también lleva ahí. Arriba: el ON del master y qué está haciendo. Abajo, la cadena de izquierda a derecha, un panel
-  por etapa con su ON y flechas entre ellos, perillas de 44 px (pedido del usuario): **Limpieza** (Corte, Barro;
+  también lleva ahí. Dos grupos, de izquierda a derecha (pedido del usuario): una **caja** con el ON del master, qué
+  está haciendo y las etapas que ese ON prende (se atenúan enteras con el master apagado), y afuera **Salida**
+  (Limitador → Volumen), que funciona siempre. Un panel por etapa con su ON y flechas entre ellos, perillas de 44 px
+  (pedido del usuario): **Limpieza** (Corte, Barro;
   `EqOn`) → **Multibanda** (una perilla "Cuánto" por banda con su barra de reducción en vivo, y dos perillas chicas
   para los cruces; `BandsOn`) → **Color** (Graves, Presencia, Aire, Inclinación; `ColorOn`) → **Cinta** (Vida, la
   cinta de las pistas más suave; `TapeOn`) → **Ancho** (Ancho y Graves mono; `WidthOn`) → **Soft clip** (Recorte y su
-  barra; `ClipOn`) → **Limitador** (Empuje, Techo, Release y su barra; `LimOn`, aparte del ON del master; apagado, los
+  barra; `ClipOn`) | Salida: **Limitador** (Empuje, Techo en pico real, −1 dBTP por defecto, Release y su barra; `LimOn`, aparte del ON del master; apagado, los
   picos pueden pasar de 0 dB) → **Volumen** (sin ON: LUFS de los últimos 3 s e integrado, el mismo medidor que la
-  celda LUFS, el pico de la pasada en rojo si tocó 0 dB, y cuánto falta para −14 LUFS).
+  celda LUFS, el pico real de la pasada (`TruePeak`) en rojo si pasó del Techo, y cuánto falta para −14 LUFS).
 - La vista tiene justo el alto de la cadena (`FitMasteringHeight`) y no se estira: los divisores no hacen nada ahí y
   la altura recordada del mixer no cambia.
 - No se mide nada: cada banda sigue su propio nivel mientras suena (`MasterBandComp`) y comprime lo que pasa de ahí,
   así una perilla se escucha en el momento, con cualquier mezcla y a cualquier volumen. Sin limitador, la exportación
-  con destino de LUFS frena la ganancia donde el pico toca el Techo.
+  con destino de LUFS frena la ganancia donde el pico real toca el Techo.
 - **Paneo**: un solo desplegable (`BuildPanMenu`) con la apertura arriba (30 % por defecto) y las plantillas con su
   descripción; elegir una la aplica y cierra el menú.
 

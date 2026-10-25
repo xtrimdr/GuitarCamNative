@@ -90,8 +90,9 @@ exports/
 - Todo guardado es **atómico**: temporal → forzado a disco → `File.Replace`. Nunca escribas `guitarcam.json` directo.
 - Toda edición pasa por `MarkDirty()` → `SaveSoon()`: cuándo se escribe lo elige el usuario (`SaveMode`, en
   Configuración → Guardado): 1,5 s después de cada edición (por defecto), cada X minutos o a mano (serializa en la UI,
-  escribe en segundo plano, en orden). Ctrl+S y el diskette fuerzan; las tomas, las exportaciones y el cerrar o cambiar
-  de proyecto (`FlushSave()`) guardan siempre, sea cual sea el modo.
+  escribe en segundo plano, en orden). Ctrl+S y el diskette fuerzan; las tomas, las exportaciones y el cambiar de proyecto
+  (`FlushSave()`) guardan siempre, sea cual sea el modo; cerrar la ventana con cambios pendientes pregunta antes
+  (`UnsavedDialog`) y no cierra si no pudo guardar.
 - **Perder una toma es el peor error posible.** `RecordingWriter` escribe mientras graba y reescribe el encabezado
   cada ~2 s. Todo lo que toque archivos del usuario piensa en qué pasa si el programa muere a la mitad.
 
