@@ -121,7 +121,8 @@ exports/
 
 **Nivel profesional** (pedido del usuario, 2026-10-24): todo lo que toque el motor de audio se hace como en un DAW
 profesional (Logic Pro, Fender Studio Pro). Nada de clics ni cortes: arrancar, parar, saltar y hacer scrub llevan su
-fundido; el estado de los efectos no se reinicia en medio de la música; lo que se dude, se mide (`AudioGapLog`) en vez
+fundido (play / stop / scrub, del largo que se elige en Configuración, `PlaybackEngine.TransportFadeMs`; los saltos,
+crossfade fijo de 10 ms; `Stop`/`Pause` cortan en el acto y son solo para grabar, exportar o cambiar de proyecto); el estado de los efectos no se reinicia en medio de la música; lo que se dude, se mide (`AudioGapLog`) en vez
 de suponerlo. Antes de dar algo por hecho, pensá cómo lo resuelve un DAW profesional y hacelo a ese nivel.
 
 El callback de ASIO (`AsioDuplex.ProcessBlock`, `PlaybackEngine.Process`) corre en el hilo del driver:
@@ -316,8 +317,8 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
 - **Preview**: los paneles se calculan con `PanelLayout.Compute` sobre un lienzo de 1080 px de alto,
   **la misma cuenta que usa la exportación** (port de `panelLayout.js`). Lo que se ve tiene que ser lo que
   se exporta. Encuadre: cover-fit + zoom/paneo/espejo del clip. Etiqueta con el nombre de la pista abajo a la izquierda.
-- **Encabezados de pista** (solo nativa, pedido del usuario): la columna se ensancha arrastrando su borde derecho
-  (324–460, se recuerda en `headerWidth`; las filas se arman para 264 y el sobrante va al volumen). Con carriles más altos aparecen debajo, de a
+- **Encabezados de pista** (solo nativa, pedido del usuario): la columna se ensancha arrastrando su manija (una franja de
+  `GripW` = 8 px adentro del borde derecho, con dos rayitas por pista; nunca pisa un clip en 0 s) (324–460, se recuerda en `headerWidth`; las filas se arman para 264 y el sobrante va al volumen). Con carriles más altos aparecen debajo, de a
   una fila de 22 px, Vida · Comp · Reverb · Delay (ícono `FxIcon`, clic prende/apaga, arrastrar el slider cambia la
   cantidad, doble clic la restablece), también en pistas vacías (`TimelineView.EffectRequested`). Tocar cualquier
   parte del encabezado (la manija o un control, menos "quitar") selecciona la pista. Al reordenar con la manija, la
@@ -327,6 +328,9 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
   adentro; un clip sin archivo, gris con "Sin conexión…". Con video y carriles de 52 px o más, la tira de
   miniaturas (`Video/VideoThumbnails.cs`) con la onda blanca abajo sobre un degradé, como `Filmstrip` de la web. Pista
   seleccionada con barra de acento de 2 px a la izquierda del encabezado; playhead de acento con triángulo.
+  Bordes de clip (solo nativa, pedido del usuario): en cada lado una manija chica partida a la mitad del clip
+  (`DrawEdgeHandles`): la de arriba, donde termina el fade, mueve el fade; la de abajo, en el borde, recorta. El
+  cursor lo dice (diagonal como la línea del fade, ↔ para recortar) y se ilumina la manija que vas a agarrar.
   Varios clips por pista (solo nativa): Alt+X divide en el cabezal y D duplica (`ClipEditing.Split` /
   `Duplicate`); los clips de una pista comparten su panel y se ve el de arriba (el último), igual en la preview
   (`LiveTrack.ShownClip`) y en la exportación (`ExportTakeSpec.Panel`).

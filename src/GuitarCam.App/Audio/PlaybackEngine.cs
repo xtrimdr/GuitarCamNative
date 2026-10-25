@@ -68,11 +68,15 @@ public sealed class PlaybackEngine : IDisposable
     /// <summary>Frame a seek asked for while playing; the audio thread takes it (see <see cref="Seek"/>).</summary>
     long pendingSeek = NoSeek;
     /// <summary>
-    /// Length of each transport fade (the seek crossfade, play, scrub hold), in seconds. Fixed in time instead of
+    /// Length of the seek crossfade, and the default of the play / stop fade, in seconds. Fixed in time instead of
     /// one buffer: a 4 ms block (and less with smaller buffers) was short enough to click on loud, saturated material.
     /// </summary>
     const double TransportFadeSec = 0.010;
     static readonly float FadeStep = (float)(1 / (TransportFadeSec * SampleRate));
+    /// <summary>Range and default of <see cref="TransportFadeMs"/> (Configuración, "audio.transportFadeMs").</summary>
+    public const double MinTransportFadeMs = 2, MaxTransportFadeMs = 50, DefaultTransportFadeMs = TransportFadeSec * 1000;
+    // per-sample step of the play / stop fade; the audio thread reads it once per block
+    volatile float rampStep = FadeStep;
     // audio thread only. fadeMode: 0 = none, 1 = fading in, -2 = fading out to stop. fadeLevel: 0..1 progress,
     // shaped by a smoothstep when applied
     int fadeMode;
@@ -84,6 +88,8 @@ public sealed class PlaybackEngine : IDisposable
     readonly float[] xfOut = new float[TrackDspChain.MaxBlockSize];
     /// <summary>Set by <see cref="Play"/> (fade in) and <see cref="FadeOutAndPause"/>; <see cref="cancelPause"/> undoes a pause in flight.</summary>
     int pendingFadeIn, pendingPause, cancelPause;
+    /// <summary>A fade-out stop asked for and not done yet (see <see cref="Stopping"/>).</summary>
+    volatile bool stopping;
     int pendingBusReset;
     volatile Exception? lastRecordingError;
     long lastRecordingDroppedFrames;
@@ -105,6 +111,11 @@ public sealed class PlaybackEngine : IDisposable
     /// <summary>The output side of the calibration key: each input + output pair keeps its own measurement.</summary>
     public string CalibrationOutputId => $"{InputOffset}:{OutputOffset}";
     public bool Playing => playing;
+    /// <summary>
+    /// Still <see cref="Playing"/> but fading out to a stop (<see cref="FadeOutAndPause"/>): the transport treats it
+    /// as stopped, so pressing play in the meantime fades back in instead of asking to stop again.
+    /// </summary>
+    public bool Stopping => playing && stopping;
     public bool Recording => recording;
     /// <summary>
     /// Stopwatch time at which the take's first sample (timeline 0) was captured (timeline at the take start), 0 until then (still counting
@@ -141,6 +152,16 @@ public sealed class PlaybackEngine : IDisposable
     {
         get => loop;
         set => loop = value;
+    }
+
+    /// <summary>
+    /// Length of the fade when playback starts and stops (play, stop, the playhead drag), in ms. The seek crossfade
+    /// stays at <see cref="TransportFadeSec"/>: longer, a jump would blur the two positions together.
+    /// </summary>
+    public double TransportFadeMs
+    {
+        get => 1 / (rampStep * SampleRate) * 1000;
+        set => rampStep = (float)(1 / (Math.Clamp(double.IsFinite(value) ? value : DefaultTransportFadeMs, MinTransportFadeMs, MaxTransportFadeMs) / 1000 * SampleRate));
     }
 
     public bool SoftwareMonitor
@@ -366,6 +387,7 @@ public sealed class PlaybackEngine : IDisposable
         if (recording || activeCalibration != null) return;
         Interlocked.Exchange(ref pendingPause, 0);
         Interlocked.Exchange(ref cancelPause, 1);
+        stopping = false;
         if (playing) return; // a fade-out pause still in flight: it fades back in where it is
         if (endFrame > 0 && Interlocked.Read(ref position) >= endFrame) Seek(0);
         long pos = Interlocked.Read(ref position);
@@ -379,31 +401,42 @@ public sealed class PlaybackEngine : IDisposable
     }
 
     /// <summary>
-    /// Pauses like <see cref="Pause"/> but fades the last block out first, for a hold that must not click (the
-    /// playhead drag). <see cref="Playing"/> stays true for that block; seeks made meanwhile apply once it stops.
+    /// Pauses like <see cref="Pause"/> but fades out over <see cref="TransportFadeMs"/> first, like a DAW's stop:
+    /// the play / stop key, ■ and the playhead drag. The tracks fade before the return buses, so reverb and delay
+    /// tails ring on. <see cref="Playing"/> stays true until the fade ends (<see cref="Stopping"/> tells it apart);
+    /// seeks made meanwhile apply once it stops.
     /// </summary>
     public void FadeOutAndPause()
     {
         if (!playing || recording) return;
+        stopping = true;
         Interlocked.Exchange(ref pendingPause, 1);
     }
 
-    /// <summary>Stops playback keeping the current playhead position (pause behavior).</summary>
-    public void Stop() => playing = false;
+    /// <summary>
+    /// Stops at once, keeping the playhead where it is. Only for what must not hear another block: starting a
+    /// recording, an export, swapping or closing the project. The transport uses <see cref="FadeOutAndPause"/>.
+    /// </summary>
+    public void Stop()
+    {
+        playing = false;
+        stopping = false;
+    }
 
-    /// <summary>Pauses playback at the current playhead position.</summary>
-    public void Pause() => playing = false;
+    /// <summary>Same as <see cref="Stop"/>: an immediate pause at the current playhead position.</summary>
+    public void Pause() => Stop();
 
     /// <summary>
-    /// Port of <c>stopTransport</c> (<c>App.tsx:1740</c>): if playing, stops and returns to where playback
-    /// started; if already stopped, rewinds to 0.
+    /// Port of <c>stopTransport</c> (<c>App.tsx:1740</c>): if playing, fades out and returns to where playback
+    /// started; if already stopped (or fading out to a stop), rewinds to 0. The seek waits for the fade.
     /// </summary>
     public void StopTransport()
     {
         if (recording) return;
-        bool wasPlaying = playing;
-        playing = false;
-        Seek(wasPlaying ? playStartSec : 0);
+        bool wasPlaying = playing && !stopping;
+        double back = playStartSec;
+        FadeOutAndPause();
+        Seek(wasPlaying ? back : 0);
     }
 
     /// <summary>
@@ -448,9 +481,9 @@ public sealed class PlaybackEngine : IDisposable
     /// Moves <paramref name="level"/> one step per sample toward 1 (fade in) or 0 and scales the block's track mix
     /// and sends by its smoothstep, so the fade starts and ends without a corner. Once at 0 the rest is silence.
     /// </summary>
-    static void TransportRamp(ref float level, bool fadeIn, int n, Span<float> ml, Span<float> mr, Span<float> rl, Span<float> rr, Span<float> dl, Span<float> dr)
+    static void TransportRamp(ref float level, bool fadeIn, float rate, int n, Span<float> ml, Span<float> mr, Span<float> rl, Span<float> rr, Span<float> dl, Span<float> dr)
     {
-        float x = level, step = fadeIn ? FadeStep : -FadeStep;
+        float x = level, step = fadeIn ? rate : -rate;
         for (int i = 0; i < n; i++)
         {
             x = Math.Clamp(x + step, 0f, 1f);
@@ -801,7 +834,7 @@ public sealed class PlaybackEngine : IDisposable
                 }
             }
 
-            if (fadeMode != 0) TransportRamp(ref fadeLevel, fadeMode > 0, n, ml, mr, rl, rr, dl, dr);
+            if (fadeMode != 0) TransportRamp(ref fadeLevel, fadeMode > 0, rampStep, n, ml, mr, rl, rr, dl, dr);
             buses.ProcessReturnsAndLimiter(ml, mr, rl, rr, dl, dr);
             Loudness.Process(ml, mr);
 
@@ -854,6 +887,7 @@ public sealed class PlaybackEngine : IDisposable
                 else
                 {
                     fadeMode = 0;
+                    stopping = false;
                     playing = false;
                 }
             }

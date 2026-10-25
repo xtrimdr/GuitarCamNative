@@ -109,8 +109,6 @@ de video y normalización ya están anotados arriba; el análisis amplía su alc
 
 ## Notas
 
-- Parar (Espacio, ■) todavía corta seco: falta el fundido de salida, como ya tienen play, los saltos y el scrub.
-  Ojo con quien llama a `Stop`/`Pause` y espera que pare en el acto (grabar, exportar).
 - `AudioGapLog` es un diagnóstico provisorio: sacarlo (o dejarlo detrás de una opción) cuando el audio esté confirmado.
 
 - Puntitos en la preview (resuelto): con la ventana permitiendo transparencia, algunos píxeles oscuros

@@ -648,6 +648,8 @@
   "set.device": "Device",
   "set.monitor": "Monitor the input through this output",
   "set.monitor.tip": "Turn it on only if your interface has no direct monitoring (it adds latency)",
+  "set.transportFade": "Fade on start and stop",
+  "set.transportFade.hint": "Avoids the click when you play or stop. Shorter is tighter, longer is softer (10 ms is fine almost always)",
   "set.camera": "Camera",
   "set.cam.webcam": "Webcam / Driver",
   "set.cam.ip": "IP DroidCam",

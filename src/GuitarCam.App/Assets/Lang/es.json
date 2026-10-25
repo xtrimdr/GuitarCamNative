@@ -648,6 +648,8 @@
   "set.device": "Dispositivo",
   "set.monitor": "Monitorear la entrada por esta salida",
   "set.monitor.tip": "Activalo solo si no tenés monitoreo directo en la interfaz (agrega latencia)",
+  "set.transportFade": "Fundido al arrancar y parar",
+  "set.transportFade.hint": "Evita el clic al dar play o parar. Más corto, más seco; más largo, más suave (10 ms va bien casi siempre)",
   "set.camera": "Cámara",
   "set.cam.webcam": "Webcam / Driver",
   "set.cam.ip": "IP DroidCam",

@@ -161,6 +161,8 @@ public partial class MainWindow : Window
             int.TryParse(AppConfig.Get("audio.outputOffset"), out int outputOffset);
             if (double.TryParse(AppConfig.Get("audio.inputGainDb"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double gainDb))
                 engine.InputGainDb = Math.Clamp(gainDb, -24, 24);
+            if (double.TryParse(AppConfig.Get("audio.transportFadeMs"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double fadeMs))
+                engine.TransportFadeMs = fadeMs;
             engine.Open(driver, 0, Math.Max(0, outputOffset));
             ShowAudioStatus();
             _ = camera.Refresh();
@@ -418,7 +420,7 @@ public partial class MainWindow : Window
             Status(engine.Status);
             return;
         }
-        if (engine.Playing) engine.Pause();
+        if (engine.Playing && !engine.Stopping) engine.FadeOutAndPause();
         else engine.Play();
     }
 
@@ -616,7 +618,7 @@ public partial class MainWindow : Window
     {
         if (start)
         {
-            if (!engine.Playing || RecordingBusy) return;
+            if (!engine.Playing || engine.Stopping || RecordingBusy) return;
             resumeAfterScrub = true;
             engine.FadeOutAndPause();
         }

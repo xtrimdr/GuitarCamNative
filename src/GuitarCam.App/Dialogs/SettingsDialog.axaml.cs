@@ -46,6 +46,7 @@ public sealed partial class SettingsDialog : UserControl
     readonly ComboBox driverBox = Combo(), outputBox = Combo();
     readonly List<ToggleButton> modeButtons = [];
     readonly InspectorSlider gain;
+    readonly InspectorSlider transportFade;
     readonly TextBlock outputHelp = Help("");
     readonly TextBlock bufferText = new() { FontSize = 12, Foreground = Palette.Dim, Classes = { "mono" }, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
     readonly Button panelButton = new() { Classes = { "btn", "outline" }, Height = 28, Padding = new Thickness(10, 0), FontSize = 12, Content = Loc.T("set.panelButton") };
@@ -143,6 +144,20 @@ public sealed partial class SettingsDialog : UserControl
         ToolTip.SetTip(monitorLabel, Loc.T("set.monitor.tip"));
         monitorSwitch.IsCheckedChanged += (_, _) => { if (!filling && engine != null) engine.SoftwareMonitor = monitorSwitch.IsChecked == true; };
         output.Children.Add(Row(monitorLabel, monitorSwitch));
+        // native only: how long play and stop fade, saved like the input gain
+        transportFade = new InspectorSlider(Loc.T("set.transportFade"), PlaybackEngine.MinTransportFadeMs, PlaybackEngine.MaxTransportFadeMs, 1,
+            PlaybackEngine.DefaultTransportFadeMs, v => $"{v:0} ms",
+            v =>
+            {
+                if (engine != null) engine.TransportFadeMs = v;
+                string text = v.ToString(CultureInfo.InvariantCulture);
+                _ = Task.Run(() =>
+                {
+                    try { AppConfig.Set("audio.transportFadeMs", text); }
+                    catch (Exception x) when (x is IOException or UnauthorizedAccessException) { /* keep this session's choice */ }
+                });
+            }, Loc.T("set.transportFade.hint"));
+        output.Children.Add(transportFade);
         audioPage.Children.Add(Card(output));
 
         // --- Cámara
@@ -411,6 +426,7 @@ public sealed partial class SettingsDialog : UserControl
             outputHelp.Text = locked && !reopening ? Loc.T("set.locked")
                 : Loc.T("set.output.help");
             monitorSwitch.IsChecked = e.SoftwareMonitor;
+            transportFade.Set(Math.Round(e.TransportFadeMs));
             fine.Set(OverdubOffsetMs);
             if (cam != null) FillCamera(cam);
         }

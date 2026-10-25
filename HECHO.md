@@ -3,6 +3,16 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-24: **manijas en el timeline**: la columna de las pistas se ensancha solo desde su manija (franja de 8 px adentro
+  del borde, con dos rayitas; antes compartía píxeles con el recorte de un clip en 0 s), y cada clip tiene manijas chicas en
+  los bordes: mitad de arriba = fade, mitad de abajo = recorte, con el cursor que corresponde (`TimelineView.DrawEdgeHandles`,
+  `HitHandle`, `OnGrip`).
+- 2026-10-24: **parar con fundido**: Espacio y ■ paran con el mismo fundido de 10 ms (smoothstep) que play, los saltos y el
+  scrub (`PlaybackEngine.FadeOutAndPause`, `StopTransport`); las pistas se apagan antes de los buses, así la reverb y el delay
+  siguen sonando. `Stopping` distingue el fundido en curso (play en ese momento vuelve a subir donde está). `Stop`/`Pause`
+  siguen cortando en el acto para grabar, exportar y cambiar de proyecto. El largo del fundido de play / stop / scrub se elige
+  en Configuración → Entradas y salidas, "Fundido al arrancar y parar" (2–50 ms, 10 por defecto; `config.json`
+  `audio.transportFadeMs`, `PlaybackEngine.TransportFadeMs`); el crossfade de los saltos queda fijo en 10 ms.
 - 2026-10-24: **corte en el primer play de la sesión**: lo que solo corre sonando (mezcla de clips, saturación, compresor,
   EQ, LUFS, grabación) se compilaba (JIT) la primera vez adentro del callback y el bloque se pasaba del buffer (5,8 ms en uno
   de 4). `AudioWarmUp` precompila en segundo plano al arrancar todo `GuitarCam.Audio`, `GuitarCam.App.Audio` y
