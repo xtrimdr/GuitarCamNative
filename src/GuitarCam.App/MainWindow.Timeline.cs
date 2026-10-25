@@ -48,6 +48,22 @@ public partial class MainWindow
         bool bars = Timeline.RulerInBars;
         BarsRulerButton.Classes.Set("on", bars);
         TimeRulerButton.Classes.Set("on", !bars);
+        miniBarsButton.Classes.Set("on", bars);
+        miniTimeButton.Classes.Set("on", !bars);
+        miniTimeline.RulerInBars = bars;
+    }
+
+    /// <summary>One button of a ruler switch built in code, like BarsRulerButton / TimeRulerButton in the XAML.</summary>
+    static Button RulerButton(string glyph, string tipKey)
+    {
+        var b = new Button
+        {
+            Classes = { "ghost" }, Width = 26, Height = 22, Padding = new Thickness(0), MinWidth = 0, CornerRadius = new CornerRadius(4),
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center, VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Content = new TextBlock { Classes = { "icon" }, Text = glyph, FontSize = 14 },
+        };
+        ToolTip.SetTip(b, Loc.T(tipKey));
+        return b;
     }
 
     /// <summary>The snap box reads as a toggle: lit with the accent (magnet, text and outline) while the grid is on,

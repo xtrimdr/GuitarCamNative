@@ -90,6 +90,7 @@ public partial class MainWindow
         {
             BuildMastering();
             FitMasteringHeight();
+            miniTimeline.SetTracks(tracks);
         }
         else
         {
@@ -105,7 +106,7 @@ public partial class MainWindow
         if (masteringScroll.Content is not Control body) return;
         body.Measure(Size.Infinity);
         var pad = masteringScroll.Padding;
-        SetBottomRowHeight(Math.Ceiling(body.DesiredSize.Height + pad.Top + pad.Bottom + MasteringScrollRoom + (audioMode ? 0 : miniTimeline.Bounds.Height)));
+        SetBottomRowHeight(Math.Ceiling(body.DesiredSize.Height + pad.Top + pad.Bottom + MasteringScrollRoom + (audioMode ? 0 : miniRow.Height)));
     }
 
     /// <summary>The height of the place the mixer and the mastering share: the bottom row, or the row under the timeline in solo audio.</summary>

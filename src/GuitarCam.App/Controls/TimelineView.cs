@@ -1434,8 +1434,8 @@ public sealed partial class TimelineView : Control
     }
 
     // seconds between labels in the time ruler (down to 1 ms for the deepest zoom) and minor ticks inside each
-    static readonly double[] TimeSteps = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800];
-    static readonly int[] TimeDivs = [5, 4, 5, 5, 4, 5, 5, 5, 5, 5, 4, 5, 5, 3, 6, 6, 4, 5, 5, 6];
+    internal static readonly double[] TimeSteps = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800];
+    internal static readonly int[] TimeDivs = [5, 4, 5, 5, 4, 5, 5, 5, 5, 5, 4, 5, 5, 3, 6, 6, 4, 5, 5, 6];
     /// <summary>Px between the finest bars-mode ticks: zoomed in, beats split in halves until they get this close.</summary>
     const double FineTickPx = 12;
 

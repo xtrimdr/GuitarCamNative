@@ -64,6 +64,10 @@ public partial class MainWindow
     readonly Panel mixerStrips = new();
     readonly ScrollViewer mixerScroll = new() { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled };
     readonly MiniTimeline miniTimeline = new();
+    /// <summary>The mini timeline's own ruler switch (asked by the user), the same mode as the timeline's (<see cref="SetRulerMode"/>).</summary>
+    readonly Button miniBarsButton = RulerButton("", "ruler.bars.tip"), miniTimeButton = RulerButton("", "ruler.time.tip");
+    /// <summary>The switch and the mini timeline, the row over the mixer and the Mastering view.</summary>
+    Border miniRow = null!;
     Button? panButton;
     string mixerKey = "";
     string mixerWidth = "auto";
@@ -131,9 +135,24 @@ public partial class MainWindow
         mixerStrips.Children.Add(wideMixer.Strips);
         mixerScroll.Content = mixerStrips;
         mixerScroll.SizeChanged += (_, _) => { mixerStrips.MinWidth = mixerScroll.Viewport.Width; RefreshMixer(); };
-        DockPanel.SetDock(miniTimeline, Dock.Top);
+        // the same two-button switch as the timeline's corner
+        var rulerSwitch = new Border
+        {
+            Background = Palette.Raised, BorderBrush = Palette.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(2), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+            Child = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Children = { miniBarsButton, miniTimeButton } },
+        };
+        miniBarsButton.Click += (_, _) => SetRulerMode(true);
+        miniTimeButton.Click += (_, _) => SetRulerMode(false);
+        DockPanel.SetDock(rulerSwitch, Dock.Left);
+        miniRow = new Border
+        {
+            Background = Palette.Panel, BorderBrush = Palette.Line, BorderThickness = new Thickness(0, 0, 0, 1), Height = miniTimeline.Height + 1,
+            Child = new DockPanel { Children = { rulerSwitch, miniTimeline } },
+        };
+        DockPanel.SetDock(miniRow, Dock.Top);
         DockPanel.SetDock(header, Dock.Top);
-        MixerHost.Children.Add(miniTimeline);
+        MixerHost.Children.Add(miniRow);
         MixerHost.Children.Add(header);
         // the DockPanel fills only its last child: the mixer and the Mastering view share it, so both fill the place
         MixerHost.Children.Add(new Panel { Children = { mixerScroll, masteringScroll } });
@@ -158,7 +177,7 @@ public partial class MainWindow
         mixerView = mixer;
         TimelineHost.IsVisible = ToolBox.IsEnabled = !mixer || audioMode;
         MixerHost.IsVisible = mixer;
-        miniTimeline.IsVisible = !audioMode;
+        miniRow.IsVisible = !audioMode;
         ApplyAudioMixerRows();
         ToolTip.SetTip(BottomSplitter, Loc.T(mixer ? "splitter.mixer" : "splitter.timeline"));
         TimelineViewButton.Classes.Set("on", !mixer);
@@ -303,7 +322,9 @@ public partial class MainWindow
 
     void RefreshMixer()
     {
-        if (!mixerView || masteringView) return;
+        if (!mixerView) return;
+        miniTimeline.SetTracks(tracks);
+        if (masteringView) return;
         double areaW = mixerScroll.Viewport.Width > 0 ? mixerScroll.Viewport.Width : MixerHost.Bounds.Width;
         // folder strips take their own width; folded groups hide their tracks
         int n = Math.Max(1, tracks.Count(t => FolderOfTrack(t)?.MixerCollapsed != true));
@@ -323,7 +344,6 @@ public partial class MainWindow
         wideMixer.Strips.IsVisible = wide;
         compactMixer.Strips.IsVisible = !wide;
         if (wide) foreach (var box in mx.Boxes) box.Width = stripW;
-        miniTimeline.SetTracks(tracks);
         bool was = syncing;
         syncing = true;
         try
@@ -343,8 +363,11 @@ public partial class MainWindow
         var (rl, rr, dl, dr) = engine.TakeReturnMeters();
         double lim = masterLimDb = engine.Limiter.TakeReductionDb();
         masterOutPeak = Math.Max(masterOutPeak, engine.TruePeak.TakeMax());
-        if (!mixerView || masteringView) return;
+        if (!mixerView) return;
+        // the mini timeline sits over the Mastering view too
+        miniTimeline.Bpm = Timeline.Bpm;
         miniTimeline.SetPlayhead(pos, tracks.Count == 0 ? 0 : tracks.Max(t => t.EndSec), RecordingBusy);
+        if (masteringView) return;
         foreach (var t in tracks)
             if (mx.Meters.TryGetValue(t.Track.Id, out var m))
             {

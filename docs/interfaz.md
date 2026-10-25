@@ -339,6 +339,9 @@ tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
 
 - Ocupa el lugar del timeline (X o "Timeline / Mixer") con su propia altura (mínimo 250). Una tira por pista, también
   las vacías; amplias o compactas ("Auto" según el ancho).
+- Arriba, sobre el mixer y sobre Mastering (no en solo audio), la mini timeline (`Controls/MiniTimeline.cs`): toda la
+  canción, el cabezal (clic o arrastre para moverlo) y una regla en compases o en minutos y segundos, con su propio
+  switch de dos botones a la izquierda que es el mismo modo que el de la regla del timeline (`SetRulerMode`).
 - Las ediciones de canal pasan por `EditTrack`, las de los buses por `BusEdit`. Los desplegables son `SelectButton`,
   no `ComboBox`.
 - Sus medidores usan el degradé verde → amarillo → rojo (`Palette.Meter*`), distinto del `StereoMeter`.

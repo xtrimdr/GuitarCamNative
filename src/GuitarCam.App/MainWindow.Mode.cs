@@ -114,7 +114,7 @@ public partial class MainWindow
         AudioArea.IsVisible = audio;
         BottomSplitter.IsVisible = !audio;
         TimelineHost.IsVisible = !mixerView || audio;
-        miniTimeline.IsVisible = !audio;
+        miniRow.IsVisible = !audio;
         ApplyAudioMixerRows();
         if (mixerView && masteringView) FitMasteringHeight();
         RefreshMixer();
