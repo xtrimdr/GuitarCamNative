@@ -193,15 +193,45 @@ public sealed class MasterSettings
     /// </summary>
     [JsonPropertyName("limCeilingDbtp")] public double LimCeilingDb { get; set; } = Dsp.MasterLimiter.CeilingDb;
     public double LimReleaseMs { get; set; } = Dsp.MasterLimiter.ReleaseMs;
+    /// <summary>Destino: where the mix is going (<see cref="Dsp.MasterLoudness.All"/>, "" = as it is), so its loudness is heard while mixing.</summary>
+    public string Target { get; set; } = Dsp.MasterLoudness.AsIs;
+    /// <summary>The gain (dB) last measured to land the mix on <see cref="Target"/>: kept, so reopening plays at that level at once.</summary>
+    public double TargetGainDb { get; set; }
+    /// <summary>The look the knobs came from (<see cref="Dsp.MasterLooks.All"/>, "" = by hand) and its "Cuánto" (0 to 1).</summary>
+    public string Look { get; set; } = Dsp.MasterLooks.Custom;
+    public double LookAmount { get; set; } = Dsp.MasterLooks.DefaultAmount;
+    /// <summary>The multiband's fourth band, Púa: how hard it holds 2–5 kHz down when the pick hits (0 = off).</summary>
+    public double PickAmount { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
     public static List<MasterBand> Defaults() => [new(), new(), new()];
+
+    /// <summary>Puts a look at that "Cuánto" into the knobs it sets (<see cref="Dsp.MasterLooks.At"/>); the rest stays.</summary>
+    public void ApplyLook(Dsp.MasterLook look, double amount)
+    {
+        var v = Dsp.MasterLooks.At(look, amount);
+        Look = look.Id;
+        LookAmount = Math.Clamp(amount, 0, 1);
+        LowCutHz = v.LowCutHz; MudDb = v.MudDb; LowsDb = v.LowsDb; PresenceDb = v.PresenceDb; AirDb = v.AirDb; TiltDb = v.TiltDb;
+        Bands[0].Amount = v.Low; Bands[1].Amount = v.Mid; Bands[2].Amount = v.High;
+        TapeAmount = v.Tape; Width = v.Width; MonoBassHz = v.MonoBassHz; PickAmount = v.Pick;
+    }
+
+    /// <summary>Takes what "Sugerime" proposed (<see cref="Dsp.MasterSuggest"/>): the EQ, the bands and the Púa; by hand from then on.</summary>
+    public void ApplySuggestion(Dsp.MasterParams p)
+    {
+        Look = Dsp.MasterLooks.Custom;
+        On = p.On;
+        LowCutHz = p.LowCutHz; MudDb = p.MudDb; LowsDb = p.LowsDb; PresenceDb = p.PresenceDb; AirDb = p.AirDb; TiltDb = p.TiltDb;
+        Bands[0].Amount = p.Low.Amount; Bands[1].Amount = p.Mid.Amount; Bands[2].Amount = p.High.Amount;
+        PickAmount = p.PickAmount;
+    }
 
     public Dsp.MasterParams ToParams()
     {
         Dsp.MasterBandParams B(int i) => new(Bands[i].Amount);
         return new(On, EqOn, LowCutHz, MudDb, LowsDb, PresenceDb, AirDb, TiltDb, BandsOn, LowXHz, HighXHz, B(0), B(1), B(2), ColorOn, LimDriveDb, LimCeilingDb, LimReleaseMs, LimOn,
-            TapeOn, TapeAmount, WidthOn, Width, MonoBassHz, ClipOn, ClipDb);
+            TapeOn, TapeAmount, WidthOn, Width, MonoBassHz, ClipOn, ClipDb, Dsp.MasterLoudness.Get(Target).Lufs, TargetGainDb, PickAmount);
     }
 
     internal void Normalize()
@@ -222,6 +252,11 @@ public sealed class MasterSettings
         ClipDb = Fin(ClipDb, 0, Dsp.SoftClipper.MaxDb, 0);
         LimCeilingDb = Fin(LimCeilingDb, Dsp.MasterLimiter.CeilingMinDb, 0, Dsp.MasterLimiter.CeilingDb);
         LimReleaseMs = Fin(LimReleaseMs, Dsp.MasterLimiter.ReleaseMinMs, Dsp.MasterLimiter.ReleaseMaxMs, Dsp.MasterLimiter.ReleaseMs);
+        Target = Dsp.MasterLoudness.Get(Target).Id;
+        TargetGainDb = Fin(TargetGainDb, -Dsp.MixMaster.MaxGainDb, Dsp.MixMaster.MaxGainDb, 0);
+        Look = Dsp.MasterLooks.Get(Look)?.Id ?? Dsp.MasterLooks.Custom;
+        LookAmount = Fin(LookAmount, 0, 1, Dsp.MasterLooks.DefaultAmount);
+        PickAmount = Fin(PickAmount, 0, 1, 0);
         Bands ??= [];
         Bands.RemoveAll(b => b == null);
         while (Bands.Count < Dsp.MasterBands.Count) Bands.Add(new());
@@ -584,6 +619,8 @@ public sealed class Clip
         GainCurve = (GainCurve ?? []).Where(g => g != null && double.IsFinite(g.Sec) && double.IsFinite(g.Db))
             .OrderBy(g => g.Sec).ToList();
         foreach (var g in GainCurve) g.Db = Math.Clamp(g.Db, Dsp.ClipGainCurve.MinDb, Dsp.ClipGainCurve.MaxDb);
+        Transition = ClipTransitions.Id(ClipTransitions.Parse(Transition));
+        TransitionSec = ClipTransitions.ClampSec(TransitionSec);
     }
 
     /// <summary>Range of <see cref="GainDb"/> (the inspector's slider).</summary>
@@ -600,6 +637,14 @@ public sealed class Clip
     public bool LinkVideoFades { get; set; } = true;
     public double VideoFadeInSec { get; set; }
     public double VideoFadeOutSec { get; set; }
+    /// <summary>
+    /// Native only: how the picture comes into this clip from the one that ends where it starts on its track
+    /// ("cut", "crossfade", "dip"; <see cref="ClipTransitions"/>). Video only: the sound still cuts at the join.
+    /// Ignored while nothing touches its start.
+    /// </summary>
+    public string Transition { get; set; } = ClipTransitions.CutId;
+    /// <summary>Length of <see cref="Transition"/>, centered on the join.</summary>
+    public double TransitionSec { get; set; } = ClipTransitions.DefaultSec;
     /// <summary>Clip gain, before the track's channel strip.</summary>
     public double GainDb { get; set; }
     /// <summary>

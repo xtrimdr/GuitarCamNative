@@ -240,6 +240,15 @@ public sealed class PlaybackEngine : IDisposable
     int lastBlock;
     int seeks;
 
+    /// <summary>
+    /// No callback for this long with the driver open means it stopped (the interface was unplugged or its driver
+    /// hung): ASIO calls back all the time while open, also with the transport stopped.
+    /// </summary>
+    static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(3);
+
+    /// <summary>The open driver stopped calling back (see <see cref="StallTimeout"/>). False until its first callback.</summary>
+    public bool Stalled => io != null && Volatile.Read(ref lastCallback) is var t && t != 0 && Stopwatch.GetElapsedTime(t) > StallTimeout;
+
     /// <summary>Longest wait between callbacks and longest callback since the last call (ms), the block length, and seeks made.</summary>
     public (double GapMs, double RunMs, double BlockMs, int Seeks) TakeTimings()
     {
@@ -290,6 +299,7 @@ public sealed class PlaybackEngine : IDisposable
         {
             io?.Dispose();
             io = null;
+            Volatile.Write(ref lastCallback, 0); // the old driver's last callback must not count as a stall
             string driver = AsioDuplex.PickDriver(wantedDriver);
             io = new AsioDuplex(driver, SampleRate, inputOffset, 0, outputOffset, Process);
             io.ResetRequested += () => DriverResetRequested?.Invoke();

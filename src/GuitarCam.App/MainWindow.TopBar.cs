@@ -96,6 +96,8 @@ public partial class MainWindow
             SaveText.Text = state switch { "error" => Loc.T("title.saveError"), "saving" => Loc.T("title.saving"), "unsaved" => Loc.T("title.unsaved"), "readonly" => Loc.T("title.readOnly"), _ => Loc.T("title.saved") };
             SaveText.Foreground = state switch { "error" => Palette.Rec, "saving" or "unsaved" => Palette.Dim, _ => Palette.Faint };
             SaveButton.IsEnabled = state is "unsaved" or "error";
+            SaveButton.Classes.Set("pending", SaveButton.IsEnabled);
+            SaveButton.Classes.Set("failed", state == "error");
             ToolTip.SetTip(SessionChip, store == null ? Loc.T("title.projects") : Loc.T("title.project.tip", store.Dir));
         }
         // Configuración can switch monitoring too

@@ -108,6 +108,25 @@ public sealed class LiveClip
     public string? VideoPath { get; init; }
     public WriteableBitmap? Frame { get; private set; }
     public bool InClip { get; private set; }
+    /// <summary>
+    /// True once <see cref="Frame"/> holds a picture decoded since the playhead entered the clip: before that it may
+    /// still be one from the last time it was shown (another part of the take), so the preview leaves the panel empty.
+    /// </summary>
+    public bool Fresh { get; private set; }
+    /// <summary>How far ahead of a clip's start its decoder is started (FFmpeg takes ~100–300 ms to give the first frame).</summary>
+    const double PreRollSec = 1.0;
+    /// <summary>
+    /// How far its picture shows before its start and after its end: a crossfade's half on each side of the join
+    /// (<see cref="ClipTransitions"/>), set every tick by <see cref="LiveTrack.UpdateTransitions"/>. Zero otherwise.
+    /// </summary>
+    public double Lead { get; internal set; }
+    public double Tail { get; internal set; }
+    volatile ClipAudioJoins? audioJoins;
+    /// <summary>
+    /// What the transitions do to its sound (<see cref="ClipTransitions"/>), null = nothing: swapped whole by
+    /// <see cref="LiveTrack.UpdateTransitions"/> when they change, read by the audio thread once per block.
+    /// </summary>
+    public ClipAudioJoins? AudioJoins { get => audioJoins; internal set => audioJoins = value; }
     public ProjectSettings? Settings { get; set; }
     long frameVersion;
     byte[]? rawFrame;
@@ -153,13 +172,26 @@ public sealed class LiveClip
     {
         var video = Video;
         if (video == null) return false;
-        bool inside = timelineSec >= ClipStartSec && timelineSec < ClipEndSec;
+        bool inside = timelineSec >= ClipStartSec - Lead && timelineSec < ClipEndSec + Tail;
         bool changed = inside != InClip;
         InClip = inside;
-        if (!inside) return changed;
+        double videoOffset = -OffsetSec + Clip.EffectiveVideoOffsetMs(Media) / 1000;
+        if (!inside)
+        {
+            // starting FFmpeg takes a few frames: done ahead of time, a cut doesn't freeze the picture
+            double until = ClipStartSec - Lead - timelineSec;
+            if (until > 0 && until <= PreRollSec) video.Want(VideoTime(ClipStartSec - Lead, videoOffset));
+            else video.Idle();
+            if (changed) Fresh = false;
+            return changed;
+        }
+        if (changed)
+        {
+            Fresh = false;
+            frameVersion = -1; // the decoder's current frame counts again, if it's from around here
+        }
 
-        double videoSec = timelineSec - OffsetSec + Clip.EffectiveVideoOffsetMs(Media) / 1000;
-        video.Want(videoSec);
+        video.Want(VideoTime(timelineSec, videoOffset));
         Frame ??= new WriteableBitmap(new PixelSize(video.Width, video.Height), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Opaque);
 
         bool newRaw = video.TryCopyLatest(ref frameVersion, buf =>
@@ -169,6 +201,11 @@ public sealed class LiveClip
             Buffer.BlockCopy(buf, 0, rawFrame, 0, buf.Length);
         });
 
+        if (newRaw && !Fresh)
+        {
+            Fresh = true;
+            changed = true;
+        }
         if (rawFrame == null) return changed;
 
         var colSpec = PreviewVideoFx.ToSpec(color ?? Settings?.Color);
@@ -217,6 +254,18 @@ public sealed class LiveClip
         return true;
     }
 
+    /// <summary>
+    /// The video time for a timeline time. Past the clip's edges (a transition's overhang) it stays within the
+    /// recording, so a side with no hidden video holds its first or last frame, as the export does.
+    /// </summary>
+    double VideoTime(double timelineSec, double videoOffset)
+    {
+        double sec = timelineSec + videoOffset;
+        if (timelineSec < ClipStartSec) sec = Math.Max(0, sec);
+        if (timelineSec >= ClipEndSec) sec = Math.Min(sec, Math.Max(0, LengthSec - 2 / VideoDecoder.Fps));
+        return sec;
+    }
+
     /// <summary>Closes the decoder; <see cref="OpenVideo"/> may open it again (a project switched back from solo audio).</summary>
     public void CloseVideo() => DetachVideo()?.Dispose();
 
@@ -230,6 +279,7 @@ public sealed class LiveClip
         Video = null;
         VideoTried = false;
         InClip = false;
+        Fresh = false;
         rawFrame = null;
         gradedFrame = null;
         return video;
@@ -298,6 +348,83 @@ public sealed class LiveTrack
 
     /// <summary>The clip whose picture shows in the panel: the last one under the playhead, the one on top in the timeline and the export.</summary>
     public LiveClip? ShownClip => Clips.LastOrDefault(c => c.InClip);
+
+    // the clips' windows and transitions, refilled every tick (grown only when the track gets more clips)
+    ClipEnvelope.ClipWindow[] windows = [];
+    TransitionKind[] kinds = [];
+    double[] secs = [];
+    int[] takes = [];
+    AudioJoin[] ins = [], outs = [];
+    /// <summary>The video transition under the playhead (<see cref="UpdateTransitions"/>), or null.</summary>
+    public ClipTransitions.Join? Transition { get; private set; }
+    /// <summary>The playhead's time when <see cref="Transition"/> was found, for <see cref="ClipTransitions.Weights"/>.</summary>
+    public double TransitionAt { get; private set; }
+
+    /// <summary>
+    /// Finds this track's transitions (<see cref="ClipTransitions"/>, the export's same math). The sound: each clip's
+    /// <see cref="LiveClip.AudioJoins"/>, for the audio thread. The picture (video tracks): each clip's
+    /// <see cref="LiveClip.Lead"/> / <see cref="LiveClip.Tail"/> so its decoder runs past its edges during a crossfade,
+    /// and <see cref="Transition"/> to the one under <paramref name="t"/>. Called every UI tick before the clips'
+    /// <see cref="LiveClip.UpdateVideo"/>; allocates only when a transition changed. Returns true when the preview must be redrawn
+    /// (inside a transition while the playhead moves, or one appeared, went or changed).
+    /// </summary>
+    public bool UpdateTransitions(double t)
+    {
+        var clips = Clips;
+        int n = clips.Count;
+        if (windows.Length < n)
+        {
+            int size = Math.Max(n, 2 * windows.Length);
+            windows = new ClipEnvelope.ClipWindow[size];
+            kinds = new TransitionKind[size];
+            secs = new double[size];
+            takes = new int[size];
+            ins = new AudioJoin[size];
+            outs = new AudioJoin[size];
+        }
+        for (int i = 0; i < n; i++)
+        {
+            var c = clips[i];
+            windows[i] = c.Window;
+            kinds[i] = ClipTransitions.Parse(c.Clip.Transition);
+            secs[i] = c.Clip.TransitionSec;
+            takes[i] = i;
+            for (int k = 0; k < i; k++)
+                if (c.Media != null && clips[k].Media?.Id == c.Media.Id) { takes[i] = k; break; }
+            c.Lead = c.Tail = 0;
+        }
+
+        // the sound: every track, video or not; a clip gets a new (immutable) set only when its joins changed
+        ClipTransitions.AudioJoins(windows.AsSpan(0, n), kinds.AsSpan(0, n), secs.AsSpan(0, n), takes.AsSpan(0, n), ins, outs);
+        for (int i = 0; i < n; i++)
+        {
+            var c = clips[i];
+            var now = c.AudioJoins;
+            bool has = ins[i].Exists || outs[i].Exists;
+            if (now == null ? has : !has || now.In != ins[i] || now.Out != outs[i])
+                c.AudioJoins = has ? new ClipAudioJoins(ins[i], outs[i]) : null;
+        }
+
+        ClipTransitions.Join? active = null;
+        if (Track.Video)
+        {
+            var w = windows.AsSpan(0, n);
+            for (int i = 0; i < n; i++)
+            {
+                if (ClipTransitions.Find(w, i, kinds[i], secs[i]) is not { } j) continue;
+                if (j.Overhang > 0)
+                {
+                    clips[j.In].Lead = Math.Max(clips[j.In].Lead, j.Overhang);
+                    clips[j.Out].Tail = Math.Max(clips[j.Out].Tail, j.Overhang);
+                }
+                if (t >= j.Start && t < j.End) active = j;
+            }
+        }
+        bool redraw = active != Transition || active != null && t != TransitionAt;
+        Transition = active;
+        TransitionAt = t;
+        return redraw;
+    }
 
     /// <summary>Associates the project's settings with all clips on this track so <see cref="LiveClip.UpdateVideo"/> follows color and video FX changes.</summary>
     public void SetProjectSettings(ProjectSettings? settings)
@@ -449,8 +576,10 @@ public sealed class LiveTrack
             int fadeLeft = c.FadeLeft;
             var w = c.Window;
             if (w.End <= w.Start) continue;
-            long startFrame = Math.Max(0, (long)Math.Round(w.Start * sampleRate));
-            long endFrame = (long)Math.Round(w.End * sampleRate);
+            // a transition plays the clip past its edges, into the audio its trims hide (MixRenderer does the same)
+            var join = c.AudioJoins;
+            long startFrame = Math.Max(0, (long)Math.Round((join != null ? join.From(w.Start) : w.Start) * sampleRate));
+            long endFrame = (long)Math.Round((join != null ? join.Until(w.End) : w.End) * sampleRate);
             if (posFrame + n <= startFrame || posFrame >= endFrame) continue;
 
             long originFrame = (long)Math.Round(w.Origin * sampleRate);
@@ -474,7 +603,9 @@ public sealed class LiveTrack
                 long src = f - originFrame;
                 if (src < 0 || src >= left.Length) continue;
                 double timeSec = f * invSr;
-                float env = (float)ClipEnvelope.GainAt(timeSec, w.Start, w.End, fades.FadeIn, fades.FadeOut) * cg * (k + dk * (i % ClipGainCurve.Step));
+                double g = join == null ? ClipEnvelope.GainAt(timeSec, w.Start, w.End, fades.FadeIn, fades.FadeOut)
+                    : ClipEnvelope.GainAt(Math.Clamp(timeSec, w.Start, w.End), w.Start, w.End, fades.FadeIn, fades.FadeOut) * join.Gain(timeSec);
+                float env = (float)g * cg * (k + dk * (i % ClipGainCurve.Step));
                 if (!weight.IsEmpty) env *= weight[i];
                 float sl = left[src], sr = right[src];
                 if (old != null && fadeLeft > 0)

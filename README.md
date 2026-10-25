@@ -68,7 +68,8 @@ de **grabar → mezclar → exportar**.
 ### Exportar
 
 - **MP4** (mezcla offline + FFmpeg, con progreso y cancelación), con presets para **Reels · TikTok**, **YouTube** e
-  **Instagram** (1:1 y 4:5) que acomodan el cuadro y llevan la mezcla a −14 LUFS.
+  **Instagram** (1:1 y 4:5) que acomodan el cuadro. El volumen sale del **Destino** del master (YouTube, Instagram,
+  TikTok, Spotify, Apple Music), que se escucha mientras mezclás y la exportación respeta.
 - Fácil o a medida: elegís destino y calidad, y si querés, en **Avanzado** la resolución (720p a 4K) y el bitrate.
 - El video se codifica con la **placa de video** (NVIDIA, AMD o Intel) si hay una, las tomas se procesan en paralelo
   y la mezcla usa todos los núcleos; si la placa falla, sigue sola con el procesador.
@@ -79,7 +80,7 @@ de **grabar → mezclar → exportar**.
 - **No pierde nada**: guardado atómico (solo después de cada edición, cada X minutos o a mano con Ctrl+S o el
   diskette, a elección en Configuración → Guardado y exportación; las tomas se guardan siempre), copias en `historial/` para volver
   atrás, recuperación de grabaciones interrumpidas y un gestor de proyectos con Papelera.
-- Idiomas, tema y atajos de teclado configurables.
+- Idiomas, tema, atajos de teclado y diseño de la ventana (Clásico o Vertical, para videos 9:16) configurables.
 
 ## Hacia dónde va
 
@@ -95,6 +96,11 @@ planeado y lo que falta está en [PENDIENTES.md](PENDIENTES.md).
 - Windows 10/11 de 64 bits.
 - Una interfaz de audio con driver **ASIO**.
 - **FFmpeg** y **ffprobe** en el `PATH` (cámara, video y exportación).
+- Para la preview, los DLL de **FFmpeg 9** (versión *shared*) en `lib\ffmpeg\` (`avcodec-63`, `avformat-63`,
+  `avutil-61`, `swscale-10`, `swresample-7` y su `LICENSE`). No van en git: se bajan de
+  [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds/releases) (`ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip`,
+  carpeta `bin`). El build los copia a `ffmpeg\` junto al exe. Sin ellos la preview usa ffmpeg.exe, que tarda más
+  en cada salto.
 - [.NET 10 SDK](https://dotnet.microsoft.com/) para compilar.
 
 ## Compilar y ejecutar
@@ -133,7 +139,8 @@ Todos se pueden cambiar en ⚙ Configuración → Atajos de teclado (menos Esc).
 | M / S | mute / solo de la pista |
 | F | ver todo |
 | X | timeline / mixer |
-| Alt+X / D | dividir el clip en el cabezal / duplicarlo |
+| Alt+X / D | dividir el clip en el cabezal / duplicarlo (o los marcados, en bloque) |
+| Ctrl+C / Ctrl+X / Ctrl+V | copiar / cortar los clips elegidos / pegarlos en el cabezal, desde la pista elegida |
 | Supr | quitar el clip (o los marcados, o la pista vacía); con un rango, borrarlo |
 | Shift+Supr | borrar el rango y cerrar el hueco (lo de después se corre) |
 | 1 a 7 | herramientas: Seleccionar / Rango / Dividir / Borrar / Escuchar / Zoom / Mano |
@@ -216,10 +223,11 @@ la consola, sin abrir la ventana.
 | `espectro [toma.wav]` | el espectro en vivo del EQ |
 | `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas, reinicio de la cadena, afinador, LUFS y mastering (bandas que suman plano, reducción por banda sin importar el nivel, Cinta, Ancho (graves mono y mismo volumen), soft clip, limitador prendido y apagado) |
 | `looks [--look id] [--salida look.cube] [--blancos n] [--negros n] [--luz n]` | los looks de color con colores de prueba, comprobación de rango y, con `--look`, el LUT `.cube` de ese look con Blancos, Negros y Sensación de luz |
-| `masterizar archivo.wav [--cuanto 0.35] [--banda-graves\|--banda-medios\|--banda-agudos 0..1] [--corte] [--barro] [--graves] [--presencia] [--aire] [--inclinacion] [--cinta] [--ancho] [--graves-mono] [--recorte] [--empuje] [--techo] [--release] [--sin-limitador]` | el mastering de la ventana sobre un WAV: cuánto comprime cada banda, cuánto recortan el soft clip y el limitador y los LUFS de entrada y salida |
+| `masterizar archivo.wav [--cuanto 0.35] [--banda-graves\|--banda-medios\|--banda-agudos 0..1] [--corte] [--barro] [--graves] [--presencia] [--aire] [--inclinacion] [--cinta] [--ancho] [--graves-mono] [--recorte] [--empuje] [--techo] [--release] [--sin-limitador] [--volumen youtube\|instagram\|tiktok\|spotify\|apple] [--pua 0..1] [--look natural\|glue\|bright\|warm\|front\|pick [--cuanto-look 1]] [--sugerime]` | el mastering de la ventana sobre un WAV: cuánto comprime cada banda (y la Púa), cuánto recortan el soft clip (Auto incluido) y el limitador y los LUFS de entrada y salida; `--volumen` es el Destino del master (mide el archivo y usa esa ganancia en vez del Empuje), `--look` pone un look, `--sugerime` muestra qué oye y qué propone, y masteriza con eso |
 | `transponer archivo.wav [--semitonos 2] [--salida x.wav]` | cambia el tono sin cambiar el largo, como el Transponer de la pista (de −12 a +12, admite cents) |
 | `proyecto editar carpeta transponer pista semitonos` | el Transponer de esa pista; deja sus tomas transpuestas en `cache/` |
 | `lufs archivo` / `afinar archivo [--en segundos] [--umbral -50]` | volumen integrado de un archivo / la nota que oye el afinador en ese momento, con la sensibilidad de la ventana (dB) |
+| `leer-video archivo [--cpu] [--saltos 20] [--cuadro 12.5 --salida x.bmp] [--comparar]` | mide el decodificador de la preview (FFmpeg dentro de la app): abrir, leer seguido, saltar y memoria por cuadro; `--comparar` lo mide contra ffmpeg.exe (tiempo por salto y diferencia de imagen) |
 | `camara [listar]` | las cámaras que ve FFmpeg y sus formatos |
 | `camara grabar [--dispositivo X \| --ip 192.168.1.50:4747] [--segundos 5]` | graba video como una toma y lo revisa con ffprobe |
 | `camara verificar-corte` | corta una grabación a la mitad y comprueba que el video quede |
@@ -228,10 +236,11 @@ la consola, sin abrir la ventana.
 | `exportar proyecto … --stems` | además, un WAV por pista en `<nombre> - stems` |
 | `exportar proyecto … --codificador auto\|cpu\|nvenc\|amf\|qsv` | quién codifica el video (auto = la placa de video si hay) |
 | `exportar proyecto … --resolucion 720\|1080\|1440\|2160 --bitrate 20` | el "Avanzado" del diálogo: lado corto del cuadro y bitrate del video en Mbps |
-| `exportar proyecto … --destino reels\|youtube\|ig-square\|ig-portrait [--lufs -14] [--cola 8]` | con el cuadro y el volumen de esa red; `--lufs` lleva la mezcla a ese volumen integrado, `--cola` deja sonar reverb y delay hasta N s después del último clip (0 = corta). Muestra los LUFS del resultado |
+| `exportar proyecto … --destino reels\|youtube\|ig-square\|ig-portrait [--volumen como-esta\|youtube\|…] [--lufs -14] [--cola 8]` | con el cuadro de esa red; el volumen es el Destino del master del proyecto (`--volumen` lo cambia para esta exportación, `--lufs` lleva la mezcla a ese volumen integrado), `--cola` deja sonar reverb y delay hasta N s después del último clip (0 = corta). Muestra los LUFS del resultado |
 | `proyecto abrir\|clips\|versiones\|volver carpeta` | abre un proyecto, lista pistas y clips, y recorre el historial |
 | `proyecto toma\|cortar carpeta [--camara]` | graba un tono como la ventana / lo corta sin cerrar, para probar la recuperación |
-| `proyecto editar carpeta mover\|recortar-inicio\|recortar-final\|fade-in\|fade-out clip delta` | edita un clip como en el timeline (más: `a-pista`, `dividir`, `duplicar`, `ganancia`, `curva`, `quitar-clip`, `nueva-pista`…) |
+| `proyecto editar carpeta mover\|recortar-inicio\|recortar-final\|fade-in\|fade-out clip delta` | edita un clip como en el timeline (más: `a-pista`, `dividir`, `duplicar` (varios ids con comas), `pegar`, `ganancia`, `curva`, `quitar-clip`, `nueva-pista`…) |
+| `proyecto editar carpeta transicion clip corte\|fundido\|negro [--segundos 0.5]`, `proyecto transiciones carpeta` | la transición de video que entra a ese clip (solo la imagen) y la lista de uniones de cada pista |
 | `proyecto editar carpeta nueva-carpeta\|a-carpeta\|sacar-de-carpeta\|mover-carpeta\|quitar-carpeta\|carpeta …` | carpetas de pistas: agrupar, mover adentro y afuera, fader, mute y solo |
 | `proyecto editar carpeta guardar-plantilla pista [nombre] \| usar-plantilla nombre`, `proyecto plantillas-de-pista x` | plantillas de pista (`pistas.json`) |
 | `proyecto encuadre\|sincronia\|formato\|modo carpeta …` | encuadre del clip, ajuste de sincronía, formato del video y modo Video / Solo audio |

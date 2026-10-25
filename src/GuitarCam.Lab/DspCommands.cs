@@ -306,6 +306,9 @@ static class DspCommands
                         GainDb = c.GainDb,
                         GainCurve = c.CurvePoints(),
                         SyncMs = c.EffectiveSyncMs(m),
+                        Transition = c.Transition,
+                        TransitionSec = c.TransitionSec,
+                        TakeId = c.MediaId,
                     });
                 }
 
@@ -688,21 +691,61 @@ static class DspCommands
             Width = a.Double("ancho", 1),
             MonoBassHz = a.Double("graves-mono", 0),
             ClipDb = a.Double("recorte", 0),
+            PickAmount = a.Double("pua", 0),
         };
+        // --look natural|glue|…: a look at --cuanto-look (0..1), over the knobs above
+        if (a.Get("look") is { } lookId)
+        {
+            var look = MasterLooks.Get(lookId)
+                ?? throw new ArgumentException($"--look: \"{lookId}\" no existe. Opciones: {string.Join(", ", MasterLooks.All.Select(l => l.Id))}.");
+            double lookAmount = a.Double("cuanto-look", MasterLooks.DefaultAmount);
+            p = MasterLooks.Apply(p, look, lookAmount);
+            Console.WriteLine($"Look {look.Label} al {lookAmount * 100:0}%");
+        }
+        // --sugerime: what "Sugerime" hears in the file and proposes; it masters with that
+        if (a.Flag("sugerime"))
+        {
+            var profile = MasterSuggest.Analyze(audio.Left, audio.Right, sr);
+            var dev = MasterSuggest.Deviation(profile);
+            Console.WriteLine("Octavas contra una mezcla terminada: " + string.Join("  ", MasterSuggest.Octaves.Select((f, i) =>
+                $"{(f >= 1000 ? $"{f / 1000:0}k" : $"{f:0}")} {dev[i]:+0.0;-0.0;0.0}")));
+            Console.WriteLine($"Picudez (dB): graves {profile.BandCrestDb[0]:0.0}, medios {profile.BandCrestDb[1]:0.0}, agudos {profile.BandCrestDb[2]:0.0}, púa {profile.PickCrestDb:0.0}");
+            var sug = MasterSuggest.Suggest(profile, p);
+            Console.WriteLine("Sugerime:");
+            foreach (var line in sug.Lines) Console.WriteLine($"  {line.Text}");
+            p = sug.Params;
+        }
+        // --volumen youtube|instagram|…: the Destino, measured on the whole file like the window does in the background
+        if (a.Get("volumen") is { } vol)
+        {
+            var dest = MasterLoudness.Get(vol);
+            if (dest.Lufs == null || dest.Id != vol)
+                throw new ArgumentException($"--volumen: \"{vol}\" no existe. Opciones: {string.Join(", ", MasterLoudness.All.Skip(1).Select(t => t.Id))}.");
+            MixTrackSpec[] mix = [new MixTrackSpec { Clips = [new MixClipSpec { Left = audio.Left, Right = audio.Right }] }];
+            var measured = MixMaster.Render(mix, new MixBusSpec { Master = p with { TargetLufs = dest.Lufs } }, audio.DurationSec, sr, 0, dest.Lufs);
+            p = p with { TargetLufs = dest.Lufs, TargetGainDb = measured.GainDb };
+            Console.WriteLine($"Destino {dest.Label} ({dest.Lufs:0} LUFS): ganancia {measured.GainDb:+0.0;-0.0;0.0} dB, la exportación queda en {measured.Lufs:0.0} LUFS");
+        }
+        double gain = MasterLoudness.GainDb(p);
         var l = (float[])audio.Left.Clone();
         var r = (float[])audio.Right.Clone();
         var bus = new MixGraphBus(sr);
         bus.SetMaster(p);
         bus.Reset();
-        double clipWorst = 0;
-        var (mean, worst, limWorst) = RunMaster(bus, l, r, () => clipWorst = Math.Max(clipWorst, -bus.Clip.TakeReductionDb()));
+        double clipWorst = 0, pickWorst = 0;
+        var (mean, worst, limWorst) = RunMaster(bus, l, r, () =>
+        {
+            clipWorst = Math.Max(clipWorst, -bus.Clip.TakeReductionDb());
+            pickWorst = Math.Max(pickWorst, -bus.Master.TakePickReductionDb());
+        });
         string[] names = ["Graves", "Medios", "Agudos"];
         for (int b = 0; b < MasterBands.Count; b++)
             Console.WriteLine(p.Band(b).Amount > 0
                 ? $"{names[b],-8} {p.Band(b).Amount * 100,4:0}%  comprime ~{mean[b]:0.0} dB (pico {worst[b]:0.0} dB)"
                 : $"{names[b],-8} {p.Band(b).Amount * 100,4:0}%  no comprime");
-        if (p.ClipDb > 0) Console.WriteLine($"Soft clip: recorte {p.ClipDb:0.0} dB, recorta hasta {clipWorst:0.0} dB");
-        Console.WriteLine(p.LimOn ? $"Limitador: empuje {p.LimDriveDb:+0.0} dB, techo {p.LimCeilingDb:0.0} dBTP, baja hasta {limWorst:0.0} dB" : "Limitador apagado");
+        if (p.PickAmount > 0) Console.WriteLine($"{"Púa",-8} {p.PickAmount * 100,4:0}%  baja 2-5 kHz hasta {pickWorst:0.0} dB");
+        Console.WriteLine($"Soft clip: {(p.ClipDb > 0 ? $"recorte {p.ClipDb:0.0} dB + auto" : "auto")}, recorta hasta {clipWorst:0.0} dB");
+        Console.WriteLine(p.LimOn ? $"Limitador: {(p.TargetLufs != null ? "ganancia del destino" : "empuje")} {gain:+0.0;-0.0;0.0} dB, techo {p.LimCeilingDb:0.0} dBTP, baja hasta {limWorst:0.0} dB" : "Limitador apagado");
         // the limiter's look-ahead: the output starts that many samples late
         int lat = bus.Limiter.Latency;
         Console.WriteLine($"LUFS: entra {LoudnessMeter.Measure(audio.Left, audio.Right, sr):0.0}, sale {LoudnessMeter.Measure(l[lat..], r[lat..], sr):0.0}; pico real sale {TruePeak.MeasureDb(l[lat..], r[lat..], l.Length - lat):0.0} dBTP");
@@ -820,12 +863,19 @@ static class DspCommands
             string fileName = a.Get("salida", string.IsNullOrWhiteSpace(p.Name) ? "GuitarCam" : p.Name);
             bool overwrite = a.Flag("reemplazar") || testMode;
             int sr = 48000;
-            // --destino: a social preset like the dialog's "Destino" (its frame and loudness); --lufs overrides the
-            // loudness (also for --audio), --cola how long the effects may ring after the last clip (0 = cut there)
+            // --destino: a social preset like the dialog's "Destino" (its frame); the loudness is the master's Destino,
+            // like the window (--volumen overrides it, --lufs gives a number), --cola how long the effects may ring after
+            // the last clip (0 = cut there)
             var target = ExportTargets.Get(a.Get("destino") ?? ExportTargets.Project);
             if (a.Get("destino") is { } dest && target.Id != dest)
                 throw new ArgumentException($"--destino: \"{dest}\" no existe. Opciones: {string.Join(", ", ExportTargets.All.Select(t => t.Id))}.");
-            double? targetLufs = a.Get("lufs") != null ? a.Double("lufs", ExportTargets.StreamingLufs) : target.Lufs;
+            if (a.Get("volumen") is { } vol)
+            {
+                if (MasterLoudness.Get(vol).Id != vol && vol != "como-esta")
+                    throw new ArgumentException($"--volumen: \"{vol}\" no existe. Opciones: como-esta, {string.Join(", ", MasterLoudness.All.Skip(1).Select(t => t.Id))}.");
+                p.Settings.Master.Target = vol == "como-esta" ? MasterLoudness.AsIs : vol;
+            }
+            double? targetLufs = a.Get("lufs") != null ? a.Double("lufs", ExportTargets.StreamingLufs) : MasterLoudness.Get(p.Settings.Master.Target).Lufs;
             double tailSec = Math.Clamp(a.Double("cola", MixMaster.MaxTailSec), 0, MixMaster.MaxTailSec);
 
             var takes = new List<ExportTakeSpec>();
@@ -861,6 +911,9 @@ static class DspCommands
                             GainDb = c.GainDb,
                             GainCurve = c.CurvePoints(),
                             SyncMs = c.EffectiveSyncMs(m),
+                            Transition = c.Transition,
+                            TransitionSec = c.TransitionSec,
+                            TakeId = c.MediaId,
                         });
                     }
                     if (trk.Video && (panel != null || c == trk.Clips[0]) && store.Resolve(m?.Video) is { } vp && File.Exists(vp))
@@ -886,6 +939,8 @@ static class DspCommands
                             PanX = c.Framing.PanX,
                             PanY = c.Framing.PanY,
                             Mirror = c.Framing.Mirror,
+                            Transition = c.Transition,
+                            TransitionSec = c.TransitionSec,
                             Panel = panel.Value,
                         });
                     }
@@ -1291,25 +1346,60 @@ static class DspCommands
         ok &= offOk;
         Console.WriteLine($"{"Master apagado: no toca la mezcla",-36} {(offOk ? "exacto" : "cambia"),12} {"exacto",10}  {(offOk ? "igual" : "DISTINTO")}");
 
-        // soft clip: with Empuje +8 dB, Recorte 3 takes most of the work off the limiter and the peak stays at the Techo
+        // soft clip: with Empuje +8 dB, Recorte 3 takes most of the work off the limiter and the peak stays at the Techo;
+        // with the knob at 0, Auto shares the hottest peaks (never cutting more than its most), and peaks only a little
+        // over the Techo it leaves to the limiter alone, bit for bit
         {
-            double Lim(double clipDb)
+            double clipWorst = 0;
+            double Lim(MasterParams p, out float[] outL, float scale = 1)
             {
-                var l = song[0].ToArray();
-                var r = song[1].ToArray();
+                var l = song[0].Select(v => v * scale).ToArray();
+                var r = song[1].Select(v => v * scale).ToArray();
                 var bus = new MixGraphBus(sr);
-                bus.SetMaster(flat with { LimDriveDb = 8, ClipDb = clipDb });
+                bus.SetMaster(p);
                 bus.Reset();
-                var (_, _, lim) = RunMaster(bus, l, r);
+                clipWorst = 0;
+                var (_, _, lim) = RunMaster(bus, l, r, () => clipWorst = Math.Max(clipWorst, -bus.Clip.TakeReductionDb()));
+                outL = l;
                 float pk = 0;
                 for (int i = 0; i < l.Length; i++) pk = Math.Max(pk, Math.Abs(l[i]));
                 if (20 * Math.Log10(pk) > MasterLimiter.CeilingDb + 1e-3) return double.NaN;
                 return lim;
             }
-            double without = Lim(0), with = Lim(3);
+            var pushed = flat with { LimDriveDb = 8 };
+            double without = Lim(pushed with { ClipOn = false }, out _), with = Lim(pushed with { ClipDb = 3 }, out _);
             bool clipOk = with < without - 2;
             ok &= clipOk;
             Console.WriteLine($"{"Soft clip 3 dB: lo que baja el lim.",-36} {$"{without:0.0} → {with:0.0} dB",12} {"menos",10}  {(clipOk ? "igual" : "DISTINTO")}");
+            double auto = Lim(pushed, out _);
+            double autoCut = clipWorst;
+            bool autoOk = auto < without - 1 && autoCut > 0.5 && autoCut <= SoftClipper.AutoMaxCutDb + 0.1;
+            // the song with its loudest peak 1,5 dB over the Techo: the limiter's alone
+            float pkSong = 0;
+            foreach (var ch in song) foreach (var v in ch) pkSong = Math.Max(pkSong, Math.Abs(v));
+            float near = (float)(Math.Pow(10, (MasterLimiter.CeilingDb + SoftClipper.AutoFreeDb - 0.5) / 20) / pkSong);
+            Lim(flat with { ClipOn = false }, out var smallOff, near);
+            Lim(flat, out var smallOn, near);
+            bool smallOk = smallOn.AsSpan().SequenceEqual(smallOff);
+            ok &= autoOk && smallOk;
+            Console.WriteLine($"{"Empuje +8, Auto: lim. / clip (máx)",-36} {$"{without:0.0} → {auto:0.0} / {autoCut:0.0}",12} {$"clip <={SoftClipper.AutoMaxCutDb:0}",10}  {(autoOk ? "igual" : "DISTINTO")}");
+            Console.WriteLine($"{"Pico 1,5 dB sobre el techo: sin clip",-36} {(smallOk ? "exacto" : "cambia"),12} {"exacto",10}  {(smallOk ? "igual" : "DISTINTO")}");
+        }
+
+        // Destino: the gain the export finds, applied in playback, gives the export's same samples; exporting again from
+        // it keeps that gain (nothing changed); and the result is on the target
+        {
+            MixTrackSpec[] mix = [new MixTrackSpec { Clips = [new MixClipSpec { Left = song[0], Right = song[1], DurationSec = 8 }] }];
+            var toTarget = flat with { TargetLufs = -14 };
+            var export = MixMaster.Render(mix, new MixBusSpec { Master = toTarget }, 8, sr, 0, -14);
+            var measured = toTarget with { TargetGainDb = export.GainDb };
+            var (liveL, _) = MixRenderer.Render(mix, new MixBusSpec { Master = measured }, 8, sr);
+            double diff = 0;
+            for (int i = 0; i < export.Left.Length - sr / 50; i++) diff = Math.Max(diff, Math.Abs(liveL[i] - export.Left[i]));
+            var again = MixMaster.Render(mix, new MixBusSpec { Master = measured }, 8, sr, 0, -14);
+            bool targetOk = diff < 1e-6 && again.GainDb == export.GainDb && Math.Abs(export.Lufs + 14) < 0.3;
+            ok &= targetOk;
+            Console.WriteLine($"{"Destino -14: reproducir = exportar",-36} {$"{export.GainDb:+0.0} dB · {diff:0.0e0}",12} {"0",10}  {(targetOk ? "igual" : "DISTINTO")}");
         }
 
         // compressing: every band works at 70 %, the same 10 dB louder or quieter (it follows its own level), and the
@@ -1352,6 +1442,73 @@ static class DspCommands
             bool offLimOk = pkDb <= MasterLimiter.CeilingDb + 0.01 && pkDb > MasterLimiter.CeilingDb - 0.5;
             ok &= offLimOk;
             Console.WriteLine($"{"Sin limitador: LUFS 0 frena en techo",-36} {$"{pkDb:0.00} dBTP",12} {$"{MasterLimiter.CeilingDb:0.00} dBTP",10}  {(offLimOk ? "igual" : "DISTINTO")}");
+        }
+
+        // looks: Cuánto 0 = Natural (Natural's own 0 = nothing at all), 1 = the whole look
+        {
+            static double[] V(MasterLook l) => [l.LowCutHz, l.MudDb, l.LowsDb, l.PresenceDb, l.AirDb, l.TiltDb, l.Low, l.Mid, l.High, l.Tape, l.Width, l.MonoBassHz, l.Pick];
+            static bool Same(MasterLook a, MasterLook b) => V(a).Zip(V(b)).All(z => Math.Abs(z.First - z.Second) < 1e-9);
+            var nothing = MasterLooks.Natural with { LowCutHz = 0, MudDb = 0, AirDb = 0, Low = 0, Mid = 0, High = 0 };
+            bool looksOk = MasterLooks.All.All(l => Same(MasterLooks.At(l, 1), l)
+                && Same(MasterLooks.At(l, 0), l.Id == MasterLooks.Natural.Id ? nothing : MasterLooks.Natural));
+            ok &= looksOk;
+            Console.WriteLine($"{"Looks: Cuánto 0 = Natural, 1 = look",-36} {(looksOk ? "exacto" : "cambia"),12} {"exacto",10}  {(looksOk ? "igual" : "DISTINTO")}");
+        }
+
+        // Púa: off, bit for bit; sustained tones (500 Hz and 3 kHz) pass; pick-like 3 kHz bursts over a bed come down
+        {
+            float[] Tamed(float[] x, double amount)
+            {
+                var l = (float[])x.Clone();
+                var r = (float[])x.Clone();
+                var t = new MasterPickTamer(sr);
+                t.Set(amount);
+                Run(l, r, t.Process);
+                return l;
+            }
+            var tones = new float[sr * 2];
+            for (int i = 0; i < tones.Length; i++) tones[i] = (float)(0.2 * Math.Sin(2 * Math.PI * 500 * i / sr) + 0.2 * Math.Sin(2 * Math.PI * 3000 * i / sr));
+            bool pickOffOk = Tamed(tones, 0).AsSpan().SequenceEqual(tones);
+            var sustained = Tamed(tones, 0.7);
+            double sustainDb = Rms(sustained, sr / 2) - Rms(tones, sr / 2);
+            var picks = new float[sr * 2];
+            int burst = sr / 200, every = sr / 4;
+            for (int i = 0; i < picks.Length; i++)
+                picks[i] = (float)(0.05 * Math.Sin(2 * Math.PI * 500 * i / sr) + (i % every < burst ? 0.5 * Math.Sin(2 * Math.PI * 3000 * i / sr) : 0));
+            var tamed = Tamed(picks, 0.7);
+            // the bursts' energy (what stings): without look-ahead the very first half cycle gets through, the clip and
+            // the limiter are there for that
+            double eIn = 0, eOut = 0;
+            for (int i = sr / 2; i < picks.Length; i++)
+                if (i % every < burst)
+                {
+                    eIn += picks[i] * (double)picks[i];
+                    eOut += tamed[i] * (double)tamed[i];
+                }
+            double burstDb = 10 * Math.Log10(eOut / eIn);
+            bool pickOk = pickOffOk && Math.Abs(sustainDb) < 1 && burstDb < -3;
+            ok &= pickOk;
+            Console.WriteLine($"{"Púa 70%: tonos quietos / púa",-36} {$"{sustainDb:0.0} / {burstDb:0.0} dB",12} {"0 / < -3",10}  {(pickOk ? "igual" : "DISTINTO")}");
+        }
+
+        // Sugerime: tones at the octaves balanced like a finished mix ask for no colour; with 250–500 Hz 6 dB up it cuts mud
+        {
+            MasterSuggestion Hear(double mudBoostDb)
+            {
+                var x = new float[sr * 4];
+                for (int o = 0; o < MasterSuggest.Octaves.Length; o++)
+                {
+                    double db = MasterSuggest.Reference[o] + (o is 3 or 4 ? mudBoostDb : 0);
+                    double amp = 0.05 * Math.Pow(10, db / 20);
+                    for (int i = 0; i < x.Length; i++) x[i] += (float)(amp * Math.Sin(2 * Math.PI * MasterSuggest.Octaves[o] * i / sr + o));
+                }
+                return MasterSuggest.Suggest(MasterSuggest.Analyze(x, x, sr), flat);
+            }
+            var even = Hear(0).Params;
+            var muddy = Hear(6).Params;
+            bool sugOk = even.MudDb == 0 && even.LowsDb == 0 && even.PresenceDb == 0 && even.AirDb == 0 && muddy.MudDb <= -1;
+            ok &= sugOk;
+            Console.WriteLine($"{"Sugerime: pareja / con barro",-36} {$"{even.MudDb:0.0} / {muddy.MudDb:0.0} dB",12} {"0 / <= -1",10}  {(sugOk ? "igual" : "DISTINTO")}");
         }
 
         return ok;

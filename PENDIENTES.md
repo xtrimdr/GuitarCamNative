@@ -15,8 +15,8 @@ _Ideas y mejoras para la nativa._
 #### 1. Usarla también como DAW, solo audio
 - [x] Proyectos o pistas sin video (hecho, ver [HECHO.md](HECHO.md))
 - [x] Edición de clips: dividir, duplicar, mover a otra pista y a otro tiempo, borrar un pedazo (rango), también de
-  varias pistas y cerrando el hueco, y barra de herramientas (hechos, ver [HECHO.md](HECHO.md)). Falta: que cerrar el
-  hueco en todas las pistas corra también los marcadores
+  varias pistas y cerrando el hueco (corre los marcadores si es en todas), y barra de herramientas (hechos, ver
+  [HECHO.md](HECHO.md))
 - [x] Ganancia por clip con su curva de volumen, y la onda dibujada con la curva aplicada (hecho, ver [HECHO.md](HECHO.md))
 - [x] Varios clips por pista: se reproducen, se dibujan, se exportan (comparten el panel), se graba desde el cabezal y
   "Traer al frente" elige cuál se ve donde se pisan (hecho, ver [HECHO.md](HECHO.md))
@@ -24,14 +24,32 @@ _Ideas y mejoras para la nativa._
   usa tal cual) y importar el audio de un video
 - [ ] Transponer: probar si conviene un modo "fino" en cents. Límite conocido: dos armónicos a menos de ~7 Hz (la 3ª
   de un acorde grave) mantienen su batido original
-- [ ] Mejorar el mixer: inserts reordenables, más sends/buses, grupos, medidores más completos
+- [ ] Efectos en slots por canal (etapa 1 de los plugins, solo efectos internos; pedido 2026-10-25). Hoy cada efecto
+  es su clase, pero la cadena es fija: el orden está en `TrackDspChain.ProcessFilledBuffer` y `Channel` tiene un
+  campo por efecto (`Sat`, `Comp`, `Eq`). Plan:
+  - Interfaz de insert en `GuitarCam.Audio` (`Process(l, r)`, `Reset()`, `LatencySamples`, medidor opcional,
+    estado guardable), pensada ya para que un VST sea un tipo de slot más (ver el punto 2)
+  - `TrackDspChain` con una lista de inserts que se reemplaza entera (como `LiveTrack[]`), sin locks en el callback;
+    el compresor con su EQ de preset pasa a ser un insert con la misma forma
+  - Modelo: `Channel.Inserts` (`{ type, on, params }`), subir `Project.CurrentVersion` y migrar `Sat`/`Comp`/`Eq` a
+    tres slots en el orden de hoy: un proyecto viejo suena idéntico
+  - Foco: un canal nuevo trae la cadena de hoy (Vida, compresor, EQ); agregar, sacar, repetir o reordenar es opcional
+    en la tira del mixer, sin pasos de más para quien no lo toca
+  - La reverb y el delay siguen como buses compartidos con envíos (no son inserts)
+  - `gclab`: armar y probar cadenas de slots; `comprobar-dsp` verifica que la cadena migrada dé lo mismo que la fija
+- [ ] Mejorar el mixer: más sends/buses, grupos, medidores más completos
 - …y más: ir sumando acá
 
 #### 2. Soporte de plugins VST
-- [ ] Cargar VST3 en las pistas y en los buses (amps, pedales, reverbs de terceros)
-- Notas: en .NET no hay un host VST3 listo; probablemente haga falta un puente en C++.
-  Conviene correr los plugins en otro proceso, así si uno se cuelga no tira abajo la grabación.
-  La exportación tiene que pasar por los mismos plugins, igual que hoy el mix offline usa el mismo grafo.
+- [ ] Cargar VST3 en las pistas y en los buses (amps, pedales, reverbs de terceros). Es la etapa 2: va después de
+  los slots internos (punto 1), como un tipo de slot más, mezclado con los internos
+- Notas: en .NET no hay un host VST3 listo; probablemente haga falta un puente en C++ (SDK de Steinberg: GPL o
+  licencia propietaria) o una librería de terceros. Cualquiera es dependencia nueva: decidirlo con el usuario.
+  Conviene correr los plugins en otro proceso (memoria compartida), así si uno se cuelga no tira abajo la grabación.
+  La exportación tiene que pasar por los mismos plugins, igual que hoy el mix offline usa el mismo grafo (ojo: hoy
+  el render corre por tramos en paralelo, con plugins con estado eso se complica).
+  Compensar la latencia de los plugins (PDC) en todas las pistas y en el click, como ya se hace con el limitador.
+  La ventana propia de cada plugin es una ventana Win32 nativa, por fuera de Avalonia.
 
 #### 3. MIDI
 - [ ] Pedalera o controlador MIDI: grabar/parar, play, marcar tomas, con los pies y sin soltar la guitarra
@@ -53,35 +71,27 @@ _Ideas y mejoras para la nativa._
   - [ ] Light leak y partículas de luz (bokeh, luciérnagas, chispas) con semilla fija, igual en vista previa y exportación
   - [ ] VHS, glitch / RGB split, película vieja (polvo, rayas), desenfoque de entrada y salida
 - [ ] Textos y títulos: nombre del tema, créditos, carteles
-- [ ] Transiciones entre clips y entre layouts
+- [ ] Transiciones entre layouts (las de video entre clips ya están: ver HECHO 2026-10-25)
 - [ ] Recorte y encuadre animados (zoom/paneo que cambian con el tiempo)
 
-#### 5. Toasts (pedido 2026-10-24)
-- [x] Sistema de toasts y `--probar` (hecho, ver [HECHO.md](HECHO.md))
-- [ ] Decidir con el usuario qué avisos, además de "Para probar", salen como toast y cuáles quedan solo en la campanita
+#### 7. Paneles reubicables y desacoplables (pedido 2026-10-25)
+Poder acomodar la ventana a cada video (vertical: la preview grande a un costado) y sacar paneles a otros monitores.
+Decidido con el usuario:
+- El diseño es **de la app** (`config.json`), no del proyecto. Al pasar el proyecto a 9:16 se **sugiere** el diseño
+  Vertical con un toast; nunca se cambia solo.
+- Pueden salir a otra ventana: **Mixer** (con Mastering), **Preview**, **En vivo**, **Inspector** y **Proyecto**. El
+  **transporte** y la barra de título quedan fijos en la ventana principal; el timeline también.
+- Hecho a mano (sin `Dock.Avalonia`, salvo que el usuario cambie de idea): sin dependencias nuevas y sin MVVM.
 
-#### 6. Masterización (pedido 2026-10-25)
-Un panel **Master** en el canal master, apagado por defecto (no suma pasos a "grabo, mezclo y exporto"). Cadena de
-orden fijo, la misma en la reproducción y la exportación (`MixGraphBus`), guardada por proyecto:
-
-**Corte de graves + Barro → Multibanda → Graves + Presencia + Aire + Inclinación → Soft clip → Limitador**
-
-Se usa entero (un look + una perilla "Cuánto") o por partes (cada etapa con su encendido, para escucharla sola).
-El orden sale de lo que se repite en foros de mastering (Gearspace, KVR, Sound On Sound): EQ correctiva antes de
-comprimir, EQ de color después (si el aire se sube antes, la banda de agudos lo comprime y lo deshace), clipper antes
-del limitador y el limitador al final, trabajando poco.
-
-- [x] **Etapa 1: EQ + Multibanda** (Comparar se sacó: no se entendía) (hecho, ver [HECHO.md](HECHO.md)). Falta: los cruces se corren con
-  dos perillas; queda pendiente el gráfico chico con la curva de las bandas.
-- [ ] **Etapa 2: Soft clip + limitador nuevo + volumen final en el master**
-  - Soft clip: hecho (perilla "Recorte" y medidor, ADAA en vez de sobremuestreo; ver [HECHO.md](HECHO.md)). Falta: con
-    un volumen final alto, repartir solo entre clipper y limitador.
-  - El destino de LUFS (Como está / YouTube / Instagram / TikTok…) pasa al master, para escucharlo al mezclar.
-  - Limitador y medición en pico real: hecho (ver [HECHO.md](HECHO.md)).
-- [ ] **Etapa 3: looks y "Sugerime"**
-  - Looks (Natural, Pegadito, Brillante, Cálido, Al frente, Domar la púa…) con una perilla "Cuánto" que mueve todo.
-    "Domar la púa" trabaja 2–5 kHz (puede pedir una cuarta banda solo para ese look).
-  - "Sugerime": analiza la mezcla (`SpectrumTap`, `LevelAnalysis`) y propone EQ y compresión por banda.
+Etapas (cada una sirve sola):
+- [x] **Etapas 1 y 2: paneles que se mueven sin reconstruirse y diseños Clásico / Vertical** (hecho, ver
+  [HECHO.md](HECHO.md)).
+- [ ] **Etapa 3: sacar a otra ventana.** Botón en el encabezado del panel; cerrar la ventana lo devuelve a su lugar. Se
+  recuerdan monitor, posición y tamaño; si el monitor ya no está, vuelve a la principal. Preview con pantalla completa
+  (monitor para grabar lejos de la compu). Con el mixer afuera se ven timeline y mixer a la vez: la X lo trae al frente.
+  Los atajos funcionan desde cualquier ventana. Ojo: dos ventanas dibujando tampoco pueden generar basura por cuadro, y la
+  preview de afuera usa el mismo decodificador.
+- [ ] **Etapa 4 (si hace falta): arrastrar y soltar** como CapCut, con guías para soltar y diseños propios guardados.
 
 ### Sugerencias (para decidir)
 
@@ -151,9 +161,6 @@ de video y normalización ya están anotados arriba; el análisis amplía su alc
   decodificado quedan solo unos pocos píxeles negros sobre casi negro, invisibles. Ojo al revisar
   capturas: las de GDI (CopyFromScreen/PrintWindow) dan alfa 0 en los píxeles negros y los visores los
   pintan blancos, aunque en pantalla se vean bien. Mirar el RGB, no el alfa.
-- "Volver a una versión guardada" no tiene dónde tocarse en la ventana: el menú provisorio del chip se fue
-  con el gestor y la pestaña Historial no lo trae. Hoy solo con `gclab proyecto versiones` / `volver`.
-  Falta decidir dónde va.
 - Lo que falta probar a mano (saltos del video mientras reproduce, fps con muchas tomas, calibración,
   medidores con sonido…) está todo en [docs/PRUEBAS.md](docs/PRUEBAS.md).
 - Cámara: mientras la app está abierta, la cámara queda tomada, así que otro programa no

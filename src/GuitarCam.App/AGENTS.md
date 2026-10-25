@@ -97,7 +97,9 @@ Respetan la cultura del sistema (en es-AR, con coma):
   hover** de todo botón (`HoverGlow`, un `DropShadowEffect` del acento que recolorea `UiTheme`; `RecGlow` en los
   rojos), puesto al final de los estilos de botón en `App.axaml` para que ninguna clase lo pierda. **El texto nunca
   brilla**: los botones transparentes con texto (filas enteras `rowmain` / `tplmain`, `link`), los `CheckBox` y las
-  muestras de color van sin glow, porque se dibujaría alrededor de las letras. En las filas el hover lo marca la fila
+  muestras de color van sin glow, porque se dibujaría alrededor de las letras. Excepción pedida por el usuario: el
+  botón de guardar, mientras hay algo para guardar, lleva clase `pending` (brilla y late suave con la opacidad;
+  `failed` en rojo si no se pudo guardar). En las filas el hover lo marca la fila
   (fondo `Raised` y borde `Line`); en el `CheckBox` brilla solo la cajita. Va como `Effect`
   del botón: un `BoxShadow` en el presentador queda cortado. Los botones de color (acento, primario, peligro, grabar,
   `lit`) no cambian de color en hover: el glow es la respuesta. Su fondo y su texto van en el presentador
@@ -105,6 +107,9 @@ Respetan la cultura del sistema (en es-AR, con coma):
   el `Button`, el texto quieto sale blanco del Fluent.
 - Un botón que pinta sus colores desde código (M/S encendidos, armar, ON, C/LIM, muestras de color) lleva la clase
   **`lit`** mientras está encendido: si no, el hover le tapa el color con gris.
+- **Scrollbars** (pedido del usuario): de 8 px (`ScrollBarSize`) y sin flechas, siempre de ese tamaño cuando hacen falta, y sin aparecer si el contenido
+  entra. El contenido les deja su lugar al costado, no pasa por debajo (estilo global en `App.axaml`). No uses el
+  `Padding` de un `ScrollViewer` para separar el contenido: queda fuera de lo que se desplaza. Usá `Margin` en el contenido.
 - Padding de sección `12,10`; separación entre bloques 10–12; márgenes del inspector `14,16`. Alturas mínimas: chips 30, transporte 36×36.
 
 ## Componentes (clases de `App.axaml`)

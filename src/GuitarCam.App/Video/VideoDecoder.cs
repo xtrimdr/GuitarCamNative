@@ -1,30 +1,36 @@
-using System.Diagnostics;
-using System.Globalization;
+using GuitarCam.Audio;
 
 namespace GuitarCam.App.Video;
 
 /// <summary>
-/// Decodes one video file with FFmpeg into raw BGRA frames through a pipe, at a constant 30 fps and a
-/// fixed size. A background thread stays a few frames ahead of the time the UI asks for; jumping back,
-/// or more than a second ahead, restarts FFmpeg at that point (-ss before -i: fast and frame-accurate).
+/// Gives the preview the frame of one video file at the time the UI asks for. A background thread reads from an
+/// <see cref="IVideoFrameSource"/> (in-process FFmpeg, <see cref="NativeVideoSource"/>, or ffmpeg.exe through a pipe
+/// when that can't be used) and stays a few frames ahead; jumping back, or more than a second ahead, seeks the
+/// source. A decoder nobody asks for (<see cref="Idle"/>) closes its source after <see cref="IdleCloseMs"/>: every
+/// cut is a clip with its own decoder, and an open one holds the file and memory on the video card.
 /// </summary>
 public sealed class VideoDecoder : IDisposable
 {
     public const double Fps = 30;
     const double Lookahead = 3 / Fps;
+    /// <summary>A frame further than this from the wanted time is from before a jump: <see cref="TryCopyLatest"/> skips it.</summary>
+    const double StaleSec = 1.0;
+    /// <summary>How long a decoder goes unasked before it closes its source (it opens again in a few ms when asked).</summary>
+    const long IdleCloseMs = 3000;
 
-    readonly string path;
-    readonly int frameBytes;
+    readonly Func<IVideoFrameSource?> reopen;
     readonly Thread thread;
     readonly object gate = new();
     readonly AutoResetEvent wake = new(false);
     volatile bool disposed;
 
     double wanted = -1; // video time the UI wants (s), < 0 = idle
-    Process? proc;
-    Stream? pipe;
-    double startSec;
-    long nextIndex; // frame index (from startSec) the pipe gives next
+    long idleSince = Environment.TickCount64;
+
+    // decoder thread only
+    IVideoFrameSource? source;
+    bool positioned; // the source was sought since it was opened
+    double nextTime; // about when the frame the source gives next starts
     bool ended;
 
     // latest: the frame to show; pending: read ahead, not due yet; spare: free buffer
@@ -32,18 +38,22 @@ public sealed class VideoDecoder : IDisposable
     double latestTime = double.NaN, pendingTime = double.NaN;
     long version;
 
-    /// <summary>FFmpeg restarts across every decoder, for <see cref="Audio.AudioGapLog"/>.</summary>
+    /// <summary>Seeks across every decoder, for <see cref="Audio.AudioGapLog"/>.</summary>
     public static int Restarts;
 
     public int Width { get; }
     public int Height { get; }
+    /// <summary>True when FFmpeg decodes inside the process; false on the ffmpeg.exe fallback.</summary>
+    public bool Native { get; }
 
-    VideoDecoder(string path, int width, int height)
+    VideoDecoder(IVideoFrameSource first, Func<IVideoFrameSource?> reopen, string path)
     {
-        this.path = path;
-        Width = width;
-        Height = height;
-        frameBytes = width * height * 4;
+        source = first;
+        this.reopen = reopen;
+        Native = first is NativeVideoSource;
+        Width = first.Width;
+        Height = first.Height;
+        int frameBytes = Width * Height * 4;
         latest = new byte[frameBytes];
         pending = new byte[frameBytes];
         spare = new byte[frameBytes];
@@ -51,202 +61,169 @@ public sealed class VideoDecoder : IDisposable
         thread.Start();
     }
 
-    /// <summary>Probes the file and opens a decoder that outputs at most <paramref name="maxWidth"/> pixels wide.</summary>
+    /// <summary>Opens a decoder that outputs at most <paramref name="maxWidth"/> pixels wide; null if the file has no readable picture.</summary>
     public static VideoDecoder? Open(string path, int maxWidth = 640)
     {
-        if (!File.Exists(path)) return null;
-        var psi = new ProcessStartInfo("ffprobe",
-            ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height:stream_side_data=rotation", "-of", "csv=p=0", path])
-        {
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        try
-        {
-            using var p = Process.Start(psi);
-            if (p == null) return null;
-            string[] lines = p.StandardOutput.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            p.WaitForExit();
-            var parts = lines[0].Split(',');
-            int w = int.Parse(parts[0], CultureInfo.InvariantCulture), h = int.Parse(parts[1], CultureInfo.InvariantCulture);
-            // phone videos can be stored landscape with a rotation tag; FFmpeg's output follows the tag
-            if (lines.Skip(1).Concat(parts.Skip(2)).Any(s => s.Trim() is "90" or "-90" or "270" or "-270")) (w, h) = (h, w);
-            int ow = Math.Min(maxWidth, w) & ~1;
-            int oh = (int)Math.Round((double)h * ow / w) & ~1;
-            return new VideoDecoder(path, ow, oh);
-        }
-        catch
-        {
-            return null;
-        }
+        if (NativeVideoSource.Open(path, maxWidth) is { } native)
+            return new VideoDecoder(native, () => NativeVideoSource.Open(path, maxWidth), path);
+        if (PipeVideoSource.Open(path, maxWidth) is { } pipe)
+            return new VideoDecoder(pipe, () => PipeVideoSource.Open(path, maxWidth), path);
+        return null;
     }
 
-    /// <summary>Asks for the frame at <paramref name="sec"/> (video time). Cheap: call it every UI tick.</summary>
+    /// <summary>
+    /// Asks for the frame at <paramref name="sec"/> (video time). Cheap: call it every UI tick. A frame read ahead
+    /// that is already due is shown right away, so a clip that was pre-rolled (<see cref="Model.LiveClip"/>) has its
+    /// first picture on the same tick it starts, instead of waiting for the decoder thread.
+    /// </summary>
     public void Want(double sec)
     {
-        lock (gate) wanted = sec;
+        lock (gate)
+        {
+            wanted = sec;
+            PromoteDue(sec);
+        }
         wake.Set();
     }
 
-    /// <summary>Copies the newest frame out if it changed since <paramref name="seen"/>.</summary>
+    /// <summary>Nothing is wanted from it for now (the playhead is away from its clip): it stops reading, and later closes its source.</summary>
+    public void Idle()
+    {
+        lock (gate)
+        {
+            if (wanted < 0) return;
+            wanted = -1;
+            idleSince = Environment.TickCount64;
+        }
+    }
+
+    /// <summary>Makes the frame read ahead current if it's due. Called with <see cref="gate"/> held.</summary>
+    bool PromoteDue(double w)
+    {
+        if (double.IsNaN(pendingTime) || pendingTime > w + 0.5 / Fps) return false;
+        (latest, pending) = (pending, latest);
+        latestTime = pendingTime;
+        pendingTime = double.NaN;
+        version++;
+        return true;
+    }
+
+    /// <summary>
+    /// Copies the newest frame out if it changed since <paramref name="seen"/> and is from around the wanted time
+    /// (not one left from before a jump that the decoder thread hasn't caught up with yet).
+    /// </summary>
     public bool TryCopyLatest(ref long seen, Action<byte[]> copy)
     {
         lock (gate)
         {
-            if (version == seen || double.IsNaN(latestTime)) return false;
+            if (version == seen || double.IsNaN(latestTime) || Math.Abs(latestTime - wanted) > StaleSec) return false;
             seen = version;
             copy(latest);
             return true;
         }
     }
 
-    double TimeOf(long index) => startSec + index / Fps;
-
     void Run()
     {
         while (!disposed)
         {
             double w;
-            lock (gate) w = wanted;
+            long idle;
+            lock (gate)
+            {
+                w = wanted;
+                idle = idleSince;
+            }
             if (w < 0)
             {
+                if (source != null && Environment.TickCount64 - idle > IdleCloseMs) Close();
                 wake.WaitOne(100);
                 continue;
             }
 
-            // restart when there's no process, or the wanted time is behind the earliest frame we can still give
-            // (the one shown, else the one read ahead, else the pipe's next: right after a restart nothing is
-            // shown yet, and a sync edit moving back past the restart point would otherwise wait forever) / far ahead
-            double earliest = !double.IsNaN(latestTime) ? latestTime : !double.IsNaN(pendingTime) ? pendingTime : TimeOf(nextIndex);
+            // seek when nothing was sought yet, or the wanted time is behind the earliest frame we can still give
+            // (the one shown, else the one read ahead, else the source's next: right after a seek nothing is
+            // shown yet, and a sync edit moving back past the seek point would otherwise wait forever) / far ahead
+            double earliest = !double.IsNaN(latestTime) ? latestTime : !double.IsNaN(pendingTime) ? pendingTime : nextTime;
             bool behind = w < earliest - 0.5 / Fps;
-            bool farAhead = w > TimeOf(nextIndex) + 1.0;
-            if (proc == null || behind || farAhead)
+            bool farAhead = w > nextTime + 1.0;
+            if (!positioned || behind || farAhead)
             {
-                Restart(Math.Max(0, w));
+                Seek(Math.Max(0, w));
                 continue;
             }
 
-            // a frame read ahead becomes current once it's due
+            // a frame read ahead becomes current once it's due (Want may have promoted it meanwhile: hence the check under the lock)
             if (!double.IsNaN(pendingTime))
             {
-                if (pendingTime <= w + 0.5 / Fps)
-                {
-                    lock (gate)
-                    {
-                        (latest, pending) = (pending, latest);
-                        latestTime = pendingTime;
-                        pendingTime = double.NaN;
-                        version++;
-                    }
-                    continue;
-                }
-                wake.WaitOne(5);
+                bool promoted;
+                lock (gate) promoted = PromoteDue(w);
+                if (!promoted) wake.WaitOne(5);
                 continue;
             }
 
-            if (ended || TimeOf(nextIndex) > w + Lookahead)
+            if (ended || source == null || nextTime > w + Lookahead)
             {
                 wake.WaitOne(5);
                 continue;
             }
 
-            if (!ReadFrame(spare))
+            // frames that are already late are dropped by the source instead of shown
+            if (!source.Read(spare, w, out double t))
             {
                 ended = true;
                 continue;
             }
-            double t = TimeOf(nextIndex++);
-            // frames that are already late are skipped instead of shown
-            if (t + 1 / Fps <= w) continue;
+            nextTime = t + 1 / Fps;
             lock (gate)
             {
                 (pending, spare) = (spare, pending);
                 pendingTime = t;
             }
         }
-        Kill();
+        Close();
     }
 
-    bool ReadFrame(byte[] buf)
-    {
-        if (pipe == null) return false;
-        try
-        {
-            pipe.ReadExactly(buf, 0, frameBytes);
-            return true;
-        }
-        catch (EndOfStreamException)
-        {
-            return false;
-        }
-        catch (IOException)
-        {
-            return false;
-        }
-    }
-
-    void Restart(double sec)
+    void Seek(double sec)
     {
         Interlocked.Increment(ref Restarts);
-        Kill();
-        startSec = Math.Floor(sec * Fps) / Fps;
-        nextIndex = 0;
-        ended = false;
         lock (gate)
         {
             pendingTime = double.NaN;
-            latestTime = double.NaN; // so a backwards seek doesn't keep restarting
+            latestTime = double.NaN; // so a backwards seek doesn't keep seeking
         }
-        var psi = new ProcessStartInfo("ffmpeg",
-        [
-            "-v", "error", "-nostdin",
-            "-ss", startSec.ToString("0.###", CultureInfo.InvariantCulture), "-i", path,
-            "-an", "-vf", $"fps={Fps.ToString(CultureInfo.InvariantCulture)},scale={Width}:{Height}",
-            "-pix_fmt", "bgra", "-f", "rawvideo", "-",
-        ])
+        positioned = true;
+        nextTime = sec;
+        ended = false;
+        source ??= reopen();
+        // a file that can't be opened again (moved, unplugged drive) stays ended until the next jump
+        if (source == null || source.Width != Width || source.Height != Height)
         {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        try
-        {
-            proc = Process.Start(psi);
-            if (proc == null) return;
-            proc.ErrorDataReceived += (_, _) => { };
-            proc.BeginErrorReadLine();
-            pipe = proc.StandardOutput.BaseStream;
-        }
-        catch
-        {
-            proc = null;
-            pipe = null;
+            Close();
+            positioned = true;
             ended = true;
+            return;
         }
+        source.Seek(sec);
     }
 
-    void Kill()
+    void Close()
     {
-        try
+        source?.Dispose();
+        source = null;
+        positioned = false;
+        lock (gate)
         {
-            if (proc is { HasExited: false }) proc.Kill();
+            pendingTime = double.NaN;
+            latestTime = double.NaN;
         }
-        catch
-        {
-            // already gone
-        }
-        proc?.Dispose();
-        proc = null;
-        pipe = null;
     }
 
     public void Dispose()
     {
         disposed = true;
         wake.Set();
-        thread.Join(500);
-        Kill();
+        // the thread closes the source itself; a pipe stuck on a read is unblocked by ending its process
+        if (!thread.Join(1000) && source is PipeVideoSource pipe) pipe.Dispose();
     }
 }

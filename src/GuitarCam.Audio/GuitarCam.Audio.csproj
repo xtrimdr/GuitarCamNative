@@ -9,6 +9,13 @@
 
   <ItemGroup>
     <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="FFmpeg.AutoGen" Version="9.0.1.1" />
+  </ItemGroup>
+
+  <!-- FFmpeg 9 shared DLLs for the in-process preview decoder (NativeVideoSource): lib/ffmpeg is kept out of git
+       (see README). Without them the preview falls back to ffmpeg.exe through a pipe. -->
+  <ItemGroup>
+    <None Include="..\..\lib\ffmpeg\*.dll;..\..\lib\ffmpeg\*.txt" Link="ffmpeg\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

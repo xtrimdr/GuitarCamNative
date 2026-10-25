@@ -29,25 +29,34 @@ public partial class MainWindow
     static double SavedSidebarWidth(string key) =>
         double.TryParse(AppConfig.Get(key), NumberStyles.Float, CultureInfo.InvariantCulture, out var w) ? Math.Clamp(w, SidebarMinWidth, SidebarMaxWidth) : SidebarWidth;
 
-    /// <summary>A sidebar may grow until the stage would get narrower than <see cref="StageMinWidth"/>.</summary>
+    /// <summary>A sidebar may grow until the stage (or, in a Vertical layout, the timeline beside the video's column)
+    /// would get narrower than <see cref="StageMinWidth"/>.</summary>
     double ClampSidebar(double w, double otherBar) =>
-        Math.Clamp(w, SidebarMinWidth, Math.Max(SidebarMinWidth, Math.Min(SidebarMaxWidth, Bounds.Width - otherBar - StageMinWidth)));
+        Math.Clamp(w, SidebarMinWidth, Math.Max(SidebarMinWidth, Math.Min(SidebarMaxWidth, Bounds.Width - otherBar - SideStageWidth - StageMinWidth)));
 
     void SetInspectorWidth(double w) { inspectorWidth = w; InspectorBar.Width = w; }
 
     void SetProjectBarWidth(double w) { projectBarWidth = w; ProjectBar.Width = w; }
 
     /// <summary>The grip over a bar's inner edge (right for the inspector, left for the project bar).</summary>
-    Border SidebarGrip(bool rightEdge, Func<double> get, Func<double> other, Action<double> set, string key)
+    Border SidebarGrip(bool rightEdge, Func<double> get, Func<double> other, Action<double> set, string key) =>
+        SizeGrip(rightEdge, rightEdge, get, w => ClampSidebar(w, other()), set, SidebarWidth, key, "splitter.sidebar");
+
+    /// <summary>
+    /// A grip on a panel's edge that drags its width: <paramref name="overhang"/> centers it on the border, half
+    /// outside the panel; a double click goes back to <paramref name="reset"/>. The width is saved under
+    /// <paramref name="key"/> when the drag ends.
+    /// </summary>
+    Border SizeGrip(bool rightEdge, bool overhang, Func<double> get, Func<double, double> clamp, Action<double> set, double reset, string key, string tipKey)
     {
-        var line = new Border { Width = GripLine, Background = Brushes.Transparent, HorizontalAlignment = rightEdge ? HorizontalAlignment.Center : HorizontalAlignment.Left };
+        var line = new Border { Width = GripLine, Background = Brushes.Transparent, HorizontalAlignment = overhang ? HorizontalAlignment.Center : rightEdge ? HorizontalAlignment.Right : HorizontalAlignment.Left };
         var grip = new Border
         {
             Width = GripWidth, Background = Brushes.Transparent, Child = line, Cursor = new Cursor(StandardCursorType.SizeWestEast),
             HorizontalAlignment = rightEdge ? HorizontalAlignment.Right : HorizontalAlignment.Left,
-            Margin = rightEdge ? new Thickness(0, 0, -GripWidth / 2, 0) : default,
+            Margin = overhang ? new Thickness(0, 0, -GripWidth / 2, 0) : default,
         };
-        ToolTip.SetTip(grip, Loc.T("splitter.sidebar"));
+        ToolTip.SetTip(grip, Loc.T(tipKey));
         double startX = 0, startW = 0;
         bool dragging = false;
         void Lit(bool on) => line.Background = on ? Palette.Accent : Brushes.Transparent;
@@ -60,7 +69,7 @@ public partial class MainWindow
             e.Handled = true;
             if (e.ClickCount == 2)
             {
-                set(ClampSidebar(SidebarWidth, other()));
+                set(clamp(reset));
                 Save();
                 return;
             }
@@ -71,7 +80,7 @@ public partial class MainWindow
         {
             if (!dragging) return;
             double dx = e.GetPosition(this).X - startX;
-            set(ClampSidebar(startW + (rightEdge ? dx : -dx), other()));
+            set(clamp(startW + (rightEdge ? dx : -dx)));
         };
         grip.PointerReleased += (_, e) =>
         {

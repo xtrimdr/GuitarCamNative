@@ -72,6 +72,8 @@
     <!-- lucide ChevronsDownUp / ChevronsUpDown (the inspector's fold-all button), filled on a 24 px grid -->
     <StreamGeometry x:Key="CollapseAllIcon">M7,4 L12,9 L17,4 L17,6.2 L12,11.2 L7,6.2 Z M7,20 L12,15 L17,20 L17,17.8 L12,12.8 L7,17.8 Z</StreamGeometry>
     <StreamGeometry x:Key="ExpandAllIcon">M7,9 L12,4 L17,9 L17,11.2 L12,6.2 L7,11.2 Z M7,15 L12,20 L17,15 L17,12.8 L12,17.8 L7,12.8 Z</StreamGeometry>
+    <!-- the scroll bars' thickness (asked by the user: two thirds of Fluent's 12) -->
+    <x:Double x:Key="ScrollBarSize">8</x:Double>
   </Application.Resources>
 
   <Application.Styles>
@@ -84,6 +86,29 @@
       <Setter Property="FontFamily" Value="{StaticResource Ui}" />
       <Setter Property="Foreground" Value="{StaticResource Fg}" />
       <Setter Property="Background" Value="{StaticResource App}" />
+    </Style>
+
+    <!-- scroll bars (asked by the user): shown at their full size whenever the content overflows and gone when it
+         fits; never the Fluent thin bar that widens under the mouse. The content takes the space beside the bar
+         instead of running under it, so its end can always be reached and seen -->
+    <Style Selector="ScrollViewer">
+      <Setter Property="AllowAutoHide" Value="False" />
+    </Style>
+    <Style Selector="ScrollViewer /template/ ScrollContentPresenter#PART_ContentPresenter">
+      <Setter Property="Grid.RowSpan" Value="1" />
+      <Setter Property="Grid.ColumnSpan" Value="1" />
+    </Style>
+    <Style Selector="ScrollBar:vertical">
+      <Setter Property="Width" Value="{StaticResource ScrollBarSize}" />
+      <Setter Property="MinWidth" Value="{StaticResource ScrollBarSize}" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal">
+      <Setter Property="Height" Value="{StaticResource ScrollBarSize}" />
+      <Setter Property="MinHeight" Value="{StaticResource ScrollBarSize}" />
+    </Style>
+    <!-- that thin, the arrows at the ends can't be read or hit: the thumb and the track are enough -->
+    <Style Selector="ScrollBar /template/ RepeatButton#PART_LineUpButton, ScrollBar /template/ RepeatButton#PART_LineDownButton">
+      <Setter Property="IsVisible" Value="False" />
     </Style>
 
     <Style Selector="TextBlock.icon">
@@ -597,6 +622,33 @@
     </Style>
     <Style Selector="CheckBox:pointerover /template/ Border#NormalRectangle">
       <Setter Property="Effect" Value="{DynamicResource HoverGlow}" />
+    </Style>
+
+    <!-- the save button while there is something to save (asked by the user): it glows and breathes so the pending
+         save is seen. The opacity pulses glow and icon together and keeps the theme's glow color; red if it failed -->
+    <Style Selector="Button.ghost.pending">
+      <Setter Property="Effect" Value="{DynamicResource HoverGlow}" />
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+      <Style.Animations>
+        <Animation Duration="0:0:1.4" IterationCount="Infinite" PlaybackDirection="Alternate" Easing="SineEaseInOut">
+          <KeyFrame Cue="0%">
+            <Setter Property="Opacity" Value="1" />
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="Opacity" Value="0.45" />
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <Style Selector="Button.ghost.pending:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+    </Style>
+    <Style Selector="Button.ghost.pending.failed">
+      <Setter Property="Effect" Value="{StaticResource RecGlow}" />
+      <Setter Property="Foreground" Value="{StaticResource Rec}" />
+    </Style>
+    <Style Selector="Button.ghost.pending.failed:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Foreground" Value="{StaticResource Rec}" />
     </Style>
 
     <!-- Loader2: an open ring that turns -->

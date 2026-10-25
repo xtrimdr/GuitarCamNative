@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using GuitarCam.App.Model;
 using GuitarCam.App.Video;
 using GuitarCam.Projects;
+using GuitarCam.Audio;
 using GuitarCam.Audio.Dsp;
 
 namespace GuitarCam.App.Controls;
@@ -275,6 +276,8 @@ public sealed partial class TimelineView : Control
     /// <summary>A track's trash can was clicked: the window asks there before removing it.</summary>
     public event Action<string, Point>? RemoveTrackRequested;
     public event Action<LiveTrack, LiveClip?, Point>? ClipContextRequested;
+    /// <summary>The chip on a join between two clips was clicked: the track, the clip coming in and where (native only).</summary>
+    public event Action<LiveTrack, LiveClip, Point>? TransitionRequested;
     public event Action<Point>? NewTrackRequested;
     public event Action<LiveTrack, double?, double?>? ChannelRequested;
     public event Action<double>? TrackHeightChanged;
@@ -1602,6 +1605,7 @@ public sealed partial class TimelineView : Control
         foreach (var (gx, major) in grid)
             if (gx >= HeaderW) ctx.DrawLine(major ? majorPen : minorPen, new Point(gx, y), new Point(gx, y + lh));
         foreach (var c in t.Clips) DrawClip(ctx, t, c, y, sel, W);
+        DrawJoins(ctx, i, W);
         if (Range is { } r && rangeTracks.Contains(t.Track.Id)) DrawRange(ctx, y, lh, W, r.Start, r.End);
         DrawSplitHover(ctx, i, y, lh);
         ctx.DrawLine(Palette.Pen(Palette.Line), new Point(HeaderW, y + lh - 0.5), new Point(W, y + lh - 0.5));
@@ -1718,6 +1722,92 @@ public sealed partial class TimelineView : Control
         ctx.DrawRectangle(Palette.Alpha(Colors.Black, 0.7), Palette.Pen(Palette.Alpha(Palette.AccentColor, 0.5)), pill, 4, 4);
         FxIcon.Draw(ctx, FxIcon.Transpose, new Rect(pill.X + 7, pill.Center.Y - 6, 12, 12), Palette.Accent);
         ctx.DrawText(label, new Point(pill.X + 24, pill.Center.Y - label.Height / 2));
+    }
+
+    // --- transitions (native only) ------------------------------------------------------------------
+
+    /// <summary>More clips than this on one lane and its joins aren't looked for (their windows go on the stack).</summary>
+    const int MaxJoinClips = 256;
+    /// <summary>The join chip's side: a square big enough to see over the frames, like CapCut's.</summary>
+    const double JoinChipSize = 20;
+
+    /// <summary>Fills <paramref name="w"/> with the lane's clip windows as drawn (a drag shows where the clip goes).</summary>
+    void JoinWindows(int lane, Span<ClipEnvelope.ClipWindow> w)
+    {
+        var t = tracks[lane];
+        for (int k = 0; k < w.Length; k++) w[k] = Window(t.Clips[k]);
+    }
+
+    /// <summary>The out clip's index when clip <paramref name="k"/> starts where another ends and both have their media, or -1.</summary>
+    static int JoinOut(LiveTrack t, ReadOnlySpan<ClipEnvelope.ClipWindow> w, int k)
+    {
+        int o = ClipTransitions.FindOut(w, k);
+        return o >= 0 && !t.Clips[k].Offline && !t.Clips[o].Offline ? o : -1;
+    }
+
+    /// <summary>The chip of a join at <paramref name="x"/>: centered on the join, halfway down the clips.</summary>
+    Rect JoinChip(int lane, double x) =>
+        new(Math.Round(x - JoinChipSize / 2), Math.Round(LaneY(lane) + LaneH(lane) / 2 - JoinChipSize / 2), JoinChipSize, JoinChipSize);
+
+    /// <summary>
+    /// The joins between clips of a track (native only, asked by the user): a square chip on each, centered on it
+    /// halfway down the clips, so it shows over the frames. White with a bow tie (⋈) while it is a cut; of the accent
+    /// with the bow tie (crossfade) or a V (dip) when it has a transition, with a thin accent line along the clips'
+    /// top over the stretch it covers. It sits over the edge handles there and wins their clicks. A click opens its menu.
+    /// </summary>
+    void DrawJoins(DrawingContext ctx, int lane, double W)
+    {
+        var t = tracks[lane];
+        int n = t.Clips.Count;
+        if (n < 2 || n > MaxJoinClips || LaneH(lane) < JoinChipSize + 12) return;
+        Span<ClipEnvelope.ClipWindow> w = stackalloc ClipEnvelope.ClipWindow[n];
+        JoinWindows(lane, w);
+        for (int k = 0; k < n; k++)
+        {
+            if (JoinOut(t, w, k) < 0) continue;
+            var model = DisplayClip(t.Clips[k]);
+            var join = ClipTransitions.Find(w, k, ClipTransitions.Parse(model.Transition), model.TransitionSec);
+            double x = X(w[k].Start);
+            if (x < HeaderW || x > W) continue;
+            var chip = JoinChip(lane, x);
+            bool over = gesture == null && chip.Inflate(2).Contains(lastPointer);
+            if (join is { } j)
+            {
+                double l = Math.Max(HeaderW, X(j.Start));
+                ctx.FillRectangle(Palette.Accent, new Rect(l, LaneY(lane) + 5, Math.Max(1, X(j.End) - l), 2));
+            }
+            var fill = join != null ? Palette.AccentColor : Palette.FgColor;
+            ctx.DrawRectangle(Palette.Alpha(fill, over || join != null ? 1 : 0.9), Palette.Pen(Palette.Alpha(Colors.Black, 0.6)), chip.Deflate(0.5), 5, 5);
+            var pen = Palette.Pen(Palette.Alpha(Palette.AppColor, 1), 1.5);
+            double gx = chip.X + 5.5, gy = chip.Y + 6, gs = 8;
+            if (join is { Kind: TransitionKind.Dip })
+            {
+                ctx.DrawLine(pen, new Point(gx, gy), new Point(gx + gs / 2, gy + gs));
+                ctx.DrawLine(pen, new Point(gx + gs / 2, gy + gs), new Point(gx + gs, gy));
+            }
+            else
+            {
+                // the bow tie: two triangles meeting at the join
+                ctx.DrawLine(pen, new Point(gx, gy), new Point(gx, gy + gs));
+                ctx.DrawLine(pen, new Point(gx + gs, gy), new Point(gx + gs, gy + gs));
+                ctx.DrawLine(pen, new Point(gx, gy), new Point(gx + gs, gy + gs));
+                ctx.DrawLine(pen, new Point(gx, gy + gs), new Point(gx + gs, gy));
+            }
+        }
+    }
+
+    /// <summary>The clip coming in at the join chip under <paramref name="p"/>, or null.</summary>
+    LiveClip? JoinChipAt(int lane, Point p)
+    {
+        if (lane < 0 || lane >= tracks.Count || p.X < HeaderW) return null;
+        var t = tracks[lane];
+        int n = t.Clips.Count;
+        if (n < 2 || n > MaxJoinClips || LaneH(lane) < JoinChipSize + 12) return null;
+        Span<ClipEnvelope.ClipWindow> w = stackalloc ClipEnvelope.ClipWindow[n];
+        JoinWindows(lane, w);
+        for (int k = 0; k < n; k++)
+            if (JoinOut(t, w, k) >= 0 && JoinChip(lane, X(w[k].Start)).Inflate(2).Contains(p)) return t.Clips[k];
+        return null;
     }
 
     /// <summary>
@@ -2277,6 +2367,12 @@ public sealed partial class TimelineView : Control
             FolderPressed(pressed, p, e);
             return;
         }
+        if (JoinChipAt(i, p) is { } incoming)
+        {
+            TransitionRequested?.Invoke(tracks[i], incoming, p);
+            e.Handled = true;
+            return;
+        }
         if (tool != TimelineTool.Select && p.X >= HeaderW && ToolPressed(i, p, e)) return;
         if (i < 0 || i >= tracks.Count)
         {
@@ -2827,7 +2923,7 @@ public sealed partial class TimelineView : Control
         }
         else if (i >= 0 && i < tracks.Count)
         {
-            if (OnHandle(i, lastPointer) || BadgeRect(i).Contains(lastPointer)) cursor = StandardCursorType.Hand;
+            if (OnHandle(i, lastPointer) || BadgeRect(i).Contains(lastPointer) || JoinChipAt(i, lastPointer) != null) cursor = StandardCursorType.Hand;
             else if (lastPointer.X < HeaderW && FxHit(i, lastPointer) is { } fx)
                 cursor = fx.Dial ? StandardCursorType.SizeNorthSouth : StandardCursorType.Hand;
             else if (lastPointer.X >= HeaderW && ClipAt(i, lastPointer.X) is { } clip)

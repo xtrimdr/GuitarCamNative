@@ -14,6 +14,11 @@ public sealed class MixClipSpec
     /// <summary>The clip's volume curve (<see cref="ClipGainCurve"/>); empty = flat.</summary>
     public ClipGainCurve.Point[] GainCurve { get; init; } = [];
     public double SyncMs { get; init; }
+    /// <summary>Native only: the transition this clip comes in through (<see cref="ClipTransitions"/>); its sound crossfades.</summary>
+    public string Transition { get; init; } = ClipTransitions.CutId;
+    public double TransitionSec { get; init; } = ClipTransitions.DefaultSec;
+    /// <summary>Its take (the media id): two pieces of one take that were one crossfade in straight lines.</summary>
+    public string? TakeId { get; init; }
 
     public ClipEnvelope.ClipWindow GetWindow(int sampleRate)
     {
@@ -146,13 +151,37 @@ public sealed class TrackDspChain
         Eq.Reset();
     }
 
+    /// <summary>The sound of the transitions between a track's clips (<see cref="ClipTransitions"/>), for <see cref="SampleClips"/>.</summary>
+    public static ClipAudioJoins?[] AudioJoins(MixClipSpec[] clips, int sampleRate)
+    {
+        var w = new ClipEnvelope.ClipWindow[clips.Length];
+        var kinds = new TransitionKind[clips.Length];
+        var secs = new double[clips.Length];
+        var takes = new int[clips.Length];
+        for (int i = 0; i < clips.Length; i++)
+        {
+            w[i] = clips[i].GetWindow(sampleRate);
+            kinds[i] = ClipTransitions.Parse(clips[i].Transition);
+            secs[i] = clips[i].TransitionSec;
+            string? take = clips[i].TakeId;
+            takes[i] = take == null ? -1 - i : Array.FindIndex(clips, c => c.TakeId == take);
+        }
+        return ClipAudioJoins.For(w, kinds, secs, takes);
+    }
+
+    /// <summary>
+    /// Adds the clips' sound for frames <c>[posFrame .. posFrame + n)</c>: trim window, fades, gain and curve, and
+    /// with <paramref name="joins"/> (<see cref="AudioJoins"/>) the transitions' crossfades, which play a clip past its
+    /// edges into the audio its trims hide. Same math as the live engine (<c>LiveTrack.AddClips</c>).
+    /// </summary>
     public static void SampleClips(
         ReadOnlySpan<MixClipSpec> clips,
         long posFrame,
         int n,
         int sampleRate,
         Span<float> dstL,
-        Span<float> dstR)
+        Span<float> dstR,
+        ReadOnlySpan<ClipAudioJoins?> joins = default)
     {
         dstL.Clear();
         dstR.Clear();
@@ -163,8 +192,9 @@ public sealed class TrackDspChain
             if (c.Left.Length == 0) continue;
             var w = c.GetWindow(sampleRate);
             if (w.End <= w.Start) continue;
-            long startFrame = Math.Max(0, (long)Math.Round(w.Start * sampleRate));
-            long endFrame = (long)Math.Round(w.End * sampleRate);
+            var join = cIdx < joins.Length ? joins[cIdx] : null;
+            long startFrame = Math.Max(0, (long)Math.Round((join?.From(w.Start) ?? w.Start) * sampleRate));
+            long endFrame = (long)Math.Round((join?.Until(w.End) ?? w.End) * sampleRate);
             if (posFrame + n <= startFrame || posFrame >= endFrame) continue;
 
             long originFrame = (long)Math.Round(w.Origin * sampleRate);
@@ -189,7 +219,10 @@ public sealed class TrackDspChain
                 long src = f - originFrame;
                 if (src < 0 || src >= left.Length) continue;
                 double timeSec = f * invSr;
-                float env = (float)ClipEnvelope.GainAt(timeSec, w.Start, w.End, fades.FadeIn, fades.FadeOut) * clipGain * (k + dk * (i % ClipGainCurve.Step));
+                // past its edges (a transition's overlap) it keeps its edge's fade level, under the crossfade
+                double g = join == null ? ClipEnvelope.GainAt(timeSec, w.Start, w.End, fades.FadeIn, fades.FadeOut)
+                    : ClipEnvelope.GainAt(Math.Clamp(timeSec, w.Start, w.End), w.Start, w.End, fades.FadeIn, fades.FadeOut) * join.Gain(timeSec);
+                float env = (float)g * clipGain * (k + dk * (i % ClipGainCurve.Step));
                 dstL[i] += left[src] * env;
                 dstR[i] += right[src] * env;
             }
@@ -257,8 +290,8 @@ public sealed class TrackDspChain
 
 /// <summary>
 /// Master and return buses shared by live playback and offline export render:
-/// <see cref="ReverbBus"/> + <see cref="DelayBus"/> + <see cref="MasterChain"/> + Empuje + <see cref="SoftClipper"/> +
-/// <see cref="MasterLimiter"/>, with preallocated
+/// <see cref="ReverbBus"/> + <see cref="DelayBus"/> + <see cref="MasterChain"/> + Empuje (or the Destino's gain,
+/// <see cref="MasterLoudness"/>) + <see cref="SoftClipper"/> + <see cref="MasterLimiter"/>, with preallocated
 /// send accumulation buffers (8192 frames) so the audio callback never allocates.
 /// </summary>
 public sealed class MixGraphBus
@@ -274,10 +307,13 @@ public sealed class MixGraphBus
     /// <summary>The master's EQ and multiband, between the returns and the limiter.</summary>
     public MasterChain Master { get; }
     /// <summary>The master's soft clip, between Empuje and the limiter.</summary>
-    public SoftClipper Clip { get; } = new();
-    /// <summary>The limiter's Empuje, linear: the target and where the glide toward it is.</summary>
+    public SoftClipper Clip { get; }
+    /// <summary>The gain into the limiter (Empuje or the Destino's), linear: the target and where the glide toward it is.</summary>
     volatile float driveTarget = 1;
     float drive = 1;
+    /// <summary>How long the gain takes to move (s): a new Destino measurement or the Empuje's knob glide in, never jump.</summary>
+    const double DriveGlideSec = 0.05;
+    readonly float driveGlide;
 
     public float ReverbMeterL { get; private set; }
     public float ReverbMeterR { get; private set; }
@@ -289,6 +325,8 @@ public sealed class MixGraphBus
         Reverb = new ReverbBus(sampleRate);
         Delay = new DelayBus(sampleRate);
         Master = new MasterChain(sampleRate);
+        Clip = new SoftClipper(sampleRate);
+        driveGlide = (float)(1 - Math.Exp(-1 / (DriveGlideSec * sampleRate)));
         int lookahead = (int)Math.Round(MasterLimiter.LookaheadSec * sampleRate);
         Limiter = new MasterLimiter(sampleRate, lookahead, MasterLimiter.CeilingDb);
     }
@@ -313,9 +351,10 @@ public sealed class MixGraphBus
         Master.Set(p);
         Limiter.Set(p.LimCeilingDb, p.LimReleaseMs);
         Limiter.Bypass = !p.LimOn;
-        Clip.Set(p.On && p.ClipOn ? p.ClipDb : 0, p.LimCeilingDb);
-        // Empuje pushes into the limiter: with it off, it would only clip
-        driveTarget = p.LimOn ? (float)Math.Pow(10, Math.Clamp(double.IsFinite(p.LimDriveDb) ? p.LimDriveDb : 0, 0, MasterParams.DriveMaxDb) / 20) : 1;
+        // the Empuje or the Destino's gain pushes into the clip and the limiter (with the limiter off, the Empuje would only
+        // clip; the Destino's gain was measured to keep the peaks under the Techo then)
+        Clip.Set(p);
+        driveTarget = (float)Math.Pow(10, MasterLoudness.GainDb(p) / 20);
     }
 
     public void ConfigureLive(MixBusSpec spec, bool glideDelay = true)
@@ -390,18 +429,19 @@ public sealed class MixGraphBus
         if (master) Master.Process(masterL, masterR);
         if (limit)
         {
-            float d0 = drive, d1 = driveTarget;
-            if (d0 != 1 || d1 != 1)
+            float d = drive, t = driveTarget;
+            if (d != 1 || t != 1)
             {
-                int n = masterL.Length;
-                for (int i = 0; i < n; i++)
+                float a = driveGlide;
+                for (int i = 0; i < masterL.Length; i++)
                 {
-                    float d = d0 + (d1 - d0) * (i + 1) / n;
+                    d += (t - d) * a;
                     masterL[i] *= d;
                     masterR[i] *= d;
                 }
+                if (Math.Abs(t - d) < 1e-5f) d = t;
             }
-            drive = d1;
+            drive = d;
             Clip.Process(masterL, masterR);
             Limiter.Process(masterL, masterR);
         }
@@ -543,7 +583,7 @@ public static class MixRenderer
         foreach (var t in tracks)
             if (t.Solo) { anySolo = true; break; }
 
-        var active = new List<(MixClipSpec[] Clips, TrackDspChain Chain)>();
+        var active = new List<(MixClipSpec[] Clips, ClipAudioJoins?[] Joins, TrackDspChain Chain)>();
         for (int k = 0; k < tracks.Count; k++)
         {
             var t = tracks[k];
@@ -552,7 +592,8 @@ public static class MixRenderer
             var chain = new TrackDspChain(sampleRate);
             chain.Configure(t);
             if (only >= 0) chain.Muted = chain.Solo = false;
-            active.Add((t.Clips.ToArray(), chain));
+            var clips = t.Clips.ToArray();
+            active.Add((clips, TrackDspChain.AudioJoins(clips, sampleRate), chain));
         }
         if (only >= 0) anySolo = false;
 
@@ -596,13 +637,13 @@ public static class MixRenderer
             int at = c * ChunkFrames, len = Math.Min(ChunkFrames, totalFrames - at);
             void Track(int k)
             {
-                var (clips, chain) = active[k];
+                var (clips, joins, chain) = active[k];
                 var b = set.Tracks[k];
                 b.Clear(len);
                 for (int off = 0; off < len; off += Quantum)
                 {
                     int n = Math.Min(Quantum, len - off);
-                    TrackDspChain.SampleClips(clips, at + off, n, sampleRate, chain.BufferL(n), chain.BufferR(n));
+                    TrackDspChain.SampleClips(clips, at + off, n, sampleRate, chain.BufferL(n), chain.BufferR(n), joins);
                     chain.ProcessFilledBuffer(n, anySolo, b.L.AsSpan(off, n), b.R.AsSpan(off, n), b.RevL.AsSpan(off, n),
                         b.RevR.AsSpan(off, n), b.DlyL.AsSpan(off, n), b.DlyR.AsSpan(off, n), out _, out _, out _);
                 }

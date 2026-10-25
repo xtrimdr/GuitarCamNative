@@ -18,7 +18,9 @@ namespace GuitarCam.App.Controls;
 /// Selection, pan and wheel zoom are ports of SplitScreenCanvas.tsx; the window owns the clip edits.
 /// The color grade and grain come already applied in each clip's Frame; vignette and letterbox are
 /// drawn here per panel (<see cref="PreviewVideoFx"/>). Like the web, the video fades only apply while
-/// playing or recording (<see cref="Timed"/>); the gap between panels is the export's border.
+/// playing or recording (<see cref="Timed"/>); the gap between panels is the export's border. A video transition
+/// between two clips of a track (<see cref="LiveTrack.Transition"/>) draws both, weighed like the export, also while
+/// paused, so you can stop in the middle of one and see it.
 /// </summary>
 public sealed class PreviewView : Control
 {
@@ -146,6 +148,38 @@ public sealed class PreviewView : Control
         if (CountdownBeat is { } beat) DrawCountdown(ctx, beat);
     }
 
+    /// <summary>
+    /// A clip's picture in its panel, cover-fit and zoomed around the pan point, with its vignette, at
+    /// <paramref name="alpha"/> (a transition's weight) times its own video fade while playing. Past its edges (a
+    /// crossfade's overhang) its fade is the one at the edge, as the export's fade filters leave it.
+    /// </summary>
+    void DrawPicture(DrawingContext ctx, LiveClip clip, Rect dest, double alpha)
+    {
+        var bmp = clip.Frame!;
+        // cover-fit, then zoom around the pan point (panX/panY in -1..1)
+        double sw = bmp.Size.Width, sh = bmp.Size.Height;
+        var fr = clip.Clip.Framing;
+        double cover = Math.Max(dest.Width / sw, dest.Height / sh) * Math.Max(1, fr.Zoom);
+        double cw = Math.Min(sw, dest.Width / cover), ch = Math.Min(sh, dest.Height / cover);
+        double cx = (sw - cw) / 2 * (1 + fr.PanX), cy = (sh - ch) / 2 * (1 + fr.PanY);
+        var src = new Rect(Math.Clamp(cx, 0, Math.Max(0, sw - cw)), Math.Clamp(cy, 0, Math.Max(0, sh - ch)), cw, ch);
+        var c = clip.Clip;
+        var window = ClipEditing.Window(c, clip.Media, clip.LengthSec);
+        var fades = ClipEnvelope.Fades(window, c.FadeInSec, c.FadeOutSec, c.LinkVideoFades, c.VideoFadeInSec, c.VideoFadeOutSec).Video;
+        double fade = Timed ? ClipEnvelope.GainAt(Math.Clamp(Playhead, window.Start, window.End), window.Start, window.End, fades.FadeIn, fades.FadeOut) : 1;
+        // the fade goes towards the composition background, like the export's fade=color
+        using (ctx.PushOpacity(fade * alpha))
+        {
+            if (fr.Mirror)
+            {
+                using (ctx.PushTransform(Matrix.CreateScale(-1, 1) * Matrix.CreateTranslation(2 * dest.X + dest.Width, 0)))
+                    ctx.DrawImage(bmp, src, dest);
+            }
+            else ctx.DrawImage(bmp, src, dest);
+            PreviewVideoFx.DrawVignette(ctx, dest, settings?.VideoFx);
+        }
+    }
+
     static readonly Typeface MonoBold = new("Cascadia Mono, Consolas", FontStyle.Normal, FontWeight.SemiBold);
 
     /// <summary>SplitScreenCanvas.tsx's countdown overlay: black at 60 % over the stage, the beat at 120 px and four dots.</summary>
@@ -192,32 +226,22 @@ public sealed class PreviewView : Control
             var dest = new Rect(frame.X + x * k, frame.Y + y * k, w * k, h * k).Deflate(pad);
             var t = tracks[i];
             var clip = t.ShownClip;
-            var bmp = clip?.Frame;
-            if (bmp != null)
+            // a video transition shows the clip going out and the one coming in (ClipTransitions, like the export)
+            LiveClip? under = null;
+            double alpha = 1;
+            if (t.Transition is { } j && j.Out < t.Clips.Count && j.In < t.Clips.Count)
             {
-                // cover-fit, then zoom around the pan point (panX/panY in -1..1)
-                double sw = bmp.Size.Width, sh = bmp.Size.Height;
-                var fr = clip!.Clip.Framing;
-                double cover = Math.Max(dest.Width / sw, dest.Height / sh) * Math.Max(1, fr.Zoom);
-                double cw = Math.Min(sw, dest.Width / cover), ch = Math.Min(sh, dest.Height / cover);
-                double cx = (sw - cw) / 2 * (1 + fr.PanX), cy = (sh - ch) / 2 * (1 + fr.PanY);
-                var src = new Rect(Math.Clamp(cx, 0, Math.Max(0, sw - cw)), Math.Clamp(cy, 0, Math.Max(0, sh - ch)), cw, ch);
-                var c = clip.Clip;
-                var window = ClipEditing.Window(c, clip.Media, clip.LengthSec);
-                var fades = ClipEnvelope.Fades(window, c.FadeInSec, c.FadeOutSec, c.LinkVideoFades, c.VideoFadeInSec, c.VideoFadeOutSec).Video;
+                var (wOut, wIn) = ClipTransitions.Weights(j, t.TransitionAt);
+                if (j.Kind == TransitionKind.Crossfade) (under, clip, alpha) = (t.Clips[j.Out], t.Clips[j.In], wIn);
+                else (clip, alpha) = t.TransitionAt < j.At ? (t.Clips[j.Out], wOut) : (t.Clips[j.In], wIn);
+            }
+            bool top = clip is { Fresh: true, Frame: not null }, below = under is { Fresh: true, Frame: not null };
+            if (top || below)
+            {
                 using (ctx.PushClip(dest))
                 {
-                    // the fade goes towards the composition background, like the export's fade=color
-                    using (ctx.PushOpacity(Timed ? ClipEnvelope.GainAt(Playhead, window.Start, window.End, fades.FadeIn, fades.FadeOut) : 1))
-                    {
-                        if (fr.Mirror)
-                        {
-                            using (ctx.PushTransform(Matrix.CreateScale(-1, 1) * Matrix.CreateTranslation(2 * dest.X + dest.Width, 0)))
-                                ctx.DrawImage(bmp, src, dest);
-                        }
-                        else ctx.DrawImage(bmp, src, dest);
-                        PreviewVideoFx.DrawVignette(ctx, dest, settings?.VideoFx);
-                    }
+                    if (below) DrawPicture(ctx, under!, dest, 1);
+                    if (top) DrawPicture(ctx, clip!, dest, alpha);
                     PreviewVideoFx.DrawLetterbox(ctx, dest, settings?.VideoFx);
                 }
             }

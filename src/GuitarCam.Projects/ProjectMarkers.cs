@@ -73,6 +73,25 @@ public static class ProjectMarkers
 
     public static void Remove(Project p, string id) => p.Markers.Remove(Find(p, id));
 
+    /// <summary>
+    /// After a range is deleted closing the gap on every track: markers after it slide left by its length, and the ones
+    /// inside it go to where it started instead of being lost (deleting one is always the user's call).
+    /// Returns how many moved.
+    /// </summary>
+    public static int CloseGap(Project p, double startSec, double endSec)
+    {
+        if (!(endSec > startSec)) return 0;
+        int moved = 0;
+        foreach (var m in p.Markers)
+        {
+            if (m.Sec <= startSec) continue;
+            m.Sec = m.Sec >= endSec ? m.Sec - (endSec - startSec) : startSec;
+            moved++;
+        }
+        Sort(p);
+        return moved;
+    }
+
     /// <summary>The first marker after <paramref name="sec"/> (a hair after, so one right at the playhead is skipped), or null.</summary>
     public static Marker? Next(Project p, double sec) => p.Markers.Find(m => m.Sec > sec + 1e-3);
 

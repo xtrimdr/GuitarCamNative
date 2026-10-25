@@ -24,6 +24,25 @@ Todo lo que se describe acá lo decidió el usuario: no lo cambies sin preguntar
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+Ese es el diseño **Clásico**. Para el **Vertical**, ver el apartado que sigue.
+
+## Diseño de la ventana (`MainWindow.Layout.cs`)
+
+- Botón de la barra de título (ícono de mosaico, antes del tema) con un menú: **Clásico**, **Vertical, video a la
+  izquierda** y **Vertical, video a la derecha**, cada uno con un dibujito y el elegido en acento. Es de la app, no del
+  proyecto (`config.json`: `layout`), pedido del usuario.
+- Vertical: la columna del video (formato, preview y "En vivo" debajo de la preview) va de arriba a abajo entre el
+  inspector y la barra del proyecto, a la izquierda o a la derecha de la timeline; la timeline ocupa el resto y el
+  mixer (o Mastering) se abre debajo, igual que en solo audio (`MoveBottomView`, `stackedViews`), sin mini timeline.
+  El ancho de la columna se arrastra desde su borde interior (400–1000, 460 por defecto, doble clic vuelve;
+  `stageWidth`) y se achica sola si la ventana no da, para que la timeline conserve 360.
+- En solo audio no hay video: el diseño no cambia nada y se ve como siempre, y el botón queda desactivado con un
+  tooltip que dice por qué (pedido del usuario).
+- Al pasar el proyecto a 9:16 en Clásico, un toast ofrece el Vertical (una vez por sesión); nunca cambia solo.
+- Los paneles (InspectorBar, StageArea, AudioArea con TimelineHost y MixerHost, ProjectBar) se mueven sin
+  reconstruirse; la barra de título y el transporte no se mueven. `ApplyLayout` decide dónde va cada uno: todo
+  diseño nuevo pasa por ahí. Falta sacarlos a otra ventana (etapa 3 de PENDIENTES).
+
 ## Barra de título
 
 - Son dos filas en un mismo `TitleBar` (para que todo entre con la ventana sin maximizar, pedido del usuario): la
@@ -38,6 +57,9 @@ Todo lo que se describe acá lo decidió el usuario: no lo cambies sin preguntar
   quedan a la derecha (margen 150). `TransparencyLevelHint="None"` no se toca: con transparencia, píxeles oscuros
   del video dejan ver lo que hay detrás.
 - El logo es el ícono de la app y abre "Acerca de" (`Dialogs/AboutDialog`).
+- El chip del proyecto abre un menú (`MainWindow.Versions.cs`): "Proyectos…" (el gestor) y "Volver a una versión
+  guardada", con las últimas 20 de `historial/` (`ProjectStore.Snapshots`). Volver guarda antes lo actual como otra
+  versión, recarga el proyecto y borra los pasos de deshacer. Sin proyecto abierto, va directo al gestor.
 - Al lado del nombre, el estado del guardado (`TickTopBar`): Guardando / Guardado / Sin guardar / Error al guardar /
   Solo lectura. "Sin guardar" sale cuando Configuración → Guardado y exportación (`SaveMode`) guarda cada X minutos o a mano; el
   diskette antes de deshacer (`SaveButton`, el atajo "save") guarda ya y está apagado si no hay nada pendiente.
@@ -59,7 +81,11 @@ Todo lo que se describe acá lo decidió el usuario: no lo cambies sin preguntar
   leídos. Nada se escribe en el centro de la barra de título ni en diálogos.
 - **Toasts** (`Controls/ToastHost`): `Toast(texto)` es para lo que conviene ver en el momento; sale abajo a la
   derecha, encima de todo, se va sola a los 6 s (el puntero encima la frena) y también queda en la campanita. Una
-  fija (`sticky`) se va solo con su ×: la usa `--probar "texto"` ("Para probar").
+  fija (`sticky`) se va solo con su ×: la usa `--probar "texto"` ("Para probar"). Puede llevar un botón (`action`).
+  Salen como toast (lo eligió el usuario; el resto queda solo en la campanita): los errores al guardar el proyecto o
+  una toma (el reintento del guardado, solo la primera vez seguida), la toma guardada (o su problema), la exportación
+  terminada (con "Mostrar" en el Explorador), la cámara que deja de mandar imagen (`TickCamera`, no en solo audio) y
+  la interfaz de audio que deja de llamar más de 3 s (`PlaybackEngine.Stalled`, `TickAudioDriver`).
 
 ## Transporte (abajo)
 
@@ -143,6 +169,16 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 - **Preview**: los paneles se calculan con `PanelLayout.Compute` sobre un lienzo de 1080 px de alto, **la misma
   cuenta que usa la exportación**: lo que se ve tiene que ser lo que se exporta. Encuadre: cover-fit + zoom/paneo/espejo
   del clip. Etiqueta con el nombre de la pista abajo a la izquierda.
+- **Video de la preview**: cada clip tiene su `Video/VideoDecoder` (un hilo que va unos cuadros adelante). Lee con
+  FFmpeg dentro del proceso (`NativeVideoSource`, en `GuitarCam.Audio`: los DLL de `lib\ffmpeg`, en el procesador hasta
+  1080p y en la placa de video arriba de eso); si no están los DLL o el archivo no abre, con ffmpeg.exe por pipe
+  (`PipeVideoSource`, un proceso por salto). Un clip arranca su decodificador 1 s antes de empezar (`LiveClip.PreRollSec`),
+  así los cortes no congelan la imagen, y un panel no muestra un cuadro hasta tener uno de ese momento (`LiveClip.Fresh`).
+  Un decodificador que no se usa (`VideoDecoder.Idle`) cierra el archivo a los 3 s.
+- **Transiciones** (ver Timeline): `LiveTrack.UpdateTransitions` corre en cada tick antes de pedir los cuadros, con la
+  misma cuenta que la exportación (`ClipTransitions`): en un fundido cruzado los dos clips muestran video pasando su
+  borde (`LiveClip.Lead` / `Tail`, así su decodificador arranca antes) y `PreviewView` dibuja el que sale y encima el
+  que entra con su peso. Se ven también en pausa (los fundidos propios del clip, solo reproduciendo, como siempre).
 - **"En vivo"** (`Controls/LiveMonitor.cs`), a la derecha de la preview: la cámara cruda, nunca la composición. La
   abre `Video/LiveCamera.cs` (un solo FFmpeg, `CameraCapture`), que también alimenta el video de la toma (`VideoTakeWriter`).
 
@@ -156,7 +192,12 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 - **Bordes de clip**: en cada lado dos manijas chicas como la de la columna (pestañita oscura con dos rayitas), una por
   mitad del clip (`DrawEdgeHandles`): la de arriba, donde termina el fade, mueve el fade; la de abajo, en el borde,
   recorta. El cursor lo dice (diagonal como la línea del fade, ↔ para recortar) y se ilumina la manija que vas a agarrar.
-- **Varios clips por pista**: Alt+X divide en el cabezal y D duplica (`ClipEditing.Split` / `Duplicate`). Los clips
+- **Varios clips por pista**: Alt+X divide en el cabezal y D duplica (`ClipEditing.Split` / `DuplicateMany`; con
+  varios clips marcados, aunque estén en varias pistas, los copia en bloque después del final del bloque).
+- **Copiar y pegar** (`ClipClipboard`, `MainWindow.Timeline.cs`): Ctrl+C / Ctrl+X toman el clip elegido o los
+  marcados; Ctrl+V los pega con el comienzo en el cabezal y la pista de arriba en la elegida (o en la suya), con la
+  misma distancia entre pistas; si no entran abajo, el bloque sube. Quedan marcados y, parado, el cabezal salta al final
+  del bloque, así otro Ctrl+V pone la copia siguiente. Solo en memoria y solo dentro del mismo proyecto. Los clips
   de una pista comparten su panel y se ve el de arriba (el último), igual en la preview (`LiveTrack.ShownClip`) y en
   la exportación (`ExportTakeSpec.Panel`).
 - **Arrastrar a otra pista** cambia la pista **y el tiempo** a la vez: el original queda atenuado y un fantasma
@@ -182,7 +223,7 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 - **Rango**: la herramienta Rango, o Shift+arrastrar con Seleccionar, marca un tramo; arrastrando hacia arriba o abajo
   suma las pistas visibles que cruza (`rangeTracks`). Supr o "Borrar el rango" del clic derecho lo saca de sus clips
   (`ClipEditing.DeleteRange`) dejando el hueco; Shift+Supr o "Borrar y cerrar el hueco" además corre lo de después en
-  esas pistas (`ClipEditing.DeleteRangeClosing`; las otras pistas, los marcadores y el A–B no se mueven). "Repetir este
+  esas pistas (`ClipEditing.DeleteRangeClosing`; las otras pistas y el A–B no se mueven; los marcadores, solo si el rango abarca todas las pistas). "Repetir este
   rango" lo pasa al rango A–B. La selección se va con un clic, Esc o una edición.
 - **Herramientas** (`Controls/TimelineView.Tools.cs`, `TimelineView.Tool`): solo cambian qué hace apretar sobre los
   carriles; encabezados, regla, marcadores y menús andan igual con cualquiera. **Dividir** corta el clip en el clic
@@ -195,6 +236,16 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 - **Clips que se pisan**: se ve el último de la pista. El clic derecho → "Traer al frente" (`ClipEditing.BringToFront`,
   prendido solo si otro lo tapa) lo pasa al final: arriba en el timeline, en la vista previa y en la exportación. El
   sonido no cambia: los dos suenan.
+- **Transiciones de video** (pedido del usuario: "simple, para no confundir con el audio"; `MainWindow.Transitions.cs`,
+  `TimelineView.DrawJoins`): donde un clip termina y otro empieza en una pista con video (a menos de 2 cuadros,
+  `ClipTransitions.JoinSec`), un chip chico con una cámara cruza el borde de arriba de los clips: gris con `|` si es
+  un corte, de acento con `⨯` (fundido cruzado) o `V` (pasar por negro), y una línea de acento arriba marca el tramo
+  que cubre. Clic → menú "Transición de video": Corte / Fundido cruzado / Pasar por negro, duración con 0,25 · 0,5 · 1
+  · 2 s y un slider de 0,1 a 3 s (0,5 por defecto), y la aclaración de que el audio sigue cortando. También desde el clic
+  derecho del clip ("Transición de video al entrar / al salir"). Se guarda en el clip que entra (`Clip.Transition`,
+  `TransitionSec`) y va centrada en la unión; nunca toca los fundidos de audio ni de video del clip. El fundido cruzado
+  usa el video que esconden los recortes; si de un lado no hay, ese lado se queda en su último o primer cuadro (el menú
+  lo avisa). Pasar por negro no necesita nada escondido. Dividir deja la transición en la pieza de la izquierda.
 - **Franja de marcadores** (`Controls/TimelineView.Markers.cs`, `MainWindow.Markers.cs`): 18 px arriba de los números
   de la regla (`MarkerH`, incluida en `RulerH`). Arrastrar en vacío dibuja el **rango A–B** del loop y lo prende; sus
   bordes y su cuerpo se arrastran; acento con el loop prendido, gris apagado, y con el loop prendido sus bordes siguen
@@ -206,9 +257,9 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   tempo (`ProjectMarkers`). Atajos: L loop, I / O ponen A / B en el cabezal, K marcador, `,` / `.` saltan.
 - **Loop**: al cruzar B (o el final del tema, sin rango) vuelve a A con el crossfade de los saltos, sin reiniciar los
   efectos (`PlaybackEngine.SetLoopRange`). Si arrancás después de B, sigue hasta el final y desde ahí vuelve a A.
-- **Clic derecho** (`ShowTimelineMenu`): sobre un clip, solo cosas del clip (dividir, duplicar, al inicio, corregir
+- **Clic derecho** (`ShowTimelineMenu`): sobre un clip, solo cosas del clip (dividir, duplicar, copiar, cortar, al inicio, corregir
   corte, restablecer, quitar clip); en el encabezado o en un tramo vacío del carril, solo cosas de la pista (panel de
-  video, renombrar, carpeta, guardar como plantilla, quitar pista); en la parte vacía de la columna de encabezados,
+  video, renombrar, carpeta, guardar como plantilla, pegar en el cabezal, quitar pista); en la parte vacía de la columna de encabezados,
   debajo de la última fila, el menú de "+ Nueva pista" (pedido del usuario). Mute y solo no van: están en el encabezado. Los
   menús no tienen tope de alto (sin scroll), salvo que la ventana sea más baja que el menú.
 - **Ganancia por clip**: `Clip.GainDb` (slider del inspector) y `Clip.GainCurve`, puntos en dB contados desde el sample
@@ -355,15 +406,31 @@ tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
   alternando timeline / mixer). Usa el lugar del mixer (`MixerHost`, con su altura y su lugar en solo audio): esconde
   la cabecera y las tiras y muestra la cadena. El botón "Master" del canal master (en acento con el master prendido)
   también lleva ahí. Dos grupos, de izquierda a derecha (pedido del usuario): una **caja** con el ON del master, qué
-  está haciendo y las etapas que ese ON prende (se atenúan enteras con el master apagado), y afuera **Salida**
+  está haciendo y las etapas que ese ON prende (se atenúan enteras con el master apagado), y al lado, en otra caja igual (mismo encabezado y paneles del mismo alto), **Salida**
   (Limitador → Volumen), que funciona siempre. Un panel por etapa con su ON y flechas entre ellos, perillas de 44 px
-  (pedido del usuario): **Limpieza** (Corte, Barro;
-  `EqOn`) → **Multibanda** (una perilla "Cuánto" por banda con su barra de reducción en vivo, y dos perillas chicas
-  para los cruces; `BandsOn`) → **Color** (Graves, Presencia, Aire, Inclinación; `ColorOn`) → **Cinta** (Vida, la
+  (pedido del usuario): **Look** (sin ON: un `SelectButton` con A mano · Natural · Pegadito · Brillante · Cálido · Al
+  frente · Domar la púa, `MasterLooks`; la perilla Cuánto, de Natural al look entero, que reescribe las perillas; y
+  **Sugerime**, `MainWindow.Suggest.cs`, que escucha la mezcla entera antes del master en segundo plano,
+  `MasterSuggest`, y abre una tarjeta con una línea por propuesta y Aplicar / Cancelar; tocar a mano una perilla que el
+  look puso lo deja en "A mano") → **Limpieza** (Corte, Barro;
+  `EqOn`) → **Multibanda** (una perilla "Cuánto" por banda con su barra de reducción en vivo, y abajo un gráfico chico,
+  `Controls/MasterBandsGraph.cs`, con la curva de cada banda que baja con lo que comprime y los dos cruces como líneas
+  que se arrastran; y una cuarta columna, **Púa**, `MasterPickTamer`, que baja 2–5 kHz solo cuando pega la púa;
+  `BandsOn`) → **Color** (Graves, Presencia, Aire, Inclinación; `ColorOn`) → **Cinta** (Vida, la
   cinta de las pistas más suave; `TapeOn`) → **Ancho** (Ancho y Graves mono, con el volumen compensado; `WidthOn`) → **Soft clip** (Recorte y su
-  barra; `ClipOn`) | Salida: **Limitador** (Empuje, Techo en pico real, −1 dBTP por defecto, Release y su barra; `LimOn`, aparte del ON del master; apagado, los
-  picos pueden pasar de 0 dB) → **Volumen** (sin ON: LUFS de los últimos 3 s e integrado, el mismo medidor que la
-  celda LUFS, el pico real de la pasada (`TruePeak`) en rojo si pasó del Techo, y cuánto falta para −14 LUFS).
+  barra; en 0 dice "Auto": con picos más de 2 dB sobre el Techo se lleva la mitad de lo que pasa, hasta 4 dB, y el
+  resto queda para el limitador; `ClipOn`) | Salida: **Limitador** (Empuje, Techo en pico real, −1 dBTP por defecto,
+  Release y su barra; `LimOn`, aparte del ON del master; apagado, los picos pueden pasar de 0 dB) → **Volumen** (sin
+  ON: el **Destino** arriba, un `SelectButton` con Como está · YouTube · Instagram · TikTok · Spotify · Apple Music
+  (`MasterLoudness`, `MasterSettings.Target`) y abajo qué está haciendo; LUFS de los últimos 3 s e integrado, el
+  mismo medidor que la celda LUFS, el pico real de la pasada (`TruePeak`) en rojo si pasó del Techo, y cuánto falta
+  para los LUFS del destino, o −14 sin destino).
+- **Destino** (`MainWindow.Loudness.cs`): con un destino, cada edición (`MarkDirty`) espera 1,5 s y mide la mezcla
+  entera en segundo plano con el mismo `MixMaster.Render` de la exportación; la ganancia que encuentra va a
+  `MasterSettings.TargetGainDb` (se guarda) y la reproducción se desliza hasta ella (50 ms), así que se escucha al
+  volumen de esa red mientras mezclás y la exportación arranca de esa ganancia y cae en la misma. Ocupa el lugar del
+  Empuje (la perilla se apaga y muestra la ganancia). No mide mientras grabás ni mientras hay audio cargándose o
+  transponiéndose (no lee disco en la UI); una edición nueva cancela la medición en curso.
 - La vista tiene justo el alto de la cadena (`FitMasteringHeight`) y no se estira: los divisores no hacen nada ahí y
   la altura recordada del mixer no cambia.
 - No se mide nada: cada banda sigue su propio nivel mientras suena (`MasterBandComp`) y comprime lo que pasa de ahí,
@@ -390,9 +457,9 @@ tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
   que la exportación, cola incluida, y no llevan la ganancia de loudness.
 - **Destino** (solo MP4): fila segmentada arriba de Calidad con Proyecto · Reels · TikTok · YouTube · IG 1:1 · IG 4:5
   (`ExportTargets`). "Proyecto" es el de siempre (el cuadro del proyecto, la mezcla como está) y viene elegido, así que
-  no suma pasos; los demás cambian el cuadro solo para ese video (9:16, 16:9, 1:1, 4:5 = 1080×1350) y llevan la mezcla
-  a −14 LUFS. Se recuerda el último (`ExportSettings.Target`). En "Exportar audio" en su lugar hay una casilla
-  "Llevar la mezcla a −14 LUFS" (`ExportSettings.AudioLufs`).
+  no suma pasos; los demás cambian el cuadro solo para ese video (9:16, 16:9, 1:1, 4:5 = 1080×1350). Se recuerda el
+  último (`ExportSettings.Target`). El volumen no se elige acá: es el **Destino del master** (ver Mastering), y una
+  línea abajo de Calidad (`LoudnessText`, también en "Exportar audio") dice a cuántos LUFS sale.
 - **Avanzado** (solo MP4): un link plegado abajo de Calidad (`AdvancedPanel`); plegado dice lo que no está por
   defecto ("Avanzado · 4K · 20 Mbps"). Adentro, Resolución 720p · 1080p · 1440p · 4K (el lado corto del cuadro,
   `Mp4Exporter.ExportSize(aspect, resolución)`; el borde entre paneles crece con ella) y Bitrate del video: "Automático"
@@ -401,7 +468,7 @@ tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
   Se recuerda por proyecto (`ExportSettings.Resolution`, `BitrateMbps`) y la estimación del peso lo usa.
 - **Masterizado y colas** (`Dsp/MixMaster.cs`): la mezcla se renderiza con el mismo `MixRenderer` sin limitador y hasta
   8 s después del último clip; corta donde reverb y delay bajan de −66 dBFS (o funde el último segundo si siguen
-  sonando en el límite). Después va el `MasterLimiter` con la ganancia que lleva a los LUFS del destino, midiendo con
+  sonando en el límite). Después va el `MasterLimiter` con la ganancia que lleva a los LUFS del Destino del master (arrancando de la que ya midió la ventana), midiendo con
   `LoudnessMeter.Measure` y corrigiendo hasta 4 pasadas (solo el limitador). En el MP4, durante la cola el último
   cuadro queda congelado y se funde al fondo (`tpad` + `fade` en `Mp4Exporter.BuildFfmpegCommand`).
 - **Velocidad**: `MixRenderer.RenderTo` mezcla de a tramos de 64 bloques en tres etapas con su hilo cada una (pistas
@@ -411,5 +478,9 @@ tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
   bitrate de la calidad en vez del CRF de x264) o el procesador; se elige en Configuración → Guardado y exportación
   (`config.json` "export.encoder", de la máquina y no del proyecto). Si la placa o los grafos fallan, la exportación
   se repite sola con el procesador y un solo grafo, como antes.
+- **Transiciones de video**: en `Mp4Exporter.BuildFfmpegCommand`, los clips de un mismo panel con una transición
+  extienden su tramo (el `trim` y el `enable` del `overlay`), con `tpad` que congela el borde cuando no hay video
+  escondido; el fundido cruzado es un `fade` con alfa (`yuva420p`) en el que queda arriba de los dos y pasar por negro,
+  dos `fade` al color del fondo. Mismo resultado que la preview.
 - **Al terminar** se ven los LUFS integrados de la mezcla y los segundos de cola (en el pie, o en la línea del audio);
   quedan en `ExportRecord.Lufs`, así que también se ven al abrir la exportación desde Historial.

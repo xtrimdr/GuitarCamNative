@@ -36,6 +36,7 @@ public partial class MainWindow
                 MarkDirty();
                 UpdateUndoButtons();
                 Preview.SetProject(tracks, s);
+                if (s.Aspect == "9:16") SuggestVerticalLayout();
             }
         }
         // a click on the checked option would uncheck it: always show the project's format again

@@ -262,6 +262,7 @@ public static class ClipEditing
         right.Id = Ids.New("clp");
         right.TrimStartSec = trimStart;
         right.FadeInSec = right.VideoFadeInSec = 0;
+        right.Transition = ClipTransitions.CutId; // the transition in stays with the left piece's start
         left.TrimEndSec = w.Dur - trimStart;
         left.FadeOutSec = left.VideoFadeOutSec = 0;
         track.Clips.Insert(track.Clips.IndexOf(left) + 1, right);
@@ -295,6 +296,7 @@ public static class ClipEditing
                 right.Id = Ids.New("clp");
                 right.TrimStartSec = ToSample(endSec - w.Origin);
                 right.FadeInSec = right.VideoFadeInSec = 0;
+                right.Transition = ClipTransitions.CutId;
                 clip.TrimEndSec = ToSample(w.Dur - (startSec - w.Origin));
                 clip.FadeOutSec = clip.VideoFadeOutSec = 0;
                 track.Clips.Insert(track.Clips.IndexOf(clip) + 1, right);
@@ -316,15 +318,18 @@ public static class ClipEditing
     /// <summary>
     /// Deletes a range on several tracks at once and slides what comes after it on those tracks to the left by the
     /// range's length, closing the gap (native only, "Borrar y cerrar el hueco"). Only the given tracks move: the
-    /// others, the markers and the A–B range stay, so a range over some tracks shifts them against the rest (as in any
-    /// DAW). Returns how many clips changed (cut, removed or moved).
+    /// others stay, so a range over some tracks shifts them against the rest (as in any DAW). When it covers every
+    /// track the song itself got shorter, so the markers follow (<see cref="ProjectMarkers.CloseGap"/>); the A–B
+    /// range stays, since it is transport state outside undo. Returns how many clips changed (cut, removed or moved).
     /// </summary>
     public static int DeleteRangeClosing(Project p, IEnumerable<string> trackIds, double startSec, double endSec, Func<Clip, double?>? lengthOf = null)
     {
         if (!(endSec > startSec)) return 0;
         double len = endSec - startSec;
         int changed = 0;
-        foreach (string id in trackIds.Distinct().ToList())
+        var ids = trackIds.Distinct().ToList();
+        if (p.Tracks.All(t => ids.Contains(t.Id))) ProjectMarkers.CloseGap(p, startSec, endSec);
+        foreach (string id in ids)
         {
             changed += DeleteRange(p, id, startSec, endSec, lengthOf);
             // after the cut every clip on the track is either before the range or from its end on
@@ -359,15 +364,42 @@ public static class ClipEditing
     /// Copies a clip on its own track right after its end (D in Studio One), including the part a cut at 0
     /// hides, so the copy starts exactly where the original stops. Returns the copy's id.
     /// </summary>
-    public static string Duplicate(Project p, string id, double? durationSec = null)
+    public static string Duplicate(Project p, string id, double? durationSec = null) =>
+        DuplicateMany(p, [id], durationSec is { } d ? _ => d : null)[0];
+
+    /// <summary>
+    /// D on several clips (a selection box, even across tracks): they are copied as one block right after the block's
+    /// end, each copy on its original's track and at the same distance from the others, so a phrase played on several
+    /// tracks repeats whole. With one clip it is <see cref="Duplicate"/>. Returns the copies' ids, in the given order.
+    /// </summary>
+    public static List<string> DuplicateMany(Project p, IReadOnlyList<string> ids, Func<Clip, double?>? lengthOf = null)
     {
-        var (track, clip) = Find(p, id);
-        var w = Window(clip, p.FindMedia(clip.MediaId), durationSec);
-        var copy = Copy(clip);
-        copy.Id = Ids.New("clp");
-        copy.AtSec = ToSample(clip.AtSec + w.End - (w.Origin + w.TrimStart));
-        track.Clips.Insert(track.Clips.IndexOf(clip) + 1, copy);
-        return copy.Id;
+        var picked = ids.Distinct().Select(id => Find(p, id)).ToList();
+        if (picked.Count == 0) return [];
+        var (start, end) = Span(p, picked.Select(x => x.Clip), lengthOf);
+        List<string> copies = [];
+        foreach (var (track, clip) in picked)
+        {
+            var copy = Copy(clip);
+            copy.Id = Ids.New("clp");
+            copy.AtSec = ToSample(clip.AtSec + end - start);
+            track.Clips.Insert(track.Clips.IndexOf(clip) + 1, copy);
+            copies.Add(copy.Id);
+        }
+        return copies;
+    }
+
+    /// <summary>Where a group of clips starts and ends on the timeline, counting the part a cut at 0 hides.</summary>
+    public static (double Start, double End) Span(Project p, IEnumerable<Clip> clips, Func<Clip, double?>? lengthOf = null)
+    {
+        double start = double.MaxValue, end = double.MinValue;
+        foreach (var c in clips)
+        {
+            var w = Window(c, p.FindMedia(c.MediaId), lengthOf?.Invoke(c));
+            start = Math.Min(start, w.Origin + w.TrimStart);
+            end = Math.Max(end, w.End);
+        }
+        return (start, end);
     }
 
     /// <summary>Clip gain in dB, within <see cref="Clip.MinGainDb"/>..<see cref="Clip.MaxGainDb"/>.</summary>
@@ -380,6 +412,35 @@ public static class ClipEditing
         var c = Find(p, id).Clip;
         c.GainCurve = [.. points.Where(g => double.IsFinite(g.Sec) && double.IsFinite(g.Db)).OrderBy(g => g.Sec)
             .Select(g => new GainPoint { Sec = g.Sec, Db = Math.Clamp(g.Db, ClipGainCurve.MinDb, ClipGainCurve.MaxDb) })];
+    }
+
+    /// <summary>
+    /// How the picture comes into a clip from the one before it (native only, <see cref="ClipTransitions"/>): the
+    /// kind ("cut", "crossfade", "dip") and its length in seconds; null keeps that part. Never touches the sound.
+    /// </summary>
+    public static void SetTransition(Project p, string id, string? kind, double? sec)
+    {
+        var c = Find(p, id).Clip;
+        if (kind != null) c.Transition = ClipTransitions.Id(ClipTransitions.Parse(kind));
+        if (sec is { } s) c.TransitionSec = Math.Round(ClipTransitions.ClampSec(s), 3);
+    }
+
+    /// <summary>
+    /// The joins of a track where one clip ends and another starts (native only), with the transition each one
+    /// has (<see cref="ClipTransitions.Find"/>; null = a cut). <paramref name="lengthOf"/> gives a clip's media length when known.
+    /// </summary>
+    public static List<(Clip Out, Clip In, ClipTransitions.Join? Join)> Joins(Project p, Track track, Func<Clip, double?>? lengthOf = null)
+    {
+        var w = track.Clips.Select(c => Window(c, p.FindMedia(c.MediaId), lengthOf?.Invoke(c))).ToArray();
+        var list = new List<(Clip, Clip, ClipTransitions.Join?)>();
+        for (int i = 0; i < w.Length; i++)
+        {
+            int o = ClipTransitions.FindOut(w, i);
+            if (o < 0) continue;
+            var c = track.Clips[i];
+            list.Add((track.Clips[o], c, ClipTransitions.Find(w, i, ClipTransitions.Parse(c.Transition), c.TransitionSec)));
+        }
+        return list;
     }
 
     public static void Reset(Project p, string id)

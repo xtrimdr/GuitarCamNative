@@ -9,7 +9,9 @@ public readonly record struct MasterBandParams(double Amount);
 /// <see cref="ColorOn"/> the colour after it (lows, presence, air, tilt); then Cinta (<see cref="TapeAmount"/>), Ancho
 /// (<see cref="Width"/>, <see cref="MonoBassHz"/>) and the soft clip (<see cref="ClipDb"/>), each with its ON. The limiter fields are the
 /// <see cref="MasterLimiter"/>'s, apart from the master's ON: its own ON (<see cref="LimOn"/>), Empuje (gain into it),
-/// Techo and Release.
+/// Techo and Release. <see cref="TargetLufs"/> is the Destino (null = as it is) and <see cref="TargetGainDb"/> the gain
+/// measured to land on it (<see cref="MasterLoudness"/>), which then takes the Empuje's place. <see cref="PickAmount"/>
+/// is the multiband's fourth band, Púa (<see cref="MasterPickTamer"/>, 0 = off).
 /// </summary>
 public sealed record MasterParams(
     bool On,
@@ -37,7 +39,10 @@ public sealed record MasterParams(
     double Width = 1,
     double MonoBassHz = 0,
     bool ClipOn = true,
-    double ClipDb = 0)
+    double ClipDb = 0,
+    double? TargetLufs = null,
+    double TargetGainDb = 0,
+    double PickAmount = 0)
 {
     /// <summary>The most the limiter's Empuje pushes the mix into it.</summary>
     public const double DriveMaxDb = 12;
@@ -331,34 +336,66 @@ public sealed class MasterBandComp
 }
 
 /// <summary>
-/// The master's soft clip, between the limiter's Empuje and the limiter: it rounds the fastest peaks (the pick, the
-/// strum's attack) so the limiter has less to do and pumps less. "Recorte" (0 to <see cref="MaxDb"/>) sets how much of
-/// the peak over the Techo it takes: the curve is straight up to a knee <see cref="KneeDb"/> under its ceiling and bends
-/// smoothly (tanh) into it, and the ceiling sits <see cref="MaxDb"/> − Recorte over the Techo, so 0 = off and the most =
-/// the clipper takes everything the limiter would. First-order ADAA on the curve keeps the aliasing of the bend down
-/// without oversampling (half a sample of delay, nothing to align). Recorte at 0 does nothing at all.
+/// The master's soft clip, between the gain into the limiter (Empuje or the Destino's) and the limiter: it rounds the
+/// fastest peaks (the pick, the strum's attack) so the limiter has less to do and pumps less. The curve is straight up
+/// to a knee <see cref="KneeDb"/> under its ceiling and bends smoothly (tanh) into it. Two ceilings, the lower wins:
+/// <list type="bullet">
+/// <item>"Recorte" (0 to <see cref="MaxDb"/>): a fixed ceiling <see cref="MaxDb"/> − Recorte over the Techo, so the most =
+/// the clipper takes everything the limiter would; 0 = none.</item>
+/// <item>Auto (asked by the user: with a high final volume, share the work instead of leaving it all to the limiter): it
+/// follows the loudest recent peak (instant attack, <see cref="AutoReleaseSec"/> to let go) and, of what that peak goes
+/// over the Techo past <see cref="AutoFreeDb"/>, takes <see cref="AutoShare"/>, never more than
+/// <see cref="AutoMaxCutDb"/>; the limiter takes the rest. A peak only a little over is left to the limiter alone.
+/// It depends on the last fraction of a second only, like a compressor, so playback and the export cut the same.</item>
+/// </list>
+/// Anti-aliasing: first-order ADAA on what the curve takes away (the curve minus the straight line), so the bend's
+/// harmonics are tamed without oversampling while the signal itself passes with no delay and no filtering: under the
+/// knee it comes out bit for bit.
 /// </summary>
 public sealed class SoftClipper
 {
     public const double MaxDb = 3;
     /// <summary>Where the bend starts, under the ceiling.</summary>
     public const double KneeDb = 3;
+    /// <summary>Auto: a peak this far over the Techo the limiter takes alone (it handles it clean).</summary>
+    public const double AutoFreeDb = 2;
+    /// <summary>Auto: the share of the rest the clip takes.</summary>
+    public const double AutoShare = 0.5;
+    /// <summary>Auto: the most it cuts a peak; more would be heard as distortion on a guitar.</summary>
+    public const double AutoMaxCutDb = 4;
+    /// <summary>Auto: how long the loudest peak is remembered (the ceiling stays put through a strum).</summary>
+    public const double AutoReleaseSec = 0.3;
     static readonly double Ln2 = Math.Log(2);
+    static readonly double KneeLin = Math.Pow(10, -KneeDb / 20);
+    static readonly double FreeLin = Math.Pow(10, AutoFreeDb / 20);
+    static readonly double MaxCutLin = Math.Pow(10, -AutoMaxCutDb / 20);
 
-    readonly double[] x1 = new double[2];
-    volatile float ceiling = 1;
-    volatile bool active;
+    /// <summary><c>Ceiling</c> = the Recorte's (linear, +∞ = none); <c>Techo</c> = the limiter's (linear).</summary>
+    sealed record Config(double Ceiling, bool Auto, double Techo);
+
+    readonly double release;
+    volatile Config config = new(double.PositiveInfinity, false, 1);
+    double pl, pr, env;
     float minGain = 1;
 
-    /// <summary>The clip's amount (dB, 0 = off) and the limiter's Techo it is measured from.</summary>
-    public void Set(double recorteDb, double techoDb)
+    public SoftClipper(double sampleRate) => release = Math.Exp(-1 / (AutoReleaseSec * sampleRate));
+
+    /// <summary>The clip's Recorte (dB, 0 = none), the limiter's Techo it is measured from and whether Auto shares the peaks.</summary>
+    public void Set(double recorteDb, double techoDb, bool auto)
     {
         double r = Math.Clamp(double.IsFinite(recorteDb) ? recorteDb : 0, 0, MaxDb);
-        ceiling = (float)Math.Pow(10, ((double.IsFinite(techoDb) ? techoDb : MasterLimiter.CeilingDb) + MaxDb - r) / 20);
-        active = r > 0.01;
+        double techo = double.IsFinite(techoDb) ? techoDb : MasterLimiter.CeilingDb;
+        config = new Config(r > 0.01 ? Math.Pow(10, (techo + MaxDb - r) / 20) : double.PositiveInfinity, auto, Math.Pow(10, techo / 20));
     }
 
-    public void Reset() => x1[0] = x1[1] = 0;
+    /// <summary>As the master has it: Recorte and Auto with the master's and the clip's ON, against the Techo.</summary>
+    public void Set(MasterParams p)
+    {
+        bool on = p.On && p.ClipOn;
+        Set(on ? p.ClipDb : 0, p.LimCeilingDb, on);
+    }
+
+    public void Reset() => pl = pr = env = 0;
 
     /// <summary>For the meter: the deepest the clip has cut since the last call, in dB (≤ 0).</summary>
     public double TakeReductionDb()
@@ -373,52 +410,81 @@ public sealed class SoftClipper
         return a + double.LogP1(Math.Exp(-2 * a)) - Ln2;
     }
 
-    /// <summary>The curve: straight to <paramref name="k"/>, then tanh into <paramref name="c"/>.</summary>
-    static double Curve(double x, double k, double d)
+    /// <summary>What the curve takes away at <paramref name="x"/> (the curve minus x): 0 under the knee <paramref name="k"/>.</summary>
+    static double Cut(double x, double k, double d)
     {
         double a = Math.Abs(x);
-        return a <= k ? x : Math.Sign(x) * (k + d * Math.Tanh((a - k) / d));
+        return a <= k ? 0 : Math.Sign(x) * (k + d * Math.Tanh((a - k) / d) - a);
     }
 
-    /// <summary>Its antiderivative (even), for ADAA.</summary>
-    static double Integral(double x, double k, double d)
+    /// <summary>Its antiderivative (even, 0 under the knee), for ADAA.</summary>
+    static double CutIntegral(double x, double k, double d)
     {
         double a = Math.Abs(x);
-        return a <= k ? 0.5 * x * x : 0.5 * k * k + k * (a - k) + d * d * LogCosh((a - k) / d);
+        if (a <= k) return 0;
+        double u = a - k;
+        return k * u + d * d * LogCosh(u / d) - 0.5 * (a * a - k * k);
+    }
+
+    /// <summary>
+    /// One sample through the curve: x plus what it takes away, anti-aliased against the previous sample. On a steep
+    /// edge the average over the step under-cuts the sample, so it is held at the ceiling <paramref name="c"/>.
+    /// </summary>
+    static double Clip(double x, double p, double k, double d, double c)
+    {
+        if (Math.Abs(x) <= k && Math.Abs(p) <= k) return x;
+        double dx = x - p;
+        double y = x + (Math.Abs(dx) < 1e-6 ? Cut(0.5 * (x + p), k, d) : (CutIntegral(x, k, d) - CutIntegral(p, k, d)) / dx);
+        return Math.Clamp(y, -c, c);
     }
 
     public void Process(Span<float> left, Span<float> right)
     {
-        if (!active)
+        int n = Math.Min(left.Length, right.Length);
+        if (n == 0) return;
+        var c = config;
+        if (!c.Auto && double.IsPositiveInfinity(c.Ceiling))
         {
-            x1[0] = left.Length > 0 ? left[^1] : x1[0];
-            x1[1] = right.Length > 0 ? right[^1] : x1[1];
+            pl = left[n - 1];
+            pr = right[n - 1];
+            env = 0;
             return;
         }
-        double c = ceiling, k = c * Math.Pow(10, -KneeDb / 20), d = c - k;
-        double low = 1;
-        for (int ch = 0; ch < 2; ch++)
+        double rel = release, e = env, p0 = pl, p1 = pr, low = 1;
+        double autoFrom = c.Techo * FreeLin;
+        for (int i = 0; i < n; i++)
         {
-            var buf = ch == 0 ? left : right;
-            double p = x1[ch], fp = Integral(p, k, d);
-            for (int i = 0; i < buf.Length; i++)
+            double xl = left[i], xr = right[i];
+            double pk = Math.Max(Math.Abs(xl), Math.Abs(xr));
+            e = pk >= e ? pk : e * rel;
+            double ceil = c.Ceiling;
+            if (c.Auto && e > autoFrom)
             {
-                double x = buf[i];
-                double fx = Integral(x, k, d);
-                double dx = x - p;
-                double y = Math.Abs(dx) < 1e-6 ? Curve(0.5 * (x + p), k, d) : (fx - fp) / dx;
-                double a = Math.Abs(x);
-                if (a > k)
-                {
-                    double g = Math.Abs(y) / a;
-                    if (g < low) low = g;
-                }
-                buf[i] = (float)y;
-                p = x;
-                fp = fx;
+                // the loudest recent peak comes down by AutoShare of its dB over AutoFreeDb, at most AutoMaxCutDb
+                double a = e * Math.Max(MaxCutLin, Math.Pow(e / autoFrom, -AutoShare));
+                if (a < ceil) ceil = a;
             }
-            x1[ch] = p;
+            if (double.IsPositiveInfinity(ceil))
+            {
+                p0 = xl;
+                p1 = xr;
+                continue;
+            }
+            double k = ceil * KneeLin, d = ceil - k;
+            double yl = Clip(xl, p0, k, d, ceil), yr = Clip(xr, p1, k, d, ceil);
+            if (pk > k)
+            {
+                double g = Math.Min(Math.Abs(xl) > k ? Math.Abs(yl) / Math.Abs(xl) : 1, Math.Abs(xr) > k ? Math.Abs(yr) / Math.Abs(xr) : 1);
+                if (g < low) low = g;
+            }
+            left[i] = (float)yl;
+            right[i] = (float)yr;
+            p0 = xl;
+            p1 = xr;
         }
+        env = e;
+        pl = p0;
+        pr = p1;
         if (low < minGain) minGain = (float)low;
     }
 }
@@ -525,7 +591,7 @@ public sealed class StereoWidth
 /// <summary>
 /// The master chain, between the returns and the limiter (<see cref="MixGraphBus"/>), the same in playback and export:
 /// low cut + mud → three-band compressor (<see cref="Crossover3"/>, one <see cref="MasterBandComp"/> per band, each with its
-/// self-set threshold and level-keeping make-up) → lows, presence, air and tilt → Cinta (the tracks' tape
+/// self-set threshold and level-keeping make-up) and the Púa (<see cref="MasterPickTamer"/>) → lows, presence, air and tilt → Cinta (the tracks' tape
 /// <see cref="Saturator"/>, gentler) → Ancho (<see cref="StereoWidth"/>). The soft clip and the limiter come after, in
 /// <see cref="MixGraphBus"/>. Turning it on or off and each stage on or off crossfade over <see cref="FadeSec"/>, so nothing clicks. Off and faded out, it costs nothing. Buffers preallocated (<see cref="TrackDspChain.MaxBlockSize"/>):
 /// <see cref="Process"/> never allocates.
@@ -549,6 +615,7 @@ public sealed class MasterChain
     readonly Crossover3 xo;
     readonly Saturator tape;
     readonly StereoWidth width;
+    readonly MasterPickTamer pick;
     readonly MasterBandComp[] comps = new MasterBandComp[MasterBands.Count];
     readonly float[] dryL = new float[Max], dryR = new float[Max], tmpL = new float[Max], tmpR = new float[Max];
     readonly float[][] bandL = new float[MasterBands.Count][], bandR = new float[MasterBands.Count][];
@@ -566,6 +633,7 @@ public sealed class MasterChain
         xo = new Crossover3(sampleRate);
         tape = new Saturator(sampleRate);
         width = new StereoWidth(sampleRate);
+        pick = new MasterPickTamer(sampleRate);
         for (int i = 0; i < MasterBands.Count; i++)
         {
             comps[i] = new MasterBandComp(sampleRate);
@@ -595,6 +663,7 @@ public sealed class MasterChain
         double t = Math.Clamp(double.IsFinite(p.TapeAmount) ? p.TapeAmount : 0, 0, 1);
         tape.Set(SatParams.From(t > 0, SatMode.Tape, t * TapeScale, MixLevelDb));
         width.Set(p.Width, p.MonoBassHz);
+        pick.Set(p.BandsOn ? p.PickAmount : 0);
         var c = Build(p);
         xo.Set(c.LowX, c.HighX);
         config = c;
@@ -607,6 +676,7 @@ public sealed class MasterChain
         foreach (var c in comps) c.Reset();
         tape.Reset();
         width.Reset();
+        pick.Reset();
         var cfg = config;
         wet = cfg.On ? 1 : 0;
         eqWet = cfg.EqOn ? 1 : 0;
@@ -618,6 +688,9 @@ public sealed class MasterChain
 
     /// <summary>For the band's meter: the deepest reduction since the last call, in dB (≤ 0).</summary>
     public double TakeReductionDb(int band) => Interlocked.Exchange(ref grMin[band], 0f);
+
+    /// <summary>For the Púa's meter: its deepest cut since the last call, in dB (≤ 0).</summary>
+    public double TakePickReductionDb() => pick.TakeReductionDb();
 
     static double Step(double from, double to, double step) => from < to ? Math.Min(to, from + step) : Math.Max(to, from - step);
 
@@ -639,6 +712,7 @@ public sealed class MasterChain
             foreach (var comp in comps) comp.Reset();
             tape.Reset();
             width.Reset();
+            pick.Reset();
             eqWet = c.EqOn ? 1 : 0;
             colorWet = c.ColorOn ? 1 : 0;
             tapeWet = c.TapeOn ? 1 : 0;
@@ -695,6 +769,9 @@ public sealed class MasterChain
                 y[i] += br[i];
             }
         }
+
+        // the fourth band, Púa: part of the multiband, before the colour
+        pick.Process(x, y);
 
         if (co0 > 0 || co1 > 0) Stage(x, y, co0, co1, StagePost);
         double ta0 = tapeWet, ta1 = Step(tapeWet, c.TapeOn ? 1 : 0, fadeStep * n);

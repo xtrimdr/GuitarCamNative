@@ -403,6 +403,7 @@ public partial class MainWindow
                 : ids.Sum(id => ClipEditing.DeleteRange(p, id, range.Start, range.End, Length));
             return keep;
         }, close ? "range-closed" : "range-deleted");
+        if (close) RefreshMarkers();
         Status(changed == 0 ? Loc.T("range.nothing") : Loc.T(close ? "range.closed" : "range.deleted", range.End - range.Start));
     }
 
@@ -446,15 +447,87 @@ public partial class MainWindow
         if (right != null) Timeline.SelectClip(Timeline.Selected, right);
     }
 
-    /// <summary>D, like Studio One: copies the selected clip right after its end and selects the copy.</summary>
-    async Task DuplicateSelection()
+    /// <summary>The clips D, Ctrl+C and Ctrl+X act on: the boxed ones, or the selected one.</summary>
+    List<string> PickedClipIds() => Timeline.BoxedClipIds is { Count: > 1 } boxed ? [.. boxed]
+        : sel != null && Timeline.SelectedClipId is { } id && sel.Clips.Any(c => c.Clip.Id == id) ? [id] : [];
+
+    /// <summary>The length the timeline knows for each clip (the media's own may still be loading).</summary>
+    Func<Clip, double?> LiveLengths()
     {
-        var clip = sel?.Clips.FirstOrDefault(c => c.Clip.Id == Timeline.SelectedClipId);
-        if (sel == null || clip == null) { Status(Loc.T("timeline.dup.pick")); return; }
+        var lengths = tracks.SelectMany(t => t.Clips).ToDictionary(c => c.Clip.Id, c => c.LengthSec);
+        return c => lengths.TryGetValue(c.Id, out double l) ? l : null;
+    }
+
+    /// <summary>D, like Studio One: copies the selected clip right after its end and selects the copy. Boxed clips,
+    /// even on several tracks, go as one block after the block's end (<see cref="ClipEditing.DuplicateMany"/>).</summary>
+    Task DuplicateSelection()
+    {
+        var ids = PickedClipIds();
+        if (ids.Count == 0) { Status(Loc.T("timeline.dup.pick")); return Task.CompletedTask; }
+        return DuplicateClips(ids);
+    }
+
+    async Task DuplicateClips(List<string> ids)
+    {
+        if (sel == null) return;
         string trackId = sel.Track.Id;
-        string? copy = null;
-        await EditTimeline(p => { copy = ClipEditing.Duplicate(p, clip.Clip.Id, clip.LengthSec); return trackId; }, "clip-duplicated");
-        if (copy != null) Timeline.SelectClip(Timeline.Selected, copy);
+        int keep = ids.IndexOf(Timeline.SelectedClipId ?? "");
+        var lengths = LiveLengths();
+        List<string> copies = [];
+        await EditTimeline(p => { copies = ClipEditing.DuplicateMany(p, ids, lengths); return trackId; },
+            ids.Count > 1 ? "clips-duplicated" : "clip-duplicated");
+        if (copies.Count == 0) return;
+        Timeline.SelectClip(Timeline.Selected, keep >= 0 ? copies[keep] : null);
+        Timeline.BoxClips(copies);
+    }
+
+    /// <summary>The clips Ctrl+C / Ctrl+X took, for Ctrl+V (in memory only, like any app's clipboard).</summary>
+    ClipClipboard? clipboard;
+
+    /// <summary>Ctrl+C, or Ctrl+X with <paramref name="cut"/> (which removes them in one undo step).</summary>
+    async Task CopySelection(bool cut)
+    {
+        if (store == null) return;
+        var ids = PickedClipIds();
+        if (ids.Count == 0 || ClipClipboard.Take(store.Project, ids, LiveLengths()) is not { } taken)
+        {
+            Status(Loc.T("clipboard.pick"));
+            return;
+        }
+        if (cut)
+        {
+            if (store.ReadOnly) return;
+            string? trackId = sel?.Track.Id;
+            await EditTimeline(p =>
+            {
+                foreach (var id in ids) ClipEditing.RemoveClip(p, id);
+                return trackId;
+            }, ids.Count > 1 ? "clips-cut" : "clip-cut");
+        }
+        clipboard = taken;
+        Status(Loc.T((cut ? "clipboard.cut" : "clipboard.copied") + (ids.Count > 1 ? ".many" : ""), ids.Count, Shortcuts.Label("paste")));
+    }
+
+    /// <summary>
+    /// Ctrl+V: the copied block starts at the playhead, its top track on the selected one (or the one it came from);
+    /// it ends up selected and, stopped, the playhead goes to its end, so pressing it again lays the next copy after it.
+    /// </summary>
+    async Task PasteClips()
+    {
+        if (store == null) return;
+        if (clipboard is not { } board) { Status(Loc.T("clipboard.empty", Shortcuts.Label("copy"))); return; }
+        double at = engine.PositionSec;
+        string? target = sel?.Track.Id;
+        List<string> pasted = [];
+        await EditTimeline(p =>
+        {
+            pasted = board.Paste(p, target, at);
+            return ClipEditing.Find(p, pasted[0]).Track.Id;
+        }, board.Items.Count > 1 ? "clips-pasted" : "clip-pasted");
+        if (pasted.Count == 0) return;
+        Timeline.SelectClip(Timeline.Selected, pasted[0]);
+        Timeline.BoxClips(pasted);
+        if (!engine.Playing) engine.Seek(at + board.LengthSec);
     }
 
     /// <summary>A menu entry's explanation waits this long under the pointer (asked by the user: the hints beside the
@@ -619,19 +692,16 @@ public partial class MainWindow
                 await EditTimeline(p => { right = ClipEditing.Split(p, id, at, clip.LengthSec); return track.Track.Id; }, "clip-split");
                 if (right != null) Timeline.SelectClip(Timeline.Selected, right);
             }, "Alt+X", enabled && under));
-            list.Add(MenuAction(Loc.T("menu.duplicate"), async () =>
-            {
-                string? copy = null;
-                await EditTimeline(p => { copy = ClipEditing.Duplicate(p, id, clip.LengthSec); return track.Track.Id; }, "clip-duplicated");
-                if (copy != null) Timeline.SelectClip(Timeline.Selected, copy);
-            }, "D", enabled));
+            // the boxed clips, when this is one of them, are duplicated, copied, aligned (or removed) all at once
+            var boxed = Timeline.BoxedClipIds.Contains(id) ? Timeline.BoxedClipIds.ToList() : [id];
+            list.Add(MenuAction(Loc.T("menu.duplicate"), () => DuplicateClips(boxed), Shortcuts.Label("duplicate"), enabled));
+            list.Add(MenuAction(Loc.T("menu.copy"), () => CopySelection(cut: false), Shortcuts.Label("copy")));
+            list.Add(MenuAction(Loc.T("menu.cut"), () => CopySelection(cut: true), Shortcuts.Label("cut"), enabled));
             list.Add(MenuAction(Loc.T("menu.toStart"), () => Command(p => ClipEditing.ToStart(p, id, clip.LengthSec), "clip-moved"), enabled: enabled));
             // where clips overlap the last one shows: this is on only when one over it covers part of it
             bool covered = track.Clips.SkipWhile(o => o != clip).Skip(1).Any(o => o.ClipStartSec < clip.ClipEndSec && o.ClipEndSec > clip.ClipStartSec);
             list.Add(MenuAction(Loc.T("menu.toFront"), () => Command(p => ClipEditing.BringToFront(p, id), "clip-to-front"),
                 enabled: enabled && covered, tip: Loc.T("menu.toFront.tip")));
-            // the boxed clips, when this is one of them, are aligned (or removed) all at once
-            var boxed = Timeline.BoxedClipIds.Contains(id) ? Timeline.BoxedClipIds.ToList() : [id];
             double grid = ClipEditing.GridSeconds(Timeline.SnapMode, Timeline.Bpm);
             list.Add(MenuAction(Loc.T(boxed.Count > 1 ? "menu.alignGrid.many" : "menu.alignGrid", boxed.Count), async () =>
             {
@@ -648,6 +718,7 @@ public partial class MainWindow
             var c = clip.Clip;
             list.Add(MenuAction(Loc.T("menu.resetClip"), () => Command(p => ClipEditing.Reset(p, id), "clip-reset"),
                 enabled: enabled && (c.TrimStartSec != 0 || c.TrimEndSec != 0 || c.FadeInSec != 0 || c.FadeOutSec != 0 || c.VideoFadeInSec != 0 || c.VideoFadeOutSec != 0)));
+            list.AddRange(TransitionItems(track, clip, point));
             list.Add(new Separator());
             list.Add(MenuAction(boxed.Count > 1 ? Loc.T("menu.removeClips", boxed.Count) : Loc.T("menu.removeClip"),
                 () => boxed.Count > 1 ? DeleteTimelineSelection() : Command(p => ClipEditing.RemoveClip(p, id), "clip-removed"), "Supr", enabled, danger: true));
@@ -665,6 +736,7 @@ public partial class MainWindow
             list.Add(MenuAction(Loc.T("menu.renameTrack") + "…", () => { RenameInPlace(track.Track.Id, () => takeName.Focus()); return Task.CompletedTask; }, enabled: enabled, icon: ""));
             list.Add(FolderSubmenu(track, enabled));
             list.Add(MenuAction(Loc.T("preset.save") + "…", () => { SavePreset(track, point); return Task.CompletedTask; }, enabled: true, icon: "", tip: Loc.T("preset.save.tip")));
+            list.Add(MenuAction(Loc.T("menu.paste"), PasteClips, Shortcuts.Label("paste"), enabled && clipboard != null, icon: "", tip: Loc.T("menu.paste.tip")));
             list.Add(new Separator());
             list.Add(MenuAction(Loc.T("menu.removeTrack"), () => EditTimeline(p => { ClipEditing.RemoveTrack(p, track.Track.Id); return null; }, "track-removed"),
                 "Supr", enabled, danger: true));

@@ -132,6 +132,9 @@ public sealed record ExportTakeSpec
     /// of a track share its panel (native only), each one shown during its own window.
     /// </summary>
     public int Panel { get; init; } = -1;
+    /// <summary>Native only: how the picture comes into this clip from the one before it in its panel (<see cref="ClipTransitions"/>).</summary>
+    public string Transition { get; init; } = ClipTransitions.CutId;
+    public double TransitionSec { get; init; } = ClipTransitions.DefaultSec;
 
     public ClipEnvelope.ClipWindow Window =>
         ClipEnvelope.Window(DurationSec, AtSec, TrimStartSec, TrimEndSec, SyncMs);
@@ -481,6 +484,37 @@ public static partial class Mp4Exporter
         maxDuration += tail;
 
         filterParts.Add($"color=c={BG}:s={outW}x{outH}:r=30:d={F3(contentEnd)}[base0]");
+
+        // video transitions between clips of a panel: how far each picture shows past its edges, and the fades they add
+        var lead = new double[numTakes];
+        var tailOver = new double[numTakes];
+        var transFades = new List<string>?[numTakes];
+        bool[] alpha = new bool[numTakes];
+        for (int panel = 0; panel < numPanels; panel++)
+        {
+            int[] members = [.. Enumerable.Range(0, numTakes).Where(i => PanelOf(i) == panel)];
+            var windows = members.Select(i => job.Takes[i].Window).ToArray();
+            for (int m = 0; m < members.Length; m++)
+            {
+                var t = job.Takes[members[m]];
+                if (ClipTransitions.Find(windows, m, ClipTransitions.Parse(t.Transition), t.TransitionSec) is not { } j) continue;
+                int o = members[j.Out], n = members[j.In];
+                lead[n] = Math.Max(lead[n], j.Overhang);
+                tailOver[o] = Math.Max(tailOver[o], j.Overhang);
+                if (j.Kind == TransitionKind.Crossfade)
+                {
+                    // the one stacked on top fades its alpha: rising if it comes in, sinking if it goes out
+                    int top = Math.Max(o, n);
+                    alpha[top] = true;
+                    (transFades[top] ??= []).Add($"fade=t={(top == n ? "in" : "out")}:st={F3(j.Start)}:d={F3(j.Sec)}:alpha=1");
+                }
+                else
+                {
+                    (transFades[o] ??= []).Add($"fade=t=out:st={F3(j.Start)}:d={F3(j.Sec / 2)}:color={BG}");
+                    (transFades[n] ??= []).Add($"fade=t=in:st={F3(j.At)}:d={F3(j.Sec / 2)}:color={BG}");
+                }
+            }
+        }
         string baseLabel = "base0";
 
         for (int i = 0; i < numTakes; i++)
@@ -496,8 +530,9 @@ public static partial class Mp4Exporter
 
             var w = t.Window;
             var fades = ClipEnvelope.Fades(w, t.FadeInSec, t.FadeOutSec, t.LinkVideoFades, t.VideoFadeInSec, t.VideoFadeOutSec);
-            double visStart = Math.Max(0, w.Start);
-            double visEnd = w.End;
+            // a transition shows the picture past the clip's edges (lead / tailOver); its own fades stay on its edges
+            double visStart = Math.Max(0, w.Start - lead[i]);
+            double visEnd = w.End + tailOver[i];
 
             // Video time = timeline time - net shift. Positive VideoOffsetMs (camera latency) pulls the video earlier.
             double netVideoShift = w.Origin - (t.VideoOffsetMs / 1000.0);
@@ -573,12 +608,21 @@ public static partial class Mp4Exporter
                     if (visStart > 0.0005) vf.Add($"tpad=start_duration={F3(visStart)}:color={BG}");
                     vf.Add("setpts=PTS-STARTPTS");
                 }
-                double vfIn = Math.Max(0, w.Start + fades.Video.FadeIn - visStart);
-                if (vfIn > 0.001) vf.Add($"fade=t=in:st={F3(visStart)}:d={F3(vfIn)}:color={BG}");
+                // past the file's end (a transition's overhang with nothing hidden there) the last frame holds
+                if (tailOver[i] > 0)
+                {
+                    vf.Add($"tpad=stop_mode=clone:stop_duration={F3(tailOver[i])}");
+                    vf.Add($"trim=end={F3(visEnd)}");
+                }
+                double clipStart = Math.Max(0, w.Start);
+                double vfIn = Math.Max(0, w.Start + fades.Video.FadeIn - clipStart);
+                if (vfIn > 0.001) vf.Add($"fade=t=in:st={F3(clipStart)}:d={F3(vfIn)}:color={BG}");
                 if (fades.Video.FadeOut > 0.001)
-                    vf.Add($"fade=t=out:st={F3(visEnd - fades.Video.FadeOut)}:d={F3(fades.Video.FadeOut)}:color={BG}");
+                    vf.Add($"fade=t=out:st={F3(w.End - fades.Video.FadeOut)}:d={F3(fades.Video.FadeOut)}:color={BG}");
+                if (alpha[i]) vf.Add("format=yuva420p");
+                if (transFades[i] is { } tf) vf.AddRange(tf);
 
-                chain.Add($"{picture},{string.Join(",", vf)},fps=30,format=yuv420p[v{i}]");
+                chain.Add($"{picture},{string.Join(",", vf)},fps=30,format={(alpha[i] ? "yuva420p" : "yuv420p")}[v{i}]");
                 string takeOut = $"v{i}";
                 if (parallel)
                 {

@@ -31,6 +31,7 @@ static class Program
                 "afinar" => DspCommands.Tune(a),
                 "transponer" => TransposeCommands.Run(a),
                 "looks" => VideoCommands.Looks(a),
+                "leer-video" => VideoCommands.ReadVideo(a),
                 "camara" => CameraCommands.Run(a),
                 "sistema" => SystemCommands.Run(a),
                 "proyecto" => ProjectCommands.Run(a),
@@ -72,13 +73,15 @@ static class Program
                                            renderiza la mezcla completa offline (sin la demora del limitador)
               exportar  [carpeta-proyecto] [--salida nombre] [--carpeta destino] [--calidad alta|estandar|borrador]
                         [--reemplazar] [--prueba] [--audio wav|mp3] [--stems]
-                        [--destino project|reels|youtube|ig-square|ig-portrait] [--lufs -14] [--cola 8]
+                        [--destino project|reels|youtube|ig-square|ig-portrait] [--volumen como-esta|youtube|…]
+                        [--lufs -14] [--cola 8]
                         [--codificador auto|cpu|nvenc|amf|qsv] [--resolucion 720|1080|1440|2160] [--bitrate 20]
                                            exporta el proyecto a MP4 (o la mezcla en WAV / MP3) con mezcla offline y FFmpeg;
                                            --stems deja además un WAV por pista en "<nombre> - stems";
-                                           --destino usa el cuadro y el volumen de esa red (Reels/Shorts/TikTok 9:16,
-                                           YouTube 16:9, Instagram 1:1 y 4:5, todas a -14 LUFS); --lufs lleva la mezcla
-                                           a ese volumen integrado; --cola deja sonar reverb y delay hasta N s después
+                                           --destino usa el cuadro de esa red (Reels/Shorts/TikTok 9:16, YouTube 16:9,
+                                           Instagram 1:1 y 4:5); el volumen es el Destino del master del proyecto
+                                           (--volumen lo cambia para esta exportación; --lufs lleva la mezcla a ese
+                                           volumen integrado); --cola deja sonar reverb y delay hasta N s después
                                            del último clip (8 por defecto, 0 = corta ahí). Muestra los LUFS del resultado;
                                            --codificador elige quién codifica el video (auto = la placa NVIDIA, AMD o
                                            Intel si hay, si no el procesador); --resolucion y --bitrate (Mbps) son
@@ -89,9 +92,17 @@ static class Program
               masterizar archivo.wav [--salida x_master.wav] [--cuanto 0.35] [--banda-graves|--banda-medios|--banda-agudos 0..1]
                         [--corte 0|20..150] [--barro dB] [--graves dB] [--presencia dB] [--aire dB] [--inclinacion dB]
                         [--cruce-graves 150] [--cruce-agudos 5000] [--cinta 0..1] [--ancho 0..2] [--graves-mono Hz]
-                        [--recorte 0..3] [--empuje 0] [--techo -0.3] [--release 80] [--sin-limitador]
+                        [--recorte 0..3] [--empuje 0] [--techo -1] [--release 80] [--sin-limitador]
+                        [--volumen youtube|instagram|tiktok|spotify|apple] [--pua 0..1]
+                        [--look natural|glue|bright|warm|front|pick [--cuanto-look 1]] [--sugerime]
                                            el mastering de la ventana sobre un WAV: cuánto comprime cada banda
-                                           ("Cuánto", 0 = nada), cuánto baja el limitador y los LUFS de entrada y salida
+                                           ("Cuánto", 0 = nada), cuánto baja el limitador y los LUFS de entrada y salida;
+                                           --volumen es el Destino: mide el archivo entero y usa la ganancia que lo lleva
+                                           al volumen de esa red en vez del empuje. Con mucha ganancia el soft clip se
+                                           lleva solo una parte (más de 2 dB sobre el techo: la mitad, hasta 4 dB);
+                                           --pua es la cuarta banda (baja 2-5 kHz cuando pega la púa); --look pone
+                                           un look al --cuanto-look (0 = Natural, 1 = el look entero); --sugerime
+                                           muestra qué oye en el archivo y qué propone, y masteriza con eso
               afinar    archivo.wav [--en segundos] [--umbral -50]
                                            la nota que oye el afinador en ese momento del archivo; --umbral es
                                            la sensibilidad de la ventana (dB, de -70 = muy sensible a -30)
@@ -105,6 +116,11 @@ static class Program
                                            lista los looks de color con cómo cambian unos colores de prueba y comprueba
                                            que queden en rango; con --look y --salida escribe ese look como LUT .cube
                                            (none = sin look), con los ajustes Blancos, Negros y Sensación de luz (-100..100)
+              leer-video archivo [--ancho 640] [--saltos 20] [--cpu] [--cuadro 12.5 [--salida cuadro.bmp]] [--comparar]
+                                           mide el decodificador de la preview (FFmpeg dentro de la app): abrir, leer
+                                           seguido, saltar y la memoria por cuadro; --cpu sin la placa de video;
+                                           --cuadro guarda ese cuadro; --comparar mide ffmpeg.exe por salto y la
+                                           diferencia de imagen con él
               camara    [listar]           lista las cámaras (DirectShow) y sus formatos; * = la que elige la app
               camara grabar [--dispositivo X | --ip 192.168.1.50:4747] [--resolucion native|1080p|720p|480p]
                         [--segundos 5] [--salida camara.mp4]
@@ -134,6 +150,9 @@ static class Program
               proyecto editar carpeta borrar-rango pista[,pista…] desde --hasta fin [--cerrar]   saca ese tramo de los clips de
                         esas pistas; queda el hueco, o con --cerrar lo de después se corre y lo tapa
               proyecto editar carpeta al-frente clip   lo pone arriba en su pista: donde se pisan, es el que se ve
+              proyecto editar carpeta transicion clip corte|fundido|negro [--segundos 0.5]   la transición de video que entra a ese clip
+                                           desde el que termina donde empieza (solo la imagen: el audio sigue cortando ahí)
+              proyecto transiciones carpeta   lista dónde se tocan los clips de cada pista y qué transición de video tiene cada unión
               proyecto editar carpeta nueva-carpeta [nombre] [--pistas id,id] | quitar-carpeta carpeta   agrupa pistas (quitarla las deja sueltas)
               proyecto editar carpeta a-carpeta pista carpeta|raiz [--en n] | sacar-de-carpeta pista | mover-carpeta carpeta n
               proyecto editar carpeta carpeta id [--nombre X] [--volumen 0.8] [--mute] [--solo] [--plegar]   fader, mute y solo de la carpeta (como un VCA)

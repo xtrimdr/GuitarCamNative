@@ -298,7 +298,7 @@ public partial class MainWindow
         {
             // the journals stay: whatever reached the WAVs comes back the next time the project opens
             recStopping = false;
-            Status(Loc.T("rec.closeFail", e.Message));
+            Toast(Loc.T("rec.closeFail", e.Message));
             return;
         }
         finally
@@ -328,7 +328,7 @@ public partial class MainWindow
             }
             if (kept.Count == 0)
             {
-                if (problem != null) Status(problem);
+                if (problem != null) Toast(problem);
                 else if (discard && !wasCountingIn) Status(takes.Count > 1
                     ? Loc.T("rec.discarded.many")
                     : Loc.T("rec.discarded.one"));
@@ -348,7 +348,7 @@ public partial class MainWindow
             if (st != store || kept.Any(k => st.Project.FindMedia(k.Take.Journal.MediaId) == null))
             {
                 // the journals stay, so the takes come back the next time the project opens
-                Status(Loc.T("rec.timelineFail", kept[0].Take.Journal.Name));
+                Toast(Loc.T("rec.timelineFail", kept[0].Take.Journal.Name));
                 return;
             }
             // a preset compressor sets its make-up and the rest from the new take's level (the web's updateComp)
@@ -360,14 +360,14 @@ public partial class MainWindow
                 }
             await FlushProjectOperation();
             foreach (var (t, _) in kept) st.EndRecording(t.Journal.MediaId);
-            Status(problem ?? (kept.Count == 1
+            Toast(problem ?? (kept.Count == 1
                 ? Loc.T("rec.saved.one", kept[0].Take.Journal.Name, $"{kept[0].Res.DurationSec:0.0}")
                 : Loc.T("rec.saved.many", kept.Count, string.Join(", ", kept.Select(k => $"\"{k.Take.Journal.Name}\"")), $"{kept[0].Res.DurationSec:0.0}")));
         }
         catch (IOException e)
         {
             // the journals stay: the takes are in media/ and the next open puts them back if this save never lands
-            Status(Loc.T("rec.saveFail", e.Message));
+            Toast(Loc.T("rec.saveFail", e.Message));
         }
         finally
         {

@@ -14,6 +14,8 @@ namespace GuitarCam.App;
 public partial class MainWindow
 {
     bool audioMode;
+    /// <summary>The timeline and the mixer live in <see cref="AudioArea"/>, one over the other (<see cref="MoveBottomView"/>).</summary>
+    bool stackedViews;
     /// <summary>Inspector controls that only mean something with a picture; hidden in solo audio.</summary>
     readonly List<Control> videoOnly = [];
 
@@ -63,9 +65,9 @@ public partial class MainWindow
         RefreshInspectorText();
         RefreshHistory();
         _ = camera.SetPaused(audio);
+        ApplyLayout();
         if (audio == audioMode) return;
         audioMode = audio;
-        MoveBottomView(audio);
         if (audio)
         {
             // the decoders are FFmpeg processes: none runs while nothing is shown. Detached here, on the UI thread,
@@ -77,13 +79,16 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// Solo audio: the timeline or the mixer moves up into the stage's place, beside the inspector, and the bottom row
-    /// closes; video: back to the bottom with the height it had (the remembered heights stay untouched meanwhile).
+    /// Stacked (solo audio, or the video in its own column in a Vertical layout): the timeline moves up beside the
+    /// inspector, the mixer opens under it and the bottom row closes; otherwise both go back to the bottom with the
+    /// height they had (the remembered heights stay untouched meanwhile).
     /// </summary>
-    void MoveBottomView(bool audio)
+    void MoveBottomView(bool stacked)
     {
+        if (stacked == stackedViews) return;
+        stackedViews = stacked;
         var row = Root.RowDefinitions[3];
-        if (audio)
+        if (stacked)
         {
             if (row.ActualHeight > 0) { if (mixerView) { if (!masteringView) mixerH = row.ActualHeight; } else timelineH = row.ActualHeight; }
             Root.Children.Remove(MixerHost);
@@ -109,21 +114,20 @@ public partial class MainWindow
             row.MinHeight = mixerView ? MixerMinH : TimelineMinH;
             row.Height = new GridLength(mixerView ? mixerH : timelineH);
         }
-        Root.RowDefinitions[2].Height = new GridLength(audio ? 0 : 4);
-        StageArea.IsVisible = !audio;
-        AudioArea.IsVisible = audio;
-        BottomSplitter.IsVisible = !audio;
-        TimelineHost.IsVisible = !mixerView || audio;
-        miniRow.IsVisible = !audio;
+        Root.RowDefinitions[2].Height = new GridLength(stacked ? 0 : 4);
+        AudioArea.IsVisible = stacked;
+        BottomSplitter.IsVisible = !stacked;
+        TimelineHost.IsVisible = ToolBox.IsEnabled = !mixerView || stacked;
+        miniRow.IsVisible = !stacked;
         ApplyAudioMixerRows();
         if (mixerView && masteringView) FitMasteringHeight();
         RefreshMixer();
     }
 
-    /// <summary>Solo audio: the mixer's row under the timeline (resizable with its splitter) is open only while the mixer is.</summary>
+    /// <summary>Stacked: the mixer's row under the timeline (resizable with its splitter) is open only while the mixer is.</summary>
     void ApplyAudioMixerRows()
     {
-        bool open = audioMode && mixerView;
+        bool open = stackedViews && mixerView;
         AudioSplitter.IsVisible = open;
         AudioArea.RowDefinitions[0].MinHeight = open ? TimelineMinH : 0;
         AudioArea.RowDefinitions[1].Height = new GridLength(open ? 4 : 0);

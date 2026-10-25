@@ -131,6 +131,10 @@
               </StackPanel>
             </StackPanel>
             <c:NotificationBell x:Name="Bell" VerticalAlignment="Center" />
+            <!-- the window's layout: Clásico / Vertical (MainWindow.Layout.cs) -->
+            <Button x:Name="LayoutButton" Classes="ghost" ToolTip.ShowOnDisabled="True" ToolTip.Tip="{loc:T winlayout.title}" AutomationProperties.Name="{loc:T winlayout.title}">
+              <TextBlock Classes="icon" Text="&#xE80A;" />
+            </Button>
             <c:ThemePicker x:Name="ThemePick" VerticalAlignment="Center" />
             <Button x:Name="SettingsButton" Classes="ghost" ToolTip.Tip="{loc:T settings.title}">
               <TextBlock Classes="icon" Text="&#xE713;" />
@@ -204,8 +208,9 @@
       </Grid>
     </Border>
 
-    <!-- inspector ("Canal"; folds to a column of icons in MainWindow.Inspector.cs) + preview -->
-    <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
+    <!-- inspector ("Canal"; folds to a column of icons in MainWindow.Inspector.cs) + preview; the window's layout
+         (MainWindow.Layout.cs) rearranges its columns -->
+    <Grid Grid.Row="1" x:Name="Workspace" ColumnDefinitions="Auto,*">
       <Border x:Name="InspectorBar" Width="290" ZIndex="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
         <ScrollViewer>
           <StackPanel x:Name="Inspector" Margin="14,16" Spacing="12" />

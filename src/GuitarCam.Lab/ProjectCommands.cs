@@ -26,6 +26,7 @@ static class ProjectCommands
             "versiones" => Versions(dir),
             "volver" => Restore(dir, a.Positional.Skip(2).FirstOrDefault()),
             "clips" => Clips(dir),
+            "transiciones" => Transitions(dir),
             "importar-audio" => ImportAudio(dir, a),
             "editar" => EditClips(dir, a),
             "historial" => HistoryCommands.Run(dir, a),
@@ -64,6 +65,26 @@ static class ProjectCommands
         return 0;
     }
 
+    /// <summary>The joins of every track and how the picture goes through each (only the video: the sound always cuts there).</summary>
+    static int Transitions(string dir)
+    {
+        using var store = ProjectStore.Open(dir);
+        var p = store.Project;
+        int n = 0;
+        foreach (var t in p.Tracks)
+            foreach (var (from, to, join) in ClipEditing.Joins(p, t))
+            {
+                n++;
+                var w = ClipEditing.Window(to, p.FindMedia(to.MediaId));
+                string what = join is { } j
+                    ? $"{(j.Kind == TransitionKind.Crossfade ? "fundido cruzado" : "pasar por negro")} de {j.Sec:0.00} s ({j.Start:0.000}–{j.End:0.000} s)"
+                    : "corte";
+                Console.WriteLine($"{t.Name} · {from.Id} → {to.Id} en {w.Start:0.000} s · {what}");
+            }
+        if (n == 0) Console.WriteLine("No hay clips que se toquen: cada uno empieza y termina solo.");
+        return 0;
+    }
+
     static int ImportAudio(string dir, Args a)
     {
         using var store = ProjectStore.Open(dir);
@@ -97,7 +118,13 @@ static class ProjectCommands
             case "fijar-corte": ClipEditing.FixCut(p, id); break;
             case "restaurar": ClipEditing.Reset(p, id); break;
             case "dividir": Console.WriteLine(ClipEditing.Split(p, id, double.Parse(value, System.Globalization.CultureInfo.InvariantCulture))); break;
-            case "duplicar": Console.WriteLine(ClipEditing.Duplicate(p, id)); break;
+            // several ids (comma-separated) go as one block, like D on a selection box
+            case "duplicar": Console.WriteLine(string.Join(",", ClipEditing.DuplicateMany(p, id.Split(',', StringSplitOptions.RemoveEmptyEntries)))); break;
+            case "pegar":
+                // copies the clips and pastes them with their start at "value" seconds, the top one on --pista (or where they were)
+                Console.WriteLine(string.Join(",", (ClipClipboard.Take(p, id.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                    ?? throw new ArgumentException("pegar: no encontré esos clips")).Paste(p, a.Get("pista"), double.Parse(value, System.Globalization.CultureInfo.InvariantCulture))));
+                break;
             case "ganancia": ClipEditing.SetGain(p, id, double.Parse(value, System.Globalization.CultureInfo.InvariantCulture)); break;
             case "curva":
                 // "segundos:dB" separated by commas, seconds from the start of the recording; empty = flat
@@ -159,6 +186,15 @@ static class ProjectCommands
                 int cut = a.Flag("cerrar") ? ClipEditing.DeleteRangeClosing(p, rangeTracks, rs, re) : rangeTracks.Sum(t => ClipEditing.DeleteRange(p, t, rs, re));
                 Console.WriteLine($"{cut} clip(s) cambiados");
                 break;
+            case "transicion":
+                // how the picture comes into this clip from the one before it: corte|fundido|negro [--segundos 0.5]
+                string? kind = value switch
+                {
+                    "" => null, "corte" => ClipTransitions.CutId, "fundido" => ClipTransitions.CrossfadeId, "negro" => ClipTransitions.DipId,
+                    _ => throw new ArgumentException($"transicion: \"{value}\" no existe. Opciones: corte, fundido, negro."),
+                };
+                ClipEditing.SetTransition(p, id, kind, a.Get("segundos") != null ? a.Double("segundos", ClipTransitions.DefaultSec) : null);
+                break;
             case "al-frente":
                 Console.WriteLine(ClipEditing.BringToFront(p, id) ? "El clip quedó al frente." : "Ya estaba al frente.");
                 break;
@@ -167,7 +203,7 @@ static class ProjectCommands
                 {
                     "mover" => ClipEditMode.Move, "recortar-inicio" => ClipEditMode.TrimStart,
                     "recortar-final" => ClipEditMode.TrimEnd, "fade-in" => ClipEditMode.FadeIn, "fade-out" => ClipEditMode.FadeOut,
-                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar|a-pista|inicio|alinear|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar; nueva-carpeta [nombre] --pistas id,id; a-carpeta pista[,pista…] carpeta|raiz [--en n]; sacar-de-carpeta pista; mover-carpeta carpeta n; quitar-carpeta carpeta [--con-pistas]; carpeta id [--nombre --volumen --mute --solo --plegar]; transponer pista semitonos; guardar-plantilla pista [nombre]; usar-plantilla id|nombre; borrar-rango pista[,pista…] desde --hasta fin [--cerrar]; al-frente clip"),
+                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar clip[,clip…]; pegar clip[,clip…] segundos [--pista id]; a-pista|inicio|alinear|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar; nueva-carpeta [nombre] --pistas id,id; a-carpeta pista[,pista…] carpeta|raiz [--en n]; sacar-de-carpeta pista; mover-carpeta carpeta n; quitar-carpeta carpeta [--con-pistas]; carpeta id [--nombre --volumen --mute --solo --plegar]; transponer pista semitonos; guardar-plantilla pista [nombre]; usar-plantilla id|nombre; borrar-rango pista[,pista…] desde --hasta fin [--cerrar]; al-frente clip; transicion clip corte|fundido|negro [--segundos 0.5]"),
                 };
                 var (_, clip) = ClipEditing.Find(p, id);
                 double dx = double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);

@@ -166,8 +166,8 @@ public partial class MainWindow
     {
         if (mixer == mixerView) return;
         var row = Root.RowDefinitions[3];
-        // in solo audio both views fill the stage's place and the bottom row stays closed
-        if (!audioMode)
+        // stacked (solo audio, Vertical layout) both views fill the place beside the inspector and the bottom row stays closed
+        if (!stackedViews)
         {
             // the Mastering view's fitted height is not the mixer's
             if (mixerView) { if (!masteringView) mixerH = row.ActualHeight; } else timelineH = row.ActualHeight;
@@ -175,9 +175,9 @@ public partial class MainWindow
             row.Height = new GridLength(mixer ? mixerH : timelineH);
         }
         mixerView = mixer;
-        TimelineHost.IsVisible = ToolBox.IsEnabled = !mixer || audioMode;
+        TimelineHost.IsVisible = ToolBox.IsEnabled = !mixer || stackedViews;
         MixerHost.IsVisible = mixer;
-        miniRow.IsVisible = !audioMode;
+        miniRow.IsVisible = !stackedViews;
         ApplyAudioMixerRows();
         ToolTip.SetTip(BottomSplitter, Loc.T(mixer ? "splitter.mixer" : "splitter.timeline"));
         TimelineViewButton.Classes.Set("on", !mixer);
@@ -190,7 +190,7 @@ public partial class MainWindow
     /// <summary>Remembers the height of the view on screen (gc.timelineHeight / gc.mixerHeight in the web).</summary>
     void SaveBottomHeight()
     {
-        if (audioMode || (mixerView && masteringView)) return;
+        if (stackedViews || (mixerView && masteringView)) return;
         double h = Root.RowDefinitions[3].ActualHeight;
         if (mixerView) mixerH = h; else timelineH = h;
         SaveViewPref(mixerView ? "mixerHeight" : "timelineHeight", h.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -547,8 +547,8 @@ public partial class MainWindow
             c.Children.Add(PanRow(t));
             var line = new Border { Height = 1, Background = Palette.Line, Margin = new Thickness(0, 6, 0, 0) };
             Grid.SetRow(line, 1); c.Children.Add(line);
-            // the right margin keeps the overlay scroll bar off the panels
-            var fx = new StackPanel { Spacing = 8, Margin = new Thickness(0, 8, 6, 6) };
+            // the scroll bar takes its own room beside the panels (App.axaml); the margin is the gap to it
+            var fx = new StackPanel { Spacing = 8, Margin = new Thickness(0, 8, 4, 6) };
             WideFx(fx, t);
             var scroll = new ScrollViewer { Content = fx, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
             Grid.SetRow(scroll, 2); c.Children.Add(scroll);

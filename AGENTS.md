@@ -56,9 +56,11 @@ tools/                 probar.ps1 (compila, comprueba y abre una copia de prueba
   que se pueda probar desde `gclab` vive ahí.
 - Cada función nueva del motor o del proyecto se puede ejercitar desde **`gclab`** (comando u opción nueva, con su
   ayuda actualizada). `gclab` usa cultura invariante (punto decimal) a propósito.
-- `net10.0-windows`, x64, `Nullable`. Audio por **ASIO** (NAudio), video con **FFmpeg/ffprobe** por proceso y pipe (en el PATH).
+- `net10.0-windows`, x64, `Nullable`. Audio por **ASIO** (NAudio), video con **FFmpeg/ffprobe** por proceso y pipe (en el PATH),
+  salvo la preview: la decodifica FFmpeg dentro del proceso (`NativeVideoSource`, FFmpeg.AutoGen con los DLL de FFmpeg 9
+  en `lib\ffmpeg`, fuera de git; ver el README).
 - Sin MVVM ni bindings: code-behind con controles con nombre. No metas un framework sin que el usuario lo pida.
-- Sin dependencias nuevas de NuGet sin preguntar. Hoy: Avalonia 11.3, NAudio 2.2.
+- Sin dependencias nuevas de NuGet sin preguntar. Hoy: Avalonia 11.3, NAudio 2.2, FFmpeg.AutoGen 9.0.
 
 ### Modelo del proyecto (`GuitarCam.Projects`)
 

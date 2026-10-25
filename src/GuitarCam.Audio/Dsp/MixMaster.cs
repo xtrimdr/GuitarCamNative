@@ -9,8 +9,11 @@ public sealed record MasteredMix(float[] Left, float[] Right, double DurationSec
 /// where they fall under <see cref="TailFloorDb"/>). Then it runs the same <see cref="MasterLimiter"/> playback uses,
 /// with a gain in front that brings the integrated loudness (<see cref="LoudnessMeter.Measure"/>, the master's LUFS
 /// cell) to the target of a social preset. The limiter squashes a bit of what the gain adds, so it measures again and
-/// corrects a few times; each pass is only the limiter, not the whole mix. Without a target the gain is the limiter's Empuje (0 dB by default) and the
-/// result is what <see cref="MixRenderer.Render"/> gives with the limiter on.
+/// corrects a few times; each pass is only the limiter, not the whole mix. It starts from the gain playback uses
+/// (<see cref="MasterLoudness.GainDb"/>): with a Destino already measured on this mix it lands on that same gain, so the
+/// export sounds like playback. Without a target the gain is the limiter's Empuje (0 dB by default) and the
+/// result is what <see cref="MixRenderer.Render"/> gives with the limiter on. The master's Destino uses this same
+/// function, in the background, to find its gain (<see cref="MasterLoudness"/>).
 /// </summary>
 public static class MixMaster
 {
@@ -53,11 +56,13 @@ public static class MixMaster
         int content = Math.Min(preL.Length, Math.Max(1, (int)Math.Ceiling(contentSec * sampleRate)));
         var (end, cut) = TailEnd(preL, preR, content, sampleRate);
 
-        // the limiter as the master card has it: Empuje is where the gain starts, a loudness target moves it from there;
-        // with the limiter off nothing holds the peaks, so the gain stops where the loudest true peak touches the Techo
+        // the limiter as the master has it: the gain starts where playback has it (the Empuje, or the gain last measured
+        // for this same Destino), a loudness target moves it from there; with the limiter off nothing holds the peaks, so
+        // the gain stops where the loudest true peak touches the Techo
         var mp = bus.Master;
-        double gain = mp.LimOn ? Math.Clamp(double.IsFinite(mp.LimDriveDb) ? mp.LimDriveDb : 0, 0, MasterParams.DriveMaxDb) : 0;
+        double gain = MasterLoudness.GainDb(mp.TargetLufs != targetLufs ? mp with { TargetLufs = null } : mp);
         double maxGain = mp.LimOn ? MaxGainDb : Math.Min(MaxGainDb, mp.LimCeilingDb - TruePeak.MeasureDb(preL, preR, end));
+        if (targetLufs != null) gain = Math.Min(gain, maxGain);
         var (l, r) = Limit(preL, preR, end, gain, sampleRate, cut, mp);
         double lufs = LoudnessMeter.Measure(l, r, sampleRate);
         if (targetLufs is { } t && double.IsFinite(t) && double.IsFinite(lufs))
@@ -103,8 +108,8 @@ public static class MixMaster
         var lim = new MasterLimiter(sampleRate, MasterLimiter.LookaheadSamples(sampleRate), MasterLimiter.CeilingDb);
         lim.Set(mp.LimCeilingDb, mp.LimReleaseMs);
         lim.Bypass = !mp.LimOn;
-        var clip = new SoftClipper();
-        clip.Set(mp.On && mp.ClipOn ? mp.ClipDb : 0, mp.LimCeilingDb);
+        var clip = new SoftClipper(sampleRate);
+        clip.Set(mp);
         int latency = lim.Latency;
         float g = (float)Math.Pow(10, gainDb / 20);
         var outL = new float[frames];

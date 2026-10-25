@@ -170,6 +170,27 @@ static class ClipChecks
         sp.Tracks[0].Clips.Add(cutAtZero);
         var wz = ClipEditing.Window(ClipEditing.Find(sp, ClipEditing.Duplicate(sp, cutAtZero.Id)).Clip, media);
         Check(Near(wz.Start, 9) && Near(wz.End, 19), "duplicar un clip cortado en 0 copia la toma entera");
+        // several clips on two tracks: one block after the block's end, and Ctrl+C / Ctrl+V keep the layout
+        var bp = new Project { Media = [media], Tracks = [new Track { Name = "A" }, new Track { Name = "B" }, new Track { Name = "C" }] };
+        var ba = new Clip { MediaId = media.Id, AtSec = 2, TrimEndSec = 6 };
+        var bb = new Clip { MediaId = media.Id, AtSec = 3, TrimEndSec = 4 };
+        bp.Tracks[0].Clips.Add(ba);
+        bp.Tracks[1].Clips.Add(bb);
+        var many = ClipEditing.DuplicateMany(bp, [ba.Id, bb.Id]);
+        var wa = ClipEditing.Window(ClipEditing.Find(bp, many[0]).Clip, media); var wb = ClipEditing.Window(ClipEditing.Find(bp, many[1]).Clip, media);
+        Check(bp.Tracks[0].Clips.Count == 2 && bp.Tracks[1].Clips.Count == 2 && Near(wa.Start, 9) && Near(wb.Start, 10),
+            "duplicar varios clips los copia en bloque, cada uno en su pista y a la misma distancia");
+        var board = ClipClipboard.Take(bp, [ba.Id, bb.Id])!;
+        var pasted = board.Paste(bp, bp.Tracks[2].Id, 20);
+        var (ta, pa) = ClipEditing.Find(bp, pasted[0]); var (tb, pb) = ClipEditing.Find(bp, pasted[1]);
+        Check(ta == bp.Tracks[1] && tb == bp.Tracks[2] && Near(ClipEditing.Window(pa, media).Start, 20) && Near(ClipEditing.Window(pb, media).Start, 21),
+            "pegar en la última pista sube el bloque para que entre y lo pone en el cabezal");
+        ba.GainDb = -6;
+        Check(board.Items[0].Clip.GainDb == 0 && board.Paste(bp, null, 0).Count == 2 && bp.Tracks[0].Clips.Count == 3,
+            "lo copiado no cambia si se edita el original, y sin pista vuelve a la suya");
+        bool foreign = false;
+        try { board.Paste(new Project { Media = [media], Tracks = [new Track(), new Track()] }, null, 0); } catch (ArgumentException) { foreign = true; }
+        Check(foreign, "no pega en otro proyecto");
         // delete a range: a clip of the media from 20 s to 30 s (AtSec 20, 10 s long), fades 0.5 / 0.7
         var rp = new Project { Media = [media], Tracks = [new Track { Name = "R" }, new Track { Name = "Otra" }] };
         var rc = new Clip { MediaId = media.Id, AtSec = 20, FadeInSec = 0.5, FadeOutSec = 0.7 };
@@ -209,6 +230,13 @@ static class ClipChecks
             "cerrar el hueco corre todo lo de después el largo del rango");
         Check(cb.Count == 1 && Near(cb[0].Start, 4) && Near(cb[0].End, 13), "un clip que empieza adentro del rango pierde ese pedazo y se corre al inicio del rango…");
         Check(Near(ClipEditing.Window(cp.Tracks[2].Clips[0], media).Start, 12), "…y las pistas fuera del rango no se mueven");
+        // markers follow only when the gap closes on every track
+        var mBefore = ProjectMarkers.Add(cp, 3, "Antes"); var mInside = ProjectMarkers.Add(cp, 5, "Adentro"); var mAfter = ProjectMarkers.Add(cp, 9, "Después");
+        ClipEditing.DeleteRangeClosing(cp, [cp.Tracks[0].Id, cp.Tracks[1].Id], 4, 6);
+        Check(mBefore.Sec == 3 && mInside.Sec == 5 && mAfter.Sec == 9, "cerrar el hueco en algunas pistas no mueve los marcadores");
+        ClipEditing.DeleteRangeClosing(cp, cp.Tracks.Select(t => t.Id), 4, 6);
+        Check(mBefore.Sec == 3 && mInside.Sec == 4 && Near(mAfter.Sec, 7) && cp.Markers.SequenceEqual<Marker>([mBefore, mInside, mAfter]),
+            "cerrándolo en todas, los de después se corren y los de adentro quedan al inicio del rango");
         var front = cp.Tracks[0].Clips[0];
         Check(ClipEditing.BringToFront(cp, front.Id) && cp.Tracks[0].Clips[^1] == front && !ClipEditing.BringToFront(cp, front.Id),
             "traer al frente pasa el clip al final de la pista (el que se ve)");
@@ -240,6 +268,58 @@ static class ClipChecks
         TrackDspChain.SampleClips([spec], 0, bl.Length, sr, bl, br);
         Check(Math.Abs(bl[500] - 1) < 1e-4 && bl[2500] == 0 && Math.Abs(bl[1500] - (float)ClipGainCurve.Gain(ClipGainCurve.MinDb / 2)) < 0.01,
             "el render sigue la curva (antes, en el fondo y a mitad de la bajada)");
+
+        // video transitions: stored on the clip that comes in, found where another ends, never touching the sound
+        var tp = new Project { Media = [media], Tracks = [new Track { Clips = [new Clip { MediaId = media.Id }] }] };
+        string first = tp.Tracks[0].Clips[0].Id;
+        ClipEditing.SetTransition(tp, first, "crossfade", 9);
+        string joinId = ClipEditing.Split(tp, first, 4);
+        var a = tp.Tracks[0].Clips[0];
+        var b = tp.Tracks[0].Clips[1];
+        Check(a.Transition == "crossfade" && b.Transition == "cut" && a.TransitionSec == GuitarCam.Audio.ClipTransitions.MaxSec,
+            "dividir deja la transición en la pieza de la izquierda y la nueva entra con corte; el largo se limita");
+        Check(ClipEditing.Joins(tp, tp.Tracks[0]) is [{ Join: null } cutJoin] && cutJoin.In == b, "dos piezas de un corte se tocan: una unión, con corte");
+        var fadesBefore = (a.FadeInSec, a.FadeOutSec, b.FadeInSec, b.FadeOutSec);
+        ClipEditing.SetTransition(tp, joinId, "dip", 1);
+        var dip = ClipEditing.Joins(tp, tp.Tracks[0]) is [{ Join: { } dj }] ? dj : default;
+        Check(dip.Kind == GuitarCam.Audio.TransitionKind.Dip && Near(dip.At, ClipEditing.Window(b, media).Start)
+            && Near(dip.Sec, 1) && dip.Overhang == 0, "pasar por negro va centrado en la unión y no muestra nada fuera de los clips");
+        Check((a.FadeInSec, a.FadeOutSec, b.FadeInSec, b.FadeOutSec) == fadesBefore, "la transición no toca los fundidos de audio");
+        var dw = GuitarCam.Audio.ClipTransitions.Weights(dip, dip.At - 0.25);
+        Check(Near(dw.Out, 0.5) && dw.In == 0 && GuitarCam.Audio.ClipTransitions.Weights(dip, dip.At).Out == 0, "pasar por negro: baja el que sale hasta la unión, después sube el otro");
+        ClipEditing.SetTransition(tp, joinId, "crossfade", 1);
+        var xf = ClipEditing.Joins(tp, tp.Tracks[0])[0].Join!.Value;
+        var xw = GuitarCam.Audio.ClipTransitions.Weights(xf, xf.At);
+        Check(xf.Overhang == 0.5 && xw.Out == 1 && Near(xw.In, 0.5), "fundido cruzado: los dos se ven medio segundo de cada lado, a mitad de camino en la unión");
+        // the sound crosses over the same stretch, with the audio the trims hide
+        var xa = ClipEditing.Window(a, media);
+        var xb = ClipEditing.Window(b, media);
+        var aj = GuitarCam.Audio.ClipTransitions.Audio(xf, xa, xb, true);
+        Check(aj.Overlap && aj.Linear && Near(aj.Start, xf.Start) && Near(aj.End, xf.End)
+            && Near(aj.OutGain(xf.At) + aj.InGain(xf.At), 1), "dos pedazos de una toma se funden en línea recta: suman exactamente la toma");
+        var ep = GuitarCam.Audio.ClipTransitions.Audio(xf, xa, xb, false);
+        Check(!ep.Linear && Near(ep.OutGain(xf.At) * ep.OutGain(xf.At) + ep.InGain(xf.At) * ep.InGain(xf.At), 1), "tomas distintas se funden a potencia constante");
+        var bare = GuitarCam.Audio.ClipTransitions.Audio(xf, ClipEnvelope.Window(4, 0), ClipEnvelope.Window(6, 4), false);
+        Check(!bare.Overlap && bare.OutGain(4) == 0 && bare.InGain(4) == 0 && bare.OutGain(3.99) == 1 && bare.InGain(4.01) == 1,
+            "sin audio escondido de ningún lado, cruza con un fundido de 10 ms en la unión (sin clic)");
+        // rendered: a steady take split in two with a crossfade stays steady across the join
+        const int xr = 1000;
+        var steady = Enumerable.Repeat(1f, 10 * xr).ToArray();
+        MixClipSpec[] pieces =
+        [
+            new() { Left = steady, Right = steady, DurationSec = 10, TrimEndSec = 6, TakeId = "t" },
+            new() { Left = steady, Right = steady, DurationSec = 10, TrimStartSec = 4, Transition = "crossfade", TransitionSec = 1, TakeId = "t" },
+        ];
+        var xl = new float[10 * xr];
+        var xrr = new float[10 * xr];
+        TrackDspChain.SampleClips(pieces, 0, xl.Length, xr, xl, xrr, TrackDspChain.AudioJoins(pieces, xr));
+        Check(xl.All(v => Math.Abs(v - 1) < 1e-4), "una toma dividida con fundido cruzado suena igual que entera");
+        var cutLeft = new float[10 * xr];
+        TrackDspChain.SampleClips(pieces, 0, cutLeft.Length, xr, cutLeft, new float[10 * xr], TrackDspChain.AudioJoins(
+            [pieces[0], new() { Left = steady, Right = steady, DurationSec = 10, TrimStartSec = 4, Transition = "crossfade", TransitionSec = 1, TakeId = "u" }], xr));
+        Check(cutLeft[3500] > 0.99 && cutLeft[3999] < 1.42 && cutLeft[4000] > 1.3, "tomas distintas: a potencia constante (sube hasta √2 con la misma señal)");
+        b.AtSec += 1;
+        Check(ClipEditing.Joins(tp, tp.Tracks[0]).Count == 0, "si el clip se separa, la unión desaparece (y la transición queda guardada sin efecto)");
         Console.WriteLine($"Edición de clips: {n} comprobaciones correctas (sin modificar archivos).");
         return 0;
     }

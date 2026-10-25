@@ -27,8 +27,11 @@ public sealed class ToastHost : StackPanel
         VerticalAlignment = VerticalAlignment.Bottom;
     }
 
-    /// <summary>Shows a toast (UI thread). <paramref name="title"/> goes above as a section label.</summary>
-    public void Show(string text, string? title = null, bool sticky = false)
+    /// <summary>
+    /// Shows a toast (UI thread). <paramref name="title"/> goes above as a section label; <paramref name="action"/>
+    /// adds a button under the text ("Mostrar" on a finished export) that runs it and closes the toast.
+    /// </summary>
+    public void Show(string text, string? title = null, bool sticky = false, (string Label, Action Run)? action = null)
     {
         if (string.IsNullOrWhiteSpace(text)) return;
         Border? card = null;
@@ -43,6 +46,12 @@ public sealed class ToastHost : StackPanel
         if (title != null)
             body.Children.Add(new TextBlock { Text = title.ToUpperInvariant(), FontSize = 10.5, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.8, Foreground = Palette.Accent });
         body.Children.Add(new TextBlock { Text = text, FontSize = 12, Foreground = Palette.Fg, TextWrapping = TextWrapping.Wrap });
+        if (action is var (label, run))
+        {
+            var act = new Button { Classes = { "chip" }, Content = label, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 0) };
+            act.Click += (_, _) => { Close(); run(); };
+            body.Children.Add(act);
+        }
 
         var close = new Button
         {

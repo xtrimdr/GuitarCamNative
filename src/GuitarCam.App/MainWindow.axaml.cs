@@ -57,14 +57,20 @@ public partial class MainWindow : Window
             else BeginMoveDrag(e);
         };
 
-        SessionChip.Click += async (_, _) => await ShowProjects();
+        SessionChip.Click += async (_, _) => await ShowSessionMenu();
         ExportButton.Click += (_, _) =>
         {
             if (store == null || restoring || Projects.IsVisible || RecordingBusy) return;
             if (Export.TryOpen(store, tracks, out var error)) { engine.Pause(); engine.Seek(0); }
             else if (error != null) Toast(error);
         };
-        Export.ExportCompleted += _ => { MarkDirty(); SaveSoon(); RefreshHistory(); };
+        Export.ExportCompleted += res =>
+        {
+            MarkDirty(); SaveSoon(); RefreshHistory();
+            bool video = res.FileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase);
+            Toast(res.FileName, Loc.T(video ? "exp.done.video" : "exp.done.audio"),
+                action: (Loc.T("proj.reveal"), () => RevealInExplorer(null, res.FullPath)));
+        };
         Export.Dismissed += () => Timeline.Focus();
         Settings.Attach(engine, camera, () => RecordingBusy);
         Settings.AudioChanged += ShowAudioStatus;
@@ -128,8 +134,10 @@ public partial class MainWindow : Window
 
         InitInspector();
         InitTrackLook();
+        InitTransitions();
         InitProjectBar();
         InitMixer();
+        InitLayout();
         InitTopBar();
         InitMeters();
         InitShortcutTips();
@@ -237,8 +245,8 @@ public partial class MainWindow : Window
         {
             SessionLog.Write("ventana cerrada");
             timer.Stop();
-            // in solo audio the bottom row is closed: the heights remembered before stay
-            try { if (!audioMode && !(mixerView && masteringView)) AppConfig.Set(mixerView ? "mixerHeight" : "timelineHeight", Root.RowDefinitions[3].ActualHeight.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
+            // stacked (solo audio, Vertical layout) the bottom row is closed: the heights remembered before stay
+            try { if (!stackedViews && !(mixerView && masteringView)) AppConfig.Set(mixerView ? "mixerHeight" : "timelineHeight", Root.RowDefinitions[3].ActualHeight.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* View preference only. */ }
             engine.Dispose();
             camera.Dispose();
@@ -249,10 +257,10 @@ public partial class MainWindow : Window
     void Status(string s) => Bell.Add(s);
 
     /// <summary>A message worth seeing now: a toast, and in the bell like every other one.</summary>
-    void Toast(string s, string? title = null, bool sticky = false)
+    void Toast(string s, string? title = null, bool sticky = false, (string Label, Action Run)? action = null)
     {
         Bell.Add(s);
-        Toasts.Show(s, title, sticky);
+        Toasts.Show(s, title, sticky, action);
     }
 
     // --- saving ----------------------------------------------------------------------------------
@@ -262,6 +270,7 @@ public partial class MainWindow : Window
         if (store == null || store.ReadOnly) return;
         dirty = true;
         ArmSave(restart: true);
+        LoudnessSoon();
     }
 
     /// <summary>
@@ -311,11 +320,14 @@ public partial class MainWindow : Window
             }
             catch (Exception e)
             {
+                // only the first failure in a row pops up: the retries would bring one every 1.5 s
+                bool first = saveFailure == null;
                 saveFailure = e;
                 Dispatcher.UIThread.Post(() =>
                 {
                     if (st != store) return;
-                    Status(Loc.T("main.saveRetry", e.Message));
+                    if (first) Toast(Loc.T("main.saveRetry", e.Message));
+                    else Status(Loc.T("main.saveRetry", e.Message));
                     // it retries soon in every mode: what the user asked to save has to get there
                     dirty = true;
                     saveTimer.Stop();
@@ -368,7 +380,7 @@ public partial class MainWindow : Window
             }
             catch (Exception e)
             {
-                Status(Loc.T("main.saveFail", e.Message));
+                Toast(Loc.T("main.saveFail", e.Message));
             }
         }
     }
@@ -642,6 +654,12 @@ public partial class MainWindow : Window
             case "duplicate":
                 await DuplicateSelection();
                 break;
+            case "copy" or "cut":
+                await CopySelection(cut: action == "cut");
+                break;
+            case "paste":
+                await PasteClips();
+                break;
             case "mixer":
                 if (mixerView && !masteringView) SetMixerView(false);
                 else ShowBottomView(mastering: false);
@@ -725,8 +743,12 @@ public partial class MainWindow : Window
         bool newFrame = false;
         var look = store?.Project.Settings;
         foreach (var t in tracks)
+        {
+            // first the transitions, so a crossfade's two clips both ask their decoders for a frame
+            newFrame |= t.UpdateTransitions(pos);
             foreach (var c in t.Clips)
                 newFrame |= c.UpdateVideo(pos, look?.Color, look?.VideoFx);
+        }
         if (newFrame || videoFade) Preview.InvalidateVisual();
         RefreshTransport(pos);
         if (RecordingBusy) RefreshRecording();
@@ -736,6 +758,7 @@ public partial class MainWindow : Window
         InputMeter.Push(m.InL, m.InR);
         Live.Meter.Push(m.InL, m.InR);
         TickCamera();
+        TickAudioDriver();
         TickTopBar();
         TickInspectorSpectrum();
         TickMeters();

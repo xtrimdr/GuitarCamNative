@@ -232,8 +232,8 @@
                          HorizontalAlignment="Right" VerticalAlignment="Center" />
             </Grid>
             <TextBlock x:Name="QualityDescText" FontSize="11" Foreground="{StaticResource Faint}" />
-            <!-- solo audio (native only): master to the streaming loudness -->
-            <CheckBox x:Name="AudioLufsCheck" Content="{loc:T exp.audioLufs}" FontSize="12" ToolTip.Tip="{loc:T exp.audioLufs.tip}" IsVisible="False" />
+            <!-- native only: the loudness comes from the master's Destino -->
+            <TextBlock x:Name="LoudnessText" FontSize="11" Foreground="{StaticResource Faint}" TextWrapping="Wrap" ToolTip.Tip="{loc:T exp.loudness.tip}" />
             <!-- native only: each track to its own WAV next to the export -->
             <CheckBox x:Name="StemsCheck" Content="{loc:T exp.stems}" FontSize="12" ToolTip.Tip="{loc:T exp.stems.tip}" />
           </StackPanel>

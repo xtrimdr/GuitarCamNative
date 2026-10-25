@@ -144,6 +144,17 @@ public partial class MainWindow
         ToolTip.SetTip(AudioCell, engine.Status);
     }
 
+    bool audioStallShown;
+
+    /// <summary>The interface stopped calling back (unplugged, driver hung): a toast once, until it calls again or is reopened.</summary>
+    void TickAudioDriver()
+    {
+        bool stalled = engine.Stalled;
+        if (stalled == audioStallShown) return;
+        audioStallShown = stalled;
+        if (stalled) Toast(Loc.T("toast.audio.lost", engine.DriverName));
+    }
+
     void RefreshTransport(double pos)
     {
         bool bars = Timeline.RulerInBars;

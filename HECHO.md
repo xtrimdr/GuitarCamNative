@@ -3,6 +3,62 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-25: Transiciones de video entre clips de una pista (Corte / Fundido cruzado / Pasar por negro, 0,1 a 3 s,
+  0,5 por defecto), solo la imagen: el audio sigue cortando en la unión. Un chip con cámara en cada unión del timeline
+  abre el menú (`MainWindow.Transitions.cs`, `TimelineView.DrawJoins`); también desde el clic derecho del clip. Se
+  guarda en el clip que entra (`Clip.Transition`, `TransitionSec`); la cuenta es una sola para preview y exportación
+  (`GuitarCam.Audio/ClipTransitions.cs`; `LiveTrack.UpdateTransitions`, `PreviewView.DrawPicture`; en
+  `Mp4Exporter`, `fade` con alfa o a color y `tpad` para congelar el borde sin video escondido).
+  `gclab proyecto editar … transicion` y `gclab proyecto transiciones`.
+- 2026-10-25: Preview sin cortes al pasar de un clip a otro: el video se decodifica con FFmpeg dentro del proceso
+  (`GuitarCam.Audio/NativeVideoSource.cs`, FFmpeg.AutoGen 9 + DLL en `lib\ffmpeg`; un salto en una toma de 720p pasa
+  de ~130 ms a ~20 ms, sin asignar memoria por cuadro, colores iguales a ffmpeg.exe), con ffmpeg.exe por pipe de
+  respaldo (`Video/PipeVideoSource.cs`). Cada clip arranca su decodificador 1 s antes de empezar y muestra el primer
+  cuadro en el mismo tick (`LiveClip.PreRollSec`, `VideoDecoder.Want`); un panel no muestra cuadros viejos
+  (`LiveClip.Fresh`); los decodificadores sin usar se cierran a los 3 s (`VideoDecoder.Idle`). `gclab leer-video` lo mide.
+
+- 2026-10-25: Clips: **Ctrl+C / Ctrl+X / Ctrl+V** (`ClipClipboard`, `MainWindow.Timeline.cs`, también en los menús de
+  clic derecho) pegan en el cabezal desde la pista elegida, con la distancia entre pistas; **D** duplica varios clips
+  marcados, en varias pistas, como un bloque (`ClipEditing.DuplicateMany`). `gclab proyecto editar … duplicar a,b` y
+  `pegar`, con sus comprobaciones en `verificar-clips`.
+- 2026-10-25: Masterización, Etapa 3: panel **Look** al principio de la cadena con seis looks (Natural, Pegadito,
+  Brillante, Cálido, Al frente, Domar la púa, como los describió el usuario; `Dsp/MasterLooks.cs`) y su perilla
+  Cuánto (de Natural al look entero, reescribe las perillas; tocar una a mano lo deja en "A mano"). Cuarta banda
+  **Púa** (`MasterPickTamer`): un corte dinámico en 2–5 kHz (en − k·banda: en 0 pasa exacto) contra el nivel sostenido
+  de la banda, que baja los ataques y deja el tono; con su perilla y su barra en el multibanda. **Sugerime**
+  (`Dsp/MasterSuggest.cs`, `MainWindow.Suggest.cs`): escucha la mezcla antes del master en segundo plano (octavas
+  contra el balance de una mezcla terminada y lo picuda que es cada banda) y muestra una tarjeta con lo que propone y
+  Aplicar / Cancelar, como eligió el usuario. `gclab masterizar --look --cuanto-look --pua --sugerime`; tres
+  comprobaciones nuevas en `comprobar-dsp`.
+- 2026-10-25: Masterización, Etapa 1 completa: gráfico chico del multibanda en lugar de las dos perillas de cruce, con
+  la curva de cada banda (Linkwitz-Riley) que baja con lo que comprime y los cruces que se arrastran (Shift fino, doble
+  clic vuelve) (`Controls/MasterBandsGraph.cs`, sin asignar por cuadro).
+- 2026-10-25: Masterización, Etapa 2: el **Destino** de LUFS pasa al master (Como está, YouTube, Instagram, TikTok,
+  Spotify −14, Apple Music −16; `MasterLoudness`, `MasterSettings.Target`). Después de cada edición mide la mezcla en
+  segundo plano con el mismo `MixMaster.Render` de la exportación y guarda la ganancia (`TargetGainDb`), que la
+  reproducción aplica en lugar del Empuje (`MainWindow.Loudness.cs`); la exportación arranca de ella y cae en la misma,
+  así que se escucha igual que sale. El diálogo de exportar ya no elige volumen (los presets solo cambian el cuadro; se
+  fue la casilla de −14 de "Exportar audio"). Soft clip con **Auto**: de lo que el pico más fuerte pasa del Techo más
+  allá de 2 dB, se lleva la mitad (hasta 4 dB) y el resto queda para el limitador; el ADAA va solo sobre lo que recorta,
+  así que debajo del codo pasa exacto (antes filtraba los agudos) y su medidor ya no marca de más. `gclab masterizar
+  --volumen`, `gclab exportar --volumen`; tres comprobaciones nuevas en `comprobar-dsp`.
+- 2026-10-25: Scrollbars de toda la app fijos: de 8 px y sin flechas cuando hacen falta, ocultos si no, y al costado
+  del contenido en vez de encima (`App.axaml`). Mastering llega bien al final de la cadena (margen en el contenido, no
+  `Padding` del `ScrollViewer`), sin scroll vertical, y Salida va en su propia caja igual a la del master, con los
+  paneles de las dos del mismo alto (`MainWindow.Master.cs`).
+- 2026-10-25: Diseño de la ventana (etapas 1 y 2 de "Paneles reubicables"): botón en la barra de título con Clásico y
+  Vertical (video de arriba a abajo a la izquierda o a la derecha, timeline al lado y mixer debajo, columna de ancho
+  arrastrable), guardado en `config.json`, y un toast que lo ofrece al pasar a 9:16 (`MainWindow.Layout.cs`;
+  `MoveBottomView` ahora sirve para solo audio y para Vertical).
+- 2026-10-25: "Volver a una versión guardada" en la ventana: el chip del proyecto abre un menú con "Proyectos…" y las
+  últimas 20 versiones de `historial/` (`MainWindow.Versions.cs`, `ProjectStore.Restore`); antes solo con gclab.
+- 2026-10-25: Avisos que salen como toast, elegidos por el usuario: errores al guardar (proyecto y tomas), toma
+  guardada, exportación terminada con "Mostrar" (`ToastHost` ahora acepta un botón), cámara que se corta
+  (`TickCamera`) e interfaz de audio que deja de responder (`PlaybackEngine.Stalled`, `TickAudioDriver`).
+- 2026-10-25: "Borrar y cerrar el hueco" sobre todas las pistas corre también los marcadores: los de después se
+  corren el largo del rango y los de adentro quedan al inicio del rango, sin perderse (`ProjectMarkers.CloseGap`,
+  desde `ClipEditing.DeleteRangeClosing`; vuelve con deshacer). En algunas pistas solas no se mueven, y el rango A–B
+  tampoco. Comprobado en `gclab proyecto verificar-clips`.
 - 2026-10-25: "Avanzado" en el diálogo de exportar MP4, plegado: resolución 720p / 1080p / 1440p / 4K y bitrate a
   mano (1–100 Mbps, o Automático = el de la calidad), recordados por proyecto (`ExportSettings.Resolution`,
   `BitrateMbps`; `Mp4Exporter.ExportSize`, `VideoEncoders.Args`). `gclab exportar --resolucion --bitrate`.

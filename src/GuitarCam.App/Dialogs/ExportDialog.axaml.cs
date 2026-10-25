@@ -365,7 +365,6 @@ public sealed partial class ExportDialog : UserControl
         var savedQuality = Mp4Exporter.ParseQuality(p?.Settings.Export.Quality);
         if (initial == null) audioFormat = AudioExporter.ParseFormat(p?.Settings.Export.AudioFormat);
         if (initial == null) StemsCheck.IsChecked = p?.Settings.Export.Stems == true;
-        if (initial == null) AudioLufsCheck.IsChecked = p?.Settings.Export.AudioLufs == true;
         target = ExportTargets.Get(initial?.Target ?? p?.Settings.Export.Target).Id;
 
         SetFileNameInput(initial?.FileName ?? defaultName);
@@ -552,12 +551,16 @@ public sealed partial class ExportDialog : UserControl
         FormatSeg.IsVisible = audio;
         QualitySeg.IsVisible = !audio;
         TargetPanel.IsVisible = !audio;
-        AudioLufsCheck.IsVisible = audio;
         foreach (var c in TargetButtons.Children)
             if (c is Button b) SetActiveSegment(b, (string?)b.Tag == target);
-        TargetDescText.Text = preset.Lufs is { } lufs
-            ? Loc.T("exp.target.desc", outW, outH, aspect, Lufs(lufs))
+        TargetDescText.Text = preset.Aspect != null
+            ? Loc.T("exp.target.desc", outW, outH, aspect)
             : Loc.T("exp.target.project.desc", aspect);
+        // the loudness is the master's Destino, heard while mixing (MasterLoudness)
+        var dest = MasterLoudness.Get(currentStore?.Project.Settings.Master.Target);
+        LoudnessText.Text = dest.Lufs is { } goal
+            ? Loc.T("exp.loudness.target", Lufs(goal), Loc.Or("master.target." + dest.Id, dest.Label))
+            : Loc.T("exp.loudness.asis");
         ToolTip.SetTip(HeaderSubtitle, null);
 
         string shownFolder = check?.Folder ?? (folder ?? Loc.T("exp.projectFolder"));
@@ -653,9 +656,7 @@ public sealed partial class ExportDialog : UserControl
         if (currentStore == null || check == null || !check.FolderExists || checkError != null || picking) return;
         if (fileName.Trim().Length == 0) return;
 
-        double? lufs = audio
-            ? (AudioLufsCheck.IsChecked == true ? ExportTargets.StreamingLufs : null)
-            : ExportTargets.Get(target).Lufs;
+        double? lufs = MasterLoudness.Get(currentStore.Project.Settings.Master.Target).Lufs;
         var opts = new ExportOptions(folder, check.FileName, check.Exists, quality, target, lufs, resolution, bitrateMbps);
         await RunExportJob(opts);
     }
@@ -708,7 +709,6 @@ public sealed partial class ExportDialog : UserControl
                 cts.Token);
 
             currentStore.Project.Settings.Export.Stems = withStems;
-            if (audio) currentStore.Project.Settings.Export.AudioLufs = opts.TargetLufs != null;
             RecordExport(currentStore.Project, opts, res, audio ? format : null);
             ExportCompleted?.Invoke(res);
             if (withStems)
@@ -1198,6 +1198,8 @@ public sealed partial class ExportDialog : UserControl
                 PanX = c.Framing.PanX,
                 PanY = c.Framing.PanY,
                 Mirror = c.Framing.Mirror,
+                Transition = c.Transition,
+                TransitionSec = c.TransitionSec,
                 Panel = panel,
             };
         }
@@ -1259,6 +1261,9 @@ public sealed partial class ExportDialog : UserControl
                     GainDb = c.GainDb,
                     GainCurve = c.CurvePoints(),
                     SyncMs = c.EffectiveSyncMs(m),
+                    Transition = c.Transition,
+                    TransitionSec = c.TransitionSec,
+                    TakeId = c.MediaId,
                 });
             }
 
