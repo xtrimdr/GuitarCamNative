@@ -415,8 +415,8 @@ public static class ClipEditing
     }
 
     /// <summary>
-    /// How the picture comes into a clip from the one before it (native only, <see cref="ClipTransitions"/>): the
-    /// kind ("cut", "crossfade", "dip") and its length in seconds; null keeps that part. Never touches the sound.
+    /// How a clip comes in from the one before it (native only, <see cref="ClipTransitions"/>): the
+    /// kind ("cut", "crossfade", "dip") and its length in seconds; null keeps that part. Never touches the clip's own fades.
     /// </summary>
     public static void SetTransition(Project p, string id, string? kind, double? sec)
     {

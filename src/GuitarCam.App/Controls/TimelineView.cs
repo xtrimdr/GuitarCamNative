@@ -1751,9 +1751,9 @@ public sealed partial class TimelineView : Control
 
     /// <summary>
     /// The joins between clips of a track (native only, asked by the user): a square chip on each, centered on it
-    /// halfway down the clips, so it shows over the frames. White with a bow tie (⋈) while it is a cut; of the accent
-    /// with the bow tie (crossfade) or a V (dip) when it has a transition, with a thin accent line along the clips'
-    /// top over the stretch it covers. It sits over the edge handles there and wins their clicks. A click opens its menu.
+    /// halfway down the clips, so it shows over the frames. White with a bar (|) while it is a cut; of the accent
+    /// with an X (crossfade: a fade out crossing a fade in, like the clips' fade lines) or a V (dip) when it has a transition,
+    /// with arrows out of it to both ends of the stretch it covers (<see cref="DrawJoinSpan"/>). It sits over the edge handles there and wins their clicks. A click opens its menu.
     /// </summary>
     void DrawJoins(DrawingContext ctx, int lane, double W)
     {
@@ -1771,27 +1771,52 @@ public sealed partial class TimelineView : Control
             if (x < HeaderW || x > W) continue;
             var chip = JoinChip(lane, x);
             bool over = gesture == null && chip.Inflate(2).Contains(lastPointer);
-            if (join is { } j)
-            {
-                double l = Math.Max(HeaderW, X(j.Start));
-                ctx.FillRectangle(Palette.Accent, new Rect(l, LaneY(lane) + 5, Math.Max(1, X(j.End) - l), 2));
-            }
+            if (join is { } j) DrawJoinSpan(ctx, chip, Math.Max(HeaderW, X(j.Start)), X(j.End));
             var fill = join != null ? Palette.AccentColor : Palette.FgColor;
             ctx.DrawRectangle(Palette.Alpha(fill, over || join != null ? 1 : 0.9), Palette.Pen(Palette.Alpha(Colors.Black, 0.6)), chip.Deflate(0.5), 5, 5);
             var pen = Palette.Pen(Palette.Alpha(Palette.AppColor, 1), 1.5);
             double gx = chip.X + 5.5, gy = chip.Y + 6, gs = 8;
-            if (join is { Kind: TransitionKind.Dip })
+            switch (join?.Kind)
             {
-                ctx.DrawLine(pen, new Point(gx, gy), new Point(gx + gs / 2, gy + gs));
-                ctx.DrawLine(pen, new Point(gx + gs / 2, gy + gs), new Point(gx + gs, gy));
+                case TransitionKind.Crossfade:
+                    ctx.DrawLine(pen, new Point(gx, gy), new Point(gx + gs, gy + gs));
+                    ctx.DrawLine(pen, new Point(gx, gy + gs), new Point(gx + gs, gy));
+                    break;
+                case TransitionKind.Dip:
+                    ctx.DrawLine(pen, new Point(gx, gy), new Point(gx + gs / 2, gy + gs));
+                    ctx.DrawLine(pen, new Point(gx + gs / 2, gy + gs), new Point(gx + gs, gy));
+                    break;
+                default:
+                    ctx.DrawLine(pen, new Point(gx + gs / 2, gy - 1), new Point(gx + gs / 2, gy + gs + 1));
+                    break;
             }
-            else
+        }
+    }
+
+    /// <summary>
+    /// How long a transition lasts (asked by the user: a line along the clips' top barely showed): an accent line out
+    /// of each side of the chip, at its height, to an arrowhead at that end, over a dark outline so it reads over the frames.
+    /// </summary>
+    static void DrawJoinSpan(DrawingContext ctx, Rect chip, double left, double right)
+    {
+        double y = chip.Center.Y, a = 4;
+        var shade = Palette.Pen(Palette.Alpha(Colors.Black, 0.7), 3.5, PenLineCap.Round, PenLineJoin.Round);
+        var pen = Palette.Pen(Palette.Accent, 1.5, PenLineCap.Round, PenLineJoin.Round);
+        Arrows(shade);
+        Arrows(pen);
+        void Arrows(IPen p)
+        {
+            if (chip.Left - left > a + 2)
             {
-                // the bow tie: two triangles meeting at the join
-                ctx.DrawLine(pen, new Point(gx, gy), new Point(gx, gy + gs));
-                ctx.DrawLine(pen, new Point(gx + gs, gy), new Point(gx + gs, gy + gs));
-                ctx.DrawLine(pen, new Point(gx, gy), new Point(gx + gs, gy + gs));
-                ctx.DrawLine(pen, new Point(gx, gy + gs), new Point(gx + gs, gy));
+                ctx.DrawLine(p, new Point(left, y), new Point(chip.Left, y));
+                ctx.DrawLine(p, new Point(left, y), new Point(left + a, y - a));
+                ctx.DrawLine(p, new Point(left, y), new Point(left + a, y + a));
+            }
+            if (right - chip.Right > a + 2)
+            {
+                ctx.DrawLine(p, new Point(chip.Right, y), new Point(right, y));
+                ctx.DrawLine(p, new Point(right, y), new Point(right - a, y - a));
+                ctx.DrawLine(p, new Point(right, y), new Point(right - a, y + a));
             }
         }
     }

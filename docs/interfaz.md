@@ -176,7 +176,8 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   así los cortes no congelan la imagen, y un panel no muestra un cuadro hasta tener uno de ese momento (`LiveClip.Fresh`).
   Un decodificador que no se usa (`VideoDecoder.Idle`) cierra el archivo a los 3 s.
 - **Transiciones** (ver Timeline): `LiveTrack.UpdateTransitions` corre en cada tick antes de pedir los cuadros, con la
-  misma cuenta que la exportación (`ClipTransitions`): en un fundido cruzado los dos clips muestran video pasando su
+  misma cuenta que la exportación (`ClipTransitions`); también le pasa al motor el fundido de audio de cada clip
+  (`LiveClip.AudioJoins`, cambiado entero solo cuando cambia, como `MixRenderer`): en un fundido cruzado los dos clips muestran video pasando su
   borde (`LiveClip.Lead` / `Tail`, así su decodificador arranca antes) y `PreviewView` dibuja el que sale y encima el
   que entra con su peso. Se ven también en pausa (los fundidos propios del clip, solo reproduciendo, como siempre).
 - **"En vivo"** (`Controls/LiveMonitor.cs`), a la derecha de la preview: la cámara cruda, nunca la composición. La
@@ -236,16 +237,23 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 - **Clips que se pisan**: se ve el último de la pista. El clic derecho → "Traer al frente" (`ClipEditing.BringToFront`,
   prendido solo si otro lo tapa) lo pasa al final: arriba en el timeline, en la vista previa y en la exportación. El
   sonido no cambia: los dos suenan.
-- **Transiciones de video** (pedido del usuario: "simple, para no confundir con el audio"; `MainWindow.Transitions.cs`,
-  `TimelineView.DrawJoins`): donde un clip termina y otro empieza en una pista con video (a menos de 2 cuadros,
-  `ClipTransitions.JoinSec`), un chip chico con una cámara cruza el borde de arriba de los clips: gris con `|` si es
-  un corte, de acento con `⨯` (fundido cruzado) o `V` (pasar por negro), y una línea de acento arriba marca el tramo
-  que cubre. Clic → menú "Transición de video": Corte / Fundido cruzado / Pasar por negro, duración con 0,25 · 0,5 · 1
-  · 2 s y un slider de 0,1 a 3 s (0,5 por defecto), y la aclaración de que el audio sigue cortando. También desde el clic
-  derecho del clip ("Transición de video al entrar / al salir"). Se guarda en el clip que entra (`Clip.Transition`,
-  `TransitionSec`) y va centrada en la unión; nunca toca los fundidos de audio ni de video del clip. El fundido cruzado
-  usa el video que esconden los recortes; si de un lado no hay, ese lado se queda en su último o primer cuadro (el menú
-  lo avisa). Pasar por negro no necesita nada escondido. Dividir deja la transición en la pieza de la izquierda.
+- **Transiciones** (pedido del usuario: simples de usar; después, que también fundan el audio, porque el corte pelado
+  era brusco; `MainWindow.Transitions.cs`, `TimelineView.DrawJoins`): donde un clip termina y otro empieza en una pista
+  (a menos de 2 cuadros, `ClipTransitions.JoinSec`), un chip cuadrado de 20 px va centrado en la unión a media
+  altura de los clips: blanco con una `|` si es un corte, de acento con una `X` (fundido cruzado: un fundido que baja
+  cruzado con uno que sube, como las líneas de fundido de los clips) o una `V` (pasar por negro); el moñito de CapCut no
+  (pedido del usuario), y de los costados del chip salen dos flechitas de acento (con borde oscuro, a su altura) hasta los bordes
+  del tramo que cubre (`DrawJoinSpan`). Queda encima de las
+  manijas de los bordes y se lleva sus clics. Clic → menú "Transición": Corte / Fundido cruzado / Pasar por negro (este
+  solo si los dos clips tienen imagen), duración con 0,25 · 0,5 · 1 · 2 s y un slider de 0,1 a 3 s (0,5 por defecto), y
+  qué pasa con el sonido. También desde el clic derecho del clip ("Transición al entrar / al salir"). Se guarda en el
+  clip que entra (`Clip.Transition`, `TransitionSec`) y va centrada en la unión; nunca cambia los fundidos propios del
+  clip. **Imagen**: el fundido cruzado usa el video que esconden los recortes; si de un lado no hay, ese lado se queda en
+  su último o primer cuadro (el menú lo avisa); pasar por negro no necesita nada escondido. **Sonido** (los dos tipos):
+  fundido cruzado en el mismo tramo, con el audio que esconden los recortes (`ClipTransitions.Audio`); dos pedazos de la
+  misma toma se funden en línea recta (suman exactamente la toma), tomas distintas a potencia constante; sin audio
+  escondido de ningún lado, cruza con un fundido de 10 ms justo en la unión (el menú lo avisa). Dividir deja la
+  transición en la pieza de la izquierda.
 - **Franja de marcadores** (`Controls/TimelineView.Markers.cs`, `MainWindow.Markers.cs`): 18 px arriba de los números
   de la regla (`MarkerH`, incluida en `RulerH`). Arrastrar en vacío dibuja el **rango A–B** del loop y lo prende; sus
   bordes y su cuerpo se arrastran; acento con el loop prendido, gris apagado, y con el loop prendido sus bordes siguen
@@ -478,7 +486,8 @@ tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
   bitrate de la calidad en vez del CRF de x264) o el procesador; se elige en Configuración → Guardado y exportación
   (`config.json` "export.encoder", de la máquina y no del proyecto). Si la placa o los grafos fallan, la exportación
   se repite sola con el procesador y un solo grafo, como antes.
-- **Transiciones de video**: en `Mp4Exporter.BuildFfmpegCommand`, los clips de un mismo panel con una transición
+- **Transiciones**: el sonido lo funde `MixRenderer` (`TrackDspChain.AudioJoins` / `SampleClips`, igual que la
+  reproducción). La imagen, en `Mp4Exporter.BuildFfmpegCommand`, los clips de un mismo panel con una transición
   extienden su tramo (el `trim` y el `enable` del `overlay`), con `tpad` que congela el borde cuando no hay video
   escondido; el fundido cruzado es un `fade` con alfa (`yuva420p`) en el que queda arriba de los dos y pasar por negro,
   dos `fade` al color del fondo. Mismo resultado que la preview.

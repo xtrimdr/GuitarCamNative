@@ -3,13 +3,13 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
-- 2026-10-25: Transiciones de video entre clips de una pista (Corte / Fundido cruzado / Pasar por negro, 0,1 a 3 s,
-  0,5 por defecto), solo la imagen: el audio sigue cortando en la unión. Un chip con cámara en cada unión del timeline
-  abre el menú (`MainWindow.Transitions.cs`, `TimelineView.DrawJoins`); también desde el clic derecho del clip. Se
-  guarda en el clip que entra (`Clip.Transition`, `TransitionSec`); la cuenta es una sola para preview y exportación
-  (`GuitarCam.Audio/ClipTransitions.cs`; `LiveTrack.UpdateTransitions`, `PreviewView.DrawPicture`; en
-  `Mp4Exporter`, `fade` con alfa o a color y `tpad` para congelar el borde sin video escondido).
-  `gclab proyecto editar … transicion` y `gclab proyecto transiciones`.
+- 2026-10-25: Transiciones entre clips de una pista (Corte / Fundido cruzado / Pasar por negro, 0,1 a 3 s, 0,5 por
+  defecto) que funden la imagen y el sonido. Un chip blanco (`|`, `X`, `V`), centrado en cada unión del timeline, abre el
+  menú (`MainWindow.Transitions.cs`, `TimelineView.DrawJoins`); también desde el clic derecho del clip. Se guarda en el
+  clip que entra (`Clip.Transition`, `TransitionSec`); la cuenta es una sola para reproducción, preview y exportación
+  (`GuitarCam.Audio/ClipTransitions.cs`; `LiveTrack.UpdateTransitions`, `PreviewView.DrawPicture`; el audio en
+  `LiveTrack.AddClips` y `TrackDspChain.SampleClips`; en `Mp4Exporter`, `fade` con alfa o a color y `tpad` para
+  congelar el borde sin video escondido). `gclab proyecto editar … transicion` y `gclab proyecto transiciones`.
 - 2026-10-25: Preview sin cortes al pasar de un clip a otro: el video se decodifica con FFmpeg dentro del proceso
   (`GuitarCam.Audio/NativeVideoSource.cs`, FFmpeg.AutoGen 9 + DLL en `lib\ffmpeg`; un salto en una toma de 720p pasa
   de ~130 ms a ~20 ms, sin asignar memoria por cuadro, colores iguales a ffmpeg.exe), con ffmpeg.exe por pipe de

@@ -638,8 +638,8 @@ public sealed class Clip
     public double VideoFadeInSec { get; set; }
     public double VideoFadeOutSec { get; set; }
     /// <summary>
-    /// Native only: how the picture comes into this clip from the one that ends where it starts on its track
-    /// ("cut", "crossfade", "dip"; <see cref="ClipTransitions"/>). Video only: the sound still cuts at the join.
+    /// Native only: how this clip comes in from the one that ends where it starts on its track ("cut", "crossfade",
+    /// "dip"; <see cref="ClipTransitions"/>): the picture and, crossfaded, the sound; the clip's own fades stay as they are.
     /// Ignored while nothing touches its start.
     /// </summary>
     public string Transition { get; set; } = ClipTransitions.CutId;

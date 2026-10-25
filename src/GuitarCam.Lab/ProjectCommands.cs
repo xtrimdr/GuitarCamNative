@@ -187,7 +187,7 @@ static class ProjectCommands
                 Console.WriteLine($"{cut} clip(s) cambiados");
                 break;
             case "transicion":
-                // how the picture comes into this clip from the one before it: corte|fundido|negro [--segundos 0.5]
+                // how this clip comes in from the one before it: corte|fundido|negro [--segundos 0.5]
                 string? kind = value switch
                 {
                     "" => null, "corte" => ClipTransitions.CutId, "fundido" => ClipTransitions.CrossfadeId, "negro" => ClipTransitions.DipId,

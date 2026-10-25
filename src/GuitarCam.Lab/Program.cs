@@ -150,9 +150,9 @@ static class Program
               proyecto editar carpeta borrar-rango pista[,pista…] desde --hasta fin [--cerrar]   saca ese tramo de los clips de
                         esas pistas; queda el hueco, o con --cerrar lo de después se corre y lo tapa
               proyecto editar carpeta al-frente clip   lo pone arriba en su pista: donde se pisan, es el que se ve
-              proyecto editar carpeta transicion clip corte|fundido|negro [--segundos 0.5]   la transición de video que entra a ese clip
-                                           desde el que termina donde empieza (solo la imagen: el audio sigue cortando ahí)
-              proyecto transiciones carpeta   lista dónde se tocan los clips de cada pista y qué transición de video tiene cada unión
+              proyecto editar carpeta transicion clip corte|fundido|negro [--segundos 0.5]   la transición que entra a ese clip desde
+                                           el que termina donde empieza: funde la imagen y el sonido, centrada en la unión
+              proyecto transiciones carpeta   lista dónde se tocan los clips de cada pista y qué transición tiene cada unión
               proyecto editar carpeta nueva-carpeta [nombre] [--pistas id,id] | quitar-carpeta carpeta   agrupa pistas (quitarla las deja sueltas)
               proyecto editar carpeta a-carpeta pista carpeta|raiz [--en n] | sacar-de-carpeta pista | mover-carpeta carpeta n
               proyecto editar carpeta carpeta id [--nombre X] [--volumen 0.8] [--mute] [--solo] [--plegar]   fader, mute y solo de la carpeta (como un VCA)
