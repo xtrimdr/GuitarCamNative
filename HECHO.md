@@ -3,6 +3,10 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-25: **color de carpeta a sus pistas**: al elegirlo, el selector (y el inspector) pregunta si pinta también
+  sus pistas con ese color (`MainWindow.TrackLook.FolderTracksAsk` / `PaintFolderTracks`, un paso de deshacer).
+- 2026-10-25: **24 colores de pista en dos filas**, en orden de arco iris (`TrackIcons.Colors`, `ColorsPerRow`;
+  `MainWindow.TrackLook.ColorChips`): se suman los tonos intermedios y se conservan los 12 de antes con el mismo hex.
 - 2026-10-25: **knobs de efecto en los encabezados de pista**: Vida · Comp · Reverb · Delay pasan de cuatro filas
   de slider a una sola fila de knobs que crecen con el alto de la pista y el ancho de la columna (20 a 64 px) y se
   achican con ella (`TimelineView.FxKnobD`, `DrawFxKnob`); arrastre vertical, ruedita y doble clic para restablecer.

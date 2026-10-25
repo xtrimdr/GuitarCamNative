@@ -216,7 +216,8 @@ public sealed class TimelineView : Control
     public event Action<Folder, Point>? FolderLookRequested;
     /// <summary>A double click on a track's or a folder's name: the window edits it in place over that rect.</summary>
     public event Action<string, Rect>? NameEditRequested;
-    public event Action<string>? RemoveTrackRequested;
+    /// <summary>A track's trash can was clicked: the window asks there before removing it.</summary>
+    public event Action<string, Point>? RemoveTrackRequested;
     public event Action<LiveTrack, LiveClip?, Point>? ClipContextRequested;
     public event Action<Point>? NewTrackRequested;
     public event Action<LiveTrack, double?, double?>? ChannelRequested;
@@ -1191,9 +1192,9 @@ public sealed class TimelineView : Control
             ctx.DrawText(count, 11, Palette.Faint, new Point(62 + Math.Min(name.Width, maxW) + 8, y + 11), Palette.Ui);
         }
         if (lastPointer.Y >= y && lastPointer.Y < y + fh && lastPointer.X < HeaderW)
-            ctx.DrawText("×", 16, Palette.Faint, new Point(FolderRemoveRect(f).X + 6, y + 4));
-        DrawToggle(ctx, FolderMuteRect(f), "M", f.Muted, Palette.Brush("#f59e0b"));
-        DrawToggle(ctx, FolderSoloRect(f), "S", f.Solo, Palette.Accent);
+            DrawTrash(ctx, FolderRemoveRect(f), Hot(FolderRemoveRect(f)));
+        DrawToggle(ctx, FolderMuteRect(f), "M", f.Muted, Palette.Brush("#f59e0b"), Hot(FolderMuteRect(f)));
+        DrawToggle(ctx, FolderSoloRect(f), "S", f.Solo, Palette.Accent, Hot(FolderSoloRect(f)));
         if (fh >= ControlsAt)
         {
             DrawVolume(ctx, FolderVolumeRect(f), f.Volume, Palette.Alpha(c, 1));
@@ -1771,9 +1772,9 @@ public sealed class TimelineView : Control
         if (chip) DrawInputChip(ctx, InputRect(i), InputLabel!(t));
 
         if (!RecordingInto(i) && lastPointer.Y >= y && lastPointer.Y < y + lh)
-            ctx.DrawText("×", 16, Palette.Faint, new Point(RemoveRect(i).X + 6, y + 7));
+            DrawTrash(ctx, RemoveRect(i), Hot(RemoveRect(i)));
         ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, y + lh - 0.5), new Point(HeaderW, y + lh - 0.5));
-        DrawArm(ctx, ArmRect(i), isArmed || RecordingInto(i));
+        DrawArm(ctx, ArmRect(i), isArmed || RecordingInto(i), Hot(ArmRect(i)));
 
         var ch = t.Channel;
         string pan = Math.Abs(ch.Pan) < 0.01 ? "C" : ch.Pan < 0 ? $"L{-ch.Pan * 100:0}" : $"R{ch.Pan * 100:0}";
@@ -1825,8 +1826,8 @@ public sealed class TimelineView : Control
                 if (withText) ctx.DrawText(label, new Point(lx + 16, lr.Center.Y - label.Height / 2));
             }
 
-        DrawToggle(ctx, MuteRect(i), "M", ch.Muted, Palette.Brush("#f59e0b"));
-        DrawToggle(ctx, SoloRect(i), "S", ch.Solo, Palette.Accent);
+        DrawToggle(ctx, MuteRect(i), "M", ch.Muted, Palette.Brush("#f59e0b"), Hot(MuteRect(i)));
+        DrawToggle(ctx, SoloRect(i), "S", ch.Solo, Palette.Accent, Hot(SoloRect(i)));
 
         if (!MetersOnLayer) DrawMeters(ctx, i);
     }
@@ -1889,9 +1890,39 @@ public sealed class TimelineView : Control
     /// <summary>The playhead's head in the ruler, at x = 0 (moved into place when drawn).</summary>
     static readonly Geometry PlayheadTriangle = Geometry.Parse("M -6,0 L 6,0 L 0,8 Z");
 
-    /// <summary>The record-arm toggle: a red dot, lit red while the track takes the next take.</summary>
-    static void DrawArm(DrawingContext ctx, Rect r, bool on)
+    /// <summary>True while the pointer rests on this header button with nothing dragged, so it lights up like the
+    /// window's buttons do on hover.</summary>
+    bool Hot(Rect r) => gesture == null && !Recording && r.Contains(lastPointer);
+
+    /// <summary>The hover glow of a drawn button: two soft rings of its color around it, like HoverGlow on the
+    /// window's buttons (an effect can't be drawn per button here, and these brushes are cached).</summary>
+    static void DrawGlow(DrawingContext ctx, Rect r, Color c)
     {
+        ctx.DrawRectangle(Palette.Alpha(c, 0.10), null, r.Inflate(3), 7, 7);
+        ctx.DrawRectangle(Palette.Alpha(c, 0.20), null, r.Inflate(1.5), 5.5, 5.5);
+    }
+
+    /// <summary>The remove button of a header: a trash can that turns red, on a box with the red glow, on hover.</summary>
+    static void DrawTrash(DrawingContext ctx, Rect r, bool hot)
+    {
+        if (hot)
+        {
+            DrawGlow(ctx, r, Palette.RecColor);
+            ctx.DrawRectangle(Palette.Hover, Palette.Pen(Palette.Alpha(Palette.RecColor, 0.45)), r, 4, 4);
+        }
+        ctx.DrawText("", 12, hot ? Palette.Rec : Palette.Faint, r.TopLeft + new Point(6, 6), Icons);
+    }
+
+    /// <summary>The record-arm toggle: a red dot, lit red while the track takes the next take.</summary>
+    static void DrawArm(DrawingContext ctx, Rect r, bool on, bool hot)
+    {
+        if (hot) DrawGlow(ctx, r, Palette.RecColor);
+        if (hot && !on)
+        {
+            ctx.DrawRectangle(Palette.Hover, Palette.Pen(Palette.Alpha(Palette.RecColor, 0.45)), r, 4, 4);
+            ctx.DrawEllipse(Palette.Rec, null, r.Center, 4.5, 4.5);
+            return;
+        }
         ctx.DrawRectangle(on ? Palette.Rec : Palette.Hover, on ? null : Palette.Pen(Palette.Line), r, 4, 4);
         ctx.DrawEllipse(on ? Palette.Fg : Palette.Alpha(Palette.RecColor, 0.7), null, r.Center, 4.5, 4.5);
     }
@@ -1907,10 +1938,13 @@ public sealed class TimelineView : Control
         ctx.DrawText(caret, new Point(r.Right - caret.Width - 5, r.Center.Y - caret.Height / 2));
     }
 
-    static void DrawToggle(DrawingContext ctx, Rect r, string label, bool on, IBrush onBrush)
+    /// <summary>An M / S toggle; on hover it glows in the accent and, while off, its letter and border brighten.</summary>
+    static void DrawToggle(DrawingContext ctx, Rect r, string label, bool on, IBrush onBrush, bool hot)
     {
-        ctx.DrawRectangle(on ? onBrush : Palette.Hover, on ? null : Palette.Pen(Palette.Line), r, 4, 4);
-        var t = Palette.Text(label, 10.5, on ? Palette.App : Palette.Dim, Palette.UiBold);
+        if (hot) DrawGlow(ctx, r, Palette.AccentColor);
+        var border = on ? null : Palette.Pen(hot ? Palette.Alpha(Palette.AccentColor, 0.5) : Palette.Line);
+        ctx.DrawRectangle(on ? onBrush : Palette.Hover, border, r, 4, 4);
+        var t = Palette.Text(label, 10.5, on ? Palette.App : hot ? Palette.Fg : Palette.Dim, Palette.UiBold);
         ctx.DrawText(t, new Point(r.Center.X - t.Width / 2, r.Center.Y - t.Height / 2));
     }
 
@@ -2015,7 +2049,7 @@ public sealed class TimelineView : Control
         }
         if (p.X < HeaderW && RemoveRect(i).Contains(p))
         {
-            RemoveTrackRequested?.Invoke(tracks[i].Track.Id);
+            RemoveTrackRequested?.Invoke(tracks[i].Track.Id, RemoveRect(i).BottomLeft + new Point(0, 4));
             return;
         }
         if (p.X < HeaderW && BadgeRect(i).Contains(p))
@@ -2257,6 +2291,15 @@ public sealed class TimelineView : Control
         modifiers = e.KeyModifiers;
         if (gesture != null) UpdateGesture();
         else UpdateCursor();
+        InvalidateVisual();
+    }
+
+    /// <summary>The pointer left: the header buttons stop glowing (no gesture holds it outside).</summary>
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        if (gesture != null) return;
+        lastPointer = new Point(-1, -1);
         InvalidateVisual();
     }
 

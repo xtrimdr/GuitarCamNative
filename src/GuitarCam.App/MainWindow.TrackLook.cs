@@ -86,18 +86,26 @@ public partial class MainWindow
 
     void SetTrackLook(LiveTrack t, Action<GuitarCam.Projects.Track> change, string key) => EditTrack(t, x => change(x.Track), key);
 
-    /// <summary>The color row of the pickers (no color first, then <see cref="TrackIcons.Colors"/>): a pick applies at
-    /// once and repaints every entry of <paramref name="refresh"/>, so the picker stays open.</summary>
-    static WrapPanel ColorChips(Func<string?> current, Action<string?> pick, List<Action> refresh)
+    /// <summary>The color grid of the pickers ("no color" first, then <see cref="TrackIcons.Colors"/> in rows of
+    /// <see cref="TrackIcons.ColorsPerRow"/>, the later rows indented under it so the hues line up): a pick applies at
+    /// once and repaints every entry of <paramref name="refresh"/>, so the picker stays open. <paramref name="size"/>
+    /// shrinks the swatches where the grid has less room (the inspector).</summary>
+    static StackPanel ColorChips(Func<string?> current, Action<string?> pick, List<Action> refresh, double size = 20)
     {
-        var colors = new WrapPanel { Margin = new Thickness(-2, 0) };
-        foreach (string? hex in new string?[] { null }.Concat(TrackIcons.Colors))
+        var colors = new StackPanel { Margin = new Thickness(-2, 0) };
+        WrapPanel? row = null;
+        for (int i = -1; i < TrackIcons.Colors.Length; i++)
         {
-            var chip = new Button { Width = 20, Height = 20, MinHeight = 20, Padding = new Thickness(0), Margin = new Thickness(2), CornerRadius = new CornerRadius(5),
+            string? hex = i < 0 ? null : TrackIcons.Colors[i];
+            if (i < 0 || i % TrackIcons.ColorsPerRow == 0 && i > 0)
+            {
+                colors.Children.Add(row = new WrapPanel());
+                if (i > 0) row.Children.Add(new Border { Width = size + 4, Height = size + 4 });
+            }
+            var chip = new Button { Width = size, Height = size, MinHeight = size, Padding = new Thickness(0), Margin = new Thickness(2), CornerRadius = new CornerRadius(5),
                 BorderThickness = new Thickness(2), HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
             if (hex == null) chip.Content = new TextBlock { Classes = { "icon" }, Text = "", FontSize = 10, Foreground = Palette.Faint };
-            int n = Array.IndexOf(TrackIcons.Colors, hex);
-            ToolTip.SetTip(chip, hex == null ? Loc.T("look.color.none") : Loc.T("look.color." + n));
+            ToolTip.SetTip(chip, hex == null ? Loc.T("look.color.none") : Loc.T("look.color." + i));
             chip.Click += (_, _) => { pick(hex); foreach (var r in refresh) r(); };
             refresh.Add(() =>
             {
@@ -106,9 +114,52 @@ public partial class MainWindow
                 chip.Background = hex == null ? Palette.Hover : Palette.Brush(hex);
                 chip.BorderBrush = on ? Palette.Fg : hex == null ? Palette.Line : Brushes.Transparent;
             });
-            colors.Children.Add(chip);
+            row!.Children.Add(chip);
         }
         return colors;
+    }
+
+    /// <summary>The question under a folder's colors (asked by the user): right after a pick it offers to give the
+    /// folder's tracks that same color, in one undo step. It shows only after a pick on that folder, and only while a
+    /// track inside has another color; <c>Ask</c> is what the color pick calls.</summary>
+    (Control View, Action<GuitarCam.Projects.Folder> Ask) FolderTracksAsk(Func<GuitarCam.Projects.Folder?> folder, List<Action> refresh)
+    {
+        string? askedId = null;
+        var text = new TextBlock { FontSize = 11, Foreground = Palette.Dim, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+        var yes = new Button { Classes = { "chip" }, Content = Loc.T("folder.color.tracks.yes"), FontSize = 11, MinHeight = 26, Padding = new Thickness(8, 0),
+            Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        ToolTip.SetTip(yes, Loc.T("folder.color.tracks.tip"));
+        var view = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), IsVisible = false };
+        view.Children.Add(text);
+        Grid.SetColumn(yes, 1); view.Children.Add(yes);
+        yes.Click += (_, _) =>
+        {
+            if (folder() is { } f) PaintFolderTracks(f);
+            askedId = null;
+            foreach (var r in refresh) r();
+        };
+        refresh.Add(() =>
+        {
+            var f = folder();
+            var inside = f == null || store == null ? [] : store.Project.Tracks.Where(t => t.FolderId == f.Id).ToList();
+            view.IsVisible = f != null && f.Id == askedId && inside.Any(t => t.Color != f.Color);
+            if (view.IsVisible) text.Text = Loc.T(inside.Count == 1 ? "folder.color.tracks.ask1" : "folder.color.tracks.ask", inside.Count);
+        });
+        return (view, f => askedId = f.Id);
+    }
+
+    /// <summary>Gives every track of <paramref name="f"/> the folder's color (none included): one undo step.</summary>
+    void PaintFolderTracks(GuitarCam.Projects.Folder f)
+    {
+        if (restoring || store == null || store.ReadOnly) return;
+        undo.Checkpoint(store.Project);
+        foreach (var t in store.Project.Tracks)
+            if (t.FolderId == f.Id) t.Color = f.Color;
+        MarkDirty();
+        UpdateUndoButtons();
+        Timeline.UpdateTracks(tracks, store.Project.Folders);
+        RefreshInspectorText();
+        RefreshMixer();
     }
 
     /// <summary>A folder's color picker (folders have no icon): opened from its icon in the timeline, its menu or the inspector.</summary>
@@ -120,11 +171,13 @@ public partial class MainWindow
         var refresh = new List<Action>();
         var body = new StackPanel { Spacing = 8 };
         body.Children.Add(new TextBlock { Classes = { "label" }, Text = Loc.T("folder.color").ToUpperInvariant() });
-        body.Children.Add(ColorChips(() => F().Color, hex => FolderEdit(F(), x => x.Color = hex, "color"), refresh));
+        var ask = FolderTracksAsk(F, refresh);
+        body.Children.Add(ColorChips(() => F().Color, hex => { FolderEdit(F(), x => x.Color = hex, "color"); ask.Ask(F()); }, refresh));
+        body.Children.Add(ask.View);
         foreach (var r in refresh) r();
         var card = new Border
         {
-            Width = 272, Padding = new Thickness(12, 10), Background = Palette.Raised, BorderBrush = Palette.Line, BorderThickness = new Thickness(1),
+            Width = 344, Padding = new Thickness(12, 10), Background = Palette.Raised, BorderBrush = Palette.Line, BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8), Child = body,
         };
         lookFlyout?.Hide();

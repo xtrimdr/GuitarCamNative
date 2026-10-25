@@ -385,7 +385,7 @@ public partial class MainWindow
         }, Loc.T("preset.save.note"));
     }
 
-    /// <summary>The "Plantilla" submenu of the new-track menu: one entry per saved preset, each with its × to delete it.</summary>
+    /// <summary>The "Plantilla" submenu of the new-track menu: one entry per saved preset, each with its trash can to delete it.</summary>
     MenuItem PresetSubmenu(bool enabled)
     {
         var items = new List<object>();
@@ -398,7 +398,7 @@ public partial class MainWindow
             row.Children.Add(badge);
             var name = new TextBlock { Text = preset.Name, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
             Grid.SetColumn(name, 1); row.Children.Add(name);
-            var delete = new Button { Classes = { "ghost" }, Content = new TextBlock { Text = "", Classes = { "icon" }, FontSize = 9 }, Width = 22, Height = 22, MinHeight = 22,
+            var delete = new Button { Classes = { "ghost" }, Content = new TextBlock { Text = "", Classes = { "icon" }, FontSize = 11 }, Width = 22, Height = 22, MinHeight = 22,
                 Padding = new Thickness(0), Margin = new Thickness(12, 0, 0, 0), HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
             ToolTip.SetTip(delete, Loc.T("preset.delete.tip"));
             Grid.SetColumn(delete, 2); row.Children.Add(delete);
@@ -455,7 +455,14 @@ public partial class MainWindow
 
         var card = new StackPanel { Spacing = 14 };
         card.Children.Add(new TextBlock { Classes = { "label" }, Text = Loc.T("folder.color").ToUpperInvariant() });
-        card.Children.Add(ColorChips(() => SelectedFolder?.Color, hex => { if (SelectedFolder is { } f) FolderEdit(f, x => x.Color = hex, "color"); }, folderRefresh));
+        var paintAsk = FolderTracksAsk(() => SelectedFolder, folderRefresh);
+        card.Children.Add(ColorChips(() => SelectedFolder?.Color, hex =>
+        {
+            if (SelectedFolder is not { } f) return;
+            FolderEdit(f, x => x.Color = hex, "color");
+            paintAsk.Ask(f);
+        }, folderRefresh, 16));
+        card.Children.Add(paintAsk.View);
         card.Children.Add(new TextBlock { Classes = { "label" }, Text = Loc.T("folder.mix").ToUpperInvariant(), Margin = new Thickness(0, 4, 0, 0) });
         var volume = new InspectorSlider(Loc.T("insp.volume"), 0, 1.5, 0.01, 1, v => $"{v * 100:0}%",
             v => { if (!syncing && SelectedFolder is { } f) FolderEdit(f, x => x.Volume = v, "volume"); });

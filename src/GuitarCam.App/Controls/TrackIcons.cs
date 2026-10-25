@@ -16,9 +16,17 @@ public static partial class TrackIcons
     /// <summary>The picker's groups, in order (names in Loc as "icon.cat.&lt;id&gt;").</summary>
     public static readonly string[] Categories = ["strings", "drums", "keys", "winds", "more"];
 
-    /// <summary>The track colors: a ring of hues bright enough for the dark surfaces, stored in the project as hex.</summary>
+    /// <summary>The track colors: a rainbow ring of hues bright enough for the dark surfaces, stored in the project as
+    /// hex. The picker shows it in two rows of <see cref="ColorsPerRow"/>; the first twelve hues it had are still here,
+    /// with the same hex, so saved projects keep their colors.</summary>
     public static readonly string[] Colors =
-        ["#f87171", "#fb923c", "#fbbf24", "#a3e635", "#4ade80", "#2dd4bf", "#38bdf8", "#60a5fa", "#818cf8", "#a78bfa", "#e879f9", "#f472b6"];
+    [
+        "#f87171", "#fb7f5a", "#fb923c", "#fba82e", "#fbbf24", "#facc15", "#cfdc24", "#a3e635", "#76e25a", "#4ade80", "#34d399", "#2dd4bf",
+        "#22d3ee", "#38bdf8", "#60a5fa", "#7298f9", "#818cf8", "#a78bfa", "#c084fc", "#d47dfa", "#e879f9", "#ee76d8", "#f472b6", "#fb7185",
+    ];
+
+    /// <summary>How many colors go on each row of the picker.</summary>
+    public const int ColorsPerRow = 12;
 
     /// <summary>The grid the icons are drawn on.</summary>
     const double Grid = 32;

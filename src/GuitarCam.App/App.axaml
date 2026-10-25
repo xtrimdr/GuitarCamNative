@@ -52,6 +52,9 @@
     <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="Hover" />
     <StaticResource x:Key="ToggleButtonBackgroundPointerOver" ResourceKey="Hover" />
     <StaticResource x:Key="ToggleButtonBackgroundPressed" ResourceKey="Hover" />
+    <!-- a submenu (Plantilla, Carpeta) opens with Fluent's presenter: same surface and border as our menus -->
+    <StaticResource x:Key="MenuFlyoutPresenterBackground" ResourceKey="Panel" />
+    <StaticResource x:Key="MenuFlyoutPresenterBorderBrush" ResourceKey="Line" />
     <!-- the soft glow of a hovered button: the accent (recolored by UiTheme), red on danger buttons -->
     <DropShadowEffect x:Key="HoverGlow" OffsetX="0" OffsetY="0" BlurRadius="12" Color="#22d3ee" Opacity="0.6" />
     <DropShadowEffect x:Key="RecGlow" OffsetX="0" OffsetY="0" BlurRadius="12" Color="#ef4444" Opacity="0.6" />

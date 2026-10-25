@@ -180,6 +180,9 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   knob se arrastra en vertical (Shift = fino), con la ruedita o doble clic para restablecer; la cantidad va adentro del
   knob si mide 36 o más, y si no, en lugar del nombre mientras lo tocás.
 - Tocar cualquier parte del encabezado (la manija o un control, menos "quitar") selecciona la pista.
+- Los botones dibujados del encabezado (armar, M, S y la papelera, también en la fila de carpeta) brillan con el
+  mouse encima (`TimelineView.Hot` / `DrawGlow`: acento en M y S, rojo en armar y papelera). La papelera de la pista
+  pregunta antes de quitarla (`MainWindow.AskRemoveTrack`).
 - Al reordenar con la manija, la pista sigue al puntero por encima de las demás y el resto se desliza a su lugar
   (`shownSlot`, `Slide`).
 - **Quitar todos los mute / solo**: M y S al final de la barra de la esquina del timeline (`ClearMutesButton` /
@@ -194,14 +197,14 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   del nombre y el volumen sin tocar las filas de efectos; lo que crece corre a la derecha el nombre y el volumen.
   Los íconos son rellenos: Fluent Emoji High Contrast de base y lo que le falta de MDI, game-icons y Qlementine
   (`tools/make-track-icons.py`, licencias en `Assets/Icons/LICENSES.txt`); los ids viejos van en `TrackIcons.Legacy`.
-- Tocarla abre el selector: 12 colores (`TrackIcons.Colors`, guardados en hex) y los íconos por categoría; el color
+- Tocarla abre el selector: 24 colores en dos filas, en orden de arco iris (`TrackIcons.Colors`, guardados en hex) y los íconos por categoría; el color
   deja el selector abierto y el ícono lo cierra.
 - Con color, los clips de la pista se tiñen (relleno, borde y onda) y la tira del mixer lo lleva arriba. Los colores
   de pista son datos del usuario, no tokens: no se usan para estados de la interfaz.
 
 ## Carpetas de pistas (`MainWindow.Folders.cs`)
 
-- En el timeline, una fila propia (manija, flecha para plegar, ícono y nombre, M S ×; abajo su fader VCA en su color,
+- En el timeline, una fila propia (manija, flecha para plegar, ícono y nombre, M S y papelera; abajo su fader VCA en su color,
   `FolderVolumeRect`, desde `ControlsAt` = 62 px como el volumen de una pista) de `FolderH` = 64 px abierta,
   con el carril vacío (sus pistas ya se ven abajo); plegada toma la altura del zoom vertical y el carril es un **mini
   mapa** (`DrawMiniMap`): una franja por pista con sus clips en el color de la pista y la onda si la franja llega a
@@ -211,7 +214,8 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 - Una carpeta se selecciona como una pista (clic en su fila o en su canal del mixer; `TimelineView.SelectedFolderId`,
   y entonces no hay pista seleccionada): el inspector muestra la carpeta (`InitFolderInspector`: nombre, color,
   volumen, M / S, nueva pista adentro y quitarla) y M, S y Supr actúan sobre ella. Su ícono abre el selector de color
-  (`ShowFolderLook`, los mismos `ColorChips` que el de pista).
+  (`ShowFolderLook`, los mismos `ColorChips` que el de pista). Elegido un color, abajo pregunta si pinta también
+  sus pistas con ese color (`FolderTracksAsk`, un solo paso de deshacer); solo aparece si alguna tiene otro.
 - **Renombrar en el lugar** (`MainWindow.Rename.cs`, pedido del usuario): doble clic sobre el texto del nombre de una
   pista o una carpeta, no en el espacio vacío de al lado (`TitleRect` / `FolderTitleRect`), o "Renombrar…" en su menú, pone una caja de texto encima (`TimelineView.NameEditRequested`, `EditingNameId`).
   Enter o un clic afuera lo guarda, Esc lo descarta, la rueda lo guarda. Un paso de deshacer.

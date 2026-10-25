@@ -178,7 +178,7 @@ public partial class MainWindow
             Timeline.PickTracks(ids);
         };
         InitFolders();
-        Timeline.RemoveTrackRequested += async id => await EditTimeline(p => { ClipEditing.RemoveTrack(p, id); return null; }, "track-removed");
+        Timeline.RemoveTrackRequested += AskRemoveTrack;
         Timeline.NewTrackRequested += ShowNewTrackMenu;
         Timeline.ClipContextRequested += ShowTimelineMenu;
     }
@@ -457,6 +457,20 @@ public partial class MainWindow
         list.Add(new Separator());
         list.Add(MenuAction(Loc.T("menu.import"), PickAudioToImport, enabled: CanImport(), icon: "", tip: Loc.T("menu.import.hint")));
         OpenTimelineMenu(Popup(list, 240), point, 200);
+    }
+
+    /// <summary>The trash can of a track's header asks first, right there: one click took the track with its clips away.</summary>
+    void AskRemoveTrack(string id, Point at)
+    {
+        if (store == null || restoring || store.ReadOnly || tracks.FirstOrDefault(t => t.Track.Id == id) is not { } track) return;
+        var list = new List<object>
+        {
+            new MenuItem { Header = Loc.T("track.remove.ask", track.Track.Name), IsEnabled = false, FontSize = 11 },
+            MenuAction(Loc.T("track.remove.yes"), () => EditTimeline(p => { ClipEditing.RemoveTrack(p, id); return null; }, "track-removed"),
+                danger: true, tip: Loc.T("track.remove.yes.tip")),
+            MenuAction(Loc.T("track.remove.no"), () => Task.CompletedTask),
+        };
+        OpenTimelineMenu(Popup(list, 240), at, 110);
     }
 
     /// <summary>The "nueva pista" shortcut: audio-only projects add the track at once; in video mode it asks audio+video or audio only.</summary>
