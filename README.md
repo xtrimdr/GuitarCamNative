@@ -12,34 +12,63 @@ sirve para hacer música sin video).
 Está pensada para usarse con la guitarra colgada: atajos de una tecla, botones grandes y un camino corto
 de **grabar → mezclar → exportar**.
 
-![El timeline, con un panel de video por toma](docs/screenshot-timeline.png)
+![El timeline en modo Video: un panel por toma, carpetas de pistas con su color, el inspector del canal y la pestaña de color](docs/screenshot-timeline.png)
 
-![El mixer, con una tira por pista, los retornos de reverb y delay y el master](docs/screenshot-mixer.png)
+| | |
+|---|---|
+| ![El mixer sonando: carpetas como VCA, retornos de reverb y delay y el master](docs/screenshot-mixer.png) | ![Formato vertical 9:16 apilado, listo para Reels, Shorts y TikTok](docs/screenshot-vertical.png) |
+| **El mixer**: una tira por pista, las carpetas como VCA, los retornos de reverb y delay y el master. | **Vertical 9:16** para Reels, Shorts y TikTok, con un look de color aplicado. |
 
-![El modo Solo audio: un DAW sin video](docs/screenshot-audio.png)
+![El modo Solo audio: pistas con sus knobs de efecto y el EQ con el espectro en vivo](docs/screenshot-audio.png)
+
+*Las capturas son del proyecto de demo; las imágenes de los paneles son fotos de [Unsplash](https://unsplash.com).*
 
 ## Qué hace
 
-- **Graba** audio por ASIO (entrada y salida en un mismo callback, con monitoreo) y video desde una cámara
-  (DirectShow o DroidCam por IP). Cada toma se escribe a disco mientras ocurre, así que un corte no la pierde.
-- **Edita en un timeline**: varias pistas, clips que se mueven, recortan, dividen y duplican, fades, ganancia
-  por clip con su curva de volumen, rango de borrado, deshacer y rehacer ilimitados, e importación de audio de
-  afuera (WAV, MP3, FLAC, OGG, M4A, AIFF). Se graba desde donde esté el cabezal, para regrabar solo un pedazo.
-  Las pistas se agrupan en **carpetas** que se pliegan, y se arrastran adentro y afuera por su manija.
-  Un sonido que te gusta se guarda como **plantilla de pista** y vuelve desde Nueva pista → Plantilla.
-- **Mezcla** con una cadena de efectos por pista: saturación ("Vida", válvula o cinta), compresor con
-  presets (Rasgueo / Arpegio / Punteo), EQ de 6 bandas con espectro en vivo, y envíos a reverb y delay,
-  más limitador master, paneo con plantillas y un mixer completo. Cada pista lleva su color y un ícono de
-  instrumento (guitarras, bajo, batería, synths, cuerdas, vientos, percusión…), en el timeline, el inspector y el mixer.
-  Cada carpeta tiene en el mixer su propio canal: su fader, M y S mandan sobre todas sus pistas, como un VCA.
-- **Compone el video**: un panel por pista con cover-fit, zoom, paneo y espejo, relaciones 16:9 / 9:16 / 1:1,
-  disposición lado a lado o apilada, y una pestaña de color (filtros, ajustes, efectos y plantillas).
-- **Exporta** a MP4 (mezcla offline + FFmpeg, con progreso y cancelación) o, en el modo **Solo audio**, a
-  WAV de 24 bits o MP3 de 320 kbps; si querés, además cada pista en su WAV (stems). Lo que ves en la vista
-  previa es lo que se exporta.
-- **Metrónomo** con compás, tempo, tap tempo, cuenta previa y seis sonidos de click; calibración de latencia
-  con cable o tocando. **Afinador** (notas en castellano, flechas que
-  te dicen para dónde girar la clavija y sensibilidad ajustable) y medidor de **LUFS** del master en la barra de transporte.
+### Grabar
+
+- Audio por **ASIO** (entrada y salida en un mismo callback, con monitoreo) y video desde una cámara (DirectShow o
+  DroidCam por IP). Cada toma se escribe a disco mientras ocurre, así que un corte no la pierde.
+- Se graba desde donde esté el cabezal, para regrabar solo un pedazo, con **metrónomo** (compás, tempo, tap tempo,
+  cuenta previa y seis sonidos de click) y **calibración de latencia** con cable o tocando.
+- **Afinador** con notas en castellano, flechas que te dicen para dónde girar la clavija y sensibilidad ajustable.
+
+### Editar
+
+- **Timeline** con varias pistas: clips que se mueven, recortan, dividen y duplican, fades, ganancia por clip con su
+  **curva de volumen**, rango de borrado, deshacer y rehacer ilimitados, e importación de audio de afuera (WAV, MP3,
+  FLAC, OGG, M4A, AIFF).
+- **Carpetas** que se pliegan y agrupan pistas; varias pistas se marcan con Ctrl+clic / Shift+clic y se mueven juntas.
+  Cada pista tiene su **color** (24, en orden de arco iris) y un **ícono de instrumento** (guitarras, bajo, batería,
+  synths, cuerdas, vientos, percusión…), su propio alto y sus knobs de Vida, Comp, Reverb y Delay en el encabezado.
+- Un sonido que te gusta se guarda como **plantilla de pista** y vuelve desde Nueva pista → Plantilla.
+- Arriba de la regla, un **rango A–B** para repetir un tramo (practicar el solo, mezclar un pedazo) y **marcadores**
+  con nombre (Intro, Estribillo, Solo…) para saltar de una parte a otra. Zoom de un tiempo a toda la canción con
+  las teclas 1 a 5.
+
+### Mezclar
+
+- Cadena de efectos por pista: saturación (**Vida**, válvula o cinta), **compresor** con presets (Rasgueo / Arpegio /
+  Punteo), **EQ de 6 bandas** con espectro en vivo, y envíos a **reverb** y **delay**, más limitador master y paneo
+  con plantillas.
+- **Mixer** completo; cada carpeta tiene su propio canal y su fader, M y S mandan sobre todas sus pistas, como un VCA.
+- Audio de nivel profesional: arrancar, parar, saltar y arrastrar el cabezal llevan su fundido, sin clics ni cortes.
+
+### Armar el video
+
+- Un panel por pista con cover-fit, zoom, paneo y espejo; relaciones **16:9 / 9:16 / 1:1**, disposición lado a lado
+  o apilada.
+- Pestaña de **color** con 26 looks (Brujo, Cine, Moody, Fresco, Noche azul, Hielo…), ajustes (exposición, contraste,
+  Blancos, Negros, Sensación de luz…), efectos y plantillas. Lo que ves en la vista previa es lo que se exporta.
+
+### Exportar
+
+- **MP4** (mezcla offline + FFmpeg, con progreso y cancelación), con presets para **Reels · TikTok**, **YouTube** e
+  **Instagram** (1:1 y 4:5) que acomodan el cuadro y llevan la mezcla a −14 LUFS.
+- En el modo **Solo audio**, WAV de 24 bits o MP3 de 320 kbps; si querés, además cada pista en su WAV (stems).
+  Medidor de **LUFS** del master en la barra de transporte.
+### Y además
+
 - **No pierde nada**: guardado atómico (solo después de cada edición, cada X minutos o a mano con Ctrl+S o el
   diskette, a elección en Configuración → Guardado; las tomas se guardan siempre), copias en `historial/` para volver
   atrás, recuperación de grabaciones interrumpidas y un gestor de proyectos con Papelera.
@@ -88,6 +117,9 @@ Todos se pueden cambiar en ⚙ Configuración → Atajos de teclado (menos Esc).
 | Shift+R o Num * | grabar (grabando: detener y guardar) |
 | R | armar / desarmar la pista seleccionada |
 | Inicio | volver al principio |
+| L | repetir en loop (el rango A–B, o todo el tema) |
+| I / O | inicio (A) / final (B) del rango en el cabezal |
+| K / , / . | marcador en el cabezal / ir al anterior / al siguiente |
 | C / Shift+C / T | click / cuenta previa / tap tempo |
 | A | afinador |
 | M / S | mute / solo de la pista |
@@ -105,6 +137,12 @@ Todos se pueden cambiar en ⚙ Configuración → Atajos de teclado (menos Esc).
 
 En el clip seleccionado, un clic sobre su línea de volumen agrega un punto; los puntos se arrastran y un
 doble clic los saca.
+
+En la franja de arriba de la regla, arrastrar marca el rango A–B (y prende el loop); sus bordes y el rango entero se
+arrastran. Doble clic agrega un marcador; los marcadores se arrastran, un clic salta ahí y doble clic los renombra.
+Clic derecho en la franja: agregar marcador, empezar o terminar el rango ahí, sacarlo, y en un marcador ponerle un
+nombre de la lista o repetir hasta el siguiente. Un rango marcado con Shift+arrastrar en una pista también se puede
+repetir desde su menú.
 
 Cada pista o carpeta puede tener su propio alto: arrastrá el borde de abajo de su encabezado (doble clic en el borde
 la vuelve al alto general). El botón ↺ al pie de los encabezados iguala todas.
@@ -166,6 +204,7 @@ la consola, sin abrir la ventana.
 | `exportar [proyecto] [--calidad alta\|estandar\|borrador] [--salida nombre]` | exporta el MP4 |
 | `exportar proyecto --audio wav\|mp3` | exporta solo la mezcla |
 | `exportar proyecto … --stems` | además, un WAV por pista en `<nombre> - stems` |
+| `exportar proyecto … --destino reels\|youtube\|ig-square\|ig-portrait [--lufs -14] [--cola 8]` | con el cuadro y el volumen de esa red; `--lufs` lleva la mezcla a ese volumen integrado, `--cola` deja sonar reverb y delay hasta N s después del último clip (0 = corta). Muestra los LUFS del resultado |
 | `proyecto abrir\|clips\|versiones\|volver carpeta` | abre un proyecto, lista pistas y clips, y recorre el historial |
 | `proyecto toma\|cortar carpeta [--camara]` | graba un tono como la ventana / lo corta sin cerrar, para probar la recuperación |
 | `proyecto editar carpeta mover\|recortar-inicio\|recortar-final\|fade-in\|fade-out clip delta` | edita un clip como en el timeline (más: `a-pista`, `dividir`, `duplicar`, `ganancia`, `curva`, `quitar-clip`, `nueva-pista`…) |
@@ -173,8 +212,9 @@ la consola, sin abrir la ventana.
 | `proyecto editar carpeta guardar-plantilla pista [nombre] \| usar-plantilla nombre`, `proyecto plantillas-de-pista x` | plantillas de pista (`pistas.json`) |
 | `proyecto encuadre\|sincronia\|formato\|modo carpeta …` | encuadre del clip, ajuste de sincronía, formato del video y modo Video / Solo audio |
 | `proyecto importar-audio carpeta archivo` | copia un audio de afuera a `media/` y lo pone en una pista |
+| `proyecto marcadores carpeta [agregar\|mover\|renombrar\|quitar …]`, `proyecto repetir carpeta [desde hasta \| --quitar]` | marcadores del tema y rango A–B del loop |
 | `proyecto historial carpeta` | tomas en uso y no usadas, exportaciones y actividad |
-| `proyecto verificar-deshacer\|verificar-clips\|verificar-tomas\|verificar-importar\|verificar-historial\|verificar-carpetas` | pruebas automáticas sobre una carpeta temporal |
+| `proyecto verificar-deshacer\|verificar-clips\|verificar-tomas\|verificar-importar\|verificar-historial\|verificar-carpetas\|verificar-marcadores` | pruebas automáticas sobre una carpeta temporal |
 | `proyectos lista\|plantillas\|nuevo\|renombrar\|duplicar\|borrar\|olvidar\|carpeta` | lo que hace el gestor de proyectos |
 | `proyectos guardar-plantilla\|borrar-plantilla` | plantillas de proyecto del usuario |
 | `proyectos plantillas-video\|guardar-plantilla-video\|aplicar-plantilla-video\|borrar-plantilla-video` | plantillas de video (filtro, ajustes y efectos) |

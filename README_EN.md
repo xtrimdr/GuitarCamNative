@@ -12,35 +12,65 @@ music without video).
 It is designed to be used with the guitar strapped on: one-key shortcuts, big buttons and a short path of
 **record → mix → export**.
 
-![The timeline, with a video panel per take](docs/screenshot-timeline.png)
+![The timeline in Video mode: one panel per take, colored track folders, the channel inspector and the color tab](docs/screenshot-timeline.png)
 
-![The mixer, with one strip per track, the reverb and delay returns and the master](docs/screenshot-mixer.png)
+| | |
+|---|---|
+| ![The mixer while playing: folders as VCAs, reverb and delay returns and the master](docs/screenshot-mixer.png) | ![Vertical 9:16 stacked layout, ready for Reels, Shorts and TikTok](docs/screenshot-vertical.png) |
+| **The mixer**: one strip per track, folders as VCAs, the reverb and delay returns and the master. | **Vertical 9:16** for Reels, Shorts and TikTok, with a color look applied. |
 
-![Audio only mode: a DAW without video](docs/screenshot-audio.png)
+![Audio only mode: tracks with their effect knobs and the EQ with its live spectrum](docs/screenshot-audio.png)
+
+*The screenshots show the demo project; the panel images are photos from [Unsplash](https://unsplash.com).*
 
 ## What it does
 
-- **Records** audio over ASIO (input and output in the same callback, with monitoring) and video from a
-  camera (DirectShow or DroidCam over IP). Each take is written to disk as it happens, so a crash does not lose it.
-- **Edits on a timeline**: multiple tracks, clips you can move, trim, split and duplicate, fades, clip gain
-  with its own volume curve, range delete, unlimited undo and redo, and import of outside audio (WAV, MP3, FLAC,
-  OGG, M4A, AIFF). Recording starts at the playhead, so you can redo just one part. Tracks group into **folders**
-  that fold, and drag in and out by their handle. A sound you like saves as a **track preset** and comes back from
-  New track → Preset.
-- **Mixes** with a per-track effects chain: saturation ("Vida", tube or tape), a compressor with presets
-  (Strumming / Arpeggio / Lead), a 6-band EQ with live spectrum, and sends to reverb and delay, plus a master
-  limiter, pan templates and a full mixer. Each track gets its own color and an instrument icon (guitars, bass,
-  drums, synths, strings, winds, percussion…), shown in the timeline, the inspector and the mixer. Each folder gets
-  its own mixer channel: its fader, M and S rule all its tracks, like a VCA.
-- **Composes the video**: a panel per track with cover-fit, zoom, pan and mirror, 16:9 / 9:16 / 1:1 aspect
-  ratios, side-by-side or stacked layout, and a color tab (filters, adjustments, effects and templates).
-- **Exports** to MP4 (offline mix + FFmpeg, with progress and cancellation) or, in **Audio only** mode, to
-  24-bit WAV or 320 kbps MP3; optionally each track in its own WAV too (stems). What you see in the preview
-  is what gets exported.
-- **Metronome** with time signature, tempo, tap tempo, count-in and six click sounds; latency calibration
-  with a cable or by playing. A **tuner** (arrows that tell you which way to turn the peg, adjustable sensitivity) and a master **LUFS** meter in the transport bar.
-- **Never loses anything**: atomic autosave 1.5 s after every edit, copies in `historial/` to go back,
-  recovery of interrupted recordings and a project manager with a Recycle Bin.
+### Record
+
+- Audio over **ASIO** (input and output in the same callback, with monitoring) and video from a camera (DirectShow
+  or DroidCam over IP). Each take is written to disk as it happens, so a crash does not lose it.
+- Recording starts at the playhead, so you can redo just one part, with a **metronome** (time signature, tempo, tap
+  tempo, count-in and six click sounds) and **latency calibration** with a cable or by playing.
+- A **tuner** with arrows that tell you which way to turn the peg and adjustable sensitivity.
+
+### Edit
+
+- A multitrack **timeline**: clips you can move, trim, split and duplicate, fades, clip gain with its own **volume
+  curve**, range delete, unlimited undo and redo, and import of outside audio (WAV, MP3, FLAC, OGG, M4A, AIFF).
+- **Folders** that fold and group tracks; Ctrl+click / Shift+click marks several tracks to move them together. Each
+  track gets its own **color** (24, in rainbow order), an **instrument icon** (guitars, bass, drums, synths, strings,
+  winds, percussion…), its own height and Vida, Comp, Reverb and Delay knobs in its header.
+- A sound you like saves as a **track preset** and comes back from New track → Preset.
+- Above the ruler, an **A–B range** loops a stretch (to practice the solo or mix a part) and named **markers**
+  (Intro, Chorus, Solo…) jump from one part to another. Zoom from one beat to the whole song with keys 1 to 5.
+
+### Mix
+
+- A per-track effects chain: saturation (**Vida**, tube or tape), a **compressor** with presets (Strumming /
+  Arpeggio / Lead), a **6-band EQ** with live spectrum, and sends to **reverb** and **delay**, plus a master limiter
+  and pan templates.
+- A full **mixer**; each folder gets its own channel, and its fader, M and S rule all its tracks, like a VCA.
+- Professional-grade audio: starting, stopping, jumping and dragging the playhead all fade, with no clicks or dropouts.
+
+### Build the video
+
+- A panel per track with cover-fit, zoom, pan and mirror; **16:9 / 9:16 / 1:1** aspect ratios, side-by-side or
+  stacked layout.
+- A **color** tab with 26 looks (Brujo, Cine, Moody, Fresco, Noche azul, Hielo…), adjustments (exposure, contrast,
+  whites, blacks, light…), effects and templates. What you see in the preview is what gets exported.
+
+### Export
+
+- **MP4** (offline mix + FFmpeg, with progress and cancellation), with presets for **Reels · TikTok**, **YouTube** and
+  **Instagram** (1:1 and 4:5) that fit the frame and bring the mix to −14 LUFS.
+- In **Audio only** mode, 24-bit WAV or 320 kbps MP3; optionally each track in its own WAV too (stems). A master
+  **LUFS** meter sits in the transport bar.
+
+### And also
+
+- **Never loses anything**: atomic saving (after every edit, every X minutes or by hand with Ctrl+S or the disk
+  button, chosen in Settings → Saving; takes are always saved), copies in `historial/` to go back, recovery of
+  interrupted recordings and a project manager with a Recycle Bin.
 - Configurable language, theme and keyboard shortcuts.
 
 ## Where it is going
@@ -86,6 +116,9 @@ Spanish by default; the language is chosen in Settings.
 | Shift+R or Num * | record (while recording: stop and save) |
 | R | arm / disarm the selected track |
 | Home | back to the start |
+| L | loop (the A–B range, or the whole song) |
+| I / O | range start (A) / end (B) at the playhead |
+| K / , / . | marker at the playhead / go to the previous / the next one |
 | C / Shift+C / T | click / count-in / tap tempo |
 | A | tuner |
 | M / S | mute / solo the track |
@@ -101,6 +134,11 @@ Spanish by default; the language is chosen in Settings.
 | Wheel, Shift+wheel, Ctrl+wheel, Alt+wheel | scroll up and down, zoom, scroll sideways, track height (the modifiers can be changed in Settings → Keyboard shortcuts) |
 
 On the selected clip, a click on its volume line adds a point; points drag, and a double-click removes one.
+
+On the strip above the ruler, a drag sets the A–B range (and turns the loop on); its edges and the whole range drag.
+A double-click adds a marker; markers drag, a click jumps there and a double-click renames them. Right-click the strip
+to add a marker, start or end the range there or remove it, and on a marker to pick a name from the list or loop to
+the next one.
 
 ## How it is built
 
