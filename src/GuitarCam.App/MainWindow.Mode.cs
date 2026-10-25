@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using GuitarCam.App.Video;
 using GuitarCam.Projects;
 
 namespace GuitarCam.App;
@@ -67,9 +68,10 @@ public partial class MainWindow
         MoveBottomView(audio);
         if (audio)
         {
-            // the decoders are FFmpeg processes: none runs while nothing is shown
-            var clips = tracks.SelectMany(t => t.Clips).ToList();
-            _ = Task.Run(() => { foreach (var c in clips) c.CloseVideo(); });
+            // the decoders are FFmpeg processes: none runs while nothing is shown. Detached here, on the UI thread,
+            // because the tick keeps drawing these clips; only the slow closing goes to the background
+            var decoders = tracks.SelectMany(t => t.Clips).Select(c => c.DetachVideo()).OfType<VideoDecoder>().ToList();
+            _ = Task.Run(() => { foreach (var d in decoders) d.Dispose(); });
         }
         else if (store != null) _ = OpenMissingVideos(store);
     }
@@ -100,8 +102,10 @@ public partial class MainWindow
             AudioArea.Children.Remove(TimelineHost);
             Grid.SetRow(TimelineHost, 3);
             Grid.SetRow(MixerHost, 3);
-            Root.Children.Add(MixerHost);
-            Root.Children.Add(TimelineHost);
+            // under the dialogs and toasts: added at the end they'd be drawn over them and keep taking the clicks
+            int at = Root.Children.IndexOf(Projects);
+            Root.Children.Insert(at, TimelineHost);
+            Root.Children.Insert(at, MixerHost);
             row.MinHeight = mixerView ? MixerMinH : TimelineMinH;
             row.Height = new GridLength(mixerView ? mixerH : timelineH);
         }

@@ -151,17 +151,18 @@ public sealed class LiveClip
     /// </summary>
     public bool UpdateVideo(double timelineSec, ColorGrade? color = null, VideoFx? videoFx = null)
     {
-        if (Video == null) return false;
+        var video = Video;
+        if (video == null) return false;
         bool inside = timelineSec >= ClipStartSec && timelineSec < ClipEndSec;
         bool changed = inside != InClip;
         InClip = inside;
         if (!inside) return changed;
 
         double videoSec = timelineSec - OffsetSec + Clip.EffectiveVideoOffsetMs(Media) / 1000;
-        Video.Want(videoSec);
-        Frame ??= new WriteableBitmap(new PixelSize(Video.Width, Video.Height), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Opaque);
+        video.Want(videoSec);
+        Frame ??= new WriteableBitmap(new PixelSize(video.Width, video.Height), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Opaque);
 
-        bool newRaw = Video.TryCopyLatest(ref frameVersion, buf =>
+        bool newRaw = video.TryCopyLatest(ref frameVersion, buf =>
         {
             if (rawFrame == null || rawFrame.Length != buf.Length)
                 rawFrame = new byte[buf.Length];
@@ -199,8 +200,8 @@ public sealed class LiveClip
             VideoColorProcessor.GradeAndGrainBgraParallel(
                 rawFrame,
                 gradedFrame,
-                Video.Width,
-                Video.Height,
+                video.Width,
+                video.Height,
                 lutTable,
                 grainLevels,
                 frameSeed);
@@ -209,22 +210,29 @@ public sealed class LiveClip
 
         using (var fb = Frame.Lock())
         {
-            int row = Video.Width * 4;
-            for (int y = 0; y < Video.Height; y++)
+            int row = video.Width * 4;
+            for (int y = 0; y < video.Height; y++)
                 Marshal.Copy(srcToCopy, y * row, fb.Address + y * fb.RowBytes, row);
         }
         return true;
     }
 
     /// <summary>Closes the decoder; <see cref="OpenVideo"/> may open it again (a project switched back from solo audio).</summary>
-    public void CloseVideo()
+    public void CloseVideo() => DetachVideo()?.Dispose();
+
+    /// <summary>
+    /// Lets go of the decoder without closing it, on the UI thread, so a clip still on screen is never ticked while
+    /// another thread clears it (that threw inside the tick and stopped its timer for good). The caller disposes it.
+    /// </summary>
+    public VideoDecoder? DetachVideo()
     {
-        Video?.Dispose();
+        var video = Video;
         Video = null;
         VideoTried = false;
         InClip = false;
         rawFrame = null;
         gradedFrame = null;
+        return video;
     }
 }
 
@@ -265,7 +273,9 @@ public sealed class LiveTrack
     /// </summary>
     public volatile float FolderGain = 1;
     public volatile bool FolderMuted, FolderSolo;
-    public bool Soloed => Channel.Solo || FolderSolo;
+    /// <summary>The Escuchar tool is playing this track alone (native only): a solo that is not saved and does not light S.</summary>
+    public volatile bool ListenSolo;
+    public bool Soloed => Channel.Solo || FolderSolo || ListenSolo;
     public bool Silenced => Channel.Muted || FolderMuted;
 
     public LiveTrack(Track track, IReadOnlyList<LiveClip> clips, int sampleRate)
@@ -308,7 +318,7 @@ public sealed class LiveTrack
         Chain.Volume = cur.Volume * FolderGain;
         Chain.Pan = cur.Pan;
         Chain.Muted = cur.Muted || FolderMuted;
-        Chain.Solo = cur.Solo || FolderSolo;
+        Chain.Solo = cur.Solo || FolderSolo || ListenSolo;
         Chain.ReverbOn = cur.ReverbOn;
         Chain.ReverbSend = cur.ReverbSend;
         Chain.DelayOn = cur.DelayOn;
@@ -487,7 +497,7 @@ public sealed class LiveTrack
         Chain.Volume = ch.Volume * FolderGain;
         Chain.Pan = ch.Pan;
         Chain.Muted = ch.Muted || FolderMuted || RecordMuted;
-        Chain.Solo = ch.Solo || FolderSolo;
+        Chain.Solo = ch.Solo || FolderSolo || ListenSolo;
         Chain.ReverbOn = ch.ReverbOn;
         Chain.ReverbSend = ch.ReverbSend;
         Chain.DelayOn = ch.DelayOn;

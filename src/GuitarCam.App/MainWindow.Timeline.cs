@@ -367,21 +367,27 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// Supr or the menu on a range selected with Shift+drag (native only): cuts that stretch out of every clip of
-    /// its track (<see cref="ClipEditing.DeleteRange"/>), leaving a gap, in one undo step.
+    /// Supr or the menu on a range (Rango or Shift+drag, native only): cuts that stretch out of every clip of its tracks
+    /// (<see cref="ClipEditing.DeleteRange"/>), leaving a gap; with <paramref name="close"/> (Shift+Supr, "Borrar y
+    /// cerrar el hueco") what follows on those tracks slides left over it (<see cref="ClipEditing.DeleteRangeClosing"/>).
+    /// One undo step either way.
     /// </summary>
-    async Task DeleteRangeSelection()
+    async Task DeleteRangeSelection(bool close = false)
     {
         if (Timeline.Range is not { } range || store == null) return;
+        var ids = range.TrackIds.ToList();
         Timeline.ClearRange();
         var lengths = tracks.SelectMany(t => t.Clips).ToDictionary(c => c.Clip.Id, c => c.LengthSec);
+        double? Length(Clip c) => lengths.TryGetValue(c.Id, out double l) ? l : null;
+        string keep = sel != null && ids.Contains(sel.Track.Id) ? sel.Track.Id : ids[0];
         int changed = 0;
         await EditTimeline(p =>
         {
-            changed = ClipEditing.DeleteRange(p, range.TrackId, range.Start, range.End, c => lengths.TryGetValue(c.Id, out double l) ? l : null);
-            return range.TrackId;
-        }, "range-deleted");
-        Status(changed == 0 ? Loc.T("range.nothing") : Loc.T("range.deleted", range.End - range.Start));
+            changed = close ? ClipEditing.DeleteRangeClosing(p, ids, range.Start, range.End, Length)
+                : ids.Sum(id => ClipEditing.DeleteRange(p, id, range.Start, range.End, Length));
+            return keep;
+        }, close ? "range-closed" : "range-deleted");
+        Status(changed == 0 ? Loc.T("range.nothing") : Loc.T(close ? "range.closed" : "range.deleted", range.End - range.Start));
     }
 
     Task DeleteTimelineSelection()
@@ -577,11 +583,13 @@ public partial class MainWindow
         var clip = clicked;
         var list = new List<object> { new MenuItem { Header = track.Track.Name, IsEnabled = false, FontSize = 11 } };
         Task Command(Action<Project> action, string type) => EditTimeline(p => { action(p); return track.Track.Id; }, type, clip?.Clip.Id);
-        if (point.X > Timeline.HeaderW && Timeline.Range is { } range && range.TrackId == track.Track.Id)
+        if (point.X > Timeline.HeaderW && Timeline.Range is { } range && range.TrackIds.Contains(track.Track.Id))
         {
             list.Add(MenuAction(Loc.T("menu.loopRange"), () => { Timeline.ClearRange(); SetLoopRange(range.Start, range.End); return Task.CompletedTask; },
                 icon: "", tip: Loc.T("menu.loopRange.tip")));
-            list.Add(MenuAction(Loc.T("menu.deleteRange"), DeleteRangeSelection, Shortcuts.Label("delete"), enabled, danger: true));
+            list.Add(MenuAction(Loc.T("menu.deleteRange"), () => DeleteRangeSelection(), Shortcuts.Label("delete"), enabled, danger: true));
+            list.Add(MenuAction(Loc.T("menu.deleteRangeClose"), () => DeleteRangeSelection(close: true), Shortcuts.Label("deleteClose"), enabled,
+                danger: true, tip: Loc.T("menu.deleteRangeClose.tip")));
             list.Add(new Separator());
         }
         if (clip != null)
@@ -602,6 +610,10 @@ public partial class MainWindow
                 if (copy != null) Timeline.SelectClip(Timeline.Selected, copy);
             }, "D", enabled));
             list.Add(MenuAction(Loc.T("menu.toStart"), () => Command(p => ClipEditing.ToStart(p, id, clip.LengthSec), "clip-moved"), enabled: enabled));
+            // where clips overlap the last one shows: this is on only when one over it covers part of it
+            bool covered = track.Clips.SkipWhile(o => o != clip).Skip(1).Any(o => o.ClipStartSec < clip.ClipEndSec && o.ClipEndSec > clip.ClipStartSec);
+            list.Add(MenuAction(Loc.T("menu.toFront"), () => Command(p => ClipEditing.BringToFront(p, id), "clip-to-front"),
+                enabled: enabled && covered, tip: Loc.T("menu.toFront.tip")));
             // the boxed clips, when this is one of them, are aligned (or removed) all at once
             var boxed = Timeline.BoxedClipIds.Contains(id) ? Timeline.BoxedClipIds.ToList() : [id];
             double grid = ClipEditing.GridSeconds(Timeline.SnapMode, Timeline.Bpm);

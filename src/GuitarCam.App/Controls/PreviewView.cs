@@ -205,18 +205,20 @@ public sealed class PreviewView : Control
                 var c = clip.Clip;
                 var window = ClipEditing.Window(c, clip.Media, clip.LengthSec);
                 var fades = ClipEnvelope.Fades(window, c.FadeInSec, c.FadeOutSec, c.LinkVideoFades, c.VideoFadeInSec, c.VideoFadeOutSec).Video;
-                // the fade goes towards the composition background, like the export's fade=color
-                using var opacity = ctx.PushOpacity(Timed ? ClipEnvelope.GainAt(Playhead, window.Start, window.End, fades.FadeIn, fades.FadeOut) : 1);
                 using (ctx.PushClip(dest))
                 {
-                    if (fr.Mirror)
+                    // the fade goes towards the composition background, like the export's fade=color
+                    using (ctx.PushOpacity(Timed ? ClipEnvelope.GainAt(Playhead, window.Start, window.End, fades.FadeIn, fades.FadeOut) : 1))
                     {
-                        using (ctx.PushTransform(Matrix.CreateScale(-1, 1) * Matrix.CreateTranslation(2 * dest.X + dest.Width, 0)))
-                            ctx.DrawImage(bmp, src, dest);
+                        if (fr.Mirror)
+                        {
+                            using (ctx.PushTransform(Matrix.CreateScale(-1, 1) * Matrix.CreateTranslation(2 * dest.X + dest.Width, 0)))
+                                ctx.DrawImage(bmp, src, dest);
+                        }
+                        else ctx.DrawImage(bmp, src, dest);
+                        PreviewVideoFx.DrawVignette(ctx, dest, settings?.VideoFx);
                     }
-                    else ctx.DrawImage(bmp, src, dest);
-                    // vignette and letterbox sit on the picture, under the fade (same order as the export)
-                    PreviewVideoFx.DrawPanelOverlays(ctx, dest, settings?.VideoFx);
+                    PreviewVideoFx.DrawLetterbox(ctx, dest, settings?.VideoFx);
                 }
             }
             else if (clip is { Video: not null })

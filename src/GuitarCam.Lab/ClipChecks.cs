@@ -196,6 +196,22 @@ static class ClipChecks
         ClipEditing.DeleteRange(rq, rq.Tracks[0].Id, 3, 6);
         var qr = ClipEditing.Window(rq.Tracks[0].Clips[1], media);
         Check(rq.Tracks[0].Clips.Count == 2 && Near(qr.Start, 6) && Near(qr.End, 10), "con un recorte previo también se corta en el lugar justo");
+        // delete a range closing the gap, over two of three tracks: what follows slides left on those tracks only
+        var cp = new Project { Media = [media], Tracks = [new Track { Name = "A" }, new Track { Name = "B" }, new Track { Name = "C" }] };
+        cp.Tracks[0].Clips.Add(new Clip { MediaId = media.Id, AtSec = 0 });
+        cp.Tracks[0].Clips.Add(new Clip { MediaId = media.Id, AtSec = 12 });
+        cp.Tracks[1].Clips.Add(new Clip { MediaId = media.Id, AtSec = 5 });
+        cp.Tracks[2].Clips.Add(new Clip { MediaId = media.Id, AtSec = 12 });
+        ClipEditing.DeleteRangeClosing(cp, [cp.Tracks[0].Id, cp.Tracks[1].Id], 4, 6);
+        var ca = cp.Tracks[0].Clips.Select(c => ClipEditing.Window(c, media)).OrderBy(w => w.Start).ToList();
+        var cb = cp.Tracks[1].Clips.Select(c => ClipEditing.Window(c, media)).ToList();
+        Check(ca.Count == 3 && Near(ca[0].End, 4) && Near(ca[1].Start, 4) && Near(ca[1].End, 8) && Near(ca[2].Start, 10) && Near(ca[2].End, 20),
+            "cerrar el hueco corre todo lo de después el largo del rango");
+        Check(cb.Count == 1 && Near(cb[0].Start, 4) && Near(cb[0].End, 13), "un clip que empieza adentro del rango pierde ese pedazo y se corre al inicio del rango…");
+        Check(Near(ClipEditing.Window(cp.Tracks[2].Clips[0], media).Start, 12), "…y las pistas fuera del rango no se mueven");
+        var front = cp.Tracks[0].Clips[0];
+        Check(ClipEditing.BringToFront(cp, front.Id) && cp.Tracks[0].Clips[^1] == front && !ClipEditing.BringToFront(cp, front.Id),
+            "traer al frente pasa el clip al final de la pista (el que se ve)");
         // clip gain and volume curve (native only)
         ClipGainCurve.Point[] pts = [new(1, 0), new(3, -12)];
         Check(ClipGainCurve.DbAt(pts, 0) == 0 && ClipGainCurve.DbAt(pts, 2) == -6 && ClipGainCurve.DbAt(pts, 9) == -12 && ClipGainCurve.DbAt([], 5) == 0,

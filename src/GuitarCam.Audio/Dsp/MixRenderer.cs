@@ -352,6 +352,24 @@ public sealed class MixGraphBus
     {
         Reverb.Process(rl, rr);
         Delay.Process(dl, dr);
+        MixReturnsAndLimit(masterL, masterR, rl, rr, dl, dr, limit, master);
+    }
+
+    /// <summary>
+    /// The second half of <see cref="ProcessReturnsAndLimiter"/>: adds the returns <see cref="Reverb"/> and
+    /// <see cref="Delay"/> already processed into the master, then the master chain, Empuje, clip and limiter. Apart
+    /// so the export can run the returns of a stretch while the master works on the one before.
+    /// </summary>
+    public void MixReturnsAndLimit(
+        Span<float> masterL,
+        Span<float> masterR,
+        ReadOnlySpan<float> rl,
+        ReadOnlySpan<float> rr,
+        ReadOnlySpan<float> dl,
+        ReadOnlySpan<float> dr,
+        bool limit = true,
+        bool master = true)
+    {
         float rPkL = ReverbMeterL, rPkR = ReverbMeterR;
         float dPkL = DelayMeterL, dPkR = DelayMeterR;
         for (int i = 0; i < masterL.Length; i++)
@@ -404,6 +422,50 @@ public sealed class MixGraphBus
 public static class MixRenderer
 {
     const int Quantum = 128;
+    /// <summary>How much each stage of <see cref="RenderTo"/> renders at a time: long enough that handing it over costs
+    /// nothing, short enough that the stages start working together right away (64 blocks, 0.17 s at 48 kHz).</summary>
+    const int ChunkFrames = Quantum * 64;
+    /// <summary>Stretches in flight: one per stage, so none waits for buffers.</summary>
+    const int Sets = 3;
+
+    /// <summary>A stretch of a track's output after its fader and its sends (what its blocks added into the master),
+    /// or the sum of all of them.</summary>
+    sealed class ChunkBuffers
+    {
+        public readonly float[] L = new float[ChunkFrames], R = new float[ChunkFrames];
+        public readonly float[] RevL = new float[ChunkFrames], RevR = new float[ChunkFrames];
+        public readonly float[] DlyL = new float[ChunkFrames], DlyR = new float[ChunkFrames];
+
+        public void Clear(int n)
+        {
+            Array.Clear(L, 0, n);
+            Array.Clear(R, 0, n);
+            Array.Clear(RevL, 0, n);
+            Array.Clear(RevR, 0, n);
+            Array.Clear(DlyL, 0, n);
+            Array.Clear(DlyR, 0, n);
+        }
+
+        public void Add(ChunkBuffers b, int n)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                L[i] += b.L[i];
+                R[i] += b.R[i];
+                RevL[i] += b.RevL[i];
+                RevR[i] += b.RevR[i];
+                DlyL[i] += b.DlyL[i];
+                DlyR[i] += b.DlyR[i];
+            }
+        }
+    }
+
+    /// <summary>One stretch in flight: each track's buffers and their sum (the master and the sends).</summary>
+    sealed class ChunkSet(int tracks)
+    {
+        public readonly ChunkBuffers[] Tracks = Enumerable.Range(0, tracks).Select(_ => new ChunkBuffers()).ToArray();
+        public readonly ChunkBuffers Sum = new();
+    }
 
     /// <summary>Port of <c>mixDurationSec</c> in <c>mixGraph.ts</c>: end of the last clip (at least 1 s).</summary>
     public static double MixDurationSec(IEnumerable<MixTrackSpec> tracks, int sampleRate)
@@ -494,46 +556,118 @@ public static class MixRenderer
         }
         if (only >= 0) anySolo = false;
 
-        var masterL = new float[Quantum];
-        var masterR = new float[Quantum];
-
+        int chunks = (totalFrames + ChunkFrames - 1) / ChunkFrames;
+        var sets = new ChunkSet[Math.Min(Sets, chunks)];
+        for (int k = 0; k < sets.Length; k++) sets[k] = new ChunkSet(active.Count);
         int reportStep = Math.Max(sampleRate / 2, totalFrames / 40);
         int nextReport = reportStep;
 
-        for (int pos = 0; pos < totalFrames; pos += Quantum)
+        // three stages, each on its own thread and each over the stretches in order (the effects keep their state from
+        // one to the next): the tracks (in parallel among them) -> the reverb and delay returns -> the master and the sink.
+        // A stretch's buffers are free again once the master is done with it.
+        using var failed = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var token = failed.Token;
+        using var free = new SemaphoreSlim(sets.Length);
+        using var tracksDone = new SemaphoreSlim(0);
+        using var returnsDone = new SemaphoreSlim(0);
+        Exception? error = null;
+        void Stage(Action<int> run, SemaphoreSlim wait, SemaphoreSlim done)
         {
-            ct.ThrowIfCancellationRequested();
-            int n = Math.Min(Quantum, totalFrames - pos);
-            var ml = masterL.AsSpan(0, n);
-            var mr = masterR.AsSpan(0, n);
-            ml.Clear();
-            mr.Clear();
-            var rl = bus.PrepareReverbL(n);
-            var rr = bus.PrepareReverbR(n);
-            var dl = bus.PrepareDelayL(n);
-            var dr = bus.PrepareDelayR(n);
-
-            foreach (var (clips, chain) in active)
+            try
             {
-                var bl = chain.BufferL(n);
-                var br = chain.BufferR(n);
-                TrackDspChain.SampleClips(clips, pos, n, sampleRate, bl, br);
-                chain.ProcessFilledBuffer(n, anySolo, ml, mr, rl, rr, dl, dr, out _, out _, out _);
+                for (int c = 0; c < chunks; c++)
+                {
+                    wait.Wait(token);
+                    run(c);
+                    done.Release();
+                }
             }
-
-            bus.ProcessReturnsAndLimiter(ml, mr, rl, rr, dl, dr, limit, master);
-
-            int skip = Math.Max(0, latency - pos);
-            int dst = pos + skip - latency;
-            int count = Math.Min(n - skip, frames - dst);
-            if (count > 0) sink(dst, ml.Slice(skip, count), mr.Slice(skip, count));
-
-            if (onProgress != null && pos + n >= nextReport)
+            catch (OperationCanceledException) { }
+            catch (Exception e)
             {
-                onProgress(Math.Min(1.0, (pos + n) / (double)totalFrames));
-                nextReport += reportStep;
+                Interlocked.CompareExchange(ref error, e, null);
+                failed.Cancel();
             }
         }
+
+        void RunTracks(int c)
+        {
+            var set = sets[c % sets.Length];
+            int at = c * ChunkFrames, len = Math.Min(ChunkFrames, totalFrames - at);
+            void Track(int k)
+            {
+                var (clips, chain) = active[k];
+                var b = set.Tracks[k];
+                b.Clear(len);
+                for (int off = 0; off < len; off += Quantum)
+                {
+                    int n = Math.Min(Quantum, len - off);
+                    TrackDspChain.SampleClips(clips, at + off, n, sampleRate, chain.BufferL(n), chain.BufferR(n));
+                    chain.ProcessFilledBuffer(n, anySolo, b.L.AsSpan(off, n), b.R.AsSpan(off, n), b.RevL.AsSpan(off, n),
+                        b.RevR.AsSpan(off, n), b.DlyL.AsSpan(off, n), b.DlyR.AsSpan(off, n), out _, out _, out _);
+                }
+            }
+            if (active.Count > 1) Parallel.For(0, active.Count, new ParallelOptions { CancellationToken = token }, Track);
+            else if (active.Count == 1) Track(0);
+            // summed in the tracks' order, so every sample is the same float the one-block-at-a-time loop gave
+            set.Sum.Clear(len);
+            foreach (var b in set.Tracks) set.Sum.Add(b, len);
+        }
+
+        void RunReturns(int c)
+        {
+            var sum = sets[c % sets.Length].Sum;
+            int len = Math.Min(ChunkFrames, totalFrames - c * ChunkFrames);
+            void Rev()
+            {
+                for (int off = 0; off < len; off += Quantum)
+                {
+                    int n = Math.Min(Quantum, len - off);
+                    bus.Reverb.Process(sum.RevL.AsSpan(off, n), sum.RevR.AsSpan(off, n));
+                }
+            }
+            void Dly()
+            {
+                for (int off = 0; off < len; off += Quantum)
+                {
+                    int n = Math.Min(Quantum, len - off);
+                    bus.Delay.Process(sum.DlyL.AsSpan(off, n), sum.DlyR.AsSpan(off, n));
+                }
+            }
+            Parallel.Invoke(new ParallelOptions { CancellationToken = token }, Rev, Dly);
+        }
+
+        void RunMaster(int c)
+        {
+            var sum = sets[c % sets.Length].Sum;
+            int at = c * ChunkFrames, len = Math.Min(ChunkFrames, totalFrames - at);
+            for (int off = 0; off < len; off += Quantum)
+            {
+                int n = Math.Min(Quantum, len - off), pos = at + off;
+                var ml = sum.L.AsSpan(off, n);
+                var mr = sum.R.AsSpan(off, n);
+                bus.MixReturnsAndLimit(ml, mr, sum.RevL.AsSpan(off, n), sum.RevR.AsSpan(off, n), sum.DlyL.AsSpan(off, n), sum.DlyR.AsSpan(off, n), limit, master);
+
+                int skip = Math.Max(0, latency - pos);
+                int dst = pos + skip - latency;
+                int count = Math.Min(n - skip, frames - dst);
+                if (count > 0) sink(dst, ml.Slice(skip, count), mr.Slice(skip, count));
+
+                if (onProgress != null && pos + n >= nextReport)
+                {
+                    onProgress(Math.Min(1.0, (pos + n) / (double)totalFrames));
+                    nextReport += reportStep;
+                }
+            }
+        }
+
+        var tracksTask = Task.Factory.StartNew(() => Stage(RunTracks, free, tracksDone), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        var returnsTask = Task.Factory.StartNew(() => Stage(RunReturns, tracksDone, returnsDone), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        // the master runs here, so the sink and the progress are called on the caller's thread like before
+        Stage(RunMaster, returnsDone, free);
+        Task.WaitAll(tracksTask, returnsTask);
+        if (error != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
+        ct.ThrowIfCancellationRequested();
 
         onProgress?.Invoke(1.0);
     }

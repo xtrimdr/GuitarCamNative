@@ -153,14 +153,21 @@ static class ProjectCommands
                 Console.WriteLine(TrackPresets.AddTo(p, preset, p.Settings.AudioOnly));
                 break;
             case "borrar-rango":
-                Console.WriteLine($"{ClipEditing.DeleteRange(p, id, double.Parse(value, System.Globalization.CultureInfo.InvariantCulture), a.Double("hasta", 0))} clip(s) cambiados");
+                // pista[,pista…] desde --hasta fin [--cerrar]: with --cerrar what follows slides left over the gap
+                double rs = double.Parse(value, System.Globalization.CultureInfo.InvariantCulture), re = a.Double("hasta", 0);
+                var rangeTracks = id.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                int cut = a.Flag("cerrar") ? ClipEditing.DeleteRangeClosing(p, rangeTracks, rs, re) : rangeTracks.Sum(t => ClipEditing.DeleteRange(p, t, rs, re));
+                Console.WriteLine($"{cut} clip(s) cambiados");
+                break;
+            case "al-frente":
+                Console.WriteLine(ClipEditing.BringToFront(p, id) ? "El clip quedó al frente." : "Ya estaba al frente.");
                 break;
             default:
                 var mode = op switch
                 {
                     "mover" => ClipEditMode.Move, "recortar-inicio" => ClipEditMode.TrimStart,
                     "recortar-final" => ClipEditMode.TrimEnd, "fade-in" => ClipEditMode.FadeIn, "fade-out" => ClipEditMode.FadeOut,
-                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar|a-pista|inicio|alinear|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar; nueva-carpeta [nombre] --pistas id,id; a-carpeta pista[,pista…] carpeta|raiz [--en n]; sacar-de-carpeta pista; mover-carpeta carpeta n; quitar-carpeta carpeta [--con-pistas]; carpeta id [--nombre --volumen --mute --solo --plegar]; transponer pista semitonos; guardar-plantilla pista [nombre]; usar-plantilla id|nombre"),
+                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar|a-pista|inicio|alinear|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar; nueva-carpeta [nombre] --pistas id,id; a-carpeta pista[,pista…] carpeta|raiz [--en n]; sacar-de-carpeta pista; mover-carpeta carpeta n; quitar-carpeta carpeta [--con-pistas]; carpeta id [--nombre --volumen --mute --solo --plegar]; transponer pista semitonos; guardar-plantilla pista [nombre]; usar-plantilla id|nombre; borrar-rango pista[,pista…] desde --hasta fin [--cerrar]; al-frente clip"),
                 };
                 var (_, clip) = ClipEditing.Find(p, id);
                 double dx = double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
@@ -717,6 +724,11 @@ static class LibraryCommands
                 ProjectLibrary.SetRoot(Path.GetFullPath(Need(arg1)));
                 Console.WriteLine($"Carpeta de proyectos: {ProjectLibrary.Root}");
                 return 0;
+            case "buscar":
+                var found = ProjectLibrary.Inspect(Need(arg1));
+                Console.WriteLine($"{found.Kind}: {found.Dir}");
+                foreach (var f in found.Found) Console.WriteLine($"  {f}");
+                return 0;
             case "olvidar":
                 ProjectLibrary.Forget(Path.GetFullPath(Need(arg1)));
                 Console.WriteLine("Quitado de la lista.");
@@ -747,7 +759,7 @@ static class LibraryCommands
                 return 0;
             case "plantillas-video":
                 foreach (var t in VideoTemplates.List())
-                    Console.WriteLine($"  {t.Id,-20} {t.Name,-30} filtro {t.Color.Look} {t.Color.Amount:0}% · viñeta {t.Fx.Vignette:0} · grano {t.Fx.Grain:0} · barras {t.Fx.Letterbox}");
+                    Console.WriteLine($"  {t.Id,-20} {t.Name,-30} filtro {t.Color.Look} {t.Color.Amount:0}% · viñeta {t.Fx.Vignette:0} · grano {t.Fx.Grain:0} · barras {t.Fx.Letterbox}{(t.Fx.Letterbox == "custom" ? $" {t.Fx.LetterboxHeight:0}%" : "")}");
                 return 0;
             case "guardar-plantilla-video":
                 using (var store = ProjectStore.Open(Path.GetFullPath(Need(arg1))))

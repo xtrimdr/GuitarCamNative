@@ -73,6 +73,9 @@ public sealed class ProjectStore : IDisposable
 
     public static bool IsProject(string dir) => File.Exists(Path.Combine(dir, FileName));
 
+    /// <summary>A folder that lost guitarcam.json but still has the .bak or a snapshot: <see cref="Open"/> rescues it.</summary>
+    public static bool IsRecoverable(string dir) => File.Exists(Path.Combine(dir, FileName + ".bak")) || Snapshots(dir).Count > 0;
+
     /// <summary>Creates the folder (it must not hold a project yet) and writes the first save.</summary>
     public static ProjectStore Create(string dir, Project project)
     {

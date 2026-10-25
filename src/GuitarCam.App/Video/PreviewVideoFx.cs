@@ -15,7 +15,7 @@ namespace GuitarCam.App.Video;
 /// backed by <see cref="VideoColorProcessor"/> so the preview matches the FFmpeg MP4 export:
 /// <list type="bullet">
 /// <item><description>Per-frame 3D LUT trilinear grading and monochrome grain run on the decoded frame buffer in <c>LiveClip.UpdateVideo</c>, with the LUT table cached here (<see cref="GetLutTable"/>).</description></item>
-/// <item><description>Panel-space elliptical vignette mask (cached per panel size and vignette settings) and cinema letterbox bars are drawn over each panel via <see cref="DrawPanelOverlays"/>.</description></item>
+/// <item><description>Panel-space elliptical vignette mask (cached per panel size and vignette settings) and cinema letterbox bars are drawn over each panel via <see cref="DrawVignette"/> and <see cref="DrawLetterbox"/>.</description></item>
 /// </list>
 /// </summary>
 public static class PreviewVideoFx
@@ -56,7 +56,8 @@ public static class PreviewVideoFx
                 fx.Vignette,
                 fx.VignetteSize,
                 fx.Grain,
-                fx.Letterbox));
+                fx.Letterbox,
+                fx.LetterboxHeight));
 
     /// <summary>Gets or builds the cached <see cref="VideoColorProcessor.Lut3DTable"/> for <paramref name="spec"/>.</summary>
     public static VideoColorProcessor.Lut3DTable GetLutTable(ExportColorSpec spec)
@@ -73,46 +74,43 @@ public static class PreviewVideoFx
     }
 
     /// <summary>
-    /// Draws the panel-level vignette multiply mask and cinema letterbox bars over <paramref name="dest"/>
-    /// (in the same order as <c>SplitScreenCanvas.tsx:263-275</c>: after the mirrored/cropped video image,
-    /// before the video fade-to-black and panel border/label).
+    /// Draws the panel-level vignette multiply mask over <paramref name="dest"/>, right after the video image and
+    /// under the same opacity as the picture's fade.
     /// </summary>
-    public static void DrawPanelOverlays(DrawingContext ctx, Rect dest, VideoFx? videoFx) =>
-        DrawPanelOverlays(ctx, dest, ToSpec(videoFx));
-
-    /// <summary>
-    /// Overload taking an <see cref="ExportVideoFxSpec"/> directly.
-    /// </summary>
-    public static void DrawPanelOverlays(DrawingContext ctx, Rect dest, ExportVideoFxSpec fx)
+    public static void DrawVignette(DrawingContext ctx, Rect dest, VideoFx? videoFx)
     {
         if (dest.Width <= 1 || dest.Height <= 1) return;
-        var norm = VideoColorProcessor.NormalizeVideoFx(fx);
-        if (!norm.On) return;
-
-        int pw = Math.Clamp((int)Math.Round(dest.Width, MidpointRounding.AwayFromZero), 2, 960);
-        int ph = Math.Clamp((int)Math.Round(dest.Height, MidpointRounding.AwayFromZero), 2, 960);
-
-        if (VideoColorProcessor.HasVignette(norm))
-        {
-            var maskBmp = GetOrCreateVignetteBitmap(norm, pw, ph);
-            ctx.DrawImage(maskBmp, new Rect(0, 0, pw, ph), dest);
-        }
-
-        int barPx = VideoColorProcessor.LetterboxBar(norm, pw, ph);
-        if (barPx > 0)
-        {
-            double barH = Math.Min(dest.Height * 0.5, barPx * (dest.Height / ph));
-            if (barH > 0.5)
-            {
-                ctx.FillRectangle(Palette.Composition, new Rect(dest.X, dest.Y, dest.Width, barH));
-                ctx.FillRectangle(Palette.Composition, new Rect(dest.X, dest.Bottom - barH, dest.Width, barH));
-            }
-        }
+        var norm = ToSpec(videoFx);
+        if (!VideoColorProcessor.HasVignette(norm)) return;
+        var (pw, ph) = MaskSize(dest);
+        ctx.DrawImage(GetOrCreateVignetteBitmap(norm, pw, ph), new Rect(0, 0, pw, ph), dest);
     }
+
+    /// <summary>
+    /// Draws the cinema letterbox bars over <paramref name="dest"/>. They go outside the fade's opacity: Avalonia
+    /// applies a pushed opacity to each draw call, so faded bars would let the picture show through them. Solid
+    /// bars in the composition color look the same as the export, where the whole panel fades to that color.
+    /// </summary>
+    public static void DrawLetterbox(DrawingContext ctx, Rect dest, VideoFx? videoFx)
+    {
+        if (dest.Width <= 1 || dest.Height <= 1) return;
+        var (pw, ph) = MaskSize(dest);
+        int barPx = VideoColorProcessor.LetterboxBar(ToSpec(videoFx), pw, ph);
+        if (barPx <= 0) return;
+        double barH = Math.Min(dest.Height * 0.5, barPx * (dest.Height / ph));
+        if (barH <= 0.5) return;
+        ctx.FillRectangle(Palette.Composition, new Rect(dest.X, dest.Y, dest.Width, barH));
+        ctx.FillRectangle(Palette.Composition, new Rect(dest.X, dest.Bottom - barH, dest.Width, barH));
+    }
+
+    /// <summary>Panel size in mask pixels (capped so the cached vignette stays small).</summary>
+    static (int W, int H) MaskSize(Rect dest) =>
+        (Math.Clamp((int)Math.Round(dest.Width, MidpointRounding.AwayFromZero), 2, 960),
+         Math.Clamp((int)Math.Round(dest.Height, MidpointRounding.AwayFromZero), 2, 960));
 
     static WriteableBitmap GetOrCreateVignetteBitmap(ExportVideoFxSpec norm, int w, int h)
     {
-        var keySpec = norm with { Grain = 0, Letterbox = "off" };
+        var keySpec = norm with { Grain = 0, Letterbox = "off", LetterboxHeight = VideoColorProcessor.LetterboxHeightDefault };
         lock (MaskGate)
         {
             if (cachedMaskSpec != keySpec)

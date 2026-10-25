@@ -57,7 +57,11 @@ public static class VideoColorProcessor
         new("1.85", "1.85", 1.85),
         new("2.00", "2.00", 2.0),
         new("2.39", "2.39", 2.39),
+        new("custom", "Libre", 0),
     ];
+
+    /// <summary>Height of each bar with the "custom" letterbox, in % of the panel height (default and range).</summary>
+    public const double LetterboxHeightDefault = 12, LetterboxHeightMin = 1, LetterboxHeightMax = 40;
 
     static double Clamp01(double v) => v < 0 ? 0 : v > 1 ? 1 : v;
     static double Mix(double a, double b, double t) => a + (b - a) * t;
@@ -692,13 +696,14 @@ public static class VideoColorProcessor
     {
         if (fx == null) return ExportVideoFxSpec.Defaults;
         static double Clamp100(double v, double d) => double.IsFinite(v) ? Math.Clamp(v, 0, 100) : d;
-        string lb = fx.Letterbox is "1.85" or "2.00" or "2.39" ? fx.Letterbox : "off";
+        string lb = fx.Letterbox is "1.85" or "2.00" or "2.39" or "custom" ? fx.Letterbox : "off";
         return new ExportVideoFxSpec(
             On: fx.On,
             Vignette: Clamp100(fx.Vignette, 0),
             VignetteSize: Clamp100(fx.VignetteSize, 50),
             Grain: Clamp100(fx.Grain, 0),
-            Letterbox: lb);
+            Letterbox: lb,
+            LetterboxHeight: double.IsFinite(fx.LetterboxHeight) ? Math.Clamp(fx.LetterboxHeight, LetterboxHeightMin, LetterboxHeightMax) : LetterboxHeightDefault);
     }
 
     public static bool HasVignette(ExportVideoFxSpec? fx)
@@ -717,6 +722,7 @@ public static class VideoColorProcessor
     {
         var n = NormalizeVideoFx(fx);
         if (!n.On) return 0;
+        if (n.Letterbox == "custom") return (int)Math.Round(h * n.LetterboxHeight / 100, MidpointRounding.AwayFromZero);
         double ratio = n.Letterbox switch
         {
             "1.85" => 1.85,

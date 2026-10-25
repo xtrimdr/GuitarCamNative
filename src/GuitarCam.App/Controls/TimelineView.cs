@@ -168,10 +168,9 @@ public sealed partial class TimelineView : Control
     /// <summary>The other clip's edge the dragged one is stuck to (snap to other clips), drawn as a guide; null = none.</summary>
     double? stuckTo;
     /// <summary>
-    /// The range selected with Shift+drag on one track (native only), to delete what is inside it. It stays after the
-    /// mouse is released until another click, Esc, an edit or the delete itself.
+    /// The range selected with Rango or Shift+drag over one or more tracks (native only, <see cref="rangeTracks"/>), to
+    /// delete what is inside it. It stays after the mouse is released until another click, Esc, an edit or the delete itself.
     /// </summary>
-    string? rangeTrackId;
     double rangeStart, rangeEnd, rangeAnchor;
     KeyModifiers modifiers;
     double originalPan;
@@ -280,18 +279,17 @@ public sealed partial class TimelineView : Control
     public event Action<LiveTrack, double?, double?>? ChannelRequested;
     public event Action<double>? TrackHeightChanged;
 
-    /// <summary>The selected range of a track, if any: the window deletes what is inside it on Supr or from the menu.</summary>
-    public (string TrackId, double Start, double End)? Range =>
-        rangeTrackId != null && rangeEnd - rangeStart >= MinRangeSec ? (rangeTrackId, rangeStart, rangeEnd) : null;
-    /// <summary>A Shift+drag shorter than this is a click, not a range.</summary>
+    /// <summary>The selected range, if any: its tracks (a live set: copy it before clearing) and its times. The window
+    /// deletes what is inside it on Supr or from the menu.</summary>
+    public (IReadOnlyCollection<string> TrackIds, double Start, double End)? Range =>
+        rangeTracks.Count > 0 && rangeEnd - rangeStart >= MinRangeSec ? (rangeTracks, rangeStart, rangeEnd) : null;
+    /// <summary>A range drag shorter than this is a click, not a range.</summary>
     const double MinRangeSec = 0.02;
-    /// <summary>The range was finished with the mouse: the window can offer to delete it.</summary>
-    public event Action<string, double, double>? RangeSelected;
 
     public void ClearRange()
     {
-        if (rangeTrackId == null) return;
-        rangeTrackId = null;
+        if (rangeTracks.Count == 0) return;
+        rangeTracks.Clear();
         rangeStart = rangeEnd = 0;
         InvalidateVisual();
     }
@@ -608,8 +606,9 @@ public sealed partial class TimelineView : Control
         FitModeChanged?.Invoke(on);
     }
 
-    /// <summary>Beats across the view for the zoom presets of keys 1–5 (native only, asked by the user): from the closest,
-    /// a beat, to a bar, 4 bars, 16 bars and the whole song (0). Counted in beats so a preset shows the same music at any tempo.</summary>
+    /// <summary>Beats across the view for the zoom presets (native only, asked by the user; no key by default since 1–7
+    /// pick the tools): from the closest, a beat, to a bar, 4 bars, 16 bars and the whole song (0). Counted in beats so a
+    /// preset shows the same music at any tempo.</summary>
     public static readonly double[] ZoomPresetBeats = [1, 4, 16, 64, 0];
 
     /// <summary>Zoom preset <paramref name="n"/> (0..4) of <see cref="ZoomPresetBeats"/>, keeping the playhead in place.</summary>
@@ -650,12 +649,7 @@ public sealed partial class TimelineView : Control
             px = (Bounds.Width - HeaderW) / 2;
             at = (scrollX + px) / pps;
         }
-        pps = next;
-        double fit = (Bounds.Width - HeaderW - 24) / Math.Max(8, LengthSec);
-        SetFit(Math.Abs(pps / fit - 1) < 0.02);
-        scrollX = Math.Max(0, at * pps - px);
-        ZoomChanged?.Invoke();
-        InvalidateVisual();
+        ZoomAround(next, at, px);
     }
 
     double X(double sec) => HeaderW + sec * pps - scrollX;
@@ -1088,6 +1082,7 @@ public sealed partial class TimelineView : Control
             }
             if (gesture == "box" && moved)
                 ctx.DrawRectangle(Palette.Alpha(Palette.AccentColor, 0.08), Palette.Pen(Palette.Alpha(Palette.AccentColor, 0.7)), BoxRect());
+            DrawZoomBand(ctx, H);
         }
         DrawRuler(ctx, W);
         DrawStrip(ctx, W);
@@ -1607,7 +1602,8 @@ public sealed partial class TimelineView : Control
         foreach (var (gx, major) in grid)
             if (gx >= HeaderW) ctx.DrawLine(major ? majorPen : minorPen, new Point(gx, y), new Point(gx, y + lh));
         foreach (var c in t.Clips) DrawClip(ctx, t, c, y, sel, W);
-        if (Range is { } r && r.TrackId == t.Track.Id) DrawRange(ctx, y, lh, W, r.Start, r.End);
+        if (Range is { } r && rangeTracks.Contains(t.Track.Id)) DrawRange(ctx, y, lh, W, r.Start, r.End);
+        DrawSplitHover(ctx, i, y, lh);
         ctx.DrawLine(Palette.Pen(Palette.Line), new Point(HeaderW, y + lh - 0.5), new Point(W, y + lh - 0.5));
     }
 
@@ -1626,7 +1622,7 @@ public sealed partial class TimelineView : Control
         bool silent = t.Silenced || tracks.Any(o => o.Soloed) && !t.Soloed;
         // the clip being carried to another track stays dimmed where it was until it is dropped
         bool carried = dragged == c && overIndex >= 0 && overIndex != fromIndex && !swapping;
-        using var opacity = ctx.PushOpacity((!c.Offline && silent ? 0.5 : 1) * (carried ? 0.35 : 1));
+        using var opacity = ctx.PushOpacity((!c.Offline && silent ? 0.5 : 1) * (carried ? 0.35 : 1) * (erasing.Contains(c.Clip.Id) ? 0.25 : 1));
         // the web shows the filmstrip from SHOW_THUMBS_AT; audio-only media (native only) keeps the plain clip
         bool thumbs = showVideo && t.Track.Video && !c.Offline && lh >= ShowThumbsAt && c.VideoPath != null;
         var fill = c.Offline ? Palette.Alpha(color, silent ? 0.05 : sel ? 0.16 : 0.10) : thumbs ? null
@@ -1663,8 +1659,9 @@ public sealed partial class TimelineView : Control
                     ctx.DrawRectangle(null, border, clip.Deflate(0.5), 4.5, 4.5); // over the frames, inside the clip
                 }
                 var geo = Waveform(c, model, w, thumbs ? clip.Bottom - clip.Height * 0.55 : y + 6, y + lh - 6, W);
-                var wave = silent ? Palette.Faint : thumbs && !sel ? Palette.Alpha(Colors.White, 0.85)
-                    : tint != null ? Palette.Alpha(color, sel ? 1 : 0.8) : sel ? Palette.Accent : Palette.Alpha(Palette.DimColor, 0.8);
+                // a tinted track keeps its color over the frames too (full strength there, the shade dims it); untinted goes white
+                var wave = silent ? Palette.Faint : tint != null ? Palette.Alpha(color, sel || thumbs ? 1 : 0.8)
+                    : thumbs && !sel ? Palette.Alpha(Colors.White, 0.85) : sel ? Palette.Accent : Palette.Alpha(Palette.DimColor, 0.8);
                 ctx.DrawGeometry(null, Palette.Pen(wave, 1), geo);
                 if (TransposeProgress?.Invoke(t) is { } progress) DrawTransposing(ctx, clip, Math.Max(x0, HeaderW), progress);
             }
@@ -1687,6 +1684,7 @@ public sealed partial class TimelineView : Control
             bool editable = sel && Selected >= 0 && Selected < tracks.Count && tracks[Selected] == t && CurveEditable(Selected, c);
             if (!c.Offline && (editable || model.GainDb != 0 || model.GainCurve.Count > 0)) DrawCurve(ctx, c, model, w, clip, editable);
             if (sel || clip.Contains(lastPointer)) DrawEdgeHandles(ctx, c, clip, x0 + f.FadeIn * pps, x1 - f.FadeOut * pps);
+            if (!c.Offline && MediaBadge(clip) is { } badge) DrawMediaBadge(ctx, badge, c.VideoPath != null);
             if (w.AnchorCut > 0.0005)
             {
                 for (double sy = clip.Top - 6; sy < clip.Bottom; sy += 6)
@@ -1720,6 +1718,34 @@ public sealed partial class TimelineView : Control
         ctx.DrawRectangle(Palette.Alpha(Colors.Black, 0.7), Palette.Pen(Palette.Alpha(Palette.AccentColor, 0.5)), pill, 4, 4);
         FxIcon.Draw(ctx, FxIcon.Transpose, new Rect(pill.X + 7, pill.Center.Y - 6, 12, 12), Palette.Accent);
         ctx.DrawText(label, new Point(pill.X + 24, pill.Center.Y - label.Height / 2));
+    }
+
+    /// <summary>
+    /// The badge in a clip's top right corner (native only): a camera when its media has video, a note when it is
+    /// audio only, so you can tell them apart without opening anything. It sits left of the edge handles and only
+    /// says something; hovering it gives the tooltip (<see cref="UpdateMediaTip"/>).
+    /// </summary>
+    static Rect? MediaBadge(Rect clip) => clip.Width >= 48 && clip.Height >= 24 ? new Rect(clip.Right - 30, clip.Top + 4, 18, 16) : null;
+
+    void DrawMediaBadge(DrawingContext ctx, Rect badge, bool video)
+    {
+        bool over = badge.Contains(lastPointer);
+        ctx.DrawRectangle(Palette.Alpha(Colors.Black, over ? 0.75 : 0.55), null, badge, 4, 4);
+        ctx.DrawText(video ? "" : "", 10, over ? Palette.Fg : Palette.Dim, new Point(badge.X + 4, badge.Y + 3), Icons);
+    }
+
+    /// <summary>The tooltip the timeline shows right now: the media badge's under the pointer, or none.</summary>
+    string? mediaTip;
+
+    void UpdateMediaTip()
+    {
+        string? tip = null;
+        if (gesture == null && lastPointer.X >= HeaderW && HitTrack(lastPointer.Y) is var i and >= 0
+            && ClipAt(i, lastPointer.X) is { Offline: false } c && MediaBadge(ClipRect(i, Window(c))) is { } badge && badge.Contains(lastPointer))
+            tip = c.VideoPath == null ? "tl.media.audio" : tracks[i].Track.Video ? "tl.media.video" : "tl.media.videoOff";
+        if (tip == mediaTip) return;
+        mediaTip = tip;
+        ToolTip.SetTip(this, tip == null ? null : Loc.T(tip));
     }
 
     /// <summary>"Transponiendo… 0%" to "100%", and the knob's bare "0%" to "100%", made once (nothing is built per frame).</summary>
@@ -2251,6 +2277,7 @@ public sealed partial class TimelineView : Control
             FolderPressed(pressed, p, e);
             return;
         }
+        if (tool != TimelineTool.Select && p.X >= HeaderW && ToolPressed(i, p, e)) return;
         if (i < 0 || i >= tracks.Count)
         {
             // under the last track a drag also draws the selection box
@@ -2338,11 +2365,8 @@ public sealed partial class TimelineView : Control
         }
         else if (p.X >= HeaderW && (modifiers & KeyModifiers.Shift) != 0 && e.ClickCount == 1)
         {
-            // Shift+drag over a lane selects a range of that track (native only)
-            Select(i);
-            rangeTrackId = tracks[i].Track.Id;
-            rangeAnchor = rangeStart = rangeEnd = Math.Max(0, ClipEditing.Snap(Sec(p.X), Grid, (modifiers & KeyModifiers.Alt) != 0));
-            StartGesture("range", e);
+            // Shift+drag over a lane selects a range, like the Rango tool (native only)
+            StartRange(i, p, e);
         }
         else if (p.X >= HeaderW)
         {
@@ -2518,7 +2542,7 @@ public sealed partial class TimelineView : Control
         moved = false;
         capturedPointer = e.Pointer;
         e.Pointer.Capture(this);
-        if (kind is "clip" or "reorder" or "scrub" or "range" or "box") dragScroll.Start();
+        if (kind is "clip" or "reorder" or "scrub" or "range" or "box" or "erase" or "zoom") dragScroll.Start();
         e.Handled = true;
     }
 
@@ -2528,7 +2552,12 @@ public sealed partial class TimelineView : Control
         lastPointer = e.GetPosition(this);
         modifiers = e.KeyModifiers;
         if (gesture != null) UpdateGesture();
-        else UpdateCursor();
+        else
+        {
+            UpdateCursor();
+            if (tool == TimelineTool.Split) UpdateSplitHover();
+        }
+        UpdateMediaTip();
         InvalidateVisual();
     }
 
@@ -2538,6 +2567,8 @@ public sealed partial class TimelineView : Control
         base.OnPointerExited(e);
         if (gesture != null) return;
         lastPointer = new Point(-1, -1);
+        splitHover = null;
+        UpdateMediaTip();
         InvalidateVisual();
     }
 
@@ -2615,9 +2646,12 @@ public sealed partial class TimelineView : Control
             if (moved) DragCurve();
         }
         else if (gesture == "range")
+            DragRange();
+        else if (gesture == "erase")
+            DragErase();
+        else if (gesture is "zoom" or "listen")
         {
-            double at = Math.Max(0, ClipEditing.Snap(Sec(lastPointer.X), Grid, (modifiers & KeyModifiers.Alt) != 0));
-            (rangeStart, rangeEnd) = (Math.Min(rangeAnchor, at), Math.Max(rangeAnchor, at));
+            // nothing follows the pointer: Zoom acts on release (its band is drawn from the pointer), Escuchar on press
         }
         else
         {
@@ -2690,6 +2724,7 @@ public sealed partial class TimelineView : Control
         var movedFolder = dragFolder;
         var movedTracks = dragIds.ToList();
         bool gathers = dragGathers;
+        List<string> erased = [.. erasing];
         List<Clip>? together = kind == "clip" && carriedAlong.Count > 0 && value != null ? [value, .. carriedPreview.Values] : null;
         string? grabbedId = dragged?.Clip.Id;
         // the new height is applied while the dragged one still holds: applied after, the rows below went back to the
@@ -2697,11 +2732,9 @@ public sealed partial class TimelineView : Control
         if (kind == "row-height" && changed && heightDrag is { } rh) RowHeightRequested?.Invoke(rh.Id, rh.H);
         ClearGesture();
         e.Pointer.Capture(null);
-        if (kind == "range")
-        {
-            if (Range is { } r) RangeSelected?.Invoke(r.TrackId, r.Start, r.End);
-            else ClearRange();
-        }
+        if (kind == "range" && Range == null) ClearRange();
+        if (kind == "erase" && erased.Count > 0) ClipsErased?.Invoke(erased);
+        if (kind == "zoom") EndZoom(lastPointer, (modifiers & KeyModifiers.Alt) != 0);
         if (kind is "marker" or "loop") StripReleased(kind, changed);
         if (kind == "box" && changed) EndBox();
         // a click on a boxed clip without moving it leaves just that one selected
@@ -2730,6 +2763,8 @@ public sealed partial class TimelineView : Control
     }
     void ClearGesture()
     {
+        if (gesture == "listen") ListenEnded?.Invoke();
+        if (erasing.Count > 0) erasing.Clear();
         bool reordered = gesture == "reorder" && moved;
         if (reordered)
         {
@@ -2770,7 +2805,7 @@ public sealed partial class TimelineView : Control
         fromIndex = overIndex = -1;
         dragScroll.Stop();
         pointer?.Capture(null);
-        Cursor = CursorOf(StandardCursorType.Arrow);
+        Cursor = ToolCursor() ?? CursorOf(StandardCursorType.Arrow);
         InvalidateVisual();
     }
 
@@ -2779,6 +2814,7 @@ public sealed partial class TimelineView : Control
     {
         var row = HitRow(lastPointer.Y);
         int i = row is { Folder: null } h ? h.Track : -1;
+        if (ToolCursor() is { } toolCursor) { Cursor = toolCursor; return; }
         var cursor = StandardCursorType.Arrow;
         if (InStrip(lastPointer)) cursor = StripCursor(lastPointer);
         else if (OnGrip(lastPointer)) cursor = StandardCursorType.SizeWestEast;

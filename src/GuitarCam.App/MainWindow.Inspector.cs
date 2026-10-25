@@ -43,7 +43,6 @@ public partial class MainWindow
     Button? collapseAll;
     readonly PathIcon collapseAllIcon = new() { Width = 14, Height = 14 };
     Task inspectorPrefsSaving = Task.CompletedTask;
-    const double InspectorWidth = 290;
     const double InspectorCollapsedWidth = 44;
     readonly DockPanel inspectorExpanded = new();
     readonly StackPanel inspectorCollapsed = new() { Spacing = 4, Margin = new Thickness(0, 8), HorizontalAlignment = HorizontalAlignment.Center };
@@ -115,13 +114,16 @@ public partial class MainWindow
             shortcutTips.Add((b, tip, "leftPanel"));
             b.Foreground = Palette.Faint; inspectorCollapsed.Children.Add(b);
         }
-        InspectorBar.Child = new Panel { Children = { inspectorExpanded, inspectorCollapsed } };
+        inspectorWidth = SavedSidebarWidth("sidebarWidth");
+        inspectorGrip = SidebarGrip(true, () => inspectorWidth, () => ProjectBar.Width, SetInspectorWidth, "sidebarWidth");
+        InspectorBar.Child = new Panel { Children = { inspectorExpanded, inspectorCollapsed, inspectorGrip } };
         SetInspectorCollapsed(AppConfig.Get("sidebarCollapsed") == "1", save: false);
     }
 
     void SetInspectorCollapsed(bool collapsed, bool save = true)
     {
-        InspectorBar.Width = collapsed ? InspectorCollapsedWidth : InspectorWidth;
+        InspectorBar.Width = collapsed ? InspectorCollapsedWidth : inspectorWidth;
+        if (inspectorGrip != null) inspectorGrip.IsVisible = !collapsed;
         inspectorExpanded.IsVisible = !collapsed;
         inspectorCollapsed.IsVisible = collapsed;
         if (save) SaveViewPref("sidebarCollapsed", collapsed ? "1" : "2");

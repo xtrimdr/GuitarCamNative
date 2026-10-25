@@ -162,7 +162,8 @@ public sealed record ExportVideoFxSpec(
     double Vignette = 0,
     double VignetteSize = 50,
     double Grain = 0,
-    string Letterbox = "off")
+    string Letterbox = "off",
+    double LetterboxHeight = VideoColorProcessor.LetterboxHeightDefault)
 {
     public static readonly ExportVideoFxSpec Defaults = new();
 }
@@ -177,7 +178,13 @@ public sealed record ExportJobSpec
     public ExportQuality Quality { get; init; } = ExportQuality.Alta;
     public string Layout { get; init; } = "side-by-side";
     public string AspectRatio { get; init; } = "16:9";
+    /// <summary>The gap around each panel, in pixels of a 1080p export: it grows with <see cref="Resolution"/> so the
+    /// frame looks the same at any size (and like the preview).</summary>
     public int BorderSize { get; init; } = 4;
+    /// <summary>Native only: the frame's short side ("Avanzado", one of <see cref="Mp4Exporter.Resolutions"/>).</summary>
+    public int Resolution { get; init; } = Mp4Exporter.DefaultResolution;
+    /// <summary>Native only: the video bitrate in Mbps ("Avanzado"); null = the quality's (x264's CRF, or the card's bitrate).</summary>
+    public double? BitrateMbps { get; init; }
     public ExportColorSpec Color { get; init; } = ExportColorSpec.Defaults;
     public ExportVideoFxSpec VideoFx { get; init; } = ExportVideoFxSpec.Defaults;
     public required IReadOnlyList<ExportTakeSpec> Takes { get; init; }
@@ -188,6 +195,8 @@ public sealed record ExportJobSpec
     public double TailSec { get; init; } = MixMaster.MaxTailSec;
     /// <summary>Integrated loudness the mix is mastered to (a social preset, <see cref="ExportTargets"/>); null = as it is.</summary>
     public double? TargetLufs { get; init; }
+    /// <summary>Native only: who encodes the video, a <see cref="VideoEncoders.ParsePreference"/> id ("auto" = the card if it has one).</summary>
+    public string Encoder { get; init; } = VideoEncoders.Auto;
 }
 
 public sealed record ExportResult(
@@ -200,7 +209,8 @@ public sealed record ExportResult(
     double DurationSec,
     double ElapsedSec,
     double Lufs = double.NegativeInfinity,
-    double TailSec = 0);
+    double TailSec = 0,
+    VideoEncoderKind? Encoder = null);
 
 public sealed class ExportException : Exception
 {
@@ -222,8 +232,9 @@ public sealed class ExportException : Exception
 /// master limiter look-ahead delay) and masters it with <see cref="MixMaster"/> (effect tails, loudness of a social
 /// preset), builds the exact single-pass FFmpeg <c>filter_complex</c> (panel layout,
 /// per-clip <c>SyncMs</c>/<c>VideoOffsetMs</c> alignment, 3D LUT <c>.cube</c>, grain, mirror, cover-scale + crop
-/// framing, vignette multiply mask, letterbox bars, <c>tpad</c> hold/delay, video fades and overlay), encodes
-/// <c>libx264</c> + <c>aac 320k</c> into a hidden <c>.part</c> file while parsing <c>-progress pipe:1</c>,
+/// framing, vignette multiply mask, letterbox bars, <c>tpad</c> hold/delay, video fades and overlay; one filtergraph
+/// per take when FFmpeg can, so the takes filter in parallel), encodes with the video card's H.264 encoder or
+/// <c>libx264</c> (<see cref="VideoEncoders"/>) + <c>aac 320k</c> into a hidden <c>.part</c> file while parsing <c>-progress pipe:1</c>,
 /// and atomically renames to <c>.mp4</c> on completion (or kills FFmpeg and removes <c>.part</c> on cancel/error).
 /// </summary>
 public static partial class Mp4Exporter
@@ -253,21 +264,45 @@ public static partial class Mp4Exporter
 
     public static string QualityToId(ExportQuality q) => GetQualitySpec(q).Id;
 
-    public static (int Width, int Height) ExportSize(string? aspectRatio) => aspectRatio switch
+    /// <summary>The frame's short side the export can pick (720p, 1080p, 1440p, 4K); 1080 is the one without "Avanzado".</summary>
+    public static readonly IReadOnlyList<int> Resolutions = [720, 1080, 1440, 2160];
+    public const int DefaultResolution = 1080;
+    /// <summary>Range of the custom bitrate: under 1 Mbps a 720p video is mush, over 100 no platform keeps it.</summary>
+    public const double MinBitrateMbps = 1, MaxBitrateMbps = 100;
+
+    /// <summary>One of <see cref="Resolutions"/> (anything else = 1080).</summary>
+    public static int NormalizeResolution(int shortSide) =>
+        Resolutions.Contains(shortSide) ? shortSide : DefaultResolution;
+
+    /// <summary>A custom bitrate in range, in whole Mbps, or null (= the quality's).</summary>
+    public static double? NormalizeBitrate(double? mbps) =>
+        mbps is { } m && double.IsFinite(m) && m > 0 ? Math.Clamp(Math.Round(m), MinBitrateMbps, MaxBitrateMbps) : null;
+
+    /// <summary>The frame for a relation at a short side (1080 = 1920×1080, 1080×1920, 1080×1080, 1080×1350); even sizes,
+    /// as H.264's 4:2:0 needs.</summary>
+    public static (int Width, int Height) ExportSize(string? aspectRatio, int shortSide = DefaultResolution)
     {
-        "9:16" => (1080, 1920),
-        "1:1" => (1080, 1080),
-        "4:5" => (1080, 1350),
-        _ => (1920, 1080),
-    };
+        var (w, h) = aspectRatio switch
+        {
+            "9:16" => (1080, 1920),
+            "1:1" => (1080, 1080),
+            "4:5" => (1080, 1350),
+            _ => (1920, 1080),
+        };
+        int s = NormalizeResolution(shortSide);
+        if (s == DefaultResolution) return (w, h);
+        int Even(int v) => (int)Math.Round(v * s / (double)DefaultResolution / 2) * 2;
+        return (Even(w), Even(h));
+    }
+
+    /// <summary>The video bitrate the card's encoders (and x264 with a custom one) aim at: <paramref name="customMbps"/>,
+    /// or the quality's for 1080p scaled by the frame's pixels.</summary>
+    public static double VideoMbps(ExportQuality quality, int width, int height, double? customMbps = null) =>
+        NormalizeBitrate(customMbps) ?? GetQualitySpec(quality).Mbps * (width * height) / (1920.0 * 1080.0);
 
     /// <summary>Estimated MP4 size in bytes (<c>ExportDialog.tsx:214-215</c>).</summary>
-    public static double EstimateBytes(ExportQuality quality, int width, int height, double durationSec)
-    {
-        var q = GetQualitySpec(quality);
-        double pixels = (width * height) / (1920.0 * 1080.0);
-        return ((q.Mbps * pixels + 0.32) * 1e6 * Math.Max(0, durationSec)) / 8.0;
-    }
+    public static double EstimateBytes(ExportQuality quality, int width, int height, double durationSec, double? customMbps = null) =>
+        ((VideoMbps(quality, width, height, customMbps) + 0.32) * 1e6 * Math.Max(0, durationSec)) / 8.0;
 
     /// <summary>Port of <c>formatBytes</c> in <c>sessionApi.ts:283-287</c>.</summary>
     public static string FormatBytes(double bytes)
@@ -372,6 +407,10 @@ public static partial class Mp4Exporter
     /// When <paramref name="tempDir"/> is provided and color grade / vignette are active, writes the temporary
     /// <c>.cube</c> and <c>.gray</c> files into <paramref name="tempDir"/> using bare filenames (since FFmpeg
     /// runs with <c>WorkingDirectory = tempDir</c> to avoid escaping Windows drive colons in filter args).
+    /// <paramref name="parallel"/> (FFmpeg 7+, <see cref="FfmpegCaps.Loopback"/>) gives every take its own filtergraph,
+    /// which FFmpeg runs on its own thread, and hands the frames to the one that composes the panels through a loopback
+    /// decoder: the frames are the same, but the takes stop waiting for each other (one graph runs its filters in
+    /// order, a take after another).
     /// </summary>
     public static BuiltExportCommand BuildFfmpegCommand(
         ExportJobSpec job,
@@ -379,12 +418,14 @@ public static partial class Mp4Exporter
         string partOutPath,
         string? tempDir = null,
         string? runId = null,
-        double? audioSec = null)
+        double? audioSec = null,
+        VideoEncoderKind encoder = VideoEncoderKind.Cpu,
+        bool parallel = false)
     {
         if (job.Takes.Count == 0)
             throw new ExportException("No hay canales activos para exportar.");
 
-        var (outW, outH) = ExportSize(job.AspectRatio);
+        var (outW, outH) = ExportSize(job.AspectRatio, job.Resolution);
         int numTakes = job.Takes.Count;
         int PanelOf(int i) => job.Takes[i].Panel >= 0 ? job.Takes[i].Panel : i;
         int numPanels = PanelCount(job.Takes);
@@ -423,6 +464,8 @@ public static partial class Mp4Exporter
         int nextInput = numTakes + 1;
 
         var filterParts = new List<string>();
+        // parallel: each take's own graph and the label it outputs
+        var takeGraphs = new List<(string Graph, string Label)>();
         const string BG = "0x09090b";
 
         double maxDuration = 1.0;
@@ -471,7 +514,8 @@ public static partial class Mp4Exporter
             string cropXExpr = $"((iw-{pw})/2)*(1+({panX.ToString("0.000", CultureInfo.InvariantCulture)}))";
             string cropYExpr = $"((ih-{ph})/2)*(1+({panY.ToString("0.000", CultureInfo.InvariantCulture)}))";
 
-            int padInner = job.BorderSize > 0 && numPanels > 1 ? job.BorderSize : 0;
+            int border = (int)Math.Round(job.BorderSize * NormalizeResolution(job.Resolution) / (double)DefaultResolution);
+            int padInner = border > 0 && numPanels > 1 ? border : 0;
             int innerW = pw - padInner * 2 - ((pw - padInner * 2) % 2);
             int innerH = ph - padInner * 2 - ((ph - padInner * 2) % 2);
 
@@ -496,6 +540,7 @@ public static partial class Mp4Exporter
                 pre.Add($"crop={innerW}:{innerH}:{cropXExpr}:{cropYExpr}");
 
                 string picture = $"[{vIn}]{string.Join(",", pre)}";
+                var chain = new List<string>();
                 if (vignette)
                 {
                     string maskName = $"vignette_{id}_{i}.gray";
@@ -508,9 +553,9 @@ public static partial class Mp4Exporter
                     }
                     ffmpegArgs.AddRange(["-f", "rawvideo", "-pix_fmt", "gray", "-s", $"{innerW}x{innerH}", "-i", maskName]);
                     int m = nextInput++;
-                    filterParts.Add($"{picture},format=gbrp[pic{i}]");
-                    filterParts.Add($"[{m}:v]format=gbrp[mask{i}]");
-                    filterParts.Add($"[pic{i}][mask{i}]blend=all_mode=multiply[vig{i}]");
+                    chain.Add($"{picture},format=gbrp[pic{i}]");
+                    chain.Add($"[{m}:v]format=gbrp[mask{i}]");
+                    chain.Add($"[pic{i}][mask{i}]blend=all_mode=multiply[vig{i}]");
                     picture = $"[vig{i}]null";
                 }
 
@@ -533,13 +578,20 @@ public static partial class Mp4Exporter
                 if (fades.Video.FadeOut > 0.001)
                     vf.Add($"fade=t=out:st={F3(visEnd - fades.Video.FadeOut)}:d={F3(fades.Video.FadeOut)}:color={BG}");
 
-                filterParts.Add($"{picture},{string.Join(",", vf)},fps=30,format=yuv420p[v{i}]");
+                chain.Add($"{picture},{string.Join(",", vf)},fps=30,format=yuv420p[v{i}]");
+                string takeOut = $"v{i}";
+                if (parallel)
+                {
+                    takeGraphs.Add((string.Join(";", chain), takeOut));
+                    takeOut = $"dec:{takeGraphs.Count - 1}";
+                }
+                else filterParts.AddRange(chain);
 
                 string nextBase = $"base{i + 1}";
                 int ox = rect.X + padInner;
                 int oy = rect.Y + padInner;
                 string enable = later ? $":enable='between(t,{F3(visStart)},{F3(visEnd)})'" : "";
-                filterParts.Add($"[{baseLabel}][v{i}]overlay=x={ox}:y={oy}:eof_action=pass{enable}[{nextBase}]");
+                filterParts.Add($"[{baseLabel}][{takeOut}]overlay=x={ox}:y={oy}:eof_action=pass{enable}[{nextBase}]");
                 baseLabel = nextBase;
             }
         }
@@ -552,14 +604,17 @@ public static partial class Mp4Exporter
         string filterComplex = string.Join(";", filterParts);
         var q = GetQualitySpec(job.Quality);
 
+        // each take's graph goes to a null output whose frames come back as [dec:k] (the k-th output)
+        for (int k = 0; k < takeGraphs.Count; k++)
+            ffmpegArgs.AddRange(["-filter_complex", takeGraphs[k].Graph, "-map", $"[{takeGraphs[k].Label}]",
+                "-c:v", "rawvideo", "-f", "null", "-", "-dec", $"{k}:0"]);
         ffmpegArgs.AddRange([
             "-filter_complex", filterComplex,
             "-map", "[vout]",
             "-map", "[aout]",
-            "-c:v", "libx264",
-            "-preset", q.Preset,
-            "-crf", q.Crf.ToString(CultureInfo.InvariantCulture),
-            "-pix_fmt", "yuv420p",
+        ]);
+        ffmpegArgs.AddRange(VideoEncoders.Args(encoder, q, outW, outH, job.BitrateMbps));
+        ffmpegArgs.AddRange([
             "-c:a", "aac",
             "-b:a", "320k",
             "-ar", "48000",
@@ -571,7 +626,8 @@ public static partial class Mp4Exporter
             partOutPath,
         ]);
 
-        return new BuiltExportCommand(ffmpegArgs, filterComplex, maxDuration, outW, outH, tempFiles);
+        string allGraphs = string.Join(" | ", takeGraphs.Select(g => g.Graph).Append(filterComplex));
+        return new BuiltExportCommand(ffmpegArgs, allGraphs, maxDuration, outW, outH, tempFiles);
     }
 
     /// <summary>
@@ -639,120 +695,22 @@ public static partial class Mp4Exporter
             ct.ThrowIfCancellationRequested();
             Report(ExportStage.Upload, 1, 1, null);
 
-            var built = BuildFfmpegCommand(job, mixWavPath, partPath, tempWorkDir, runId, mix.DurationSec);
+            var found = await VideoEncoders.DetectAsync().ConfigureAwait(false);
+            var encoder = VideoEncoders.Resolve(job.Encoder, found);
+            var built = BuildFfmpegCommand(job, mixWavPath, partPath, tempWorkDir, runId, mix.DurationSec, encoder, found.Loopback);
             extraTempFiles = built.TempFilesToClean;
 
-            var videoStart = Stopwatch.StartNew();
-            Report(ExportStage.Video, 1, 1, new RenderProgress(ExportStage.Video, 0, 0, built.MaxDurationSec));
-
-            var psi = new ProcessStartInfo("ffmpeg", built.FfmpegArgs)
+            var (code, details) = await RunFfmpegAsync(built, tempWorkDir, r => Report(ExportStage.Video, 1, 1, r), ct).ConfigureAwait(false);
+            // a card's encoder can still refuse this frame size or a busy driver, and an odd FFmpeg build the take graphs:
+            // the processor in a single graph is what always worked, so "auto" tries that before giving up
+            if (code != 0 && (encoder != VideoEncoderKind.Cpu || found.Loopback) && VideoEncoders.ParsePreference(job.Encoder) == VideoEncoders.Auto)
             {
-                WorkingDirectory = tempWorkDir,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-
-            using var proc = new Process { StartInfo = psi };
-            try
-            {
-                if (!proc.Start())
-                    throw new ExportException(Texts.T("err.ffmpeg.start0", "No se pudo iniciar FFmpeg."));
+                encoder = VideoEncoderKind.Cpu;
+                built = BuildFfmpegCommand(job, mixWavPath, partPath, tempWorkDir, runId, mix.DurationSec, encoder, parallel: false);
+                (code, details) = await RunFfmpegAsync(built, tempWorkDir, r => Report(ExportStage.Video, 1, 1, r), ct).ConfigureAwait(false);
             }
-            catch (Win32Exception ex)
-            {
-                throw new ExportException(
-                    ex.NativeErrorCode == 2
-                        ? Texts.T("err.ffmpeg.missing", "No se encontró FFmpeg en el PATH.")
-                        : Texts.T("err.ffmpeg.start", "No se pudo iniciar FFmpeg: {0}", ex.Message));
-            }
-
-            var stderrBuilder = new StringBuilder();
-            var stderrGate = new object();
-            proc.ErrorDataReceived += (_, e) =>
-            {
-                if (e.Data == null) return;
-                lock (stderrGate)
-                {
-                    stderrBuilder.AppendLine(e.Data);
-                    if (stderrBuilder.Length > 20000)
-                        stderrBuilder.Remove(0, stderrBuilder.Length - 20000);
-                }
-            };
-            proc.BeginErrorReadLine();
-
-            using var reg = ct.Register(() =>
-            {
-                try
-                {
-                    if (!proc.HasExited) proc.Kill(entireProcessTree: true);
-                }
-                catch
-                {
-                }
-            });
-
-            var block = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            while (await proc.StandardOutput.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
-            {
-                int eq = line.IndexOf('=');
-                if (eq < 0) continue;
-                string key = line[..eq].Trim();
-                string val = line[(eq + 1)..].Trim();
-                block[key] = val;
-                if (!string.Equals(key, "progress", StringComparison.OrdinalIgnoreCase)) continue;
-
-                double us = 0;
-                if ((block.TryGetValue("out_time_us", out var usStr) || block.TryGetValue("out_time_ms", out usStr))
-                    && double.TryParse(usStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedUs) && parsedUs > 0)
-                {
-                    us = parsedUs;
-                }
-                double timeSec = us > 0 ? us / 1e6 : 0;
-                double prog = string.Equals(val, "end", StringComparison.OrdinalIgnoreCase)
-                    ? 1.0
-                    : Math.Clamp(timeSec / built.MaxDurationSec, 0, 1);
-
-                double fps = block.TryGetValue("fps", out var fpsStr)
-                    && double.TryParse(fpsStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedFps)
-                    ? parsedFps
-                    : 0;
-                double speed = 0;
-                if (block.TryGetValue("speed", out var spdStr))
-                {
-                    string cleanSpd = spdStr.TrimEnd('x', 'X', ' ');
-                    if (double.TryParse(cleanSpd, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedSpd))
-                        speed = parsedSpd;
-                }
-
-                double elapsedVideo = videoStart.Elapsed.TotalSeconds;
-                double? eta = prog > 0.02 && prog < 1.0 ? (elapsedVideo * (1.0 - prog)) / prog : null;
-
-                Report(ExportStage.Video, 1, 1, new RenderProgress(
-                    ExportStage.Video,
-                    prog,
-                    Math.Min(timeSec, built.MaxDurationSec),
-                    built.MaxDurationSec,
-                    fps,
-                    speed,
-                    eta));
-                block.Clear();
-            }
-
-            await proc.WaitForExitAsync(ct).ConfigureAwait(false);
-            ct.ThrowIfCancellationRequested();
-
-            if (proc.ExitCode != 0)
-            {
-                string details;
-                lock (stderrGate)
-                {
-                    string s = stderrBuilder.ToString().Trim();
-                    details = s.Length > 1200 ? s[^1200..] : s;
-                }
+            if (code != 0)
                 throw new ExportException("Error al renderizar con FFmpeg", string.IsNullOrWhiteSpace(details) ? null : details);
-            }
 
             Report(ExportStage.Finalize, 1, 1, new RenderProgress(ExportStage.Finalize, 1));
             string outFilename = $"{target.FileName}.mp4";
@@ -782,13 +740,129 @@ public static partial class Mp4Exporter
                 built.MaxDurationSec,
                 sw.Elapsed.TotalSeconds,
                 mix.Lufs,
-                mix.TailSec);
+                mix.TailSec,
+                encoder);
         }
         finally
         {
             TryDelete(partPath);
             TryDelete(mixWavPath);
             foreach (var f in extraTempFiles) TryDelete(f);
+        }
+    }
+
+    /// <summary>
+    /// Runs FFmpeg with <paramref name="built"/>, reporting its <c>-progress</c> lines, and returns its exit code and the
+    /// end of its error output (empty when it worked). Cancelling kills it.
+    /// </summary>
+    static async Task<(int Code, string Details)> RunFfmpegAsync(BuiltExportCommand built, string tempWorkDir, Action<RenderProgress> report, CancellationToken ct)
+    {
+        var videoStart = Stopwatch.StartNew();
+        report(new RenderProgress(ExportStage.Video, 0, 0, built.MaxDurationSec));
+
+        var psi = new ProcessStartInfo("ffmpeg", built.FfmpegArgs)
+        {
+            WorkingDirectory = tempWorkDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        using var proc = new Process { StartInfo = psi };
+        try
+        {
+            if (!proc.Start())
+                throw new ExportException(Texts.T("err.ffmpeg.start0", "No se pudo iniciar FFmpeg."));
+        }
+        catch (Win32Exception ex)
+        {
+            throw new ExportException(
+                ex.NativeErrorCode == 2
+                    ? Texts.T("err.ffmpeg.missing", "No se encontró FFmpeg en el PATH.")
+                    : Texts.T("err.ffmpeg.start", "No se pudo iniciar FFmpeg: {0}", ex.Message));
+        }
+
+        var stderrBuilder = new StringBuilder();
+        var stderrGate = new object();
+        proc.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data == null) return;
+            lock (stderrGate)
+            {
+                stderrBuilder.AppendLine(e.Data);
+                if (stderrBuilder.Length > 20000)
+                    stderrBuilder.Remove(0, stderrBuilder.Length - 20000);
+            }
+        };
+        proc.BeginErrorReadLine();
+
+        using var reg = ct.Register(() =>
+        {
+            try
+            {
+                if (!proc.HasExited) proc.Kill(entireProcessTree: true);
+            }
+            catch
+            {
+            }
+        });
+
+        var block = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        while (await proc.StandardOutput.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
+        {
+            int eq = line.IndexOf('=');
+            if (eq < 0) continue;
+            string key = line[..eq].Trim();
+            string val = line[(eq + 1)..].Trim();
+            block[key] = val;
+            if (!string.Equals(key, "progress", StringComparison.OrdinalIgnoreCase)) continue;
+
+            double us = 0;
+            if ((block.TryGetValue("out_time_us", out var usStr) || block.TryGetValue("out_time_ms", out usStr))
+                && double.TryParse(usStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedUs) && parsedUs > 0)
+            {
+                us = parsedUs;
+            }
+            double timeSec = us > 0 ? us / 1e6 : 0;
+            double prog = string.Equals(val, "end", StringComparison.OrdinalIgnoreCase)
+                ? 1.0
+                : Math.Clamp(timeSec / built.MaxDurationSec, 0, 1);
+
+            double fps = block.TryGetValue("fps", out var fpsStr)
+                && double.TryParse(fpsStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedFps)
+                ? parsedFps
+                : 0;
+            double speed = 0;
+            if (block.TryGetValue("speed", out var spdStr))
+            {
+                string cleanSpd = spdStr.TrimEnd('x', 'X', ' ');
+                if (double.TryParse(cleanSpd, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedSpd))
+                    speed = parsedSpd;
+            }
+
+            double elapsedVideo = videoStart.Elapsed.TotalSeconds;
+            double? eta = prog > 0.02 && prog < 1.0 ? (elapsedVideo * (1.0 - prog)) / prog : null;
+
+            report(new RenderProgress(
+                ExportStage.Video,
+                prog,
+                Math.Min(timeSec, built.MaxDurationSec),
+                built.MaxDurationSec,
+                fps,
+                speed,
+                eta));
+            block.Clear();
+        }
+
+        await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+
+        if (proc.ExitCode == 0) return (0, "");
+        lock (stderrGate)
+        {
+            string s = stderrBuilder.ToString().Trim();
+            return (proc.ExitCode, s.Length > 1200 ? s[^1200..] : s);
         }
     }
 

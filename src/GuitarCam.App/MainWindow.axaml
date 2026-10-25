@@ -138,7 +138,7 @@
           </StackPanel>
         </Grid>
 
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="12,0,12,8">
+        <Grid Grid.Row="1" x:Name="ProjectRow" ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="12,0,12,8">
           <!-- the project's mode (native only): video, or solo audio without stage, camera or MP4; first in the row so
                the kind of project is the first thing read -->
           <Border Classes="mode" VerticalAlignment="Center">
@@ -173,7 +173,7 @@
           </Button>
 
           <!-- edit tools, set apart from the project chip by a line -->
-          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" Margin="6,0,0,0">
+          <StackPanel Grid.Column="2" x:Name="EditButtons" Orientation="Horizontal" Spacing="2" Margin="6,0,0,0">
             <Border Classes="tsep" Margin="0,0,8,0" />
             <!-- save now (native only): what the "Guardado" mode leaves pending, by hand -->
             <Button x:Name="SaveButton" Classes="ghost" IsEnabled="False" ToolTip.Tip="{loc:T title.save.tip}" AutomationProperties.Name="{loc:T title.save.tip}">
@@ -186,6 +186,12 @@
               <TextBlock Classes="icon" Text="&#xE7A6;" />
             </Button>
           </StackPanel>
+
+          <!-- the timeline's tools (native only, asked by the user): centered on the window, like the transport, and
+               pushed aside only when the window is too narrow (MainWindow.Tools.cs); same recessed track as the mode -->
+          <Border Grid.Column="3" x:Name="ToolBox" Classes="mode" HorizontalAlignment="Left">
+            <StackPanel x:Name="ToolStrip" Orientation="Horizontal" Spacing="2" />
+          </Border>
 
           <Button Grid.Column="4" x:Name="ExportButton" Classes="accent" ToolTip.Tip="{loc:T export.mp4}">
             <StackPanel Orientation="Horizontal" Spacing="7">
@@ -200,7 +206,7 @@
 
     <!-- inspector ("Canal"; folds to a column of icons in MainWindow.Inspector.cs) + preview -->
     <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
-      <Border x:Name="InspectorBar" Width="290" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+      <Border x:Name="InspectorBar" Width="290" ZIndex="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
         <ScrollViewer>
           <StackPanel x:Name="Inspector" Margin="14,16" Spacing="12" />
         </ScrollViewer>

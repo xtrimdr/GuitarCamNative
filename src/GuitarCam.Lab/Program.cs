@@ -73,12 +73,16 @@ static class Program
               exportar  [carpeta-proyecto] [--salida nombre] [--carpeta destino] [--calidad alta|estandar|borrador]
                         [--reemplazar] [--prueba] [--audio wav|mp3] [--stems]
                         [--destino project|reels|youtube|ig-square|ig-portrait] [--lufs -14] [--cola 8]
+                        [--codificador auto|cpu|nvenc|amf|qsv] [--resolucion 720|1080|1440|2160] [--bitrate 20]
                                            exporta el proyecto a MP4 (o la mezcla en WAV / MP3) con mezcla offline y FFmpeg;
                                            --stems deja además un WAV por pista en "<nombre> - stems";
                                            --destino usa el cuadro y el volumen de esa red (Reels/Shorts/TikTok 9:16,
                                            YouTube 16:9, Instagram 1:1 y 4:5, todas a -14 LUFS); --lufs lleva la mezcla
                                            a ese volumen integrado; --cola deja sonar reverb y delay hasta N s después
-                                           del último clip (8 por defecto, 0 = corta ahí). Muestra los LUFS del resultado
+                                           del último clip (8 por defecto, 0 = corta ahí). Muestra los LUFS del resultado;
+                                           --codificador elige quién codifica el video (auto = la placa NVIDIA, AMD o
+                                           Intel si hay, si no el procesador); --resolucion y --bitrate (Mbps) son
+                                           el "Avanzado" del diálogo: el lado corto del cuadro y el bitrate del video
               click     [--salida clicks.wav] [--bpm 100]
                                            escribe todos los sonidos de click a un WAV para escucharlos
               lufs      archivo.wav|mp3        volumen integrado (EBU R128) del archivo, como el medidor LUFS del master
@@ -107,7 +111,8 @@ static class Program
                                            graba el video como una toma (H.264, 30 fps, keyframe cada 1 s)
               camara verificar-corte [--dispositivo X]
                                            corta una grabación a la mitad (con y sin FFmpeg) y comprueba que el video quede
-              sistema   [--segundos 5]     muestra CPU, GPU y RAM cada 1,5 s como la barra de arriba, y si está FFmpeg
+              sistema   [--segundos 5]     muestra CPU, GPU y RAM cada 1,5 s como la barra de arriba, si está FFmpeg
+                                           y con qué placa de video exporta
               proyecto abrir    carpeta    abre un proyecto nativo y muestra pistas, avisos e historial
               proyecto versiones carpeta   lista las versiones guardadas, de más nueva a más vieja
               proyecto volver   carpeta n  restaura la versión n y conserva el estado actual en el historial
@@ -126,7 +131,9 @@ static class Program
               proyecto editar carpeta a-pista clip pista [--intercambiar clip] | reordenar desde hasta
               proyecto editar carpeta inicio|fijar-corte|restaurar|quitar-clip clip | quitar-pista pista
               proyecto editar carpeta nueva-pista | agregar-toma medio [--pista pista]
-              proyecto editar carpeta borrar-rango pista desde --hasta fin   saca ese tramo de los clips de la pista (queda el hueco)
+              proyecto editar carpeta borrar-rango pista[,pista…] desde --hasta fin [--cerrar]   saca ese tramo de los clips de
+                        esas pistas; queda el hueco, o con --cerrar lo de después se corre y lo tapa
+              proyecto editar carpeta al-frente clip   lo pone arriba en su pista: donde se pisan, es el que se ve
               proyecto editar carpeta nueva-carpeta [nombre] [--pistas id,id] | quitar-carpeta carpeta   agrupa pistas (quitarla las deja sueltas)
               proyecto editar carpeta a-carpeta pista carpeta|raiz [--en n] | sacar-de-carpeta pista | mover-carpeta carpeta n
               proyecto editar carpeta carpeta id [--nombre X] [--volumen 0.8] [--mute] [--solo] [--plegar]   fader, mute y solo de la carpeta (como un VCA)
@@ -155,6 +162,7 @@ static class Program
               proyectos nuevo "Nombre" [--plantilla id] | renombrar carpeta "Nombre" | duplicar carpeta
               proyectos borrar carpeta | guardar-plantilla carpeta "Nombre"
               proyectos previsualizar "Nombre" | olvidar carpeta | carpeta ruta
+              proyectos buscar carpeta     qué abre "Abrir carpeta" con esa carpeta (el proyecto, uno adentro, vacía, de la web…)
               proyectos borrar-plantilla id
               proyectos plantillas-video | guardar-plantilla-video carpeta "Nombre"
               proyectos aplicar-plantilla-video carpeta id|"Nombre" | borrar-plantilla-video id

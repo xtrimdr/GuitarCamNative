@@ -238,6 +238,42 @@
             <CheckBox x:Name="StemsCheck" Content="{loc:T exp.stems}" FontSize="12" ToolTip.Tip="{loc:T exp.stems.tip}" />
           </StackPanel>
 
+          <!-- Avanzado (native only, MP4): resolution and bitrate by hand; folded, and the defaults change nothing,
+               so the easy path stays as it was. Folded, the link says what is not the default. -->
+          <StackPanel x:Name="AdvancedPanel" Spacing="12" Margin="0,-6,0,0">
+            <Button x:Name="AdvancedToggle" Classes="link" HorizontalAlignment="Left" ToolTip.Tip="{loc:T exp.adv.tip}">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock x:Name="AdvancedChevron" Classes="icon" Text="&#xE76C;" FontSize="10" VerticalAlignment="Center" />
+                <TextBlock Text="{loc:T exp.adv}" FontSize="12" />
+                <TextBlock x:Name="AdvancedSummary" Classes="mono" FontSize="11" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+            <StackPanel x:Name="AdvancedBody" Spacing="12" IsVisible="False">
+              <StackPanel Spacing="6">
+                <TextBlock Text="{loc:T exp.adv.res}" FontSize="11" FontWeight="Medium" Foreground="{StaticResource Dim}" />
+                <Grid ColumnDefinitions="Auto,*">
+                  <Border Classes="seg">
+                    <StackPanel x:Name="ResolutionButtons" Orientation="Horizontal" Spacing="2" />
+                  </Border>
+                  <TextBlock Grid.Column="1" x:Name="ResolutionSizeText" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}"
+                             HorizontalAlignment="Right" VerticalAlignment="Center" />
+                </Grid>
+              </StackPanel>
+              <StackPanel Spacing="6">
+                <TextBlock Text="{loc:T exp.adv.bitrate}" FontSize="11" FontWeight="Medium" Foreground="{StaticResource Dim}" />
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                  <CheckBox x:Name="BitrateAutoCheck" Content="{loc:T exp.adv.bitrate.auto}" FontSize="12"
+                            ToolTip.Tip="{loc:T exp.adv.bitrate.auto.tip}" IsChecked="True" />
+                  <Slider Grid.Column="1" x:Name="BitrateSlider" Minimum="1" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True"
+                          Margin="12,0" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="2" x:Name="BitrateText" Classes="mono" FontSize="12" Foreground="{StaticResource Dim}"
+                             MinWidth="64" TextAlignment="Right" VerticalAlignment="Center" />
+                </Grid>
+                <TextBlock x:Name="BitrateHint" FontSize="11" Foreground="{StaticResource Faint}" TextWrapping="Wrap" />
+              </StackPanel>
+            </StackPanel>
+          </StackPanel>
+
           <!-- Warning / Collision banner -->
           <Border x:Name="WarningBanner" CornerRadius="6" BorderThickness="1" Padding="12,10" IsVisible="False">
             <Grid ColumnDefinitions="Auto,*">

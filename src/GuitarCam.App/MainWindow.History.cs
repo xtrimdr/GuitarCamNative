@@ -15,7 +15,8 @@ namespace GuitarCam.App;
 
 /// <summary>
 /// The Biblioteca and Historial tabs of the project bar (once one tab, HistoryPanel.tsx). Biblioteca: Canales (filter,
-/// search, by day, listen to the raw file, show in Explorer, take off the timeline or use again) and "Borrar no usados".
+/// search, by day, listen to the raw file in a mini player under its row (wave, seek, ±5 s), show in Explorer,
+/// take off the timeline or use again, send one unused take to the Recycle Bin) and "Borrar no usados".
 /// Historial: Exportaciones (watch, show, Recycle Bin with an inline confirmation) and Actividad (the log as sentences,
 /// by day, "Ver más"). Both are refreshed together while either is on screen. Same as the web except:
 /// there are no "Guardando / Reintentar" rows, as a native take is written to disk while it is recorded, and listening
@@ -37,8 +38,18 @@ public partial class MainWindow
     string historyFilter = "all";
     int historyShown = ProjectHistory.ActivityPage;
     string? historyBusyId, historyBytesDir;
-    string? historyDeletingExport;
-    bool historyExportBusy, historyConfirmPurge, historyPurging;
+    string? historyDeletingExport, historyDeletingTake;
+    bool historyExportBusy, historyTakeBusy, historyConfirmPurge, historyPurging;
+    /// <summary>Peaks per take for the mini player's wave: enough bins for a wide sidebar.</summary>
+    const int TakePeakBins = 600;
+    /// <summary>How far the mini player's back / forward buttons jump.</summary>
+    const double TakeSkipSec = 5;
+    readonly Dictionary<string, float[]> takePeaks = [];
+    readonly TakeScrubber takeScrubber = new();
+    readonly TextBlock takeTime = new() { Classes = { "mono" }, FontSize = 10, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center };
+    readonly Grid takePlayer = new() { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto"), RowDefinitions = new RowDefinitions("Auto,Auto"), Margin = new Thickness(36, 4, 0, 0) };
+    readonly DispatcherTimer takePlayerClock = new() { Interval = TimeSpan.FromMilliseconds(33) };
+    int takeTimeShown = -1;
 
     bool HistoryVisible => projectTab is "history" or "library" && projectBarExpanded.IsVisible;
 
@@ -88,6 +99,7 @@ public partial class MainWindow
         ColorSection("Exportaciones", "\uE8B2", host: historyPanel, scope: "history").Children.Add(historyExports);
         ColorSection("Actividad", "\uE81C", host: historyPanel, scope: "history").Children.Add(historyActivity);
 
+        BuildTakePlayer();
         takePreview.Stopped += RefreshHistory;
         historyClock.Tick += (_, _) => { if (HistoryVisible) RefreshHistory(); };
         historyClock.Start();
@@ -138,7 +150,7 @@ public partial class MainWindow
             foreach (var g in visible.GroupBy(m => m.CreatedAt.ToLocalTime().Date))
             {
                 list.Children.Add(DayHeader(ProjectHistory.DayLabel(g.Key), list.Children.Count == 0));
-                foreach (var m in g) list.Children.Add(TakeRow(st, m, used.Contains(m.Id), editable));
+                foreach (var m in g) list.Children.Add(m.Id == historyDeletingTake ? TakeDeleteRow(st, m) : TakeRow(st, m, used.Contains(m.Id), editable));
             }
             historyTakes.Children.Add(list);
         }
@@ -183,7 +195,7 @@ public partial class MainWindow
     /// <summary>Take sizes come from disk: measured in the background, then the list refreshes.</summary>
     void MeasureHistoryBytes(ProjectStore st)
     {
-        if (historyBytesDir != st.Dir) historyBytes.Clear(); // a duplicated project keeps the same media ids
+        if (historyBytesDir != st.Dir) { historyBytes.Clear(); takePeaks.Clear(); } // a duplicated project keeps the same media ids
         historyBytesDir = st.Dir;
         var missing = st.Project.Media.Where(m => !historyBytes.ContainsKey(m.Id)).ToList();
         if (missing.Count == 0) return;
@@ -246,10 +258,10 @@ public partial class MainWindow
 
     Control TakeRow(ProjectStore st, Media m, bool inTimeline, bool editable)
     {
-        bool playing = takePreview.PlayingId == m.Id;
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), ColumnSpacing = 8 };
-        var play = RowButton(playing ? "\uE73B" : "\uF5B0", playing ? Loc.T("hist.stop") : Loc.T("hist.listen"), () => TogglePreview(st, m));
-        if (playing) play.Foreground = Palette.Accent;
+        bool current = takePreview.PlayingId == m.Id, playing = current && !takePreview.Paused;
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto,Auto"), ColumnSpacing = 8 };
+        var play = RowButton(playing ? "\uE769" : "\uF5B0", Loc.T(playing ? "hist.pause" : current ? "hist.resume" : "hist.listen"), () => TogglePreview(st, m));
+        if (current) play.Foreground = Palette.Accent;
         grid.Children.Add(play);
 
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
@@ -274,6 +286,13 @@ public partial class MainWindow
         var reveal = RowButton("\uE838", Loc.T("hist.reveal"), () => RevealInExplorer(st.Dir, m.Video ?? m.Audio));
         Grid.SetColumn(reveal, 2); grid.Children.Add(reveal);
         var hover = new List<Control> { reveal };
+        if (!inTimeline)
+        {
+            var trash = RowButton("", Loc.T("hist.trashTake"), () => { historyDeletingTake = m.Id; RefreshHistory(); }, danger: true);
+            trash.IsEnabled = editable && historyBusyId == null && !historyTakeBusy;
+            hover.Add(trash);
+            Grid.SetColumn(trash, 3); grid.Children.Add(trash);
+        }
         Control action;
         if (historyBusyId == m.Id)
             action = new Panel { Width = 28, Height = 28, Children = { new Avalonia.Controls.Shapes.Arc { Classes = { "spin" }, Width = 14, Height = 14, Stroke = Palette.Dim } } };
@@ -294,8 +313,91 @@ public partial class MainWindow
             use.Click += async (_, _) => await UseTake(m);
             action = use;
         }
-        Grid.SetColumn(action, 3); grid.Children.Add(action);
-        return HistoryRow(grid, hover, new Thickness(8, 6, 16, 6));
+        Grid.SetColumn(action, 4); grid.Children.Add(action);
+        if (!current) return HistoryRow(grid, hover, new Thickness(8, 6, 16, 6));
+        (takePlayer.Parent as Panel)?.Children.Remove(takePlayer); // it moves with the take across refreshes
+        return HistoryRow(new StackPanel { Children = { grid, takePlayer } }, hover, new Thickness(8, 6, 16, 8));
+    }
+
+    /// <summary>The inline "send to the Recycle Bin?" of one unused take (like an export's).</summary>
+    Control TakeDeleteRow(ProjectStore st, Media m)
+    {
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), ColumnSpacing = 8 };
+        grid.Children.Add(HistoryIcon("", 14, Palette.Rec));
+        var text = new TextBlock { FontSize = 12, Foreground = Palette.Fg, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+        text.Inlines!.Add(new Run(Loc.T("hist.trashAsk.a")));
+        text.Inlines.Add(new Run(m.Name) { FontWeight = FontWeight.Medium });
+        text.Inlines.Add(new Run(Loc.T("hist.trashAsk.b")));
+        Grid.SetColumn(text, 1); grid.Children.Add(text);
+        var no = new Button { Classes = { "btn", "sm" }, Content = Loc.T("hist.no"), Height = 28, IsEnabled = !historyTakeBusy };
+        no.Click += (_, _) => { historyDeletingTake = null; RefreshHistory(); };
+        Grid.SetColumn(no, 2); grid.Children.Add(no);
+        var label = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        if (historyTakeBusy) label.Children.Add(new Avalonia.Controls.Shapes.Arc { Classes = { "spin" }, Width = 12, Height = 12, Stroke = Brushes.White });
+        label.Children.Add(new TextBlock { Text = Loc.T("hist.delete") });
+        var yes = new Button { Classes = { "btn", "sm", "danger" }, Content = label, Height = 28, IsEnabled = !historyTakeBusy };
+        yes.Click += async (_, _) => await DeleteTake(st, m);
+        Grid.SetColumn(yes, 3); grid.Children.Add(yes);
+        if (!historyTakeBusy) Dispatcher.UIThread.Post(() => yes.Focus());
+        return new Border { Child = grid, Background = Palette.RecSoft, Padding = new Thickness(16, 6, 8, 6) };
+    }
+
+    /// <summary>The mini player under the row that is playing: the wave (click or drag to jump), ±5 s, the time and stop.
+    /// Built once and moved to that row on every refresh; its clock only runs while a take is loaded.</summary>
+    void BuildTakePlayer()
+    {
+        Grid.SetColumnSpan(takeScrubber, 4);
+        takePlayer.Children.Add(takeScrubber);
+        takeScrubber.SeekRequested += f =>
+        {
+            takePreview.Seek(f * takePreview.DurationSec);
+            TickTakePlayer();
+        };
+        var back = RowButton("", Loc.T("hist.back5"), () => SkipTake(-TakeSkipSec));
+        var fwd = RowButton("", Loc.T("hist.fwd5"), () => SkipTake(TakeSkipSec));
+        var stop = RowButton("", Loc.T("hist.stop"), () => { takePreview.Stop(); RefreshHistory(); });
+        takeTime.Margin = new Thickness(8, 0);
+        takeTime.HorizontalAlignment = HorizontalAlignment.Right;
+        foreach (var (c, col) in new (Control, int)[] { (back, 0), (fwd, 1), (takeTime, 2), (stop, 3) })
+        {
+            Grid.SetRow(c, 1); Grid.SetColumn(c, col);
+            takePlayer.Children.Add(c);
+        }
+        takePlayerClock.Tick += (_, _) => TickTakePlayer();
+    }
+
+    void SkipTake(double sec)
+    {
+        takePreview.Seek(takePreview.PositionSec + sec);
+        TickTakePlayer();
+    }
+
+    /// <summary>Moves the wave's played edge every frame; the time text changes (and allocates) once a second.</summary>
+    void TickTakePlayer()
+    {
+        if (takePreview.PlayingId == null) { takePlayerClock.Stop(); return; }
+        double dur = takePreview.DurationSec, pos = takePreview.PositionSec;
+        takeScrubber.SetProgress(dur > 0 ? pos / dur : 0);
+        int whole = (int)pos;
+        if (whole == takeTimeShown) return;
+        takeTimeShown = whole;
+        takeTime.Text = $"{ProjectHistory.FormatDuration(whole)} / {ProjectHistory.FormatDuration(dur)}";
+    }
+
+    /// <summary>The take's wave for the mini player: read once in the background, then kept while the project is open.</summary>
+    void LoadTakePeaks(string id, string path)
+    {
+        if (takePeaks.TryGetValue(id, out var known)) { takeScrubber.SetPeaks(known); return; }
+        takeScrubber.SetPeaks(null);
+        Task.Run(() => TakePreview.Peaks(path, TakePeakBins)).ContinueWith(t =>
+        {
+            if (t.IsFaulted) return; // the flat line stays; listening still works
+            Dispatcher.UIThread.Post(() =>
+            {
+                takePeaks[id] = t.Result;
+                if (takePreview.PlayingId == id) takeScrubber.SetPeaks(t.Result);
+            });
+        }, TaskScheduler.Default);
     }
 
     Control ExportRow(ProjectStore st, ExportRecord e, bool editable)
@@ -433,7 +535,7 @@ public partial class MainWindow
     {
         if (takePreview.PlayingId == m.Id)
         {
-            takePreview.Stop();
+            if (takePreview.Paused) takePreview.Resume(); else takePreview.Pause();
             RefreshHistory();
             return;
         }
@@ -441,6 +543,10 @@ public partial class MainWindow
         {
             if (st.Resolve(m.Audio) is not { } path || !File.Exists(path)) throw new FileNotFoundException();
             takePreview.Play(m.Id, path);
+            takeTimeShown = -1;
+            LoadTakePeaks(m.Id, path);
+            TickTakePlayer();
+            takePlayerClock.Start();
         }
         catch (Exception e) when (e is IOException or InvalidOperationException or NAudio.MmException or FormatException or InvalidDataException)
         {
@@ -479,15 +585,7 @@ public partial class MainWindow
         {
             st.LogTimelineChanges(); // like the web, which saves the timeline before deciding what is unused
             var (purged, bytes, failure) = await Task.Run(() => ProjectHistory.TrashMedia(st.Dir, unused));
-            ProjectHistory.ForgetPurged(st.Project, purged, bytes);
-            foreach (var m in purged) historyBytes.Remove(m.Id);
-            if (purged.Count > 0)
-            {
-                undo.Clear(); // purged files are gone; older states could reference them
-                UpdateUndoButtons();
-                MarkDirty();
-                SaveSoon();
-            }
+            ForgetTrashed(st, purged, bytes);
             if (failure != null) Status(Loc.T("hist.err.purge", failure.Message));
             else historyConfirmPurge = false;
         }
@@ -496,6 +594,40 @@ public partial class MainWindow
             historyPurging = false;
             RefreshHistory();
         }
+    }
+
+    /// <summary>One unused take to the Recycle Bin, after its inline confirmation.</summary>
+    async Task DeleteTake(ProjectStore st, Media m)
+    {
+        if (st != store || st.ReadOnly || historyTakeBusy) return;
+        if (takePreview.PlayingId == m.Id) takePreview.Stop(); // the file is open while it plays
+        historyTakeBusy = true;
+        RefreshHistory();
+        try
+        {
+            st.LogTimelineChanges();
+            if (ProjectHistory.UsedMediaIds(st.Project).Contains(m.Id)) return; // it went back to the timeline meanwhile
+            var (purged, bytes, failure) = await Task.Run(() => ProjectHistory.TrashMedia(st.Dir, [m]));
+            ForgetTrashed(st, purged, bytes);
+            if (failure != null) Status(Loc.T("hist.err.trashTake", m.Name, failure.Message));
+        }
+        finally
+        {
+            historyTakeBusy = false;
+            historyDeletingTake = null;
+            RefreshHistory();
+        }
+    }
+
+    void ForgetTrashed(ProjectStore st, List<Media> purged, long bytes)
+    {
+        ProjectHistory.ForgetPurged(st.Project, purged, bytes);
+        foreach (var m in purged) { historyBytes.Remove(m.Id); takePeaks.Remove(m.Id); }
+        if (purged.Count == 0) return;
+        undo.Clear(); // purged files are gone; older states could reference them
+        UpdateUndoButtons();
+        MarkDirty();
+        SaveSoon();
     }
 
     async Task DeleteExport(ProjectStore st, ExportRecord e)

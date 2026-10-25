@@ -121,6 +121,7 @@ public partial class MainWindow : Window
         InitTimelineEditing();
         InitTransport();
         InitMarkers();
+        InitTools();
         InitPreview();
         InitMode();
         InitImport();
@@ -155,7 +156,7 @@ public partial class MainWindow : Window
             if (e.Source == Projects && e.GetPosition(this).Y < 44 && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) BeginMoveDrag(e);
         };
 
-        timer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) => Tick());
+        timer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) => SafeTick());
         saveTimer = new DispatcherTimer { Interval = SaveDelay };
         saveTimer.Tick += (_, _) => SaveSoon();
         SaveMode.Changed += () => ArmSave(restart: false);
@@ -182,6 +183,8 @@ public partial class MainWindow : Window
         };
         Closing += async (_, e) =>
         {
+            SessionLog.Write($"cerrar  motivo {e.CloseReason}  desde código {e.IsProgrammatic}"
+                + (e.IsProgrammatic ? Environment.NewLine + SessionLog.Caller() : ""));
             if (RecordingBusy)
             {
                 // keep the take: stop, put it in the project and save, then close
@@ -232,6 +235,7 @@ public partial class MainWindow : Window
         };
         Closed += (_, _) =>
         {
+            SessionLog.Write("ventana cerrada");
             timer.Stop();
             // in solo audio the bottom row is closed: the heights remembered before stay
             try { if (!audioMode && !(mixerView && masteringView)) AppConfig.Set(mixerView ? "mixerHeight" : "timelineHeight", Root.RowDefinitions[3].ActualHeight.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
@@ -596,6 +600,12 @@ public partial class MainWindow : Window
             case "delete":
                 await (Timeline.Range != null ? DeleteRangeSelection() : sel == null && SelectedFolder is { } gone ? RemoveFolder(gone) : DeleteTimelineSelection());
                 break;
+            case "deleteClose":
+                if (Timeline.Range != null) await DeleteRangeSelection(close: true);
+                break;
+            case "toolSelect" or "toolRange" or "toolSplit" or "toolErase" or "toolListen" or "toolZoom" or "toolHand":
+                ToolKey(action);
+                break;
             case "play":
                 TogglePlay();
                 break;
@@ -671,6 +681,24 @@ public partial class MainWindow : Window
         }
         e.Handled = true;
         Timeline.InvalidateVisual();
+    }
+
+    string? lastTickError;
+
+    /// <summary>
+    /// <see cref="Tick"/> behind a catch: a timer whose handler throws is never rescheduled, and with it the playhead,
+    /// the meters and the picture stop for the rest of the session. The error goes to the session log (once per kind).
+    /// </summary>
+    void SafeTick()
+    {
+        try { Tick(); }
+        catch (Exception ex)
+        {
+            string key = $"{ex.GetType().Name} {ex.TargetSite}";
+            if (key == lastTickError) return;
+            lastTickError = key;
+            SessionLog.Write($"error en el tick: {ex}");
+        }
     }
 
     void Tick()

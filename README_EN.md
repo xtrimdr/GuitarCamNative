@@ -42,7 +42,8 @@ It is designed to be used with the guitar strapped on: one-key shortcuts, big bu
   winds, percussion…), its own height and Vida, Comp, Reverb and Delay knobs in its header.
 - A sound you like saves as a **track preset** and comes back from New track → Preset.
 - Above the ruler, an **A–B range** loops a stretch (to practice the solo or mix a part) and named **markers**
-  (Intro, Chorus, Solo…) jump from one part to another. Zoom from one beat to the whole song with keys 1 to 5.
+  (Intro, Chorus, Solo…) jump from one part to another. Zoom from one beat to the whole song with shortcuts you
+  assign in Settings → Keyboard shortcuts.
 
 ### Mix
 
@@ -63,13 +64,16 @@ It is designed to be used with the guitar strapped on: one-key shortcuts, big bu
 
 - **MP4** (offline mix + FFmpeg, with progress and cancellation), with presets for **Reels · TikTok**, **YouTube** and
   **Instagram** (1:1 and 4:5) that fit the frame and bring the mix to −14 LUFS.
+- Easy or custom: pick the destination and quality, and if you want, the resolution (720p to 4K) and bitrate under **Advanced**.
+- The video is encoded on the **video card** (NVIDIA, AMD or Intel) when there is one, the takes are processed in
+  parallel and the mix uses every core; if the card fails, it carries on with the processor.
 - In **Audio only** mode, 24-bit WAV or 320 kbps MP3; optionally each track in its own WAV too (stems). A master
   **LUFS** meter sits in the transport bar.
 
 ### And also
 
 - **Never loses anything**: atomic saving (after every edit, every X minutes or by hand with Ctrl+S or the disk
-  button, chosen in Settings → Saving; takes are always saved), copies in `historial/` to go back, recovery of
+  button, chosen in Settings → Saving and export; takes are always saved), copies in `historial/` to go back, recovery of
   interrupted recordings and a project manager with a Recycle Bin.
 - Configurable language, theme and keyboard shortcuts.
 
@@ -95,7 +99,7 @@ in [PENDIENTES.md](PENDIENTES.md) (in Spanish).
 tools\probar.ps1 "what to try"
 ```
 
-It builds, runs `gclab comprobar-dsp`, copies the app to `%LOCALAPPDATA%\GuitarCam Pruebas\<date>-<commit>` (the last
+It builds, runs `gclab comprobar-dsp`, copies the app to `pruebas\<date>-<commit>` (ignored by git; the last
 5 are kept) and opens it from there, marked "TEST <commit>" in the title bar. Since it never runs from `bin\`, an open
 app does not block the next build. `-Abrir` opens the newest copy without building, `-NoAbrir` only builds and copies,
 `-SinComprobar` skips `gclab`, `-Proyecto folder` opens that project. If a GuitarCam is already open, a dialog asks first whether to close it
@@ -125,7 +129,9 @@ Spanish by default; the language is chosen in Settings.
 | F | fit all |
 | X | timeline / mixer |
 | Alt+X / D | split the clip at the playhead / duplicate it |
-| Del | remove the clip (or the empty track) |
+| Del | remove the clip (or the empty track); with a range, delete it |
+| Shift+Del | delete the range and close the gap (what follows slides left) |
+| 1 to 7 | tools: Select / Range / Split / Erase / Listen / Zoom / Hand |
 | Ctrl+Z / Ctrl+Y | undo / redo |
 | Ctrl+Shift+N | new track |
 | Ctrl+click / Shift+click on a header | pick several tracks (one by one / a range) to move them together |
@@ -139,6 +145,12 @@ On the strip above the ruler, a drag sets the A–B range (and turns the loop on
 A double-click adds a marker; markers drag, a click jumps there and a double-click renames them. Right-click the strip
 to add a marker, start or end the range there or remove it, and on a marker to pick a name from the list or loop to
 the next one.
+
+The timeline tools sit in the middle of the project bar: **Select** (as always), **Range** (marks a stretch of one or
+several tracks; right-click: delete it, delete it and close the gap, loop it), **Split** (a click cuts the clip
+there, on the grid), **Erase** (removes the clips it touches), **Listen** (hold the button on a clip to hear that
+track alone from there), **Zoom** (click zooms in, Alt+click out, a drag shows that stretch) and **Hand** (drag to
+move the view). Where two clips of a track overlap, right-click → **Bring to front** picks which one shows.
 
 ## How it is built
 

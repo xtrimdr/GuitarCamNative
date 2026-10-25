@@ -14,8 +14,8 @@ Todo lo que se describe acá lo decidió el usuario: no lo cambies sin preguntar
 
 ```
 ┌ barra de título propia (44) ─ logo · nombre · NATIVE · (PRUEBA) ··························· CPU │ GPU │ RAM │ DSP │ FFmpeg · 🔔 · tema · ⚙ · [_ □ ×] ┐
-├ fila de herramientas (~40) ─ Video|Solo audio · chip del proyecto (guardado) ▾ │ guardar · deshacer/rehacer ··················· [Exportar MP4] ┤
-├ inspector (290) ─┬─ preview (un panel por pista con video) ────────┬─ "En vivo" (256) ─┬─ proyecto (290, plegable a 44) ┤
+├ fila de herramientas (~40) ─ Video|Solo audio · chip del proyecto (guardado) ▾ │ guardar · deshacer/rehacer ···· [↖ ⌶│✂ ⌫│🎧 🔍 ✋] ···· [Exportar MP4] ┤
+├ inspector (290↔) ┬─ preview (un panel por pista con video) ────────┬─ "En vivo" (256) ─┬─ proyecto (290↔, plegable a 44) ┤
 │ TOMA + secciones │                                                 │ cámara + entrada  │ pestañas Color / Historial     │
 ├──────────────────┴─ separador arrastrable ─────────────────────────┴───────────────────┤                                │
 │ timeline (280): regla (32) · encabezados fijos (324) · un carril por pista (64, 40–320) │                                │
@@ -30,12 +30,16 @@ Todo lo que se describe acá lo decidió el usuario: no lo cambies sin preguntar
   primera, de 44, es la barra de título (`ExtendClientAreaTitleBarHeightHint="44"`) con la app, los medidores, avisos,
   tema y Configuración; la segunda es la del proyecto: modo, chip, guardar/deshacer y Exportar a la derecha (ahí no
   hay botones del sistema, así que va sin el margen de 150). Las dos arrastran la ventana.
+- En el medio de la segunda fila, las **herramientas del timeline** (`MainWindow.Tools.cs`, pedido del usuario): una
+  caja como la de Video | Solo audio (`Border.mode` con `ToggleButton.mode` de 32 px, solo ícono) con Seleccionar ·
+  Rango │ Dividir · Borrar │ Escuchar · Zoom · Mano. Queda **centrada en la ventana**, como el transporte; solo se
+  corre (`PlaceTools`) si no entra entre deshacer y Exportar. Con el mixer en lugar del timeline se apaga.
 - Es la de la app (`ExtendClientAreaToDecorationsHint`): arrastrable, doble clic maximiza, los botones del sistema
   quedan a la derecha (margen 150). `TransparencyLevelHint="None"` no se toca: con transparencia, píxeles oscuros
   del video dejan ver lo que hay detrás.
 - El logo es el ícono de la app y abre "Acerca de" (`Dialogs/AboutDialog`).
 - Al lado del nombre, el estado del guardado (`TickTopBar`): Guardando / Guardado / Sin guardar / Error al guardar /
-  Solo lectura. "Sin guardar" sale cuando Configuración → Guardado (`SaveMode`) guarda cada X minutos o a mano; el
+  Solo lectura. "Sin guardar" sale cuando Configuración → Guardado y exportación (`SaveMode`) guarda cada X minutos o a mano; el
   diskette antes de deshacer (`SaveButton`, el atajo "save") guarda ya y está apagado si no hay nada pendiente.
 - Cerrar la ventana con cambios sin guardar (modo cada X minutos o a mano, o un guardado que falló) pregunta
   "¿Guardo los cambios?" (`Dialogs/UnsavedDialog`): Guardar y cerrar (Enter), Cerrar sin guardar, Cancelar (Esc).
@@ -120,8 +124,16 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 
 - Lo que es del proyecto (lo de la pista va al inspector). Ocupa la altura de la preview y el timeline, se pliega a
   una columna de íconos y recuerda pestaña y secciones plegadas. Las ediciones de Color pasan por `ColorEdit(...)`.
-- Pestañas Color / Biblioteca / Historial. Biblioteca (las tomas, usadas o no, importadas o grabadas, y "Borrar no
-  usadas") e Historial (exportaciones y actividad; la pestaña por defecto) viven en `MainWindow.History.cs` y se arman
+- Las dos barras laterales (esta y el inspector) cambian de ancho arrastrando su borde interior (240–600, el escenario
+  conserva 360; doble clic vuelve a 290) y lo recuerdan en `config.json` (`sidebarWidth`, `projectBarWidth`):
+  `MainWindow.Sidebars.cs`.
+- Efectos de Color: viñeta, grano y barras de cine (No / 1.85 / 2.00 / 2.39 / Libre, con "Alto de las barras" en % del
+  panel solo en Libre). En la preview las barras se dibujan fuera del fundido del clip (`PreviewVideoFx.DrawLetterbox`):
+  con la opacidad encima dejarían ver el video.
+- Pestañas Color / Biblioteca / Historial. Biblioteca (las tomas, usadas o no, importadas o grabadas; la papelera de
+  cada fila sin usar, con confirmación en la fila; "Borrar no usadas"; y al escuchar una toma, un mini reproductor bajo
+  su fila: onda para saltar con clic o arrastre (`Controls/TakeScrubber`), ±5 s, tiempo y parar, por la salida de
+  Windows con `TakePreview`, que hace los saltos con un fundido corto) e Historial (exportaciones y actividad; la pestaña por defecto) viven en `MainWindow.History.cs` y se arman
   solo mientras alguna está a la vista (`RefreshHistory`); lo que hacen con el proyecto y los archivos vive en
   `ProjectHistory` (Projects).
 - "Salió / volvió al timeline" se registra al guardar (`ProjectStore.Serialize` → `LogTimelineChanges`).
@@ -138,8 +150,9 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 
 - **Clips**: fondo `Hover` al 40 %, borde `Line` (acento al 60 % si está seleccionado), onda `Dim` (acento si está
   seleccionado, `Faint` si la pista no suena), sin el nombre adentro; sin archivo, gris con "Sin conexión…". Con
-  video y carriles de 52 px o más, la tira de miniaturas (`Video/VideoThumbnails.cs`) con la onda blanca abajo sobre
-  un degradé. Pista seleccionada con barra de acento de 2 px a la izquierda del encabezado; playhead de acento con triángulo.
+  video y carriles de 52 px o más, la tira de miniaturas (`Video/VideoThumbnails.cs`) con la onda abajo sobre
+  un degradé (del color de la pista si tiene uno; si no, blanca). Arriba a la derecha, un badge dice si el medio es solo
+  audio (nota) o audio + video (cámara), con tooltip (`MediaBadge`). Pista seleccionada con barra de acento de 2 px a la izquierda del encabezado; playhead de acento con triángulo.
 - **Bordes de clip**: en cada lado dos manijas chicas como la de la columna (pestañita oscura con dos rayitas), una por
   mitad del clip (`DrawEdgeHandles`): la de arriba, donde termina el fade, mueve el fade; la de abajo, en el borde,
   recorta. El cursor lo dice (diagonal como la línea del fade, ↔ para recortar) y se ilumina la manija que vas a agarrar.
@@ -166,9 +179,22 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   última) dibuja un rectángulo que marca cada clip que toca; con Ctrl suma a lo marcado (`boxed`, `UpdateBox`). Agarrar
   uno marcado por el cuerpo mueve todos el mismo tiempo, cada uno en su pista (`StartCarry`, `DragCarried`, evento `ClipsMoved`: un solo paso para deshacer); sus bordes recortan solo ese. Supr los saca a
   todos. Un clic sin mover, o cualquier selección común, deja uno solo.
-- **Rango**: Shift+arrastrar sobre una pista marca un rango; Supr o "Borrar el rango" del clic derecho lo saca de sus
-  clips (`ClipEditing.DeleteRange`) dejando el hueco. "Repetir este rango" lo pasa al rango A–B. La selección se va
-  con un clic, Esc o una edición.
+- **Rango**: la herramienta Rango, o Shift+arrastrar con Seleccionar, marca un tramo; arrastrando hacia arriba o abajo
+  suma las pistas visibles que cruza (`rangeTracks`). Supr o "Borrar el rango" del clic derecho lo saca de sus clips
+  (`ClipEditing.DeleteRange`) dejando el hueco; Shift+Supr o "Borrar y cerrar el hueco" además corre lo de después en
+  esas pistas (`ClipEditing.DeleteRangeClosing`; las otras pistas, los marcadores y el A–B no se mueven). "Repetir este
+  rango" lo pasa al rango A–B. La selección se va con un clic, Esc o una edición.
+- **Herramientas** (`Controls/TimelineView.Tools.cs`, `TimelineView.Tool`): solo cambian qué hace apretar sobre los
+  carriles; encabezados, regla, marcadores y menús andan igual con cualquiera. **Dividir** corta el clip en el clic
+  (imantado; Alt, libre) y mientras pasás muestra la línea del corte. **Borrar** saca lo que toca un arrastre, en un solo
+  paso de deshacer (los clips se atenúan hasta soltar). **Escuchar**, mientras mantenés apretado sobre un clip, toca
+  esa pista sola desde ahí (`LiveTrack.ListenSolo`: un solo del motor que no se guarda ni prende la S); al soltar se
+  apaga con el fundido y el cabezal vuelve a donde estaba. **Zoom**: clic ×2, Alt+clic ÷2, arrastrar muestra ese tramo.
+  **Mano** arrastra la vista. Cada una tiene su puntero (`Controls/ToolCursors.cs`: el mismo ícono que su botón,
+  blanco con borde negro; la mano sale del trazo de lucide porque Segoe no tiene). Teclas 1 a 7, en el orden de la caja.
+- **Clips que se pisan**: se ve el último de la pista. El clic derecho → "Traer al frente" (`ClipEditing.BringToFront`,
+  prendido solo si otro lo tapa) lo pasa al final: arriba en el timeline, en la vista previa y en la exportación. El
+  sonido no cambia: los dos suenan.
 - **Franja de marcadores** (`Controls/TimelineView.Markers.cs`, `MainWindow.Markers.cs`): 18 px arriba de los números
   de la regla (`MarkerH`, incluida en `RulerH`). Arrastrar en vacío dibuja el **rango A–B** del loop y lo prende; sus
   bordes y su cuerpo se arrastran; acento con el loop prendido, gris apagado, y con el loop prendido sus bordes siguen
@@ -202,8 +228,8 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 - **Zoom** (pedido del usuario): al pie de la columna, una barra de `FooterH` = 40 px (`TimelineFooter`) con dos
   sliders grandes (pista de 6 px, perilla de 18): zoom horizontal (escala logarítmica de "ver todo" a `MaxPps` = 2 px por muestra, `TimelineView.Zoom` /
   `SetZoom`, se mantiene el cabezal en su lugar) y altura de pista (40 a 320). Las filas scrollean por encima de la
-  barra. Con las teclas 1 a 5, zooms fijos contados en tiempos (`TimelineView.ZoomPresetBeats`: un tiempo, 1 compás,
-  4, 16 y toda la canción), configurables como todo atajo.
+  barra. Zooms fijos contados en tiempos (`TimelineView.ZoomPresetBeats`: un tiempo, 1 compás, 4, 16 y toda la
+  canción), sin tecla de entrada (el usuario les sacó el 1 a 5 para las herramientas): se asignan en Atajos.
 - **"+ Nueva pista"** (pedido del usuario): fija al pie de la columna, justo encima de la barra de zoom (`AddRect`,
   `AddH` = 36 px, `DrawAddButton`); las filas pasan por debajo y el scroll deja lugar para ver la última entera.
 - **Alto por fila** (pedido del usuario): `Track.HeightScale` (múltiplo del alto general, así el slider sigue
@@ -331,7 +357,7 @@ tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
   (pedido del usuario): **Limpieza** (Corte, Barro;
   `EqOn`) → **Multibanda** (una perilla "Cuánto" por banda con su barra de reducción en vivo, y dos perillas chicas
   para los cruces; `BandsOn`) → **Color** (Graves, Presencia, Aire, Inclinación; `ColorOn`) → **Cinta** (Vida, la
-  cinta de las pistas más suave; `TapeOn`) → **Ancho** (Ancho y Graves mono; `WidthOn`) → **Soft clip** (Recorte y su
+  cinta de las pistas más suave; `TapeOn`) → **Ancho** (Ancho y Graves mono, con el volumen compensado; `WidthOn`) → **Soft clip** (Recorte y su
   barra; `ClipOn`) | Salida: **Limitador** (Empuje, Techo en pico real, −1 dBTP por defecto, Release y su barra; `LimOn`, aparte del ON del master; apagado, los
   picos pueden pasar de 0 dB) → **Volumen** (sin ON: LUFS de los últimos 3 s e integrado, el mismo medidor que la
   celda LUFS, el pico real de la pasada (`TruePeak`) en rojo si pasó del Techo, y cuánto falta para −14 LUFS).
@@ -364,10 +390,23 @@ tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
   no suma pasos; los demás cambian el cuadro solo para ese video (9:16, 16:9, 1:1, 4:5 = 1080×1350) y llevan la mezcla
   a −14 LUFS. Se recuerda el último (`ExportSettings.Target`). En "Exportar audio" en su lugar hay una casilla
   "Llevar la mezcla a −14 LUFS" (`ExportSettings.AudioLufs`).
+- **Avanzado** (solo MP4): un link plegado abajo de Calidad (`AdvancedPanel`); plegado dice lo que no está por
+  defecto ("Avanzado · 4K · 20 Mbps"). Adentro, Resolución 720p · 1080p · 1440p · 4K (el lado corto del cuadro,
+  `Mp4Exporter.ExportSize(aspect, resolución)`; el borde entre paneles crece con ella) y Bitrate del video: "Automático"
+  (el de la calidad) o un slider de 1 a 100 Mbps; mover el slider sale de Automático. Con bitrate a mano, x264 pasa de
+  CRF a ese bitrate y la placa lo usa en vez del de la calidad; la calidad sigue eligiendo la velocidad del codificador.
+  Se recuerda por proyecto (`ExportSettings.Resolution`, `BitrateMbps`) y la estimación del peso lo usa.
 - **Masterizado y colas** (`Dsp/MixMaster.cs`): la mezcla se renderiza con el mismo `MixRenderer` sin limitador y hasta
   8 s después del último clip; corta donde reverb y delay bajan de −66 dBFS (o funde el último segundo si siguen
   sonando en el límite). Después va el `MasterLimiter` con la ganancia que lleva a los LUFS del destino, midiendo con
   `LoudnessMeter.Measure` y corrigiendo hasta 4 pasadas (solo el limitador). En el MP4, durante la cola el último
   cuadro queda congelado y se funde al fondo (`tpad` + `fade` en `Mp4Exporter.BuildFfmpegCommand`).
+- **Velocidad**: `MixRenderer.RenderTo` mezcla de a tramos de 64 bloques en tres etapas con su hilo cada una (pistas
+  en paralelo → reverb y delay → master), con el mismo resultado bit a bit que de a un bloque. En el MP4, cada toma
+  tiene su propio grafo de filtros en FFmpeg (loopback decoders, `-dec`, FFmpeg 7+), así las tomas se filtran a la vez.
+  El video lo codifica la placa de video si FFmpeg encuentra una (NVENC, AMF o Quick Sync, `VideoEncoders`, con el
+  bitrate de la calidad en vez del CRF de x264) o el procesador; se elige en Configuración → Guardado y exportación
+  (`config.json` "export.encoder", de la máquina y no del proyecto). Si la placa o los grafos fallan, la exportación
+  se repite sola con el procesador y un solo grafo, como antes.
 - **Al terminar** se ven los LUFS integrados de la mezcla y los segundos de cola (en el pie, o en la línea del audio);
   quedan en `ExportRecord.Lufs`, así que también se ven al abrir la exportación desde Historial.

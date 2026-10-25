@@ -303,6 +303,8 @@ public sealed class VideoFx
     public double VignetteSize { get; set; } = 50;
     public double Grain { get; set; }
     public string Letterbox { get; set; } = "off";
+    /// <summary>Height of each bar with the "custom" letterbox, in % of the panel height.</summary>
+    public double LetterboxHeight { get; set; } = GuitarCam.Audio.VideoColorProcessor.LetterboxHeightDefault;
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
     /// <summary>Same ranges as normalizeVideoFx (videoFx.js).</summary>
@@ -311,6 +313,9 @@ public sealed class VideoFx
         static double N(double v, double d) => double.IsFinite(v) ? Math.Clamp(v, 0, 100) : d;
         Vignette = N(Vignette, 0); VignetteSize = N(VignetteSize, 50); Grain = N(Grain, 0);
         if (!GuitarCam.Audio.VideoColorProcessor.LetterboxOptions.Any(l => l.Id == Letterbox)) Letterbox = "off";
+        LetterboxHeight = double.IsFinite(LetterboxHeight)
+            ? Math.Clamp(LetterboxHeight, GuitarCam.Audio.VideoColorProcessor.LetterboxHeightMin, GuitarCam.Audio.VideoColorProcessor.LetterboxHeightMax)
+            : GuitarCam.Audio.VideoColorProcessor.LetterboxHeightDefault;
     }
 }
 
@@ -327,11 +332,17 @@ public sealed class ExportSettings
     public string Target { get; set; } = GuitarCam.Audio.ExportTargets.Project;
     /// <summary>Native only: "Exportar audio" masters the mix to the streaming loudness (−14 LUFS).</summary>
     public bool AudioLufs { get; set; }
+    /// <summary>Native only, "Avanzado": the MP4's short side (720, 1080, 1440 or 2160).</summary>
+    public int Resolution { get; set; } = GuitarCam.Audio.Mp4Exporter.DefaultResolution;
+    /// <summary>Native only, "Avanzado": the MP4's video bitrate in Mbps; null = the quality's.</summary>
+    public double? BitrateMbps { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
     internal void Normalize()
     {
         if (!GuitarCam.Audio.ExportTargets.All.Any(t => t.Id == Target)) Target = GuitarCam.Audio.ExportTargets.Project;
+        Resolution = GuitarCam.Audio.Mp4Exporter.NormalizeResolution(Resolution);
+        BitrateMbps = GuitarCam.Audio.Mp4Exporter.NormalizeBitrate(BitrateMbps);
     }
 }
 

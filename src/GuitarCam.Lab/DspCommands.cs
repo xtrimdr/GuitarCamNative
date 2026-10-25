@@ -779,6 +779,17 @@ static class DspCommands
     }
 
     /// <summary>The line after an export: the mix's integrated loudness, like the dialog's done screen, and the effect tail.</summary>
+    /// <summary>--resolucion: "720", "1080p", "1440", "2160" or "4k"; null when not given.</summary>
+    static int? ParseResolution(string? s)
+    {
+        if (s == null) return null;
+        string v = s.Trim().ToLowerInvariant().TrimEnd('p');
+        int r = v == "4k" ? 2160 : int.TryParse(v, out int n) ? n : 0;
+        if (!Mp4Exporter.Resolutions.Contains(r))
+            throw new ArgumentException($"--resolucion: \"{s}\" no existe. Opciones: 720, 1080, 1440, 2160 (4k).");
+        return r;
+    }
+
     static string Loudness(ExportResult r) =>
         (double.IsFinite(r.Lufs) ? $"Mezcla: {r.Lufs:0.0} LUFS integrado" : "Mezcla: silencio (no llega a -70 LUFS)")
         + (r.TailSec > 0 ? $", {r.TailSec:0.0} s de cola de efectos" : ", sin cola");
@@ -926,7 +937,7 @@ static class DspCommands
                 AspectRatio = ExportTargets.AspectFor(target.Id, p.Settings.Aspect),
                 BorderSize = 4,
                 Color = new ExportColorSpec(col.On, col.Look, col.Amount, col.Exposure, col.Contrast, col.Highlights, col.Shadows, col.Saturation, col.Vibrance, col.Temperature, col.Tint, col.Fade, col.Whites, col.Blacks, col.Light),
-                VideoFx = new ExportVideoFxSpec(vfx.On, vfx.Vignette, vfx.VignetteSize, vfx.Grain, vfx.Letterbox),
+                VideoFx = new ExportVideoFxSpec(vfx.On, vfx.Vignette, vfx.VignetteSize, vfx.Grain, vfx.Letterbox, vfx.LetterboxHeight),
                 Takes = takes,
                 MixTracks = mixTracks,
                 MixBus = new MixBusSpec
@@ -939,6 +950,11 @@ static class DspCommands
                 SampleRate = sr,
                 TailSec = tailSec,
                 TargetLufs = targetLufs,
+                // --codificador auto|cpu|nvenc|amf|qsv: who encodes the video (auto = the video card if it has one)
+                Encoder = VideoEncoders.ParsePreference(a.Get("codificador")),
+                // --resolucion 720|1080|1440|2160 (4k) and --bitrate Mbps: the dialog's "Avanzado" (default: the project's)
+                Resolution = ParseResolution(a.Get("resolucion")) ?? p.Settings.Export.Resolution,
+                BitrateMbps = a.Get("bitrate") != null ? Mp4Exporter.NormalizeBitrate(a.Double("bitrate", 0)) : p.Settings.Export.BitrateMbps,
             };
             Console.WriteLine($"Destino: {target.Label} ({job.AspectRatio}){(targetLufs is { } tl ? $", mezcla a {tl:0.0} LUFS" : "")}, cola hasta {tailSec:0.0} s");
 
@@ -968,6 +984,9 @@ static class DspCommands
             }).GetAwaiter().GetResult();
 
             Console.WriteLine($"Exportado: {res.FullPath} ({Mp4Exporter.FormatBytes(res.Bytes)}, {res.DurationSec:0.0} s en {res.ElapsedSec:0.0} s)");
+            Console.WriteLine(res.Encoder is { } enc && enc != VideoEncoderKind.Cpu
+                ? $"Video codificado con la placa ({VideoEncoders.Brand(enc)}, {VideoEncoders.Id(enc)})"
+                : "Video codificado con el procesador (libx264)");
             Console.WriteLine(Loudness(res));
             if (a.Flag("stems")) ExportStems(job, res.FullPath, res.DurationSec);
 
@@ -1239,6 +1258,28 @@ static class DspCommands
             bool widthOk = diff < 1e-4 && low < -15 && Math.Abs(high) < 0.2;
             ok &= widthOk;
             Console.WriteLine($"{"Ancho 0 = mono; graves mono 50/2k",-36} {$"{low:0} / {high:0.0} dB",12} {"< -15 / 0",10}  {(widthOk ? "igual" : "DISTINTO")}");
+        }
+
+        // Ancho keeps the level: two different guitars hard left and right (as much side as mid), widened or
+        // narrowed, come out as loud as they went in
+        {
+            var song2 = TestSignal(sr, 4);
+            var srcL = song2[0];
+            var srcR = new float[srcL.Length];
+            for (int i = 0; i < srcR.Length; i++) srcR[i] = srcL[(i + sr / 3) % srcL.Length]; // a different take
+            static double Both(float[] l, float[] r, int from) => 10 * Math.Log10(Math.Pow(10, Rms(l, from) / 10) + Math.Pow(10, Rms(r, from) / 10));
+            double inDb = Both(srcL, srcR, sr);
+            double worstW = 0;
+            foreach (double w in new[] { 0.5, 1.3, 2.0 })
+            {
+                var l = (float[])srcL.Clone();
+                var r = (float[])srcR.Clone();
+                Run(l, r, Chain(sr, flat with { Width = w }).Process);
+                worstW = Math.Max(worstW, Math.Abs(Both(l, r, sr) - inDb));
+            }
+            bool keepOk = worstW < 0.5;
+            ok &= keepOk;
+            Console.WriteLine($"{"Ancho 50/130/200 %: mismo volumen",-36} {$"{worstW:0.00} dB",12} {"< 0,5 dB",10}  {(keepOk ? "igual" : "DISTINTO")}");
         }
 
         // off: bit for bit

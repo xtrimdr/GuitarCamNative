@@ -414,16 +414,22 @@ public sealed partial class ProjectsDialog : UserControl
         {
             var dir = await PickFolder(Loc.T("proj.pick.project"));
             if (dir == null) return;
-            if (ProjectStore.IsProject(dir))
+            var found = await Task.Run(() => ProjectLibrary.Inspect(dir));
+            switch (found.Kind)
             {
-                if (OpenProject != null) await OpenProject(dir);
-            }
-            else
-            {
-                if (await Task.Run(() => Directory.EnumerateFileSystemEntries(dir).Any()))
-                    throw new IOException(Loc.T("proj.pick.notEmpty"));
-                busy = null;
-                SetDraft(new Draft(DraftKind.New, System.IO.Path.GetFileName(dir.TrimEnd('\\')) is { Length: > 0 } n ? n : NextDefaultName(), dir));
+                case ProjectLibrary.PickedKind.Project:
+                    if (OpenProject != null) await OpenProject(found.Dir);
+                    break;
+                case ProjectLibrary.PickedKind.Empty:
+                    busy = null;
+                    SetDraft(new Draft(DraftKind.New, System.IO.Path.GetFileName(found.Dir) is { Length: > 0 } n ? n : NextDefaultName(), found.Dir));
+                    break;
+                case ProjectLibrary.PickedKind.Several:
+                    throw new IOException(Loc.T("proj.pick.several", string.Join(", ", found.Found.Select(System.IO.Path.GetFileName))));
+                case ProjectLibrary.PickedKind.WebProject:
+                    throw new IOException(Loc.T("proj.pick.web"));
+                default:
+                    throw new IOException(Loc.T("proj.pick.none"));
             }
         }, Loc.T("proj.err.picker"));
 

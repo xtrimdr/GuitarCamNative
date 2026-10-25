@@ -19,7 +19,6 @@ namespace GuitarCam.App;
 /// </summary>
 public partial class MainWindow
 {
-    const double ProjectBarWidth = 290;
     const double ProjectBarCollapsedWidth = 44;
 
     readonly List<Action> colorRefresh = [];
@@ -92,7 +91,9 @@ public partial class MainWindow
         DockPanel.SetDock(top, Dock.Top);
         projectBarExpanded.Children.Add(top);
         projectBarExpanded.Children.Add(projectBarBody);
-        ProjectBar.Child = new Panel { Children = { projectBarExpanded, projectBarCollapsed } };
+        projectBarWidth = SavedSidebarWidth("projectBarWidth");
+        projectBarGrip = SidebarGrip(false, () => projectBarWidth, () => InspectorBar.Width, SetProjectBarWidth, "projectBarWidth");
+        ProjectBar.Child = new Panel { Children = { projectBarExpanded, projectBarCollapsed, projectBarGrip } };
 
         BuildColorPanel();
         BuildHistoryPanel();
@@ -112,7 +113,8 @@ public partial class MainWindow
 
     void SetProjectBarCollapsed(bool collapsed, bool save = true)
     {
-        ProjectBar.Width = collapsed ? ProjectBarCollapsedWidth : ProjectBarWidth;
+        ProjectBar.Width = collapsed ? ProjectBarCollapsedWidth : projectBarWidth;
+        if (projectBarGrip != null) projectBarGrip.IsVisible = !collapsed;
         projectBarExpanded.IsVisible = !collapsed;
         projectBarCollapsed.IsVisible = collapsed;
         if (save) SaveViewPref("projectBarCollapsed", collapsed ? "1" : "2");
@@ -308,23 +310,34 @@ public partial class MainWindow
         colorRefresh.Add(() => size.IsVisible = ProjectFx.Vignette > 0);
         ColorSlider(fx, Loc.T("color.fx.grain"), 0, 100, 0, () => ProjectFx.Grain, v => ColorEdit(s => s.VideoFx.Grain = v, "videoFx:grain"),
             v => $"{v:0}", Loc.T("color.fx.grain.hint"));
-        var bars = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-        var barsLabel = new TextBlock { Text = Loc.T("color.letterbox"), Classes = { "dim" }, VerticalAlignment = VerticalAlignment.Center };
+        // label above, the five options below: side by side they don't fit a narrow inspector
+        var bars = new StackPanel { Spacing = 6 };
+        var barsLabel = new TextBlock { Text = Loc.T("color.letterbox"), Classes = { "dim" } };
         ToolTip.SetTip(barsLabel, Loc.T("color.letterbox.tip0"));
         bars.Children.Add(barsLabel);
-        var seg = new StackPanel { Orientation = Orientation.Horizontal };
+        var seg = new UniformGrid { Rows = 1 };
         foreach (var l in VideoColorProcessor.LetterboxOptions)
         {
-            var b = new ToggleButton { Classes = { "seg" }, Padding = new Thickness(7, 0), MinWidth = 0, Content = new TextBlock { Text = l.Id == "off" ? Loc.T("color.letterbox.off") : l.Label, Classes = { "mono" }, FontSize = 12 } };
-            ToolTip.SetTip(b, l.Ratio > 0 ? Loc.T("color.letterbox.format", l.Label) : Loc.T("color.letterbox.none"));
+            var (text, tip) = l.Id switch
+            {
+                "off" => (Loc.T("color.letterbox.off"), Loc.T("color.letterbox.none")),
+                "custom" => (Loc.T("color.letterbox.custom"), Loc.T("color.letterbox.custom.tip")),
+                _ => (l.Label, Loc.T("color.letterbox.format", l.Label)),
+            };
+            var b = new ToggleButton { Classes = { "seg" }, Padding = new Thickness(4, 0), MinWidth = 0, HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Center, Content = new TextBlock { Text = text, Classes = { "mono" }, FontSize = 12 } };
+            ToolTip.SetTip(b, tip);
             string id = l.Id;
             b.Click += (_, _) => ColorEdit(s => s.VideoFx.Letterbox = id, "videoFx:letterbox");
             colorRefresh.Add(() => b.IsChecked = ProjectFx.Letterbox == id);
             seg.Children.Add(b);
         }
-        var segBox = new Border { Classes = { "seg" }, Child = seg };
-        Grid.SetColumn(segBox, 1); bars.Children.Add(segBox);
+        bars.Children.Add(new Border { Classes = { "seg" }, Child = seg });
         fx.Children.Add(bars);
+        var barHeight = ColorSlider(fx, Loc.T("color.letterbox.height"), VideoColorProcessor.LetterboxHeightMin, VideoColorProcessor.LetterboxHeightMax,
+            VideoColorProcessor.LetterboxHeightDefault, () => ProjectFx.LetterboxHeight, v => ColorEdit(s => s.VideoFx.LetterboxHeight = v, "videoFx:letterboxHeight"),
+            v => $"{v:0}%", Loc.T("color.letterbox.height.hint"));
+        colorRefresh.Add(() => barHeight.IsVisible = ProjectFx.Letterbox == "custom");
         fx.Children.Add(Help(Loc.T("color.fx.hint")));
 
         RefreshColorPanel();

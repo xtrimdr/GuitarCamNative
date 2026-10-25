@@ -89,7 +89,7 @@ exports/
 
 - Todo guardado es **atómico**: temporal → forzado a disco → `File.Replace`. Nunca escribas `guitarcam.json` directo.
 - Toda edición pasa por `MarkDirty()` → `SaveSoon()`: cuándo se escribe lo elige el usuario (`SaveMode`, en
-  Configuración → Guardado): 1,5 s después de cada edición (por defecto), cada X minutos o a mano (serializa en la UI,
+  Configuración → Guardado y exportación): 1,5 s después de cada edición (por defecto), cada X minutos o a mano (serializa en la UI,
   escribe en segundo plano, en orden). Ctrl+S y el diskette fuerzan; las tomas, las exportaciones y el cambiar de proyecto
   (`FlushSave()`) guardan siempre, sea cual sea el modo; cerrar la ventana con cambios pendientes pregunta antes
   (`UnsavedDialog`) y no cierra si no pudo guardar.
@@ -137,7 +137,8 @@ limitador. El click va por fuera del limitador, atrasado la misma latencia. `Tra
 2. **Se trabaja en esta carpeta, en `master`, sin ramas ni worktrees** (lo pidió el usuario): así hay un solo build y
    lo que se prueba es lo que está acá. Probá el motor y el proyecto con `gclab`. **Al terminar cada cambio corré
    `tools\probar.ps1 -NoAbrir`** (compila, corre `gclab comprobar-dsp` y deja una copia en
-   `%LOCALAPPDATA%\GuitarCam Pruebas`) **y preguntale al usuario** (con un cuadro de pregunta, si tu herramienta lo
+   `pruebas\`, fuera de AppData a propósito: desde la app de Claude, que es MSIX, lo escrito en AppData queda dentro
+   del paquete y el acceso directo no lo ve) **y preguntale al usuario** (con un cuadro de pregunta, si tu herramienta lo
    tiene) **si quiere probarlo**. Si dice que sí, `tools\probar.ps1 -Abrir "texto"` abre esa copia con qué probar,
    corto y concreto (sale como toast fijo; `-Proyecto carpeta` la abre en ese proyecto). Si el script dice
    "NO SE PUEDE PROBAR", contale por qué y no abras nada. Nunca abras el exe de `bin\` ni lo mandes a probar desde

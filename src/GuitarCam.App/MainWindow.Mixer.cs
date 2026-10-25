@@ -156,7 +156,7 @@ public partial class MainWindow
             row.Height = new GridLength(mixer ? mixerH : timelineH);
         }
         mixerView = mixer;
-        TimelineHost.IsVisible = !mixer || audioMode;
+        TimelineHost.IsVisible = ToolBox.IsEnabled = !mixer || audioMode;
         MixerHost.IsVisible = mixer;
         miniTimeline.IsVisible = !audioMode;
         ApplyAudioMixerRows();

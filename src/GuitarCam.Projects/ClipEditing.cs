@@ -314,6 +314,48 @@ public static class ClipEditing
     }
 
     /// <summary>
+    /// Deletes a range on several tracks at once and slides what comes after it on those tracks to the left by the
+    /// range's length, closing the gap (native only, "Borrar y cerrar el hueco"). Only the given tracks move: the
+    /// others, the markers and the A–B range stay, so a range over some tracks shifts them against the rest (as in any
+    /// DAW). Returns how many clips changed (cut, removed or moved).
+    /// </summary>
+    public static int DeleteRangeClosing(Project p, IEnumerable<string> trackIds, double startSec, double endSec, Func<Clip, double?>? lengthOf = null)
+    {
+        if (!(endSec > startSec)) return 0;
+        double len = endSec - startSec;
+        int changed = 0;
+        foreach (string id in trackIds.Distinct().ToList())
+        {
+            changed += DeleteRange(p, id, startSec, endSec, lengthOf);
+            // after the cut every clip on the track is either before the range or from its end on
+            foreach (var clip in p.Tracks.Find(t => t.Id == id)!.Clips)
+            {
+                if (Window(clip, p.FindMedia(clip.MediaId), lengthOf?.Invoke(clip)).Start < endSec - HalfSample) continue;
+                clip.AtSec = ToSample(clip.AtSec - len);
+                changed++;
+            }
+        }
+        return changed;
+    }
+
+    /// <summary>Half a sample at 48 kHz: what <see cref="ToSample"/> may move an edge by, so a clip cut at a time still counts as starting there.</summary>
+    const double HalfSample = 0.5 / SamplesPerSec;
+
+    /// <summary>
+    /// Puts a clip last on its track (native only, "Traer al frente"): the last one is drawn on top and is the one whose
+    /// picture shows where clips overlap, in the preview (<c>LiveTrack.ShownClip</c>) and the export. The sound does not
+    /// change: overlapping clips both play. Returns false if it was already in front.
+    /// </summary>
+    public static bool BringToFront(Project p, string id)
+    {
+        var (track, clip) = Find(p, id);
+        if (track.Clips[^1] == clip) return false;
+        track.Clips.Remove(clip);
+        track.Clips.Add(clip);
+        return true;
+    }
+
+    /// <summary>
     /// Copies a clip on its own track right after its end (D in Studio One), including the part a cut at 0
     /// hides, so the copy starts exactly where the original stops. Returns the copy's id.
     /// </summary>

@@ -18,15 +18,29 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $bin = Join-Path $root 'src\GuitarCam.App\bin\Debug\net10.0-windows'
-$copies = Join-Path $env:LOCALAPPDATA 'GuitarCam Pruebas'
+# Not under AppData: run from an MSIX-packaged tool (the Claude desktop app), Windows redirects AppData writes into
+# the package's own LocalCache and the desktop shortcut would never find the copies
+$copies = Join-Path $root 'pruebas'
 # How many copies stay around; older ones are deleted (unless one is still open)
 $Keep = 5
 
 function Fail([string]$text) {
     Write-Host ''
     Write-Host "NO SE PUEDE PROBAR: $text" -ForegroundColor Red
+    SessionLog "probar.ps1 no pudo: $text"
     exit 1
 }
+
+# The app's own sesiones.log: a window this script closes looks like one closed by hand, so it says so there
+function SessionLog([string]$text) {
+    try {
+        $dir = Join-Path $env:APPDATA 'GuitarCam Studio'
+        New-Item -ItemType Directory -Force $dir | Out-Null
+        Add-Content -Path (Join-Path $dir 'sesiones.log') -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')  $text" -Encoding UTF8
+    } catch { }
+}
+# From the desktop shortcut the console is hidden: an error would vanish without a trace
+trap { SessionLog "probar.ps1 falló: $_ $($_.InvocationInfo.PositionMessage)"; break }
 
 # How long a GuitarCam asked to close gets to save and close before the script gives up
 $CloseWaitSec = 20
@@ -45,6 +59,7 @@ function AskClose($procs, [string]$why, [bool]$canKeep) {
     $owner.Dispose()
     if ($answer -eq 'Cancel' -or (-not $canKeep -and $answer -eq 'No')) { return 'cancel' }
     if ($answer -eq 'No') { return 'keep' }
+    SessionLog "probar.ps1 cierra pid $(($procs | ForEach-Object Id) -join ', ') (respuesta: $answer)"
     foreach ($p in $procs) { [void]$p.CloseMainWindow() }
     foreach ($p in $procs) {
         if (-not $p.WaitForExit($CloseWaitSec * 1000)) {
@@ -65,8 +80,16 @@ function Launch([string]$dir) {
     if ($Proyecto) { $a += $Proyecto }
     if ($Que) { $a += '--probar'; $a += $Que }
     $exe = Join-Path $dir 'GuitarCam.exe'
-    if ($a.Count) { Start-Process -FilePath $exe -WorkingDirectory $dir -ArgumentList ($a | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) }
-    else { Start-Process -FilePath $exe -WorkingDirectory $dir }
+    SessionLog "probar.ps1 abre $exe"
+    # Opened through Explorer, so it runs as the user's own app even when this script runs inside a packaged tool
+    # (otherwise it would read and write a redirected copy of %APPDATA%\GuitarCam Studio, not the user's settings)
+    $lnk = Join-Path $dir 'abrir.lnk'
+    $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+    $s.TargetPath = $exe
+    $s.WorkingDirectory = $dir
+    $s.Arguments = ($a | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -join ' '
+    $s.Save()
+    explorer.exe $lnk
     Write-Host "Abierto: $exe" -ForegroundColor Green
 }
 

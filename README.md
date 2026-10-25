@@ -45,7 +45,7 @@ de **grabar → mezclar → exportar**.
 - Un sonido que te gusta se guarda como **plantilla de pista** y vuelve desde Nueva pista → Plantilla.
 - Arriba de la regla, un **rango A–B** para repetir un tramo (practicar el solo, mezclar un pedazo) y **marcadores**
   con nombre (Intro, Estribillo, Solo…) para saltar de una parte a otra. Zoom de un tiempo a toda la canción con
-  las teclas 1 a 5.
+  atajos que se asignan en Configuración → Atajos de teclado.
 
 ### Mezclar
 
@@ -69,12 +69,15 @@ de **grabar → mezclar → exportar**.
 
 - **MP4** (mezcla offline + FFmpeg, con progreso y cancelación), con presets para **Reels · TikTok**, **YouTube** e
   **Instagram** (1:1 y 4:5) que acomodan el cuadro y llevan la mezcla a −14 LUFS.
+- Fácil o a medida: elegís destino y calidad, y si querés, en **Avanzado** la resolución (720p a 4K) y el bitrate.
+- El video se codifica con la **placa de video** (NVIDIA, AMD o Intel) si hay una, las tomas se procesan en paralelo
+  y la mezcla usa todos los núcleos; si la placa falla, sigue sola con el procesador.
 - En el modo **Solo audio**, WAV de 24 bits o MP3 de 320 kbps; si querés, además cada pista en su WAV (stems).
   Medidor de **LUFS** del master en la barra de transporte.
 ### Y además
 
 - **No pierde nada**: guardado atómico (solo después de cada edición, cada X minutos o a mano con Ctrl+S o el
-  diskette, a elección en Configuración → Guardado; las tomas se guardan siempre), copias en `historial/` para volver
+  diskette, a elección en Configuración → Guardado y exportación; las tomas se guardan siempre), copias en `historial/` para volver
   atrás, recuperación de grabaciones interrumpidas y un gestor de proyectos con Papelera.
 - Idiomas, tema y atajos de teclado configurables.
 
@@ -100,12 +103,13 @@ planeado y lo que falta está en [PENDIENTES.md](PENDIENTES.md).
 tools\probar.ps1 "qué probar"
 ```
 
-Compila, corre `gclab comprobar-dsp`, copia la app a `%LOCALAPPDATA%\GuitarCam Pruebas\<fecha>-<commit>` (quedan las
+Compila, corre `gclab comprobar-dsp`, copia la app a `pruebas\<fecha>-<commit>` (fuera de git; quedan las
 últimas 5) y la abre desde ahí, con la marca "PRUEBA <commit>" en la barra de título. Como nunca corre desde `bin\`,
 la app abierta no traba la próxima compilación. `-Abrir` abre la última copia sin compilar, `-NoAbrir` solo compila y
 copia, `-SinComprobar` salta `gclab`, `-Proyecto carpeta` abre ese proyecto. Si ya hay un GuitarCam abierto, antes de abrir
 pregunta en un cuadro si lo cierra (guarda el proyecto antes), así la copia nueva no abre el mismo proyecto en solo
-lectura. Si algo falla, dice "NO SE PUEDE PROBAR" y no abre nada. `dotnet build` solo sigue sirviendo para compilar.
+lectura. Si algo falla, dice "NO SE PUEDE PROBAR" y no abre nada (desde el acceso directo, que no muestra la consola, queda
+anotado en `%APPDATA%\GuitarCam Studio\sesiones.log`, junto con cada inicio y cierre de la app y sus errores). `dotnet build` solo sigue sirviendo para compilar.
 
 La app arranca en el gestor de **Proyectos** (lista, buscador, plantillas, renombrar, duplicar, Papelera).
 Con una carpeta de proyecto como argumento, la abre directo. Con `--probar "texto"` muestra ese texto en un aviso fijo ("Para probar") al abrir. `tools\make-shortcut.ps1` crea un acceso
@@ -128,10 +132,11 @@ Todos se pueden cambiar en ⚙ Configuración → Atajos de teclado (menos Esc).
 | A | afinador |
 | M / S | mute / solo de la pista |
 | F | ver todo |
-| 1 a 5 | zoom: 1 tiempo / 1 compás / 4 compases / 16 compases / toda la canción |
 | X | timeline / mixer |
 | Alt+X / D | dividir el clip en el cabezal / duplicarlo |
-| Supr | quitar el clip (o los marcados, o la pista vacía) |
+| Supr | quitar el clip (o los marcados, o la pista vacía); con un rango, borrarlo |
+| Shift+Supr | borrar el rango y cerrar el hueco (lo de después se corre) |
+| 1 a 7 | herramientas: Seleccionar / Rango / Dividir / Borrar / Escuchar / Zoom / Mano |
 | Ctrl+Z / Ctrl+Y | deshacer / rehacer |
 | Ctrl+Shift+N | nueva pista |
 | Clic derecho en la regla | cómo se dibuja la grilla: Auto, igual que el imán o una subdivisión fija |
@@ -147,8 +152,15 @@ doble clic los saca.
 En la franja de arriba de la regla, arrastrar marca el rango A–B (y prende el loop); sus bordes y el rango entero se
 arrastran. Doble clic agrega un marcador; los marcadores se arrastran, un clic salta ahí y doble clic los renombra.
 Clic derecho en la franja: agregar marcador, empezar o terminar el rango ahí, sacarlo, y en un marcador ponerle un
-nombre de la lista o repetir hasta el siguiente. Un rango marcado con Shift+arrastrar en una pista también se puede
-repetir desde su menú.
+nombre de la lista o repetir hasta el siguiente. Un rango marcado con Shift+arrastrar (o con la herramienta Rango),
+en una pista o en varias, también se puede repetir desde su menú.
+
+Las herramientas del timeline están en el centro de la barra del proyecto: **Seleccionar** (lo de siempre), **Rango**
+(marca un tramo de una o varias pistas; clic derecho: borrarlo, borrarlo y cerrar el hueco, repetirlo), **Dividir**
+(un clic corta el clip ahí, en la grilla), **Borrar** (saca los clips que toca), **Escuchar** (mantené apretado sobre
+un clip para oír esa pista sola desde ahí), **Zoom** (clic acerca, Alt+clic aleja, arrastrar muestra ese tramo) y
+**Mano** (arrastrar mueve la vista). Donde dos clips de una pista se pisan, el clic derecho → **Traer al frente**
+elige cuál se ve.
 
 Cada pista o carpeta puede tener su propio alto: arrastrá el borde de abajo de su encabezado (doble clic en el borde
 la vuelve al alto general). El botón ↺ al pie de los encabezados iguala todas.
@@ -200,9 +212,9 @@ la consola, sin abrir la ventana.
 | `mezclar proyecto\|toma.wav [--salida mezcla.wav]` | renderiza la mezcla offline, con el mismo grafo que la reproducción |
 | `procesar toma.wav --sat cinta --comp-estilo punteo --eq ritmica --reverb cuarto --delay punteada` | aplica efectos a un WAV |
 | `click` | escribe todos los sonidos de click a un WAV |
-| `sistema [--segundos 5]` | CPU, GPU y RAM, y si FFmpeg está en el PATH |
+| `sistema [--segundos 5]` | CPU, GPU y RAM, si FFmpeg está en el PATH y con qué placa de video exporta |
 | `espectro [toma.wav]` | el espectro en vivo del EQ |
-| `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas, reinicio de la cadena, afinador, LUFS y mastering (bandas que suman plano, reducción por banda sin importar el nivel, Cinta, Ancho y graves mono, soft clip, limitador prendido y apagado) |
+| `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas, reinicio de la cadena, afinador, LUFS y mastering (bandas que suman plano, reducción por banda sin importar el nivel, Cinta, Ancho (graves mono y mismo volumen), soft clip, limitador prendido y apagado) |
 | `looks [--look id] [--salida look.cube] [--blancos n] [--negros n] [--luz n]` | los looks de color con colores de prueba, comprobación de rango y, con `--look`, el LUT `.cube` de ese look con Blancos, Negros y Sensación de luz |
 | `masterizar archivo.wav [--cuanto 0.35] [--banda-graves\|--banda-medios\|--banda-agudos 0..1] [--corte] [--barro] [--graves] [--presencia] [--aire] [--inclinacion] [--cinta] [--ancho] [--graves-mono] [--recorte] [--empuje] [--techo] [--release] [--sin-limitador]` | el mastering de la ventana sobre un WAV: cuánto comprime cada banda, cuánto recortan el soft clip y el limitador y los LUFS de entrada y salida |
 | `transponer archivo.wav [--semitonos 2] [--salida x.wav]` | cambia el tono sin cambiar el largo, como el Transponer de la pista (de −12 a +12, admite cents) |
@@ -214,6 +226,8 @@ la consola, sin abrir la ventana.
 | `exportar [proyecto] [--calidad alta\|estandar\|borrador] [--salida nombre]` | exporta el MP4 |
 | `exportar proyecto --audio wav\|mp3` | exporta solo la mezcla |
 | `exportar proyecto … --stems` | además, un WAV por pista en `<nombre> - stems` |
+| `exportar proyecto … --codificador auto\|cpu\|nvenc\|amf\|qsv` | quién codifica el video (auto = la placa de video si hay) |
+| `exportar proyecto … --resolucion 720\|1080\|1440\|2160 --bitrate 20` | el "Avanzado" del diálogo: lado corto del cuadro y bitrate del video en Mbps |
 | `exportar proyecto … --destino reels\|youtube\|ig-square\|ig-portrait [--lufs -14] [--cola 8]` | con el cuadro y el volumen de esa red; `--lufs` lleva la mezcla a ese volumen integrado, `--cola` deja sonar reverb y delay hasta N s después del último clip (0 = corta). Muestra los LUFS del resultado |
 | `proyecto abrir\|clips\|versiones\|volver carpeta` | abre un proyecto, lista pistas y clips, y recorre el historial |
 | `proyecto toma\|cortar carpeta [--camara]` | graba un tono como la ventana / lo corta sin cerrar, para probar la recuperación |
@@ -225,7 +239,7 @@ la consola, sin abrir la ventana.
 | `proyecto marcadores carpeta [agregar\|mover\|renombrar\|quitar …]`, `proyecto repetir carpeta [desde hasta \| --quitar]` | marcadores del tema y rango A–B del loop |
 | `proyecto historial carpeta` | tomas en uso y no usadas, exportaciones y actividad |
 | `proyecto verificar-deshacer\|verificar-clips\|verificar-tomas\|verificar-importar\|verificar-historial\|verificar-carpetas\|verificar-marcadores` | pruebas automáticas sobre una carpeta temporal |
-| `proyectos lista\|plantillas\|nuevo\|renombrar\|duplicar\|borrar\|olvidar\|carpeta` | lo que hace el gestor de proyectos |
+| `proyectos lista\|plantillas\|nuevo\|renombrar\|duplicar\|borrar\|olvidar\|carpeta\|buscar` | lo que hace el gestor de proyectos (`buscar`: qué abre "Abrir carpeta") |
 | `proyectos guardar-plantilla\|borrar-plantilla` | plantillas de proyecto del usuario |
 | `proyectos plantillas-video\|guardar-plantilla-video\|aplicar-plantilla-video\|borrar-plantilla-video` | plantillas de video (filtro, ajustes y efectos) |
 

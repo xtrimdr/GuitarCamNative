@@ -14,6 +14,8 @@ namespace GuitarCam.App.Controls;
 public sealed class FxIcon : Control
 {
     public const string Sat = "sat", Comp = "comp", Eq = "eq", Reverb = "reverb", Delay = "delay", Transpose = "transpose";
+    /// <summary>Not an effect: the timeline's Mano tool (its button and pointer), because Segoe has no open hand.</summary>
+    public const string Hand = "hand";
 
     // lucide-react 1.59 paths; a relative "m" that starts a subpath is written absolute ("M… l…") so it doesn't
     // depend on where the previous subpath ended
@@ -26,6 +28,8 @@ public sealed class FxIcon : Control
         [Delay] = Geometry.Parse("M17 2l4 4-4 4 M3 11v-1a4 4 0 0 1 4-4h14 M7 22l-4-4 4-4 M21 13v1a4 4 0 0 1-4 4H3"),
         // lucide "music": a note for the track's pitch (Transponer)
         [Transpose] = Geometry.Parse("M9 18V5l12-2v13 M3 18a3 3 0 1 0 6 0a3 3 0 1 0-6 0 M15 16a3 3 0 1 0 6 0a3 3 0 1 0-6 0"),
+        // lucide "hand"
+        [Hand] = Geometry.Parse("M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2 M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2 M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8 M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"),
     };
 
     /// <summary>The same property as TextBlock.Foreground, so <see cref="SetColor"/> paints either kind of icon.</summary>
@@ -52,12 +56,12 @@ public sealed class FxIcon : Control
     public static void SetColor(Control icon, IBrush brush) => icon.SetValue(TextElement.ForegroundProperty, brush);
 
     /// <summary>Draws an effect's icon straight into a drawing context (the timeline's track headers are hand-drawn).</summary>
-    public static void Draw(DrawingContext ctx, string icon, Rect box, IBrush brush)
+    public static void Draw(DrawingContext ctx, string icon, Rect box, IBrush brush, double stroke = 2)
     {
         if (!Paths.TryGetValue(icon, out var path)) return;
         double s = box.Width / 24;
         using (ctx.PushTransform(Matrix.CreateScale(s, s) * Matrix.CreateTranslation(box.X, box.Y)))
-            ctx.DrawGeometry(null, Palette.Pen(brush, 2, PenLineCap.Round, PenLineJoin.Round), path);
+            ctx.DrawGeometry(null, Palette.Pen(brush, stroke, PenLineCap.Round, PenLineJoin.Round), path);
     }
 
     public override void Render(DrawingContext ctx)

@@ -52,6 +52,10 @@ public sealed partial class SettingsDialog : UserControl
     readonly List<ToggleButton> saveModeButtons = [];
     readonly InspectorSlider saveMinutes;
     readonly TextBlock saveHelp = Help("");
+    readonly List<ToggleButton> encoderButtons = [];
+    readonly TextBlock encoderHelp = Help("");
+    /// <summary>What FFmpeg can do here; null while <see cref="VideoEncoders.DetectAsync"/> is still probing.</summary>
+    FfmpegCaps? encoderCaps;
     readonly TextBlock outputHelp = Help("");
     readonly TextBlock bufferText = new() { FontSize = 12, Foreground = Palette.Dim, Classes = { "mono" }, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
     readonly Button panelButton = new() { Classes = { "btn", "outline" }, Height = 28, Padding = new Thickness(10, 0), FontSize = 12, Content = Loc.T("set.panelButton") };
@@ -330,7 +334,7 @@ public sealed partial class SettingsDialog : UserControl
         SaveTab.Classes.Set("active", id == "save");
         ViewTab.Classes.Set("active", id == "view");
         StopCapture();
-        if (id == "save") RefreshSave();
+        if (id == "save") { RefreshSave(); RefreshEncoder(); }
         if (id == "shortcuts") { shortcutNote = null; BuildShortcuts(); }
         Body.Content = id switch { "camera" => cameraPage, "sync" => syncPage, "shortcuts" => shortcutsPage, "language" => languagePage, "save" => savePage, "view" => viewPage, _ => audioPage };
         Refresh();
@@ -628,7 +632,53 @@ public sealed partial class SettingsDialog : UserControl
         s.Children.Add(saveHelp);
         s.Children.Add(Help(Loc.T("set.save.always")));
         savePage.Children.Add(Card(s));
+        BuildEncoder();
         return minutes;
+    }
+
+    /// <summary>"Exportación de video" (native only): whether the export encodes on the video card (when FFmpeg finds
+    /// one) or on the processor; machine-wide (<see cref="VideoEncoders.ConfigKey"/>), applied on the next export.</summary>
+    void BuildEncoder()
+    {
+        var modes = new UniformGrid { Columns = 2 };
+        foreach (var (id, text, tip) in new[]
+        {
+            (VideoEncoders.Auto, Loc.T("set.encoder.gpu"), Loc.T("set.encoder.gpu.tip")),
+            (VideoEncoders.CpuId, Loc.T("set.encoder.cpu"), Loc.T("set.encoder.cpu.tip")),
+        })
+        {
+            var b = new ToggleButton { Content = text, Tag = id, Classes = { "seg" }, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center };
+            ToolTip.SetTip(b, tip);
+            b.Click += (_, _) =>
+            {
+                try { AppConfig.Set(VideoEncoders.ConfigKey, id); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+                RefreshEncoder();
+            };
+            encoderButtons.Add(b);
+            modes.Children.Add(b);
+        }
+        var s = Section(Loc.T("set.encoder.section"));
+        s.Children.Add(Field(Loc.T("set.encoder.who"), new Border { Classes = { "seg" }, Child = modes }));
+        s.Children.Add(encoderHelp);
+        savePage.Children.Add(Card(s));
+        _ = DetectEncoder();
+    }
+
+    async Task DetectEncoder()
+    {
+        encoderCaps = await VideoEncoders.DetectAsync();
+        RefreshEncoder();
+    }
+
+    void RefreshEncoder()
+    {
+        string pref = VideoEncoders.ParsePreference(AppConfig.Get(VideoEncoders.ConfigKey)) == VideoEncoders.CpuId ? VideoEncoders.CpuId : VideoEncoders.Auto;
+        foreach (var b in encoderButtons) b.IsChecked = (string)b.Tag! == pref;
+        encoderHelp.Text = encoderCaps is not { } caps ? Loc.T("set.encoder.looking")
+            : pref == VideoEncoders.CpuId ? Loc.T("set.encoder.cpu.help")
+            : caps.Gpu is { } g ? Loc.T("set.encoder.found", VideoEncoders.Brand(g))
+            : Loc.T("set.encoder.none");
     }
 
     /// <summary>"Vista" (native only): which effect knobs the timeline's track headers show (<see cref="TrackKnobs"/>);

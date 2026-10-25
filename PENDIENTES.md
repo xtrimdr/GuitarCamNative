@@ -14,11 +14,12 @@ _Ideas y mejoras para la nativa._
 
 #### 1. Usarla también como DAW, solo audio
 - [x] Proyectos o pistas sin video (hecho, ver [HECHO.md](HECHO.md))
-- [x] Edición de clips: dividir, duplicar, mover a otra pista y a otro tiempo, borrar un pedazo (rango) (hechos). Falta
-  borrar el rango "cerrando el hueco" (que lo de después se corra) y rangos que abarquen varias pistas
+- [x] Edición de clips: dividir, duplicar, mover a otra pista y a otro tiempo, borrar un pedazo (rango), también de
+  varias pistas y cerrando el hueco, y barra de herramientas (hechos, ver [HECHO.md](HECHO.md)). Falta: que cerrar el
+  hueco en todas las pistas corra también los marcadores
 - [x] Ganancia por clip con su curva de volumen, y la onda dibujada con la curva aplicada (hecho, ver [HECHO.md](HECHO.md))
-- [ ] Varios clips por pista: ya se reproducen, se dibujan, se exportan (comparten el panel) y se graba desde el
-  cabezal (hecho, ver [HECHO.md](HECHO.md)); falta elegir qué clip se ve cuando se pisan
+- [x] Varios clips por pista: se reproducen, se dibujan, se exportan (comparten el panel), se graba desde el cabezal y
+  "Traer al frente" elige cuál se ve donde se pisan (hecho, ver [HECHO.md](HECHO.md))
 - [x] Importar audio externo (hecho, ver [HECHO.md](HECHO.md)). Falta: que el clip importado siga el tempo del proyecto (hoy se
   usa tal cual) y importar el audio de un video
 - [ ] Transponer: probar si conviene un modo "fino" en cents. Límite conocido: dos armónicos a menos de ~7 Hz (la 3ª
@@ -110,7 +111,6 @@ _Ideas que surgieron charlando. Todas apuntan al video._
   `ExportTargets` que usa el Destino de la exportación
 - [ ] **Visualizadores de audio** como capa del video (onda o espectro animado)
 - [ ] **Acordes / tablatura / letra en pantalla** mientras grabás (tipo teleprompter) y opcionalmente en el video
-- [ ] **Exportar con la GPU** (NVENC) para que el render sea mucho más rápido
 
 ### Opcional — ideas de Fender Studio Pro (2026-10-24)
 

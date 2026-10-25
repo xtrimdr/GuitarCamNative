@@ -3,6 +3,43 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-25: "Avanzado" en el diálogo de exportar MP4, plegado: resolución 720p / 1080p / 1440p / 4K y bitrate a
+  mano (1–100 Mbps, o Automático = el de la calidad), recordados por proyecto (`ExportSettings.Resolution`,
+  `BitrateMbps`; `Mp4Exporter.ExportSize`, `VideoEncoders.Args`). `gclab exportar --resolucion --bitrate`.
+- 2026-10-25: Exportación más rápida (un MP4 de 95 s con 2 tomas: de 73 s a ~46 s; el audio solo, de 6,9 s a 4,3 s).
+  El video se codifica con la placa de video si FFmpeg encuentra NVENC, AMF o Quick Sync (`VideoEncoders`, se elige
+  en Configuración → Guardado y exportación, `gclab exportar --codificador`); cada toma se filtra en su propio grafo
+  de FFmpeg en paralelo (`Mp4Exporter.BuildFfmpegCommand`, mismos cuadros que antes); la mezcla corre en tres etapas
+  en paralelo (`MixRenderer.RenderTo`, bit a bit igual). Si la placa falla, repite sola con el procesador.
+- 2026-10-25: Con barras de cine, el fundido de video de la preview dejaba ver el video a través de las barras
+  (Avalonia aplica la opacidad a cada dibujo por separado): ahora las barras van fuera del fundido
+  (`PreviewVideoFx.DrawLetterbox`, `PreviewView`). Barras de cine **Libre** con slider "Alto de las barras" (1–40 % del
+  panel por barra, `VideoFx.LetterboxHeight`), igual en la preview y en el MP4 (`VideoColorProcessor.LetterboxBar`).
+- 2026-10-25: Pasar a solo audio mientras se reproducía dejaba el timeline (y los medidores) muerto en los dos modos:
+  los decodificadores se cerraban en otro hilo mientras el tick dibujaba esos clips, el tick tiraba un error y su
+  timer no volvía a arrancar. Ahora se sueltan en la UI (`LiveClip.DetachVideo`, `MainWindow.Mode.cs`) y un error en el
+  tick queda en `sesiones.log` sin frenar el timer (`SafeTick`).
+- 2026-10-25: Biblioteca: cada canal sin usar tiene su papelera (confirmación en la fila) y al escucharlo aparece un
+  mini reproductor bajo la fila con la onda (clic o arrastre para saltar), ±5 s, pausa y tiempo (`MainWindow.History.cs`,
+  `Controls/TakeScrubber.cs`, `TakePreview`). Las dos barras laterales cambian de ancho arrastrando el borde y lo
+  recuerdan (`MainWindow.Sidebars.cs`).
+- 2026-10-25: El Ancho del mastering ya no sube el volumen al abrir (ni lo baja al cerrar): compensa la energía que
+  cambia el ancho según cuánto centro y costados tiene la mezcla, medido en vivo (`StereoWidth`), así el ON/OFF compara
+  solo el ancho. `gclab comprobar-dsp` lo mide (antes: hasta 3,9 dB de diferencia; ahora 0,1).
+- 2026-10-25: En modo video la onda sobre las miniaturas toma el color de la pista (antes siempre blanca), y cada clip
+  lleva arriba a la derecha un badge de solo audio / audio + video con tooltip (`TimelineView.MediaBadge`).
+- 2026-10-25: "Abrir carpeta" del gestor entiende qué elegiste: el proyecto, una subcarpeta suya (media\, exports\…),
+  la carpeta que tiene un solo proyecto adentro, o uno sin `guitarcam.json` pero con `.bak` o historial (lo rescata).
+  Un proyecto de la web o una carpeta con varios lo dicen claro en vez de "no está vacía".
+  `ProjectLibrary.Inspect`, `ProjectStore.IsRecoverable`, `gclab proyectos buscar`.
+
+- 2026-10-25: **Herramientas del timeline**: Seleccionar, Rango, Dividir, Borrar, Escuchar, Zoom y Mano, en una caja
+  centrada en la barra del proyecto (teclas 1 a 7; los zooms fijos que tenían 1 a 5 quedan sin tecla), cada una con
+  su puntero. `MainWindow.Tools.cs`, `Controls/TimelineView.Tools.cs`, `Controls/ToolCursors.cs`, `LiveTrack.ListenSolo`.
+- 2026-10-25: **Rangos de varias pistas y "Borrar y cerrar el hueco"** (Shift+Supr): lo de después se corre en esas
+  pistas. `ClipEditing.DeleteRangeClosing`, `gclab proyecto editar borrar-rango pista,pista desde --hasta fin --cerrar`.
+- 2026-10-25: **Traer al frente**: donde dos clips de una pista se pisan, el clic derecho elige cuál se ve (timeline,
+  vista previa y exportación). `ClipEditing.BringToFront`, `gclab proyecto editar al-frente clip`.
 - 2026-10-25: **Transponer más rápido y con feedback**: el `PitchShifter` analiza y sintetiza otros bloques mientras
   integra las fases (resultado idéntico, 3 min de 7,0 s a 4,2 s), los clips muestran "Transponiendo… %" con una barra,
   el knob Tono queda gris con el porcentaje y un toast avisa cuando está lista; los valores probados quedan en caché

@@ -427,10 +427,20 @@ public sealed class SoftClipper
 /// The master's stereo width: mid/side, the side times <see cref="MasterParams.Width"/> (0 = mono, 1 = as it is, 2 =
 /// twice as wide), and under <see cref="MasterParams.MonoBassHz"/> the side goes away (a high pass on it), so the lows
 /// stay in the middle: a phone speaker or a club sums them and they do not cancel. Width glides per block.
+/// Widening adds side energy and narrowing takes it away, so louder would pass for better: the output is scaled to keep
+/// the energy the width alone changed (the mono lows are not made up for). The mix's mid and side energies are slow
+/// averages (<see cref="EnergySec"/>, a plain mean right after a reset so it is right from the first second); the
+/// width in the formula is the current one, so turning the knob is made up for at once, not a second later.
 /// </summary>
 public sealed class StereoWidth
 {
     public const double MaxWidth = 2, MonoBassMaxHz = 250;
+    /// <summary>How slowly the mid and side energies follow the mix: long enough not to pump with the music.</summary>
+    const double EnergySec = 1.5;
+    /// <summary>The make-up's limit either way (±6 dB): a near-pure side signal narrowed to mono has nothing to keep.</summary>
+    const double MaxGain = 2;
+    /// <summary>Below this mean energy (about -100 dBFS) the gain holds: silence says nothing about the mix.</summary>
+    const double QuietEnergy = 1e-10;
     static readonly double ButterQDb = 20 * Math.Log10(Math.Sqrt(0.5));
 
     readonly double fs;
@@ -438,11 +448,21 @@ public sealed class StereoWidth
     volatile Biquad.Coeffs hp = Biquad.FlatCoeffs;
     volatile float target = 1;
     float width = 1;
+    double midE, sideE, seenSec, gain = 1;
 
     public StereoWidth(double sampleRate)
     {
         fs = sampleRate;
         sideHp = new Biquad(sampleRate);
+    }
+
+    /// <summary>The level make-up for this width with the mix's current mid/side balance.</summary>
+    double MakeUp(double w)
+    {
+        double e = midE + sideE;
+        if (e < QuietEnergy) return gain;
+        double g = Math.Sqrt(e / Math.Max(1e-30, midE + w * w * sideE));
+        return Math.Clamp(g, 1 / MaxGain, MaxGain);
     }
 
     public void Set(double width, double monoBassHz)
@@ -455,6 +475,8 @@ public sealed class StereoWidth
     {
         sideHp.Reset();
         width = target;
+        midE = sideE = seenSec = 0;
+        gain = 1;
     }
 
     public void Process(Span<float> left, Span<float> right)
@@ -462,15 +484,41 @@ public sealed class StereoWidth
         var c = hp;
         float w0 = width, w1 = target;
         int n = left.Length;
+        if (n == 0) return;
+        double g0 = gain, mSum = 0, sSum = 0;
         for (int i = 0; i < n; i++)
         {
             double l = left[i], r = right[i];
-            double m = 0.5 * (l + r), s = 0.5 * (l - r);
-            s = sideHp.ProcessSample(s, 0, c) * (w0 + (w1 - w0) * (i + 1) / n);
+            double m = 0.5 * (l + r), s = sideHp.ProcessSample(0.5 * (l - r), 0, c);
+            mSum += m * m;
+            sSum += s * s;
+            s *=w0 + (w1 - w0) * (i + 1) / n;
             left[i] = (float)(m + s);
             right[i] = (float)(m - s);
         }
+
+        // energies: a plain mean until EnergySec has gone by, then an exponential one; silent blocks leave them be, so
+        // a pause in the song neither forgets the mix nor slows the start
+        bool first = seenSec == 0;
+        if ((mSum + sSum) / n >= QuietEnergy)
+        {
+            double sec = n / fs;
+            seenSec += sec;
+            double a = Math.Max(sec / seenSec, 1 - Math.Exp(-sec / EnergySec));
+            midE += a * (mSum / n - midE);
+            sideE += a * (sSum / n - sideE);
+        }
+        double g1 = MakeUp(w1);
+        if (first) g0 = g1; // nothing known before: no ramp from a guess
+        gain = g1;
         width = w1;
+        if (g0 == 1 && g1 == 1) return;
+        for (int i = 0; i < n; i++)
+        {
+            float g = (float)(g0 + (g1 - g0) * (i + 1) / n);
+            left[i] *= g;
+            right[i] *= g;
+        }
     }
 }
 

@@ -9,6 +9,14 @@ static class SystemCommands
     {
         string? ffmpeg = FfmpegInfo.Probe();
         Console.WriteLine(ffmpeg == null ? "FFmpeg no encontrado en el PATH: no vas a poder exportar" : $"FFmpeg {ffmpeg}".Trim());
+        if (ffmpeg != null)
+        {
+            var caps = VideoEncoders.DetectAsync().GetAwaiter().GetResult();
+            Console.WriteLine(caps.Gpu is { } g
+                ? $"Exporta con la placa de video: {VideoEncoders.Brand(g)} ({VideoEncoders.Id(g)})"
+                : "Ninguna placa de video que FFmpeg pueda usar: exporta con el procesador");
+            Console.WriteLine(caps.Loopback ? "Cada toma se filtra en su propio hilo" : "Las tomas se filtran de a una (FFmpeg anterior a 7)");
+        }
         double seconds = a.Double("segundos", 5);
         using var stats = new SystemStats();
         var end = DateTime.Now.AddSeconds(seconds);

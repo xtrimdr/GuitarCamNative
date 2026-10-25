@@ -21,6 +21,7 @@ namespace GuitarCam.App.Dialogs;
 /// <summary>
 /// What the setup step chose. <c>Target</c> is the social preset (<see cref="ExportTargets"/>) and <c>TargetLufs</c>
 /// the loudness the mix is mastered to (the preset's, or −14 for "Exportar audio" with the box ticked; null = as it is).
+/// <c>Resolution</c> and <c>BitrateMbps</c> are "Avanzado": the frame's short side and the video bitrate (null = the quality's).
 /// </summary>
 public sealed record ExportOptions(
     string? OutDir,
@@ -28,7 +29,9 @@ public sealed record ExportOptions(
     bool Overwrite,
     ExportQuality Quality,
     string Target = ExportTargets.Project,
-    double? TargetLufs = null);
+    double? TargetLufs = null,
+    int Resolution = Mp4Exporter.DefaultResolution,
+    double? BitrateMbps = null);
 
 public sealed record ExportSummary(
     int Width,
@@ -60,6 +63,8 @@ public sealed record ExportedVideo(
 /// <item><description>"Destino" picks a social preset (<see cref="ExportTargets"/>): its frame for this video and the
 /// mix mastered to its loudness. "Proyecto" is the default and changes nothing, so grabo-mezclo-exporto has no extra
 /// step. The done screen shows the mix's integrated LUFS and the effect tail (<see cref="GuitarCam.Audio.Dsp.MixMaster"/>).</description></item>
+/// <item><description>"Avanzado" (folded) picks the resolution (720p to 4K) and a bitrate by hand; its defaults are what
+/// the dialog did without it, and folded it says what is not the default, so the easy path stays easy.</description></item>
 /// </list>
 /// </summary>
 public sealed partial class ExportDialog : UserControl
@@ -86,6 +91,11 @@ public sealed partial class ExportDialog : UserControl
     string? folder;
     ExportQuality quality = ExportQuality.Alta;
     string target = ExportTargets.Project;
+    int resolution = Mp4Exporter.DefaultResolution;
+    /// <summary>"Avanzado"'s bitrate; null = the quality's.</summary>
+    double? bitrateMbps;
+    bool advancedOpen;
+    bool syncingBitrate;
     ExportCheck? check;
     string? checkError;
     bool picking;
@@ -186,6 +196,26 @@ public sealed partial class ExportDialog : UserControl
             b.Click += (_, _) => SetTarget(t.Id);
             TargetButtons.Children.Add(b);
         }
+        foreach (int r in Mp4Exporter.Resolutions)
+        {
+            var b = new Button { Classes = { "seg" }, Content = ResolutionLabel(r), Tag = r };
+            b.Click += (_, _) => { resolution = r; RenderSetupState(); };
+            ResolutionButtons.Children.Add(b);
+        }
+        AdvancedToggle.Click += (_, _) => { advancedOpen = !advancedOpen; RenderSetupState(); };
+        BitrateAutoCheck.IsCheckedChanged += (_, _) =>
+        {
+            if (syncingBitrate) return;
+            bitrateMbps = BitrateAutoCheck.IsChecked == true ? null : Mp4Exporter.NormalizeBitrate(BitrateSlider.Value);
+            RenderSetupState();
+        };
+        // moving the slider is choosing a bitrate: it leaves "Automático" by itself
+        BitrateSlider.ValueChanged += (_, _) =>
+        {
+            if (syncingBitrate) return;
+            bitrateMbps = Mp4Exporter.NormalizeBitrate(BitrateSlider.Value);
+            RenderSetupState();
+        };
         UseSuggestedButton.Click += (_, _) =>
         {
             if (check == null) return;
@@ -341,6 +371,8 @@ public sealed partial class ExportDialog : UserControl
         SetFileNameInput(initial?.FileName ?? defaultName);
         folder = initial != null ? initial.OutDir : savedFolder;
         quality = initial?.Quality ?? savedQuality;
+        resolution = Mp4Exporter.NormalizeResolution(initial?.Resolution ?? p?.Settings.Export.Resolution ?? Mp4Exporter.DefaultResolution);
+        bitrateMbps = Mp4Exporter.NormalizeBitrate(initial != null ? initial.BitrateMbps : p?.Settings.Export.BitrateMbps);
         check = null;
         checkError = null;
         picking = false;
@@ -509,7 +541,7 @@ public sealed partial class ExportDialog : UserControl
         string takesWord = Loc.T(summary.Takes == 1 ? "exp.channel.one" : "exp.channel.many");
         var preset = ExportTargets.Get(target);
         string aspect = ExportTargets.AspectFor(target, summary.AspectRatio);
-        var (outW, outH) = Mp4Exporter.ExportSize(aspect);
+        var (outW, outH) = Mp4Exporter.ExportSize(aspect, resolution);
         int tracksWithClips = currentStore?.Project.Tracks.Count(t => t.Clips.Count > 0) ?? 0;
         HeaderSubtitle.Text = audio
             ? Loc.T("exp.sub.audio", Loc.T(tracksWithClips == 1 ? "tracks.one" : "tracks.many", tracksWithClips), Mp4Exporter.FormatTime(summary.DurationSec))
@@ -544,11 +576,13 @@ public sealed partial class ExportDialog : UserControl
 
         var qSpec = Mp4Exporter.GetQualitySpec(quality);
         double estBytes = audio ? AudioExporter.EstimateBytes(audioFormat, summary.DurationSec)
-            : Mp4Exporter.EstimateBytes(quality, outW, outH, summary.DurationSec);
+            : Mp4Exporter.EstimateBytes(quality, outW, outH, summary.DurationSec, bitrateMbps);
         EstBytesText.Text = $"≈ {Mp4Exporter.FormatBytes(estBytes)}";
         QualityDescText.Text = !audio ? qSpec.Title
             : audioFormat == AudioFormat.Mp3 ? Loc.T("exp.mp3.note")
             : Loc.T("exp.wav.note");
+
+        RenderAdvanced(outW, outH);
 
         bool hasError = checkError != null || (check is { FolderExists: false });
         bool hasCollision = !hasError && check is { Exists: true };
@@ -579,6 +613,32 @@ public sealed partial class ExportDialog : UserControl
         SetupStartText.Text = Loc.T(check is { Exists: true } ? "exp.replaceStart" : "exp.start");
     }
 
+    static string ResolutionLabel(int shortSide) => shortSide == 2160 ? "4K" : $"{shortSide}p";
+
+    /// <summary>"Avanzado": folded or open, what is not the default next to its title, and the controls as they are.</summary>
+    void RenderAdvanced(int outW, int outH)
+    {
+        AdvancedPanel.IsVisible = !audio;
+        AdvancedBody.IsVisible = advancedOpen;
+        AdvancedChevron.Text = advancedOpen ? "\uE70D" : "\uE76C";
+        var custom = new List<string>();
+        if (resolution != Mp4Exporter.DefaultResolution) custom.Add(ResolutionLabel(resolution));
+        if (bitrateMbps is { } m) custom.Add(Loc.T("exp.adv.mbps", $"{m:0}"));
+        AdvancedSummary.Text = custom.Count > 0 ? "· " + string.Join(" · ", custom) : "";
+        foreach (var c in ResolutionButtons.Children)
+            if (c is Button b) SetActiveSegment(b, (int)b.Tag! == resolution);
+        ResolutionSizeText.Text = $"{outW}×{outH}";
+
+        double auto = Mp4Exporter.VideoMbps(quality, outW, outH);
+        syncingBitrate = true;
+        BitrateAutoCheck.IsChecked = bitrateMbps == null;
+        BitrateSlider.Value = Math.Clamp(Math.Round(bitrateMbps ?? auto), Mp4Exporter.MinBitrateMbps, Mp4Exporter.MaxBitrateMbps);
+        syncingBitrate = false;
+        BitrateSlider.Opacity = bitrateMbps == null ? 0.45 : 1;
+        BitrateText.Text = Loc.T("exp.adv.mbps", $"{bitrateMbps ?? auto:0.#}");
+        BitrateHint.Text = bitrateMbps == null ? Loc.T("exp.adv.bitrate.autoHint") : Loc.T("exp.adv.bitrate.customHint");
+    }
+
     static void SetActiveSegment(Button btn, bool active)
     {
         if (active)
@@ -596,7 +656,7 @@ public sealed partial class ExportDialog : UserControl
         double? lufs = audio
             ? (AudioLufsCheck.IsChecked == true ? ExportTargets.StreamingLufs : null)
             : ExportTargets.Get(target).Lufs;
-        var opts = new ExportOptions(folder, check.FileName, check.Exists, quality, target, lufs);
+        var opts = new ExportOptions(folder, check.FileName, check.Exists, quality, target, lufs, resolution, bitrateMbps);
         await RunExportJob(opts);
     }
 
@@ -1298,9 +1358,13 @@ public sealed partial class ExportDialog : UserControl
             FileName = options.FileName,
             Overwrite = options.Overwrite,
             Quality = options.Quality,
+            Resolution = options.Resolution,
+            BitrateMbps = options.BitrateMbps,
             Layout = p.Settings.Layout,
             AspectRatio = ExportTargets.AspectFor(options.Target, p.Settings.Aspect),
             TargetLufs = options.TargetLufs,
+            // Configuración → Guardado y exportación: the video card's encoder if there is one, or the processor
+            Encoder = VideoEncoders.ParsePreference(AppConfig.Get(VideoEncoders.ConfigKey)),
             BorderSize = 4,
             Color = new ExportColorSpec(
                 col.On,
@@ -1323,7 +1387,8 @@ public sealed partial class ExportDialog : UserControl
                 vfx.Vignette,
                 vfx.VignetteSize,
                 vfx.Grain,
-                vfx.Letterbox),
+                vfx.Letterbox,
+                vfx.LetterboxHeight),
             Takes = takes,
             MixTracks = mixTracks,
             MixBus = mixBus,
@@ -1340,6 +1405,8 @@ public sealed partial class ExportDialog : UserControl
         {
             project.Settings.Export.Quality = Mp4Exporter.QualityToId(options.Quality);
             project.Settings.Export.Target = ExportTargets.Get(options.Target).Id;
+            project.Settings.Export.Resolution = Mp4Exporter.NormalizeResolution(options.Resolution);
+            project.Settings.Export.BitrateMbps = Mp4Exporter.NormalizeBitrate(options.BitrateMbps);
         }
         project.Exports.Insert(0, new ExportRecord
         {

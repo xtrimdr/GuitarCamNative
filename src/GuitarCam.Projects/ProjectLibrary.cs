@@ -204,6 +204,61 @@ public static partial class ProjectLibrary
 
     // --- operations -------------------------------------------------------------------------------
 
+    /// <summary>What a folder picked with "Open folder" turned out to be.</summary>
+    public enum PickedKind { Project, Empty, Several, WebProject, Other }
+
+    /// <summary>
+    /// The result of <see cref="Inspect"/>: <c>Dir</c> is the project to open (Project) or the empty folder
+    /// (Empty); <c>Found</c> lists the projects inside when there are several.
+    /// </summary>
+    public sealed record PickedFolder(PickedKind Kind, string Dir, IReadOnlyList<string> Found);
+
+    /// <summary>Project subfolders: picking one of these means its parent.</summary>
+    static readonly string[] InnerDirs = [ProjectStore.MediaDir, ProjectStore.HistoryDir, ProjectStore.CacheDir, "exports"];
+
+    /// <summary>The old web app's project file: those folders can't be opened here.</summary>
+    const string WebProjectFile = "session.json";
+
+    /// <summary>
+    /// Works out what the user meant by a picked folder: the project itself (or one that lost guitarcam.json
+    /// but can be rescued), a folder of the project (media/, exports/…), the folder holding it, or an empty
+    /// folder for a new one. Anything else gets a clear reason instead of "not empty".
+    /// </summary>
+    public static PickedFolder Inspect(string dir)
+    {
+        dir = Path.GetFullPath(dir).TrimEnd('\\', '/');
+        static bool Openable(string d) => ProjectStore.IsProject(d) || ProjectStore.IsRecoverable(d);
+        if (Openable(dir)) return new(PickedKind.Project, dir, []);
+        // before the empty check: an empty media/ is the project's, not a place for a new one
+        if (Path.GetDirectoryName(dir) is { } parent)
+        {
+            if (InnerDirs.Contains(Path.GetFileName(dir), StringComparer.OrdinalIgnoreCase) && Openable(parent))
+                return new(PickedKind.Project, parent, []);
+            if (File.Exists(Path.Combine(parent, WebProjectFile))) return new(PickedKind.WebProject, parent, []);
+        }
+        if (!Directory.Exists(dir) || !Directory.EnumerateFileSystemEntries(dir).Any()) return new(PickedKind.Empty, dir, []);
+        if (File.Exists(Path.Combine(dir, WebProjectFile))) return new(PickedKind.WebProject, dir, []);
+        // web projects count too, so a folder of old projects plus one native doesn't silently open that one
+        List<string> inside;
+        try
+        {
+            inside = Directory.EnumerateDirectories(dir)
+                .Where(d => Openable(d) || File.Exists(Path.Combine(d, WebProjectFile)))
+                .Order(StringComparer.CurrentCultureIgnoreCase).ToList();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            inside = [];
+        }
+        return inside switch
+        {
+            [var one] when Openable(one) => new(PickedKind.Project, one, []),
+            [var one] => new(PickedKind.WebProject, one, []),
+            [_, _, ..] => new(PickedKind.Several, dir, inside),
+            _ => new(PickedKind.Other, dir, []),
+        };
+    }
+
     /// <summary>A new project in the projects folder (or in <paramref name="dir"/>, an empty folder the user picked).</summary>
     /// <param name="mode">video | audio (native only): the project's mode, from the manager's "Video / Solo audio".</param>
     public static string Create(string name, ProjectTemplate? template, string? dir = null, string mode = "video")
