@@ -116,6 +116,7 @@ public partial class MainWindow
         };
 
         miniTimeline.SeekRequested += sec => engine.Seek(sec);
+        miniTimeline.ScrubChanged += Scrub;
         var header = BuildMixerHeader();
         mx = compactMixer;
         mixerStrips.Children.Add(compactMixer.Strips);

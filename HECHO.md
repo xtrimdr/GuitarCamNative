@@ -3,6 +3,26 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-24: **corte en el primer play de la sesión**: lo que solo corre sonando (mezcla de clips, saturación, compresor,
+  EQ, LUFS, grabación) se compilaba (JIT) la primera vez adentro del callback y el bloque se pasaba del buffer (5,8 ms en uno
+  de 4). `AudioWarmUp` precompila en segundo plano al arrancar todo `GuitarCam.Audio`, `GuitarCam.App.Audio` y
+  `GuitarCam.App.Model`, y al terminar de abrir un proyecto hace una recolección completa con todo parado. Sin medir con la placa.
+- 2026-10-24: **saltos de audio al mover el cabezal mientras suena**: `PlaybackEngine.Seek` escribía la posición desde la UI
+  y el callback la pisaba al terminar el bloque (a veces se perdía el salto, pero la cadena se reiniciaba igual), y el corte era
+  seco. Ahora, sonando, es un pedido que toma el hilo de audio: un bloque se apaga en la posición vieja y el siguiente se
+  enciende en la nueva (`pendingSeek`, `SeekRamp`), sin reiniciar los efectos (el compresor reiniciado arrancaba sin
+  reducción y el salto sonaba más fuerte); las colas de reverb y delay siguen. `AudioGapLog` (diagnóstico, provisorio) anota
+  los huecos del callback en `%APPDATA%\GuitarCam Studioudio-cortes.log`: con saltos sonando no hubo ninguno.
+  Arrastrar el cabezal sonando (regla y mini timeline del mixer) ya no hace "grrr": como en Studio Pro o Logic, el audio se
+  pausa con fundido mientras arrastrás y sigue con fundido desde donde soltás (`FadeOutAndPause`, `ScrubChanged`); un clic
+  suelto sigue siendo un salto. Play también arranca con fundido.
+  Los fundidos duran 10 ms fijos con curva suave (`TransportFadeSec`, `TransportRamp`), no un bloque del buffer (4 ms con 192
+  muestras hacía clic con material saturado). El salto sonando es un crossfade de igual potencia entre la posición vieja y la
+  nueva, sumado en los clips antes de la cadena (`LiveTrack.AddClips`, `CrossfadeWeights`): bajar y después subir dejaba un
+  "hipo" que se veía hasta en el cabezal, que ahora muestra el destino desde el clic (`PositionSec` lee el salto pendiente). Un clic en la regla
+  pedía dos saltos (al apretar y al soltar) y el segundo tiraba el cabezal para atrás: ahora es uno solo (`scrubSought`).
+- 2026-10-24: **la onda del clip con su ganancia** (ítem 1): `TimelineView.Waveform` multiplica cada columna por la
+  ganancia del clip y su curva (lo mismo que suena), y el caché se rehace al cambiar la curva o la ganancia. Sin mirarla en la ventana.
 - 2026-10-24: **afinador pulido**: notas en castellano desde `Loc` (`note.*`, en inglés C D E) en el panel y en la celda;
   triángulos a los costados que dicen para dónde girar la clavija y parpadean más rápido cuanto más desafinado
   (`TunerView`); "OK!" en verde dentro de ±3 cents (token `InTune` = verde de los medidores del mixer); slider

@@ -23,6 +23,8 @@ public partial class MainWindow : Window
     static readonly TimeSpan SaveDelay = TimeSpan.FromSeconds(1.5);
 
     readonly PlaybackEngine engine = new();
+    readonly AudioGapLog gapLog = new();
+    bool resumeAfterScrub;
     readonly LiveCamera camera = new();
     readonly UndoManager undo = new();
     readonly DispatcherTimer timer;
@@ -90,6 +92,7 @@ public partial class MainWindow : Window
         ClickToggle.IsCheckedChanged += (_, _) => engine.ClickOn = ClickToggle.IsChecked == true;
 
         Timeline.SeekRequested += engine.Seek;
+        Timeline.ScrubChanged += Scrub;
         Timeline.SelectionChanged += i => ShowTrack(i >= 0 && i < tracks.Count ? tracks[i] : null);
         Preview.ClipSelected += (track, clip) => Timeline.SelectClip(tracks.IndexOf(track), clip.Clip.Id);
         Preview.FramingRequested += (clip, zoom, x, y) =>
@@ -337,6 +340,8 @@ public partial class MainWindow : Window
         RecentProjects.Touch(dir, store.Project.Name);
         await ShowProject(store);
         UpdateUndoButtons();
+        // once the screen is built: the load's garbage, collected now and not during the first play
+        Dispatcher.UIThread.Post(() => { if (!engine.Playing && !RecordingBusy) AudioWarmUp.Compact(); }, DispatcherPriority.Background);
     }
 
     /// <summary>Loads every clip's audio (offline if its file is missing) and puts the project on screen.</summary>
@@ -592,12 +597,33 @@ public partial class MainWindow : Window
         TickMeters();
         if (Settings.IsVisible) Settings.Meter.Push(m.InL, m.InR);
         if (engine.IsOpen) ShowDsp(engine.LoadPercent);
+        gapLog.Tick(engine);
 
         if (sel != null)
         {
             grShown = Math.Min(sel.GrPeak, grShown * 0.85);
             GrText.Text = sel.Channel.Comp.On ? $"{grShown:0.0} dB" : "—";
             GrBar.Width = GrTrack.Bounds.Width * Math.Clamp(-grShown / 24, 0, 1);
+        }
+    }
+
+    /// <summary>
+    /// Holds playback while the playhead is dragged and plays on from where it is let go, like Studio Pro and
+    /// Logic: a seek per pointer move faded the sound out and in ~60 times a second, a buzz. The hold and the
+    /// restart are both faded. A plain click (no drag) stays a faded jump. Stopped, the drag just moves the playhead.
+    /// </summary>
+    void Scrub(bool start)
+    {
+        if (start)
+        {
+            if (!engine.Playing || RecordingBusy) return;
+            resumeAfterScrub = true;
+            engine.FadeOutAndPause();
+        }
+        else if (resumeAfterScrub)
+        {
+            resumeAfterScrub = false;
+            engine.Play();
         }
     }
 

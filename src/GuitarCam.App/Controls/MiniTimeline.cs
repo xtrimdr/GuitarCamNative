@@ -16,8 +16,11 @@ public sealed class MiniTimeline : Control
     const double PadX = 12, BarH = 20;
     IReadOnlyList<LiveTrack> tracks = [];
     double playhead, duration;
-    bool recording, scrubbing;
+    bool recording, scrubbing, held;
+    double downX;
     public event Action<double>? SeekRequested;
+    /// <summary>A drag started (true) or ended (false), like <see cref="TimelineView.ScrubChanged"/>.</summary>
+    public event Action<bool>? ScrubChanged;
 
     public MiniTimeline()
     {
@@ -73,6 +76,7 @@ public sealed class MiniTimeline : Control
     {
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed || recording) return;
         scrubbing = true;
+        downX = e.GetPosition(this).X;
         e.Pointer.Capture(this);
         SeekRequested?.Invoke(SecAt(e.GetPosition(this)));
         e.Handled = true;
@@ -80,16 +84,33 @@ public sealed class MiniTimeline : Control
 
     protected override void OnPointerMoved(PointerEventArgs e)
     {
-        if (scrubbing) SeekRequested?.Invoke(SecAt(e.GetPosition(this)));
+        if (!scrubbing) return;
+        var p = e.GetPosition(this);
+        if (!held && Math.Abs(p.X - downX) >= 3)
+        {
+            held = true;
+            ScrubChanged?.Invoke(true);
+        }
+        // a click is one jump, on press (see TimelineView's scrub)
+        if (held) SeekRequested?.Invoke(SecAt(p));
     }
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         if (!scrubbing) return;
-        scrubbing = false;
+        if (held) SeekRequested?.Invoke(SecAt(e.GetPosition(this)));
+        EndScrub();
         e.Pointer.Capture(null);
-        SeekRequested?.Invoke(SecAt(e.GetPosition(this)));
     }
 
-    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e) => scrubbing = false;
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e) => EndScrub();
+
+    void EndScrub()
+    {
+        if (!scrubbing) return;
+        scrubbing = false;
+        if (!held) return;
+        held = false;
+        ScrubChanged?.Invoke(false);
+    }
 }

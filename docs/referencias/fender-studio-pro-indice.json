@@ -1,0 +1,1354 @@
+{
+  "fecha": "2026-10-24",
+  "fuente": "https://fenderstudiopromanual.fender.com/en/Studio-Pro-User-Manual.htm",
+  "metodo": "Indice MadCap y GET de los temas; texto de mc-main-content normalizado por linea. No incluye imagenes ni cuerpos del manual.",
+  "temas_en_indice": 224,
+  "temas_extraidos": 224,
+  "caracteres_extraidos": 1668885,
+  "temas": [
+    {
+      "titulo": "Adding Time to the Arrangement",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Adding_Time_to_the_Arrangement.htm",
+      "caracteres": 1190,
+      "sha256_texto": "38420fb4ef5635316e96b47fab0a1e4fca68b1d594a274744597b9ed68150d30"
+    },
+    {
+      "titulo": "Arranger Options",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Arranger%20Options.htm",
+      "caracteres": 4467,
+      "sha256_texto": "7f34814f3ad8432a470cdbc4074f07f32753a0fafd4d6d48ee6fd8431a733584"
+    },
+    {
+      "titulo": "Arranger Track",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/ArrangerTrack.htm",
+      "caracteres": 10017,
+      "sha256_texto": "4dc4595d231177ae5e67ab9ff041890bf2418db18331f27f584350251a5629c3"
+    },
+    {
+      "titulo": "Bouncing",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Bouncing.htm",
+      "caracteres": 4600,
+      "sha256_texto": "986e448a08be179bd6d00e4aba16d7d4ab034f469ed1287faa6d675870e1c616"
+    },
+    {
+      "titulo": "Arranging",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Chapter-Arranging.htm",
+      "caracteres": 375,
+      "sha256_texto": "d75f434bec292aedcf0b4658513d989ded68998bab70630abb141cb001c469ed"
+    },
+    {
+      "titulo": "Chord Track",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Chord%20Track.htm",
+      "caracteres": 24775,
+      "sha256_texto": "b666a4c0ec943c980c5d8243756c19dee5b9b9da8b7027a023535a5a1f945e91"
+    },
+    {
+      "titulo": "Deleting Time from the Arrangement",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Deleting_Time_from_the_Arrangement.htm",
+      "caracteres": 801,
+      "sha256_texto": "c1d283113a0bb0531080005146ce65f57d7e2f7f5254cb33483975c65bd17b00"
+    },
+    {
+      "titulo": "Duplicating Tracks",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Duplicating_Tracks.htm",
+      "caracteres": 1879,
+      "sha256_texto": "86419374a9dd8175883c1e3419d643ba9cafe32e80e6c991cb0658ff03a7a225"
+    },
+    {
+      "titulo": "Folder Tracks",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Folder_Tracks.htm",
+      "caracteres": 4339,
+      "sha256_texto": "34d8c44254fdab4fbb8ab715dd9273eb0b43fb2c3d93b4480cef2436d76b65f7"
+    },
+    {
+      "titulo": "Global Tracks",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Global_Tracks.htm",
+      "caracteres": 4323,
+      "sha256_texto": "72a7429d7d72f459cb88c99746791defbe3a8a839a8a97a171db1d05e0456df0"
+    },
+    {
+      "titulo": "Lyrics Lanes",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Lyrics%20Lanes.htm",
+      "caracteres": 1953,
+      "sha256_texto": "756562ecf61d84a366c823854aeda710757c6b17698550cb8d6171a910bfb802"
+    },
+    {
+      "titulo": "Lyrics Track",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Lyrics%20Track.htm",
+      "caracteres": 7276,
+      "sha256_texto": "0f31c9c26b77904fe78ff9caaee3acac3f97f90af806bac2385063fda2dc00f8"
+    },
+    {
+      "titulo": "Quickly Duplicating Events",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Quickly_Duplicating_Events.htm",
+      "caracteres": 1808,
+      "sha256_texto": "6f196716321a6bde9d3a176aac82c78c1df3a3726666ee241a25d86476ec317c"
+    },
+    {
+      "titulo": "Scratch Pad",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/ScratchPad.htm",
+      "caracteres": 3272,
+      "sha256_texto": "cac6e218f2f310f62aabd57f5c03f5f497c214eadd95c309ffe3a42f75bb3af6"
+    },
+    {
+      "titulo": "Signature Track",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Signature_Track.htm",
+      "caracteres": 6037,
+      "sha256_texto": "aa936d95af2ecf5f036fc1527bd13bde4ab3608914408648a1d4b79a520078ce"
+    },
+    {
+      "titulo": "Tempo Track",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Tempo_Track.htm",
+      "caracteres": 4941,
+      "sha256_texto": "f53a40efaf9ba1dd8219e3d186e276d22078883a69a55c8b6291be4f7705163e"
+    },
+    {
+      "titulo": "The Launcher",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/The%20Launcher.htm",
+      "caracteres": 11869,
+      "sha256_texto": "8d64703fedbbe98298c3a286c2682311493cc83c0161c96f158d49a2b11fe44b"
+    },
+    {
+      "titulo": "Track and Channel Icons",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Track%20Icons.htm",
+      "caracteres": 928,
+      "sha256_texto": "4301f656a2444fb3d36ff144bd3d0116a915bae50cc12dd05aeff00af8d3aa48"
+    },
+    {
+      "titulo": "Track List",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Track_List.htm",
+      "caracteres": 4174,
+      "sha256_texto": "60f8482c07f90649d69aa07eca502a3bfb575185139759be7f794503fb882728"
+    },
+    {
+      "titulo": "Automation Modes",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Automation_Topics/Automation_Modes.htm",
+      "caracteres": 5315,
+      "sha256_texto": "9bd29efdf4e0a86f34fe7b2a14a6a093ceaa8462d57e976394156b4b46cdc39b"
+    },
+    {
+      "titulo": "Automation Types",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Automation_Topics/Automation_Types.htm",
+      "caracteres": 5530,
+      "sha256_texto": "3898423cfac3c0c800684b18c812d9c300a17ba4a6c629608581d6659843c541"
+    },
+    {
+      "titulo": "Automation",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Automation_Topics/Chapter-Automation.htm",
+      "caracteres": 212,
+      "sha256_texto": "3da1e462aeb694b0cc284c709bcb3f841c5733fb2ac12457840ae79c664aa95d"
+    },
+    {
+      "titulo": "Editing Automation Envelopes",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Automation_Topics/Editing_Automation_Envelopes.htm",
+      "caracteres": 9332,
+      "sha256_texto": "226d1545a48222c2f7ede72072c536160807ad8073d2cb6567291bd31a805c51"
+    },
+    {
+      "titulo": "Instrument Part Automation",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Automation_Topics/Instrument_Part_Automation.htm",
+      "caracteres": 5733,
+      "sha256_texto": "02a0ca4f7345d772aa7ae12c6daaf9f28e9a058ebea1e05c55aefa8133821b83"
+    },
+    {
+      "titulo": "What is Automation?",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Automation_Topics/What_is_Automation.htm",
+      "caracteres": 869,
+      "sha256_texto": "77b28099d96bbc0623dbb1bc950844757680d4804c06bb8512bdda21ddf83f4d"
+    },
+    {
+      "titulo": "Built-In Effects",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Effects_Topics/Chapter-Built_In_Effects.htm",
+      "caracteres": 4362,
+      "sha256_texto": "976d82b78b26065d55de21090214c4e4d38e6cd35b899925d24220f91b5624b8"
+    },
+    {
+      "titulo": "Delay",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Effects_Topics/Delay.htm",
+      "caracteres": 12811,
+      "sha256_texto": "a198c7c9d3a9a9f230f86513db8bdaacac3935a60142ed44ab416ebbe19a417f"
+    },
+    {
+      "titulo": "Distortion",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Effects_Topics/Distortion.htm",
+      "caracteres": 31081,
+      "sha256_texto": "1dc7e14ee3e1a23c861b0a3dc1e65f4445ec58fdacc2065137a67cf216826f67"
+    },
+    {
+      "titulo": "Dynamics",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Effects_Topics/Dynamics.htm",
+      "caracteres": 13255,
+      "sha256_texto": "bd18843f97f554258985512b7c5a3e10355a4adc0cecc91383120cebc2d01470"
+    },
+    {
+      "titulo": "EQ",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Effects_Topics/EQ.htm",
+      "caracteres": 6304,
+      "sha256_texto": "08d736119a87f64de78f73031527874dfe7a234ff6dd9b476daf795aa030ae0b"
+    },
+    {
+      "titulo": "Built-in Effect Micro Views",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Effects_Topics/Effect_Micro.htm",
+      "caracteres": 2026,
+      "sha256_texto": "c6330b347f7aa88c8997dc71cfc387895b7c4a9379d73dbffa496a6aebc9ffc7"
+    },
+    {
+      "titulo": "External Effect",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Effects_Topics/External-Effect.htm",
+      "caracteres": 8516,
+      "sha256_texto": "7f00b8cf0add21a70d24915e94810208861dec2c5040bb6b9e9f606ca17b3407"
+    },
+    {
+      "titulo": "Mastering",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Effects_Topics/Mastering.htm",
+      "caracteres": 6181,
+      "sha256_texto": "0b5fc07588824388229b1cc5fe608aed18bf4f3c9cf4ae2777c799aff96ea179"
+    },
+    {
+      "titulo": "Metering, Analysis, and Signal Generation",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Effects_Topics/Metering%2C%20Analysis%2C%20and%20Signal%20Generation.htm",
+      "caracteres": 18389,
+      "sha256_texto": "2e8e31bf3e058fe6a1fed63b02070bcc0d06656d78b9760530aaa81e3f0b1969"
+    },
+    {
+      "titulo": "Mix Engine FX",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Effects_Topics/Mix_Engine_FX.htm",
+      "caracteres": 11342,
+      "sha256_texto": "60c544e8b924e895fa415758abf1613c871ad4c5ca84627945810493e72a73c1"
+    },
+    {
+      "titulo": "Mixing",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Effects_Topics/Mixing.htm",
+      "caracteres": 20694,
+      "sha256_texto": "1450f82c105bb4b3e3d398f168787a9aa52b7127bc39abf01120e5a1aa70273b"
+    },
+    {
+      "titulo": "Modulation",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Effects_Topics/Modulation.htm",
+      "caracteres": 19153,
+      "sha256_texto": "0f9906d39c669419162449bf57277f1870ed81b7ae2b4b0ae426a38badb8dd83"
+    },
+    {
+      "titulo": "Reverb",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Effects_Topics/Reverb.htm",
+      "caracteres": 12408,
+      "sha256_texto": "62f7df9d98df75df255f8d68547f0647882d0aa4eecf2f0b6d6100a3972e9d82"
+    },
+    {
+      "titulo": "Vocal Tune",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Effects_Topics/Vocal%20Tune.htm",
+      "caracteres": 4063,
+      "sha256_texto": "a01e1d6b206a44b135905155bd71324166e6e0db184049da6e6045d79c095ca7"
+    },
+    {
+      "titulo": "Voice FX",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Effects_Topics/Voice%20FX.htm",
+      "caracteres": 3077,
+      "sha256_texto": "d1f8226eabf430357888a17946a25ddf6a658cda91f9b7169edafddb81cea704"
+    },
+    {
+      "titulo": "CV Instrument",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Instruments_Topics/CV%20Instrument.htm",
+      "caracteres": 14568,
+      "sha256_texto": "b2b8ea3607e54d54dac6aa67e701fd4406db646e41ac79722bae2a40abd164a5"
+    },
+    {
+      "titulo": "Built-in Virtual Instruments",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Instruments_Topics/Chapter-Built_in_Virtual_Instruments.htm",
+      "caracteres": 426,
+      "sha256_texto": "f6803e081e2b869483c3c30b3b7a680f792dc8c10dc66d663c55d46f130c2e9a"
+    },
+    {
+      "titulo": "Cinematic Lights",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Instruments_Topics/Cinematic%20Lights.htm",
+      "caracteres": 37762,
+      "sha256_texto": "e7b925f2cfb27a11574afad48bfa412ca240172c58dbfd89013317c42efc3ceb"
+    },
+    {
+      "titulo": "Deep Flight One",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Instruments_Topics/Deep%20Flight%20One.htm",
+      "caracteres": 37669,
+      "sha256_texto": "18b397a51834513dec397155e8fd14b79aeb868846cb9d5c9865dea97775adaf"
+    },
+    {
+      "titulo": "Impact",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Instruments_Topics/Impact.htm",
+      "caracteres": 21520,
+      "sha256_texto": "55bd2c2e39adc59733f608d357b50b3d77897b02bfe9a0dde32fdcdcd692fd45"
+    },
+    {
+      "titulo": "Lead Architect",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Instruments_Topics/Lead%20Architect.htm",
+      "caracteres": 37706,
+      "sha256_texto": "cade2ef6b4024aaa6fb0a9e640a8813d7bb01193ba07a8a3bbb19e7e2499474a"
+    },
+    {
+      "titulo": "Mai Tai",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Instruments_Topics/Mai_Tai.htm",
+      "caracteres": 29515,
+      "sha256_texto": "8eb23a47569f243f4b81f17cef3ea4abc3c34dfbef46e7ced22f9bd6215f94ee"
+    },
+    {
+      "titulo": "Mojito",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Instruments_Topics/Mojito.htm",
+      "caracteres": 5623,
+      "sha256_texto": "30c85877b7c558f5a4128c09987518ebbefab389343854b2128258c9efe43988"
+    },
+    {
+      "titulo": "Multi Instruments",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Instruments_Topics/Multi_Instruments.htm",
+      "caracteres": 9773,
+      "sha256_texto": "147fdfdfaf4ec5143dae3abfae2f1fd83b5b8c34e3af24be0519f931beeb5f93"
+    },
+    {
+      "titulo": "Note FX",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Instruments_Topics/Note_FX.htm",
+      "caracteres": 13897,
+      "sha256_texto": "1316c5e580cf3d74bd00bfe3ee466616ebc46f770c17f9b7893a08f19ea105ab"
+    },
+    {
+      "titulo": "Presence",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Instruments_Topics/Presence.htm",
+      "caracteres": 30389,
+      "sha256_texto": "369be0b07f5b73913ad14e0a90b5f156e375ebe030c9fe8734419a06d61aa271"
+    },
+    {
+      "titulo": "Presence Editor",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Instruments_Topics/Presence_Editor.htm",
+      "caracteres": 23531,
+      "sha256_texto": "256679639117ad0094d849e46813b97ca441b02965df5dd07108347a6ecd5981"
+    },
+    {
+      "titulo": "SampleOne",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Instruments_Topics/SampleOne.htm",
+      "caracteres": 36342,
+      "sha256_texto": "fd0fce7bc4abe2ef90ee68bc699e73b79bfc474c4d8c59ed72ea1e2377f4c08c"
+    },
+    {
+      "titulo": "Sub Zero Bass",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Built-In_Instruments_Topics/Sub%20Zero%20Bass.htm",
+      "caracteres": 37520,
+      "sha256_texto": "0c766da7f8ae02199abb10be32ae49aedd315cf0d73796174269a761681e9888"
+    },
+    {
+      "titulo": "Collaboration",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Collaboration_Topics/Chapter-Collaboration.htm",
+      "caracteres": 2081,
+      "sha256_texto": "0f05581afb12753eb16c4cc5c02bc80802c081798949cee8e4bfd8c035411418"
+    },
+    {
+      "titulo": "Collaborating with Others",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Collaboration_Topics/Collaborating_with-Others.htm",
+      "caracteres": 7068,
+      "sha256_texto": "b622c74ff4de9bf2f9e48b269b1d2dc3dfb7237b331b280d210c61dc65fbc29d"
+    },
+    {
+      "titulo": "Sending and Receiving Documents",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Collaboration_Topics/Sending_and_Receiving_Documents.htm",
+      "caracteres": 6850,
+      "sha256_texto": "90e7eff860a40d4671a77e11e3f18be3011c4d73cc5c31fe327861e4ebb6f20c"
+    },
+    {
+      "titulo": "Workspaces in MyFender",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Collaboration_Topics/Workspaces.htm",
+      "caracteres": 4761,
+      "sha256_texto": "ac15fe1f01af4e4cac51543ced780d8fe021352629b558ca4b586d118203302a"
+    },
+    {
+      "titulo": "Automation with Hardware Controllers",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Control_Link_Topics/Automation_with_Hardware.htm",
+      "caracteres": 4936,
+      "sha256_texto": "38ed21c8f76963dec7fb69231e44c63b4cda969fae5717d4fdc4c83f3b3c7304"
+    },
+    {
+      "titulo": "Control Link",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Control_Link_Topics/Chapter-Control_Link.htm",
+      "caracteres": 237,
+      "sha256_texto": "2464bf44f45f4669812559a3c62388634391fd652aad3bc68646d08e8c9046d0"
+    },
+    {
+      "titulo": "Control Linking",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Control_Link_Topics/Control_Linking.htm",
+      "caracteres": 2438,
+      "sha256_texto": "1679a1da0d7833eadf0d8880d7a9ce28f8a65dff1f411ccc083c84599d1ace2e"
+    },
+    {
+      "titulo": "Global and Focus Mapping",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Control_Link_Topics/Global_and_Focus_Mapping.htm",
+      "caracteres": 5332,
+      "sha256_texto": "94cc23cdb9cf9a31d8ea4f8b58a16f91dbada39aa7cb7392b4091ba202ab53d3"
+    },
+    {
+      "titulo": "Mackie Control Support",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Control_Link_Topics/Mackie_Control.htm",
+      "caracteres": 5052,
+      "sha256_texto": "b2ac7346c110f02ff0e225462c4eb9fce854bfccc3eb8982649db9a1c4e49a48"
+    },
+    {
+      "titulo": "Map Your Keyboard",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Control_Link_Topics/Map_Your_Keyboard.htm",
+      "caracteres": 3885,
+      "sha256_texto": "6048bef44415f03fbd31ac3a7e842b799c56fc38cf3d4e79959a0f588358b415"
+    },
+    {
+      "titulo": "Set Up Your External Devices",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Control_Link_Topics/Set_Up_Your_External_Devices.htm",
+      "caracteres": 366,
+      "sha256_texto": "f9978b5d23c23a51d5a85b479b2091767f414799b8f039552380609a1b1d37fa"
+    },
+    {
+      "titulo": "What is Control Link?",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Control_Link_Topics/What_is_Control_Link.htm",
+      "caracteres": 1204,
+      "sha256_texto": "2596c62f23bc81e7120904699457c64ade4bf3763e2ec109a64013ed7e7bb648"
+    },
+    {
+      "titulo": "Action Menu",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Action_Menu.htm",
+      "caracteres": 3884,
+      "sha256_texto": "e4129253af93022bbdca5931cfd06d43d7c2becfcd37879fb2f86b7bd73f3a23"
+    },
+    {
+      "titulo": "Arrange View Mouse Tools",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Arrange_View_Mouse_Tools.htm",
+      "caracteres": 18083,
+      "sha256_texto": "3e5d44ba4c9acafd80e7b5d0ce76ab3fa9c9180d71ffa72ee94bd601013755a6"
+    },
+    {
+      "titulo": "Audio Loops and Music Loops",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Audio_Loops_and_Music_Loops.htm",
+      "caracteres": 3491,
+      "sha256_texto": "484006ed8c63cadff19fa28c242fe46c9e713579c780b47524d8a5b964c8817c"
+    },
+    {
+      "titulo": "Editing",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Chapter-Editing.htm",
+      "caracteres": 381,
+      "sha256_texto": "90d96cd79af5b5916d8c016dbfcd988832c833479ec09b918fe5835d9b4d193f"
+    },
+    {
+      "titulo": "Clips and Clip Gain Curves",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Clips_and_Clip_Gain_Curves.htm",
+      "caracteres": 10233,
+      "sha256_texto": "61808d43d70461151371bb83410f28e99dd4cf813114085a05274f4c5cde3db9"
+    },
+    {
+      "titulo": "Common Editing Actions",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Common_Editing_Actions.htm",
+      "caracteres": 19707,
+      "sha256_texto": "04c21c1b7f1d8c03680d5f6a3632cd88b94ec6d824640fe0988ad06b9a092265"
+    },
+    {
+      "titulo": "Comping",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Comping.htm",
+      "caracteres": 11365,
+      "sha256_texto": "b26ab34e93452f6cc20d285ba3b214438a12c908770c9ecfb5bed11f623308b2"
+    },
+    {
+      "titulo": "Convert a Part into a Pattern",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Convert_Part_to_Pattern.htm",
+      "caracteres": 1119,
+      "sha256_texto": "7c18f833920c7e11f5fafba47a5f4350a5059c97f7b2e442ad86b67f9cff2e04"
+    },
+    {
+      "titulo": "Edit Groups",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Edit_Groups.htm",
+      "caracteres": 3492,
+      "sha256_texto": "82e3606e808f8e484e46303f9cb7ae820fbd4129a64bc7f44b654e193bf3e3b1"
+    },
+    {
+      "titulo": "Edit View Event Editing",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Edit_View_Event_Editing.htm",
+      "caracteres": 10677,
+      "sha256_texto": "e8402120e850be2ac02ac17537bbc700cf2475b382c83c8619ec145351e08364"
+    },
+    {
+      "titulo": "Editing Suggestions",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Editing_Suggestions.htm",
+      "caracteres": 1863,
+      "sha256_texto": "2cbaa214ad0d096a04cb4df42731eca153504075d019fe2ae3374ddb91cd2875"
+    },
+    {
+      "titulo": "Events",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Events.htm",
+      "caracteres": 14842,
+      "sha256_texto": "d558a07d54d0331d5c14f9f12e5085d79e0b1d5a04faf328f2760cf223e34f12"
+    },
+    {
+      "titulo": "Lock Tracks or Events",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Lock_Track_Lock_Event.htm",
+      "caracteres": 3012,
+      "sha256_texto": "83d35112fff030212c544c5b1f910e6eabdb9b65758b3b07c52f371264c0ea18"
+    },
+    {
+      "titulo": "Macro Toolbar",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Macro_Toolbar.htm",
+      "caracteres": 10735,
+      "sha256_texto": "81fe957709c91ac81f2812035d79d85d3c5ccfa90972d3ea1efda7e8273d6f28"
+    },
+    {
+      "titulo": "Navigating with Zoom",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Navigating_With_Zoom.htm",
+      "caracteres": 3439,
+      "sha256_texto": "fdb394e57c0ec98dbcb8ad2e3da72414bf61c3cea347a534ac61f87241617969"
+    },
+    {
+      "titulo": "Note Editor",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Note%20Editor.htm",
+      "caracteres": 34090,
+      "sha256_texto": "99ef3195f2436df0907bed5dd34cf067ae990fe984a63b976a1849a87d96de3e"
+    },
+    {
+      "titulo": "Patterns",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Patterns.htm",
+      "caracteres": 22047,
+      "sha256_texto": "7a9052e80e8807281f3be0bbf35cb25fe049d7b6d094328bf8d34d076d1dcbc4"
+    },
+    {
+      "titulo": "Pitch Correction with Melodyne Integration",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Pitch_Correction_with.htm",
+      "caracteres": 5783,
+      "sha256_texto": "76818cadec7172d7ae8a2f00a41468863fd67f4fcaef194bf337224482a782e7"
+    },
+    {
+      "titulo": "Sound Variations",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Sound_Variations.htm",
+      "caracteres": 26101,
+      "sha256_texto": "043d15d82db1df5ccd4432b618db31f824999c47d9349ef3119ccda99a7f7389"
+    },
+    {
+      "titulo": "Stem Separation",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Stem%20Separation.htm",
+      "caracteres": 1445,
+      "sha256_texto": "93ab5fa97b54930ca9174c272b20a56d7d7756344787b2fa71f9c34c56b25041"
+    },
+    {
+      "titulo": "The Grid",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/The_Grid.htm",
+      "caracteres": 4708,
+      "sha256_texto": "0639eb71a567c7a24f5acfc3b77002e8a6e159b6827bf84481f805b9cca6f0c8"
+    },
+    {
+      "titulo": "Timestretching",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Timestretching.htm",
+      "caracteres": 9510,
+      "sha256_texto": "dc178f62a1a61845969c136e77075f0aa6ffc650739771c5e8cf0b0893b03cfc"
+    },
+    {
+      "titulo": "Track Presets",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Track%20Presets.htm",
+      "caracteres": 3186,
+      "sha256_texto": "57ba3ed4da3300de014ea421555dbdb0dd45c884bad8c920e9474b4cabd9c9f9"
+    },
+    {
+      "titulo": "Track Freeze",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Track_Freeze.htm",
+      "caracteres": 7883,
+      "sha256_texto": "3788105588cd473c72e67f9d009ce68743ab5c527a7651eab9b7069c6dfed984"
+    },
+    {
+      "titulo": "Track and Event Inspectors",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Track_and_Event_Inspectors.htm",
+      "caracteres": 14658,
+      "sha256_texto": "fdf4d8b038c23990710dd438028e631f714574117bb7ed65b824a7dc823dc898"
+    },
+    {
+      "titulo": "Transient Detection and Editing",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Transient_Detection_and.htm",
+      "caracteres": 15575,
+      "sha256_texto": "a7589492cf2ea4b0595f3a6ff48f0ef9de490e90ce58415ee4335e3b1b0ab746"
+    },
+    {
+      "titulo": "Undo History",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Undo_History.htm",
+      "caracteres": 423,
+      "sha256_texto": "d4cb8486ec57b3ae2a48fc46a923e4d666785b4c051fad213c3dc429f07e3b3a"
+    },
+    {
+      "titulo": "Audio Dropout Protection",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/Audio%20Dropout%20Protection.htm",
+      "caracteres": 1149,
+      "sha256_texto": "1529e08a162661186207f0af6d0bce9bdad08eb5bca0d42a011f49a326f609e7"
+    },
+    {
+      "titulo": "Automatic Delay Compensation",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/Automatic_Delay_Compensation.htm",
+      "caracteres": 420,
+      "sha256_texto": "a65e0a0fd0d72c78d6e560e3c1343fe6089ad13fcd5f2e0e91ba668aad7befd7"
+    },
+    {
+      "titulo": "Fundamentals",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/Chapter-Fundamentals.htm",
+      "caracteres": 248,
+      "sha256_texto": "e588b3b577f61e082297d80f54d7bc45c1b6838b52736696e406182a85b3a10a"
+    },
+    {
+      "titulo": "Control Link",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/Control_Link.htm",
+      "caracteres": 394,
+      "sha256_texto": "9edc372ee4c863947643bc1d7f44e95b71303456e76a18fb067a3aaa16c0eff4"
+    },
+    {
+      "titulo": "Documents",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/Documents.htm",
+      "caracteres": 2169,
+      "sha256_texto": "b975ed90089e5e1c5908f757b77cde8b1e2d6c05d11b480ec38b0f17798f1550"
+    },
+    {
+      "titulo": "Drag-and-Drop",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/Drag_and_Drop.htm",
+      "caracteres": 1381,
+      "sha256_texto": "0690a9ab5667fd49fa4d7694ee9b54d07839f4df41eee0fc178ffb94d0929c2f"
+    },
+    {
+      "titulo": "Fender and PreSonus Hardware Integration",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/Fender%20and%20PreSonus_Hardware_Integration.htm",
+      "caracteres": 1221,
+      "sha256_texto": "fd86393d61e79fb69351ec6afa0a1b343b57476b145c71d9cb600c86dbada0d4"
+    },
+    {
+      "titulo": "Studio Pro Help and Information",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/Fender_Studio_Pro_Help_and_Information.htm",
+      "caracteres": 2100,
+      "sha256_texto": "7e5cc6db7cb75c4186950f464c29d90c784ee5f01869bd727798fe11b899d130"
+    },
+    {
+      "titulo": "Flexible Parameter Control",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/Flexible_Parameter_Control.htm",
+      "caracteres": 1410,
+      "sha256_texto": "4e7fbfeddf6d9561210f52a5d4f45e0f82912816ae87ced847274a52d0328902"
+    },
+    {
+      "titulo": "High-Precision Mix Engine",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/High_Precision_Mix_Engine.htm",
+      "caracteres": 841,
+      "sha256_texto": "7ab2413984a75f44125986b493d1aef4589ceb0777362f264700eefcb7e77fd0"
+    },
+    {
+      "titulo": "Key Commands",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/Key_Commands.htm",
+      "caracteres": 4027,
+      "sha256_texto": "b960acc2819c00e6d41a8c6f1a537bee4fdf44d79c3d55980df2e69caa2c3c89"
+    },
+    {
+      "titulo": "MIDI",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/MIDI.htm",
+      "caracteres": 625,
+      "sha256_texto": "93d859c4db3722f1e0048a9765c285e45dfce06312166b577990af35dd80ae92"
+    },
+    {
+      "titulo": "Nondestructive Editing and Undo/Redo",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/Nondestructive_Editing.htm",
+      "caracteres": 650,
+      "sha256_texto": "d9e50b1b2005ec3c904f25ef174ce20dc33e7ade0192693df7b9b10f27185d24"
+    },
+    {
+      "titulo": "Retrospective Recording",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/Retrospective_Record.htm",
+      "caracteres": 3361,
+      "sha256_texto": "37f287563e97e03f3de7a473a1028b9b4f56d97f59057d3a1dae8d03c9f32c99"
+    },
+    {
+      "titulo": "Session Information and Track Notes",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/Session%20Information%20and%20Track%20Notes.htm",
+      "caracteres": 2082,
+      "sha256_texto": "265f4d401dccafd6b878ea8774c41accf24f175298cdb56e18ff2c64a7457759"
+    },
+    {
+      "titulo": "Smart Templates",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/Smart%20Templates.htm",
+      "caracteres": 7708,
+      "sha256_texto": "cf8d38b94c65020bc49424106a1baf01351572e90f6cc773ab1bf1d02b9b09a2"
+    },
+    {
+      "titulo": "Transport Controls",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/Transport_Controls.htm",
+      "caracteres": 1334,
+      "sha256_texto": "7e8a68b06de997e2248c00ca236e4e5958ec2e7132f25bf2efd4941e754408d3"
+    },
+    {
+      "titulo": "View Options",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/View_Options.htm",
+      "caracteres": 9254,
+      "sha256_texto": "60f837ce99d2f6d0c3b8b028e4841eb53e46ca4d11d74e82e67ab0f97d6a2330"
+    },
+    {
+      "titulo": "Installation and Activation",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Getting_Started_Topics/Chapter-Installation_and_Activation.htm",
+      "caracteres": 21513,
+      "sha256_texto": "6f15a57959b5a7941e4c7af36f8cd0d55c019791ac70e73a5b3718da7b12cd93"
+    },
+    {
+      "titulo": "Introduction",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Introduction.htm",
+      "caracteres": 1438,
+      "sha256_texto": "1327d568479bd4d09e3bd0131b38f5ccf9eea00a6837b852bf36cceaafcb357c"
+    },
+    {
+      "titulo": "Adding Tracks",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mastering_Topics/Adding_Tracks.htm",
+      "caracteres": 6171,
+      "sha256_texto": "e556ff26db5e44dc97c8a779e3a2994fa829d01427b1279a1b173712ecda46cf"
+    },
+    {
+      "titulo": "Automation in the Mastering Page",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mastering_Topics/Automation%20in%20the%20Project%20Page.htm",
+      "caracteres": 2137,
+      "sha256_texto": "d2393172cf6ceb6382619dd3e82c10b525bb60c11052362832c35f42826441be"
+    },
+    {
+      "titulo": "Mastering",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mastering_Topics/Chapter-Mastering.htm",
+      "caracteres": 1467,
+      "sha256_texto": "7eb0c13fcfb0e1837e697fa987930b59ed7f3e81aa83c6d836ce37de79473284"
+    },
+    {
+      "titulo": "Creating a New Mastering Project",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mastering_Topics/Creating_a_New_Project.htm",
+      "caracteres": 2560,
+      "sha256_texto": "d5979f58b938ac428707682ec4b481b9105254d5762354c457740a872694e509"
+    },
+    {
+      "titulo": "Editing Tracks",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mastering_Topics/Editing_Tracks.htm",
+      "caracteres": 9617,
+      "sha256_texto": "b0a675dd22f0a504efb558a89c20220994ff1852768759de7cc4fef9c6cc4bea"
+    },
+    {
+      "titulo": "The Listen Bus",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mastering_Topics/Listen_Bus_Mastering.htm",
+      "caracteres": 1224,
+      "sha256_texto": "a04f8a2b1f9a1bd945f3c29e2ef0a575fb61d96dc8fe8827fae12177cf5e3613"
+    },
+    {
+      "titulo": "Master Device Rack",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mastering_Topics/Master_Device_Rack.htm",
+      "caracteres": 1554,
+      "sha256_texto": "51b6b6a61e9225b3ccddb8633fbf6a2eec4d0379971e61f50c725ac57869dbcc"
+    },
+    {
+      "titulo": "Metering",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mastering_Topics/Metering.htm",
+      "caracteres": 6007,
+      "sha256_texto": "54456356db26cafbb1e6bad55a90cc9c05eac6734e30d1590776385a5c307bf3"
+    },
+    {
+      "titulo": "Mastering Page Tools",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mastering_Topics/Project_Page_Tools.htm",
+      "caracteres": 3000,
+      "sha256_texto": "adcfde232e5004dacf81b3949e052c6d17b46f84fe39d1ee98977d888afe3502"
+    },
+    {
+      "titulo": "Publishing Your Mastering Project",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mastering_Topics/Publishing_Your_Project.htm",
+      "caracteres": 14698,
+      "sha256_texto": "bd3376184bcf2e184f92df245f458e02dfa7f042474240f0fc380141abf8587f"
+    },
+    {
+      "titulo": "Session and Mastering Integration",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mastering_Topics/Song_and_Project_Integration.htm",
+      "caracteres": 5041,
+      "sha256_texto": "f1a7abfb9155f00e56b7e1a10165ae0ed58ca43337f668b7ef430e2d1fe68503"
+    },
+    {
+      "titulo": "Track Sequencing",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mastering_Topics/Track_Sequencing.htm",
+      "caracteres": 938,
+      "sha256_texto": "232be4dc0d03b2bb4a064dbe078eb3ddaaa042102593a424b788853417969965"
+    },
+    {
+      "titulo": "Using Insert Effects",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mastering_Topics/Using_Insert_Effects.htm",
+      "caracteres": 4174,
+      "sha256_texto": "56f37bb656b1da7bc3b41e98c3bbcaac6ac3ef58d063cac6de412e14dacfbc14"
+    },
+    {
+      "titulo": "Automatic Plug-In Delay Compensation",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/Automatic_Plug-In_Delay.htm",
+      "caracteres": 791,
+      "sha256_texto": "456fe29931982958ba22d0d49aa66760a7053eaa79b0d9b16f45b85cb8056fb8"
+    },
+    {
+      "titulo": "Channel Overview and Editor",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/Channel%20Overview%20and%20Editor.htm",
+      "caracteres": 17831,
+      "sha256_texto": "dc14acd8a8990f62e9ca516d8521d810d79cc28904d4015dfe215cf2c51469ed"
+    },
+    {
+      "titulo": "Mixing",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/Chapter-Mixing.htm",
+      "caracteres": 459,
+      "sha256_texto": "60fbaeec0bc181dea18956c919bb6e4329da2b154b94f3a302274502b5aefbd9"
+    },
+    {
+      "titulo": "Effects Signal Routing",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/Effects_Signal_Routing.htm",
+      "caracteres": 27332,
+      "sha256_texto": "e6817ddd687f41e95de9415dde0d3765795e8059754026cc6887a814abda775b"
+    },
+    {
+      "titulo": "Fader Flip",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/Fader%20Flip.htm",
+      "caracteres": 1758,
+      "sha256_texto": "af738fe2feea41f69c0b6946e2915fa145961524a15855b220821ab517b5250f"
+    },
+    {
+      "titulo": "Groups",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/Groups.htm",
+      "caracteres": 5997,
+      "sha256_texto": "3f86e546a6a17ccabafcadc4b3b4430ea10496a5cf7f86c06e8df9e0279ec5e4"
+    },
+    {
+      "titulo": "The Listen Bus",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/Listen_Bus.htm",
+      "caracteres": 2780,
+      "sha256_texto": "131ca9d3da90fcffac92e601c190a0103a7858b6fa81aac17ae7898d14063d12"
+    },
+    {
+      "titulo": "Looping During Mixing",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/Looping_During_Mixing.htm",
+      "caracteres": 2404,
+      "sha256_texto": "5a3839528762aa060b55e37da071b1031ac546f29a8b0cced7d9eb6934661ef0"
+    },
+    {
+      "titulo": "Manual Audio Track Delay",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/Manual_Audio_Track_Delay.htm",
+      "caracteres": 1689,
+      "sha256_texto": "e013379113060d27525be3d99b4a0896a2cd3a664e87d6fec6cb7348f80f114d"
+    },
+    {
+      "titulo": "Metering",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/Metering.htm",
+      "caracteres": 5234,
+      "sha256_texto": "96e4652102e92c24db5102492ca323b9b6c11efeeffa2e8f76096da57eb6c90c"
+    },
+    {
+      "titulo": "Mixing Down",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/Mixing_Down.htm",
+      "caracteres": 15720,
+      "sha256_texto": "f3e1a372420db080c573707f34a6bd2afad02a67c2cffd2875ce16f105df3a18"
+    },
+    {
+      "titulo": "Mixing Suggestions",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/Mixing_Suggestions.htm",
+      "caracteres": 8599,
+      "sha256_texto": "e72a4aaef410776effe1803b047bffe4b0918fd2aa52dbbdae2a3e9f4cfbf039"
+    },
+    {
+      "titulo": "Scenes",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/Scenes.htm",
+      "caracteres": 4978,
+      "sha256_texto": "15d0f17b3b3996af274b2e064cde3f4f37c8d8a039d6c9decea83a92d7b4e7d4"
+    },
+    {
+      "titulo": "The Console",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/The_Console.htm",
+      "caracteres": 38083,
+      "sha256_texto": "9b523f61c9362a0e841bebbe767f58213e6f0dc2ed686176ec36d4db1d6f081f"
+    },
+    {
+      "titulo": "Using the Marker Track",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/Using_the_Marker_Track.htm",
+      "caracteres": 6628,
+      "sha256_texto": "df90c475e6c98a98094749cb8d5d2ac3aec17388754e83616769953f8f34f203"
+    },
+    {
+      "titulo": "VCA Faders",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/VCA_Channels.htm",
+      "caracteres": 4671,
+      "sha256_texto": "c186a32b336d6a5ba6d3e010bcb6a978b219a09aaf44ea1f4eaf1f2b58912e34"
+    },
+    {
+      "titulo": "Pages",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Pages_Topics/Chapter-Pages.htm",
+      "caracteres": 309,
+      "sha256_texto": "e2fbcef1fe42109a578c99559a3034a7bf685e9ea4bf6ffcebaa737fdf45de54"
+    },
+    {
+      "titulo": "Mastering",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Pages_Topics/Mastering.htm",
+      "caracteres": 1497,
+      "sha256_texto": "8d8907d1214a80f4a7e570524704c29bfba699301877a637b793016014da6666"
+    },
+    {
+      "titulo": "Quick Switch",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Pages_Topics/Quick_Switch.htm",
+      "caracteres": 536,
+      "sha256_texto": "b48699a08260376b852cd91da33ee9f2c3b210b06161db5f016b958f91e2dd5b"
+    },
+    {
+      "titulo": "Session",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Pages_Topics/Session.htm",
+      "caracteres": 6521,
+      "sha256_texto": "cc792612f7629bdd11c9fe23d32529c60b72c0747bb1f71623444dd2e9762253"
+    },
+    {
+      "titulo": "Show",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Pages_Topics/Show.htm",
+      "caracteres": 1591,
+      "sha256_texto": "dcfecc3b9bfb1038dc7a508a4b6e62a6dc9ba497cd73ced4adff94abf77f6678"
+    },
+    {
+      "titulo": "Start",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Pages_Topics/Start.htm",
+      "caracteres": 11604,
+      "sha256_texto": "194e53f1e581a28eac888eb434a8fe618f532c3c0e90d966db2e961b339e2787"
+    },
+    {
+      "titulo": "Activating Recording",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Recording_Topics/Activating_Recording.htm",
+      "caracteres": 6921,
+      "sha256_texto": "34313fbfd2a024eb0c5f8580948cd31b0398ae6f95f42afffcd64719d364d35c"
+    },
+    {
+      "titulo": "Audio Recording Format",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Recording_Topics/Audio_Recording_Format.htm",
+      "caracteres": 481,
+      "sha256_texto": "14ef4591c664d040bf4791bd257a336323d81851f0ac8e1fe6f2df78431654dc"
+    },
+    {
+      "titulo": "Audio Tracks",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Recording_Topics/Audio_Tracks.htm",
+      "caracteres": 11982,
+      "sha256_texto": "48aa152844c49fd76dba554c63850f9991649810bc6de82742424ff0f69a904e"
+    },
+    {
+      "titulo": "Recording",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Recording_Topics/Chapter-Recording.htm",
+      "caracteres": 172,
+      "sha256_texto": "88e4f915015b30c15eb25b2b591ae6897f93015f6c704fe9cd8ac4cb6175204a"
+    },
+    {
+      "titulo": "Creating a Good Monitor Mix",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Recording_Topics/Creating_a_Good_Monitor_Mix.htm",
+      "caracteres": 1574,
+      "sha256_texto": "6bacce32d98472bec7f902b0f33a27637241f5a33495151f5d2b84f1b2296a24"
+    },
+    {
+      "titulo": "Cue Mixes and Low-Latency Monitoring",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Recording_Topics/Cue_Mixes_and_Low-Latency_Monitoring.htm",
+      "caracteres": 7089,
+      "sha256_texto": "8553d8720515fcbbfdb3136d28004e7a0397dce96e3617f4deb5a76c2a228914"
+    },
+    {
+      "titulo": "Instrument Track Recording Modes",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Recording_Topics/Instrument_Track_Recording.htm",
+      "caracteres": 6930,
+      "sha256_texto": "99508f8f234c8b46ea557432f6077ee2f3a95e4cfd86948b2142939ad58d08e4"
+    },
+    {
+      "titulo": "Instrument Tracks",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Recording_Topics/Instrument_Tracks.htm",
+      "caracteres": 13542,
+      "sha256_texto": "43b10b18e12d392c667310792fdb3c3d350d2bb180542a74a9ecc4dd953308b2"
+    },
+    {
+      "titulo": "Loop Recording on Audio Tracks",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Recording_Topics/Loop_Recording_on_Audio_Tracks.htm",
+      "caracteres": 3387,
+      "sha256_texto": "6b8045b5044d53f666273e92d05ceee890ce632306cfcd19c610ef921f4166fe"
+    },
+    {
+      "titulo": "Metronome Control",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Recording_Topics/Metronome_Control.htm",
+      "caracteres": 7230,
+      "sha256_texto": "664cb89e7a6d6ed17c6834f433c8a22d73d6f8dbaf20e4a2d7f0994579456915"
+    },
+    {
+      "titulo": "Printing Effects While Recording",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Recording_Topics/Print_Effects_While_Recording.htm",
+      "caracteres": 1277,
+      "sha256_texto": "0f834fffb12f20e1c85602685e1dc37a6ce27c8a994979b5afb2647d733844e8"
+    },
+    {
+      "titulo": "Step Record",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Recording_Topics/Step_Recording.htm",
+      "caracteres": 2572,
+      "sha256_texto": "eb789b6afd91f3ba53693884d8bac720c007dce7745ea095254f81d0080d43fc"
+    },
+    {
+      "titulo": "Track Layers",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Recording_Topics/Track_Layers.htm",
+      "caracteres": 2977,
+      "sha256_texto": "300046b62d5d7a8d85f3f65a2d7eb12c8d97123e6215c819a3f206116791e44d"
+    },
+    {
+      "titulo": "AAF Import and Export",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Saving%2C%20Import%20and%20Export/AAF%20Import%20and%20Export.htm",
+      "caracteres": 2712,
+      "sha256_texto": "3aeac1a3c739e67c567dd0e4272272010928cf2135c73738a898dc471b5d8ef5"
+    },
+    {
+      "titulo": "Audio Batch Converter",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Saving%2C%20Import%20and%20Export/Audio_Batch_Converter.htm",
+      "caracteres": 13214,
+      "sha256_texto": "80c1394daa48239682135736cbec374506cce21510e18dee7f54fef764deef16"
+    },
+    {
+      "titulo": "Saving, Import and Export",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Saving%2C%20Import%20and%20Export/Chapter-Saving-Import%20and%20Export.htm",
+      "caracteres": 211,
+      "sha256_texto": "a1c68a3161d0cf926bc424cd6a3fb7049d1a6937465a935d8e964dcd84dbde85"
+    },
+    {
+      "titulo": "Export Stems from your Session",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Saving%2C%20Import%20and%20Export/Export_Stems_from_your_Session.htm",
+      "caracteres": 5153,
+      "sha256_texto": "9279db2d7d0ae6642b6dfaf6a51b4a048f0f60f999136c20ecd825ad64754af9"
+    },
+    {
+      "titulo": "Exporting Audio and MIDI Files",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Saving%2C%20Import%20and%20Export/Exporting_Audio_and_MIDI_Files.htm",
+      "caracteres": 2001,
+      "sha256_texto": "8ef5c574b0dd84d290d3296e908b1adf0a40a215b38d1a2866a8adfc4fa16e9e"
+    },
+    {
+      "titulo": "Import Session Data",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Saving%2C%20Import%20and%20Export/Import%20Session%20Data.htm",
+      "caracteres": 1909,
+      "sha256_texto": "5e7fc3bdd4ea1e053660d5615394c367f58105864bb7c6fc6a400eb93713b699"
+    },
+    {
+      "titulo": "Importing Project Files from Other Applications",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Saving%2C%20Import%20and%20Export/Importing_Other_Application.htm",
+      "caracteres": 1164,
+      "sha256_texto": "2348446faa4992a8bcf1ee4c17180e64b0b29ad16e0298b647fbef9796a715c0"
+    },
+    {
+      "titulo": "Saving Options",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Saving%2C%20Import%20and%20Export/Saving%20Options.htm",
+      "caracteres": 5226,
+      "sha256_texto": "25e8a0fc8d5b9b048119a3afe46bb6be192ee94305d7df70e90cedf9f0a08b0c"
+    },
+    {
+      "titulo": "Zip Export and Import",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Saving%2C%20Import%20and%20Export/Zip_export_and_import.htm",
+      "caracteres": 1944,
+      "sha256_texto": "b081bf0b3746de15bd3a2886feeaf137b27566a678772d879717ed9d3458e6c7"
+    },
+    {
+      "titulo": "Score Editor",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Score_Editor_Topics/Chapter-Score_Editor.htm",
+      "caracteres": 686,
+      "sha256_texto": "5c500983899497a38367a634f3be8cfa8a9a73f3de61b039495cd44a92f32144"
+    },
+    {
+      "titulo": "Editing Scores in Drum Notation",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Score_Editor_Topics/Editing_Scores_in_Drum_Notation.htm",
+      "caracteres": 2499,
+      "sha256_texto": "97a4a15f617eb808f5923d5ff6c036fba07f3bf41b97d0e17f4a1148bd81bdf0"
+    },
+    {
+      "titulo": "Editing Scores in Notation",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Score_Editor_Topics/Editing_Scores_in_Notation.htm",
+      "caracteres": 14710,
+      "sha256_texto": "e1feeb85f4b909dcc02ba2b142c8721050516a98ecf9000219be118089525ee9"
+    },
+    {
+      "titulo": "Editing Scores in Tablature",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Score_Editor_Topics/Editing_Scores_in_Tablature.htm",
+      "caracteres": 4144,
+      "sha256_texto": "dcd75b621910639fc3ee6cfdd106a0f980c0b5c95628ca6d76ee3bb4cb364921"
+    },
+    {
+      "titulo": "Note Editor Inspector (Score View)",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Score_Editor_Topics/Note_Editor_inspector.htm",
+      "caracteres": 22553,
+      "sha256_texto": "9572a091f72d2f3ea3521c8d9795f8d27670668de8f426b1248d5954388619b4"
+    },
+    {
+      "titulo": "Lyrics in the Score View",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Score_Editor_Topics/Score_Editor_Lyrics.htm",
+      "caracteres": 2463,
+      "sha256_texto": "8c1794576c8f8af76089b47a773d00492291ee60c3df4eb56cd8efd789202fb4"
+    },
+    {
+      "titulo": "Overview",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Score_Editor_Topics/Score_Editor_overview.htm",
+      "caracteres": 5600,
+      "sha256_texto": "e1f72dbf83e8c6f4d6b8a1071305b7f58387d47b0cbc5d21987808e97dd07b0b"
+    },
+    {
+      "titulo": "Score Editor Toolbar",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Score_Editor_Topics/Score_Editor_toolbar.htm",
+      "caracteres": 12859,
+      "sha256_texto": "80fc972cfc3fc2e8ae742dfab01450cc8879bce93152a1fd2b187d8e6a82e35f"
+    },
+    {
+      "titulo": "Advanced Options",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Setup_Topics/Advanced_Options.htm",
+      "caracteres": 17324,
+      "sha256_texto": "acd97436d076065d5c434fe164aa1b6ba447666ba097b5ce0980ba0dbc834274"
+    },
+    {
+      "titulo": "Audio Device Input/Output Setup",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Setup_Topics/Audio_Device_Input_Output.htm",
+      "caracteres": 8356,
+      "sha256_texto": "929841cc0a35b00abd9f33b26964440b6fb46b4f7aedafd9011a57f17710e8c3"
+    },
+    {
+      "titulo": "Creating a New Session",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Setup_Topics/Creating_a_New_Session.htm",
+      "caracteres": 6523,
+      "sha256_texto": "1c19158b1fd678971c47ea88f50c57ecbac00389ba45df3d1d5b277b33691bd9"
+    },
+    {
+      "titulo": "Custom Colors",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Setup_Topics/Custom_Colors.htm",
+      "caracteres": 2200,
+      "sha256_texto": "941fc2300c65a81decfa4d36d46e5e14540a1d56fd9777a6b03203f1cbcacb2a"
+    },
+    {
+      "titulo": "Customization",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Setup_Topics/Customization.htm",
+      "caracteres": 2792,
+      "sha256_texto": "7cb20387880a61c748826341df3c9fc2a9da2d8965ef8de9fd83bd4b882ebcdb"
+    },
+    {
+      "titulo": "General Options",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Setup_Topics/General_Options.htm",
+      "caracteres": 3737,
+      "sha256_texto": "df4d81e733a7aebd30616fa9b82a1b2c892638b215202a38ae839b845c7260a4"
+    },
+    {
+      "titulo": "Managing Your Content",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Setup_Topics/Managing_Your_Content.htm",
+      "caracteres": 8100,
+      "sha256_texto": "f7b747eba0912a88efe620b57ddcf2e224f26d514c67df3fca882c791821e728"
+    },
+    {
+      "titulo": "Recovery Options",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Setup_Topics/Recovery_options.htm",
+      "caracteres": 2280,
+      "sha256_texto": "6c94c1e436d2eec556e23ff7e699aca241eaac38a510f4205d2faa64b40253b3"
+    },
+    {
+      "titulo": "Set Up Your Audio Device",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Setup_Topics/Set_Up_Your_Audio_Device.htm",
+      "caracteres": 11766,
+      "sha256_texto": "2dcce9598822fcd255f21136d0f5c1b775cb13fd3e89b018955b539a30e87af2"
+    },
+    {
+      "titulo": "Set Up Your MIDI Devices",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Setup_Topics/Set_Up_Your_MIDI_Devices.htm",
+      "caracteres": 15988,
+      "sha256_texto": "515566c50498577a28edad57e70292264836cdddff374222a63b549c48730e6b"
+    },
+    {
+      "titulo": "Setup",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Setup_Topics/Setup.htm",
+      "caracteres": 227,
+      "sha256_texto": "beab8940ec3c784922da4bede2de829be32fc9c1deeeda2fa5941296dfca396e"
+    },
+    {
+      "titulo": "System Requirements",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Setup_Topics/System_Requirements.htm",
+      "caracteres": 1220,
+      "sha256_texto": "23702569e08a59a1fc5f45d5d2f614b1a8eaae53a32f7e7bffc46b1286ebb9a8"
+    },
+    {
+      "titulo": "Working with Notion",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Setup_Topics/Working%20with%20Notion.htm",
+      "caracteres": 4492,
+      "sha256_texto": "025c3f690ce4edcb907f54475df7e8201ebe5ab75d186cc8444e2e2e18a61309"
+    },
+    {
+      "titulo": "Show",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Show_Topics/Chapter-Show.htm",
+      "caracteres": 457,
+      "sha256_texto": "e96b6d3f80e87362d7fe87fbfe87483b78e54025e9b52f8f388187c306dc02af"
+    },
+    {
+      "titulo": "The Controls View",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Show_Topics/Show_Controls.htm",
+      "caracteres": 6813,
+      "sha256_texto": "7d7400efa765e49294c06983a9f00e4310d6a7d419bae0a105e3dd196c97a15a"
+    },
+    {
+      "titulo": "Introduction",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Show_Topics/Show_Introduction.htm",
+      "caracteres": 2901,
+      "sha256_texto": "7d383698c1f5e295b71d54cdc01f78af2d5d6682ee044015a8f41c311fdbafda"
+    },
+    {
+      "titulo": "Show Management",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Show_Topics/Show_Management.htm",
+      "caracteres": 5612,
+      "sha256_texto": "71ff03be0e3f435dc06eae428384b0376ca22f8d54049be78652147c12a05d69"
+    },
+    {
+      "titulo": "Performance View",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Show_Topics/Show_Perform.htm",
+      "caracteres": 13440,
+      "sha256_texto": "cd15337540231cbf9716652e7031b35772b84145a7dc4d94c01d1c585440a3f0"
+    },
+    {
+      "titulo": "Players and Patches",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Show_Topics/Show_Players.htm",
+      "caracteres": 13824,
+      "sha256_texto": "db739cffbd3aab7aced64db1d8a621f57cc7cee3d8d6e1b640a90d3022c94e27"
+    },
+    {
+      "titulo": "The Setlist",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Show_Topics/Show_Setlist.htm",
+      "caracteres": 5133,
+      "sha256_texto": "b4c7f6083b78114d5f0ee59311cb978dd592504f4cab777588a70ca3a2cb551c"
+    },
+    {
+      "titulo": "The Show Timeline",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Show_Topics/Show_Timeline.htm",
+      "caracteres": 12422,
+      "sha256_texto": "c52d33e6a2347a7ea22088cf667fc90b96b75e29c5fde2e790b84dd69bd0b67a"
+    },
+    {
+      "titulo": "The Show Page Toolbar",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Show_Topics/Show_Toolbar.htm",
+      "caracteres": 1616,
+      "sha256_texto": "eb1b5872bd08f066ada4ecd5d0b09bdf45c92b07a9b776a969f229df653b63ea"
+    },
+    {
+      "titulo": "Spatial Audio",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Spatial_Audio_Topics/Chapter-Spatial_Audio.htm",
+      "caracteres": 258,
+      "sha256_texto": "7afbd205b5eaaab2bcab64327fe5f3f6d0fdefa04ffe5510845bb9c398931fad"
+    },
+    {
+      "titulo": "Creating a New Session in Spatial Audio",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Spatial_Audio_Topics/Creating_New_Song_Spatial.htm",
+      "caracteres": 4928,
+      "sha256_texto": "b15e186780a816934b850ea267f3a722620a0a41a9170374115cc9338e5ac910"
+    },
+    {
+      "titulo": "Exporting and Importing Dolby Atmos Master Files",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Spatial_Audio_Topics/Exporting_and_Importing_ADM_Files.htm",
+      "caracteres": 1206,
+      "sha256_texto": "3219ac4972cf9001d64d011a97800bbd679a4d24aae3fa3f1b008e3d6f99141a"
+    },
+    {
+      "titulo": "Mixing in Spatial Audio",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Spatial_Audio_Topics/Mixing_Spatial_Audio.htm",
+      "caracteres": 7189,
+      "sha256_texto": "90c86b00750357819669fb93aaa99a8a789867f228a0cb5f2f02c81378015fe7"
+    },
+    {
+      "titulo": "Requirements for Working in Spatial Audio",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Spatial_Audio_Topics/Requirements_For_Spatial.htm",
+      "caracteres": 1066,
+      "sha256_texto": "5c48e1520580fbd604e8d5b6f64469366ed8ee15b17fa4d02ed00294cffc39ab"
+    },
+    {
+      "titulo": "Spatial Audio Formats",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Spatial_Audio_Topics/Spatial_Audio_Formats.htm",
+      "caracteres": 2799,
+      "sha256_texto": "1c2333a99393bb337d82c35d3ca4f95c932c218d06028717d0fa092d45a39adc"
+    },
+    {
+      "titulo": "The Dolby Atmos Renderer",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Spatial_Audio_Topics/The_Dolby_Atmos_Renderer.htm",
+      "caracteres": 11137,
+      "sha256_texto": "241b0d3d1223ae7bcf0f4dc18bcff75a0b76d89b0e380429f5fe0e9ce008c284"
+    },
+    {
+      "titulo": "Browser Tabs and Search",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/The_Browser_Topics/Browser_Tabs_and_Search.htm",
+      "caracteres": 8585,
+      "sha256_texto": "0e3b0b0355f8154a9f30070351df57a4056f67264d897fff09e616761db4f5f0"
+    },
+    {
+      "titulo": "Browsing Session, Project and Show Content",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/The_Browser_Topics/Browsing_Session_and_Project.htm",
+      "caracteres": 1728,
+      "sha256_texto": "4d8038072a03ab49af71df4ed6f8aa28f8798b35c47e6a92cd4a43625c481adb"
+    },
+    {
+      "titulo": "The Browser",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/The_Browser_Topics/Chapter-The_Browser.htm",
+      "caracteres": 636,
+      "sha256_texto": "ec2c55c1289767a1b0a8abb41aa59dffc52c0eff7f3bea65f3fa761cf9334e94"
+    },
+    {
+      "titulo": "Cloud Tab",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/The_Browser_Topics/Cloud_Tab.htm",
+      "caracteres": 4372,
+      "sha256_texto": "da139a13269362cd57334a5362a5e1eb30e7f7505725cecfca4cc192a202ab26"
+    },
+    {
+      "titulo": "Files Tab",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/The_Browser_Topics/Files_Tab.htm",
+      "caracteres": 17539,
+      "sha256_texto": "bcf08facdcb0bbe146e96b5da71ae6b5a5dbfbc1bc9775c18e6ef0c2e01db939"
+    },
+    {
+      "titulo": "Instruments and Effects Tabs",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/The_Browser_Topics/Instruments_and_Effects_Tabs.htm",
+      "caracteres": 16771,
+      "sha256_texto": "9932d7f40c71c03eeed1c63245c22743f75a4df74539b2739f38485eb1204b0b"
+    },
+    {
+      "titulo": "Loops Tab",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/The_Browser_Topics/Loops_Tab.htm",
+      "caracteres": 2365,
+      "sha256_texto": "58cefa0d1fbcf4f7af1ba7da3bda79a7c9853ec9985f6f39ebf5b8bd135be98d"
+    },
+    {
+      "titulo": "The Navigation Bar",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/The_Browser_Topics/Navigation_Bar.htm",
+      "caracteres": 1607,
+      "sha256_texto": "31859f79f0295ed161460ae0d085a703ed8dba26d3e51c14d712f42051de43fb"
+    },
+    {
+      "titulo": "Pool Tab",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/The_Browser_Topics/Pool_Tab.htm",
+      "caracteres": 6002,
+      "sha256_texto": "282aba458d5a389f8707e114744d5ff0808a36ba9f0ab5f17df47aca60ce9c90"
+    },
+    {
+      "titulo": "Sound Set Builder",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/The_Browser_Topics/Sound_Set_Builder.htm",
+      "caracteres": 24978,
+      "sha256_texto": "b2d2d2116ee0116813853804e53e45d3847c8d7172347297f19f30ebc313e4ff"
+    },
+    {
+      "titulo": "Thumbnail View",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/The_Browser_Topics/Thumbnail_and_Gallery_Images.htm",
+      "caracteres": 1825,
+      "sha256_texto": "a8137662e2176e50083278e1c821955286c5169b4bf65877031f029642236c50"
+    },
+    {
+      "titulo": "Video Playback and Sync",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Video_Playback_and_Sync_Topics/Chapter-Video_Playback_and_Sync.htm",
+      "caracteres": 230,
+      "sha256_texto": "f4df8c708164b522b8f0c8873102fe0a827a2908b09ed3e9e0e7561ab0a2673b"
+    },
+    {
+      "titulo": "Exporting Video Files",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Video_Playback_and_Sync_Topics/Exporting_Video_Files.htm",
+      "caracteres": 1392,
+      "sha256_texto": "d94f9e777a44711ce63db7200d194f17d0c289654e03eb3ab2a4e51ddb28453e"
+    },
+    {
+      "titulo": "Import Video",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Video_Playback_and_Sync_Topics/Import_Video.htm",
+      "caracteres": 1555,
+      "sha256_texto": "06ddbdb72556e581607d5085284489141d84bc564a15c97142970e3f00082029"
+    },
+    {
+      "titulo": "Sync to Video",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Video_Playback_and_Sync_Topics/Sync_to_Video.htm",
+      "caracteres": 2958,
+      "sha256_texto": "8618d4702d292a2b19bec54ad8ae72b7e4febe8f4da4f4b9dfb20c22e4b6bf6c"
+    },
+    {
+      "titulo": "Video Track",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Video_Playback_and_Sync_Topics/Video%20Track.htm",
+      "caracteres": 3125,
+      "sha256_texto": "19abf7c4f83d64360e8c55b3a6976433b1857e725e2373601fe3350f84ec7b8e"
+    },
+    {
+      "titulo": "Video Player Interface",
+      "url": "https://fenderstudiopromanual.fender.com/en/Content/Video_Playback_and_Sync_Topics/Video_Player_Interface.htm",
+      "caracteres": 1444,
+      "sha256_texto": "9e656b90ea5c468b624d192396f3e6fa286c2d404f1ecb90d1bad48289120381"
+    }
+  ]
+}

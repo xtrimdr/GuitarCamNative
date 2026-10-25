@@ -119,6 +119,11 @@ exports/
 
 ## 4. Audio en tiempo real
 
+**Nivel profesional** (pedido del usuario, 2026-10-24): todo lo que toque el motor de audio se hace como en un DAW
+profesional (Logic Pro, Fender Studio Pro). Nada de clics ni cortes: arrancar, parar, saltar y hacer scrub llevan su
+fundido; el estado de los efectos no se reinicia en medio de la música; lo que se dude, se mide (`AudioGapLog`) en vez
+de suponerlo. Antes de dar algo por hecho, pensá cómo lo resuelve un DAW profesional y hacelo a ese nivel.
+
 El callback de ASIO (`AsioDuplex.ProcessBlock`, `PlaybackEngine.Process`) corre en el hilo del driver:
 
 - **No asignes memoria, no bloquees, no uses locks, no toques disco ni la UI** dentro del callback. LINQ
@@ -133,6 +138,9 @@ El callback de ASIO (`AsioDuplex.ProcessBlock`, `PlaybackEngine.Process`) corre 
   no se notan, pero un gen1 deja huecos de 10–15 ms (con buffers de 4 ms, un corte). En lo que corre en cada `Tick`
   o en cada `Render` no se asigna: nada de reconstruir controles (el mixer arma sus dos vistas una vez y alterna),
   ni de `new Pen`/`FormattedText`/pinceles por cuadro (ver [Controles dibujados a mano](#controles-dibujados-a-mano)).
+- **Nada se compila en el callback**: `AudioWarmUp` precompila al arrancar todo `GuitarCam.Audio`, `GuitarCam.App.Audio` y
+  `GuitarCam.App.Model`, y compacta la memoria al terminar de abrir un proyecto. El código de tiempo real nuevo va en esos
+  namespaces (o se suma a la lista); los métodos genéricos no se precompilan, así que en el callback no se usan.
 - Sample rate del motor: 48 kHz (`PlaybackEngine.SampleRate`).
 - `PlaybackEngine` muestra la carga del callback ("DSP x %" con su barrita, arriba junto a CPU / GPU / RAM; roja desde el 80 %): si un cambio la sube mucho, decilo.
 

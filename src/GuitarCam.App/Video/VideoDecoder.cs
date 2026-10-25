@@ -32,6 +32,9 @@ public sealed class VideoDecoder : IDisposable
     double latestTime = double.NaN, pendingTime = double.NaN;
     long version;
 
+    /// <summary>FFmpeg restarts across every decoder, for <see cref="Audio.AudioGapLog"/>.</summary>
+    public static int Restarts;
+
     public int Width { get; }
     public int Height { get; }
 
@@ -185,6 +188,7 @@ public sealed class VideoDecoder : IDisposable
 
     void Restart(double sec)
     {
+        Interlocked.Increment(ref Restarts);
         Kill();
         startSec = Math.Floor(sec * Fps) / Fps;
         nextIndex = 0;

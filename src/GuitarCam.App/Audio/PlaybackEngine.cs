@@ -63,6 +63,27 @@ public sealed class PlaybackEngine : IDisposable
     long recStartTimestamp;
     double? calibratedLatencyMs;
     int pendingTrackReset;
+    /// <summary>No seek waiting for the audio thread in <see cref="pendingSeek"/>.</summary>
+    const long NoSeek = long.MinValue;
+    /// <summary>Frame a seek asked for while playing; the audio thread takes it (see <see cref="Seek"/>).</summary>
+    long pendingSeek = NoSeek;
+    /// <summary>
+    /// Length of each transport fade (the seek crossfade, play, scrub hold), in seconds. Fixed in time instead of
+    /// one buffer: a 4 ms block (and less with smaller buffers) was short enough to click on loud, saturated material.
+    /// </summary>
+    const double TransportFadeSec = 0.010;
+    static readonly float FadeStep = (float)(1 / (TransportFadeSec * SampleRate));
+    // audio thread only. fadeMode: 0 = none, 1 = fading in, -2 = fading out to stop. fadeLevel: 0..1 progress,
+    // shaped by a smoothstep when applied
+    int fadeMode;
+    float fadeLevel = 1;
+    // audio thread only: the seek crossfade. xfFrom = where the old position is (-1 = none), xfLevel = 0..1 progress
+    long xfFrom = -1;
+    float xfLevel;
+    readonly float[] xfIn = new float[TrackDspChain.MaxBlockSize];
+    readonly float[] xfOut = new float[TrackDspChain.MaxBlockSize];
+    /// <summary>Set by <see cref="Play"/> (fade in) and <see cref="FadeOutAndPause"/>; <see cref="cancelPause"/> undoes a pause in flight.</summary>
+    int pendingFadeIn, pendingPause, cancelPause;
     int pendingBusReset;
     volatile Exception? lastRecordingError;
     long lastRecordingDroppedFrames;
@@ -179,8 +200,23 @@ public sealed class PlaybackEngine : IDisposable
 
     public double LoadPercent { get; private set; }
 
+    // callback timing for AudioGapLog: written by the audio thread, read and reset by the UI
+    long lastCallback, worstGap, worstRun;
+    int lastBlock;
+    int seeks;
+
+    /// <summary>Longest wait between callbacks and longest callback since the last call (ms), the block length, and seeks made.</summary>
+    public (double GapMs, double RunMs, double BlockMs, int Seeks) TakeTimings()
+    {
+        double ms = 1000.0 / Stopwatch.Frequency;
+        var res = (Interlocked.Exchange(ref worstGap, 0) * ms, Interlocked.Exchange(ref worstRun, 0) * ms,
+            1000.0 * lastBlock / SampleRate, Interlocked.Exchange(ref seeks, 0));
+        return res;
+    }
+
     /// <summary>Current timeline position in seconds (held at the take's start during count-in, like <c>App.tsx:1068</c> holds it at 0).</summary>
-    public double PositionSec => Math.Max(recording ? Interlocked.Read(ref recStartFrame) : 0, Interlocked.Read(ref position)) / (double)SampleRate;
+    public double PositionSec => Math.Max(recording ? Interlocked.Read(ref recStartFrame) : 0,
+        Interlocked.Read(ref pendingSeek) is var seek && seek != NoSeek ? seek : Interlocked.Read(ref position)) / (double)SampleRate;
 
     /// <summary>Where the take being recorded starts in the timeline.</summary>
     public double RecordStartSec => Interlocked.Read(ref recStartFrame) / (double)SampleRate;
@@ -328,13 +364,28 @@ public sealed class PlaybackEngine : IDisposable
     public void Play()
     {
         if (recording || activeCalibration != null) return;
+        Interlocked.Exchange(ref pendingPause, 0);
+        Interlocked.Exchange(ref cancelPause, 1);
+        if (playing) return; // a fade-out pause still in flight: it fades back in where it is
         if (endFrame > 0 && Interlocked.Read(ref position) >= endFrame) Seek(0);
         long pos = Interlocked.Read(ref position);
+        Interlocked.CompareExchange(ref pendingSeek, NoSeek, pos); // a seek made while stopped already moved it
         playStartSec = Math.Max(0.0, pos / (double)SampleRate);
         double beatLen = SampleRate * 60.0 / bpm;
         nextBeat = (long)Math.Ceiling(pos / beatLen - 1e-6);
         Interlocked.Exchange(ref pendingTrackReset, 1);
+        Interlocked.Exchange(ref pendingFadeIn, 1);
         playing = true;
+    }
+
+    /// <summary>
+    /// Pauses like <see cref="Pause"/> but fades the last block out first, for a hold that must not click (the
+    /// playhead drag). <see cref="Playing"/> stays true for that block; seeks made meanwhile apply once it stops.
+    /// </summary>
+    public void FadeOutAndPause()
+    {
+        if (!playing || recording) return;
+        Interlocked.Exchange(ref pendingPause, 1);
     }
 
     /// <summary>Stops playback keeping the current playhead position (pause behavior).</summary>
@@ -355,16 +406,58 @@ public sealed class PlaybackEngine : IDisposable
         Seek(wasPlaying ? playStartSec : 0);
     }
 
+    /// <summary>
+    /// Moves the playhead. While playing, the jump is a request the audio thread takes at the next block: writing the
+    /// position from here raced the callback (which writes it back at the end of each block, losing the seek but
+    /// still resetting the effects mid-note), and the cut itself clicked. There, like Logic or Studio Pro, the clips
+    /// crossfade from the old position to the new one over <see cref="TransportFadeSec"/> (equal power, so the level
+    /// never dips: fading out and then in left a hiccup), before the insert chain, so the effects see one continuous
+    /// signal and keep their state. A seek during a crossfade waits for it to end (at most that long). Stopped, it
+    /// moves at once (and the request keeps the order with one still pending). <see cref="PositionSec"/> shows the
+    /// target right away, so the playhead never steps back.
+    /// </summary>
     public void Seek(double sec)
     {
         if (recording) return;
         double maxSec = LengthSec > 0 ? Math.Max(LengthSec, sec) : Math.Max(0, sec);
         long frame = (long)(Math.Clamp(sec, 0, maxSec) * SampleRate);
-        Interlocked.Exchange(ref position, frame);
         playStartSec = frame / (double)SampleRate;
-        double beatLen = SampleRate * 60.0 / bpm;
-        nextBeat = (long)Math.Ceiling(frame / beatLen - 1e-6);
-        Interlocked.Exchange(ref pendingTrackReset, 1);
+        Interlocked.Increment(ref seeks);
+        Interlocked.Exchange(ref pendingSeek, frame);
+        if (playing) return;
+        Interlocked.Exchange(ref position, frame);
+        nextBeat = BeatAt(frame);
+    }
+
+    long BeatAt(long frame) => (long)Math.Ceiling(frame / (SampleRate * 60.0 / bpm) - 1e-6);
+
+    /// <summary>Equal-power weights for the next <paramref name="n"/> samples of the seek crossfade (cos out, sin in).</summary>
+    static void CrossfadeWeights(ref float level, int n, float[] wIn, float[] wOut)
+    {
+        float x = level;
+        for (int i = 0; i < n; i++)
+        {
+            x = Math.Min(1f, x + FadeStep);
+            wIn[i] = MathF.Sin(x * MathF.PI / 2);
+            wOut[i] = MathF.Cos(x * MathF.PI / 2);
+        }
+        level = x;
+    }
+
+    /// <summary>
+    /// Moves <paramref name="level"/> one step per sample toward 1 (fade in) or 0 and scales the block's track mix
+    /// and sends by its smoothstep, so the fade starts and ends without a corner. Once at 0 the rest is silence.
+    /// </summary>
+    static void TransportRamp(ref float level, bool fadeIn, int n, Span<float> ml, Span<float> mr, Span<float> rl, Span<float> rr, Span<float> dl, Span<float> dr)
+    {
+        float x = level, step = fadeIn ? FadeStep : -FadeStep;
+        for (int i = 0; i < n; i++)
+        {
+            x = Math.Clamp(x + step, 0f, 1f);
+            float g = x * x * (3 - 2 * x);
+            ml[i] *= g; mr[i] *= g; rl[i] *= g; rr[i] *= g; dl[i] *= g; dr[i] *= g;
+        }
+        level = x;
     }
 
     // --- Recording (§5.8) ------------------------------------------------------------------------
@@ -435,6 +528,7 @@ public sealed class PlaybackEngine : IDisposable
 
         var cur = taps;
         for (int i = 0; i < cur.Length; i++) cur[i].Recorder = recorders[i];
+        Interlocked.Exchange(ref pendingSeek, NoSeek);
         Interlocked.Exchange(ref position, startFrame);
         playStartSec = recStart / (double)SampleRate;
         recording = true;
@@ -573,6 +667,9 @@ public sealed class PlaybackEngine : IDisposable
     void Process(float[][] input, float[][] output, int n)
     {
         long t0 = Stopwatch.GetTimestamp();
+        if (lastCallback != 0 && t0 - lastCallback > Interlocked.Read(ref worstGap)) Interlocked.Exchange(ref worstGap, t0 - lastCallback);
+        lastCallback = t0;
+        lastBlock = n;
         if (n <= 0 || n > mixL.Length) return;
 
         var ch0 = input.Length > 0 ? input[0].AsSpan(0, n) : Span<float>.Empty;
@@ -632,8 +729,31 @@ public sealed class PlaybackEngine : IDisposable
 
         if (playing)
         {
-            long pos = Interlocked.Read(ref position);
             bool isRec = recording;
+            if (!isRec)
+            {
+                if (fadeMode == -2 && Interlocked.Exchange(ref cancelPause, 0) != 0) fadeMode = 1; // played again meanwhile
+                if (fadeMode != -2 && Interlocked.Exchange(ref pendingPause, 0) != 0)
+                {
+                    Interlocked.Exchange(ref cancelPause, 0);
+                    fadeMode = -2;
+                }
+                else if (fadeMode != -2 && xfFrom < 0 && Interlocked.Read(ref pendingSeek) != NoSeek)
+                {
+                    // the position moves first and the request clears after, so PositionSec never shows the old one
+                    long req = Interlocked.Read(ref pendingSeek);
+                    xfFrom = Interlocked.Exchange(ref position, req);
+                    Interlocked.CompareExchange(ref pendingSeek, NoSeek, req);
+                    xfLevel = 0;
+                    nextBeat = BeatAt(req);
+                }
+                else if (fadeMode == 0 && Interlocked.Exchange(ref pendingFadeIn, 0) != 0)
+                {
+                    fadeLevel = 0;
+                    fadeMode = 1;
+                }
+            }
+            long pos = Interlocked.Read(ref position);
 
             // During recording count-in (pos < recStart), backing tracks and disk recording start only once f >= recStart.
             long recStart = isRec ? recStartFrame : 0;
@@ -657,8 +777,16 @@ public sealed class PlaybackEngine : IDisposable
                     if (list[i].Channel.Solo) { anySolo = true; break; }
                 }
 
+                bool xf = xfFrom >= 0 && !isRec;
+                if (xf) CrossfadeWeights(ref xfLevel, playCount, xfIn, xfOut);
                 for (int i = 0; i < list.Length; i++)
-                    list[i].MixInto(trackPos, playCount, anySolo, subMl, subMr, subRl, subRr, subDl, subDr);
+                    list[i].MixInto(trackPos, playCount, anySolo, subMl, subMr, subRl, subRr, subDl, subDr,
+                        xf ? xfFrom : -1, xfIn.AsSpan(0, playCount), xfOut.AsSpan(0, playCount));
+                if (xf)
+                {
+                    xfFrom += playCount;
+                    if (xfLevel >= 1) xfFrom = -1;
+                }
 
                 if (isRec)
                 {
@@ -673,6 +801,7 @@ public sealed class PlaybackEngine : IDisposable
                 }
             }
 
+            if (fadeMode != 0) TransportRamp(ref fadeLevel, fadeMode > 0, n, ml, mr, rl, rr, dl, dr);
             buses.ProcessReturnsAndLimiter(ml, mr, rl, rr, dl, dr);
             Loudness.Process(ml, mr);
 
@@ -718,29 +847,49 @@ public sealed class PlaybackEngine : IDisposable
             outR = or;
 
             pos += n;
-            if (!isRec && endFrame > 0 && pos >= endFrame)
+            if (fadeMode == -2 && fadeLevel <= 0)
             {
-                if (loop)
-                {
-                    pos = 0;
-                    nextBeat = 0;
-                    Interlocked.Exchange(ref position, 0);
-                    var curTracks = tracks;
-                    for (int i = 0; i < curTracks.Length; i++) curTracks[i].Chain.Reset();
-                }
+                Interlocked.Exchange(ref position, pos);
+                if (Interlocked.Exchange(ref cancelPause, 0) != 0) fadeMode = 1; // played again meanwhile
                 else
                 {
-                    Interlocked.Exchange(ref position, pos);
+                    fadeMode = 0;
                     playing = false;
                 }
             }
             else
             {
-                Interlocked.Exchange(ref position, pos);
+                if (fadeMode == 1 && fadeLevel >= 1) fadeMode = 0;
+                if (!isRec && endFrame > 0 && pos >= endFrame)
+                {
+                    if (loop)
+                    {
+                        pos = 0;
+                        nextBeat = 0;
+                        Interlocked.Exchange(ref position, 0);
+                        var curTracks = tracks;
+                        for (int i = 0; i < curTracks.Length; i++) curTracks[i].Chain.Reset();
+                    }
+                    else
+                    {
+                        Interlocked.Exchange(ref position, pos);
+                        playing = false;
+                    }
+                }
+                else
+                {
+                    Interlocked.Exchange(ref position, pos);
+                }
             }
         }
         else
         {
+            // a seek caught by a stop: apply it as is, then any newer one
+            xfFrom = -1;
+            fadeMode = 0;
+            fadeLevel = 0; // the next Play fades in from silence
+            long req = Interlocked.Exchange(ref pendingSeek, NoSeek);
+            if (req != NoSeek) Interlocked.Exchange(ref position, req);
             // Transport stopped: keep processing the shared return buses with silent input so reverb
             // and delay tails decay naturally in real time (matching MixBus in the web app).
             buses.ProcessReturnsAndLimiter(ml, mr, rl, rr, dl, dr);
@@ -793,7 +942,9 @@ public sealed class PlaybackEngine : IDisposable
 
     void UpdateLoad(long t0, int n)
     {
-        double used = Stopwatch.GetElapsedTime(t0).TotalSeconds;
+        long run = Stopwatch.GetTimestamp() - t0;
+        if (run > Interlocked.Read(ref worstRun)) Interlocked.Exchange(ref worstRun, run);
+        double used = run / (double)Stopwatch.Frequency;
         double budget = n / (double)SampleRate;
         LoadPercent = LoadPercent * 0.9 + 0.1 * (100 * used / budget);
     }

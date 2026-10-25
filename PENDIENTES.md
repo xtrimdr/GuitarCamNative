@@ -16,8 +16,7 @@ _Ideas y mejoras para la nativa._
 - [x] Proyectos o pistas sin video (hecho, ver [HECHO.md](HECHO.md))
 - [x] Edición de clips: dividir, duplicar, mover a otra pista y a otro tiempo, borrar un pedazo (rango) (hechos). Falta
   borrar el rango "cerrando el hueco" (que lo de después se corra) y rangos que abarquen varias pistas
-- [x] Ganancia por clip con su curva de volumen (hecho, ver [HECHO.md](HECHO.md)). Falta: que la onda del clip
-  se dibuje con la curva aplicada
+- [x] Ganancia por clip con su curva de volumen, y la onda dibujada con la curva aplicada (hecho, ver [HECHO.md](HECHO.md))
 - [ ] Varios clips por pista: ya se reproducen, se dibujan, se exportan (comparten el panel) y se graba desde el
   cabezal (hecho, ver [HECHO.md](HECHO.md)); falta elegir qué clip se ve cuando se pisan
 - [x] Importar audio externo (hecho, ver [HECHO.md](HECHO.md)). Falta: que el clip importado siga el tempo del proyecto (hoy se
@@ -74,7 +73,45 @@ _Ideas que surgieron charlando. Todas apuntan al video._
 - [ ] **Acordes / tablatura / letra en pantalla** mientras grabás (tipo teleprompter) y opcionalmente en el video
 - [ ] **Exportar con la GPU** (NVENC) para que el render sea mucho más rápido
 
+### Opcional — ideas de Fender Studio Pro (2026-10-24)
+
+Se relevaron los 224 temas del manual y se cruzaron con la nativa. El detalle, las fuentes y el orden
+sugerido están en [docs/FENDER_STUDIO_PRO_ANALISIS.md](docs/FENDER_STUDIO_PRO_ANALISIS.md).
+Estas ideas son opcionales, sin compromiso de implementación. Comping, MIDI, automatización, amp sim, importación
+de video y normalización ya están anotados arriba; el análisis amplía su alcance sin duplicarlos acá.
+
+- [ ] **Rango A–B de reproducción**: repetir un tramo para practicar o mezclar; base compartida para
+  regrabación y exportación parcial. Hoy el loop vuelve a cero al final del proyecto.
+- [ ] **Marcadores con nombre**: Intro / Estribillo / Solo, agregar en el cabezal y navegar con atajos;
+  empezar con posiciones en segundos, útiles también para el futuro director de video.
+- [ ] **Regrabar un rango automáticamente**: escuchar compases previos del tema, grabar solamente entre
+  entrada y salida y escuchar el después. Amplía la grabación actual desde el cabezal; requiere silenciar
+  la toma anterior solo dentro del tramo y conservar la sincronía de cámara.
+- [ ] **Fundidos cruzados de audio**: unir clips o correcciones con un fundido breve ajustable, igual en
+  reproducción y exportación; distinguirlo de las transiciones visuales.
+- [ ] **Conservar colas de efectos al exportar**: hoy la duración llega al último clip; dejar terminar
+  reverb/delay con un límite y definir el cierre visual del MP4. Añadir también exportación de un rango.
+- [ ] **Presets de canal del usuario**: guardar y cargar un sonido en una pista existente, sin sus clips;
+  definir qué pasa con los envíos y los retornos compartidos.
+- [ ] **Bloquear edición de pistas o clips**: proteger contra mover, recortar, borrar y reemplazar al
+  grabar, con deshacer y una regla compartida por ventana y `gclab`.
+- [ ] **Comparar mezclas A/B**: guardar estados de canales y buses para comparar sonidos dentro del
+  proyecto, sin duplicar los medios.
+- [ ] **Chequeo mono y correlación**: revisar la mezcla y capturas con varios micrófonos; distinguir
+  monitoreo de lo que se exporta.
+- [ ] **Puerta / expansor suave**: reducir ruido entre frases sin cortar el sustain de la guitarra.
+- [ ] **Paquete portable del proyecto**: ZIP para trasladar o respaldar, distinguiendo copia reducida
+  para compartir de respaldo completo con tomas no usadas e historial.
+- [ ] **Rescatar audio recién tocado**: investigar un búfer opcional y preasignado para recuperar una
+  idea sin haber apretado Grabar. Adaptación propia: la grabación retrospectiva del manual es MIDI.
+- [ ] **Congelar pistas al incorporar VST**: render temporal reversible para reducir DSP, conservando
+  originales y estado de plugins.
+
 ## Notas
+
+- Parar (Espacio, ■) todavía corta seco: falta el fundido de salida, como ya tienen play, los saltos y el scrub.
+  Ojo con quien llama a `Stop`/`Pause` y espera que pare en el acto (grabar, exportar).
+- `AudioGapLog` es un diagnóstico provisorio: sacarlo (o dejarlo detrás de una opción) cuando el audio esté confirmado.
 
 - Puntitos en la preview (resuelto): con la ventana permitiendo transparencia, algunos píxeles oscuros
   del video dejaban ver la ventana de atrás. `TransparencyLevelHint="None"` lo corta, y con el video

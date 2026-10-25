@@ -353,7 +353,9 @@ public sealed class LiveTrack
     /// <summary>
     /// Samples all clips on this track for frames <c>[posFrame .. posFrame + n)</c> with their trim window,
     /// <c>SyncMs</c> offset, linear fade-in/out envelope and clip gain, then runs the full insert chain and
-    /// accumulates into the master and reverb/delay send buffers. Zero allocations.
+    /// accumulates into the master and reverb/delay send buffers. Zero allocations. During a seek crossfade
+    /// (<paramref name="fromFrame"/> &gt;= 0) the clips at the old position, weighted by <paramref name="wOut"/>, are
+    /// summed with the new ones, weighted by <paramref name="wIn"/>, before the chain, so its state stays continuous.
     /// </summary>
     public void MixInto(
         long posFrame,
@@ -364,13 +366,27 @@ public sealed class LiveTrack
         Span<float> reverbInL,
         Span<float> reverbInR,
         Span<float> delayInL,
-        Span<float> delayInR)
+        Span<float> delayInR,
+        long fromFrame = -1,
+        ReadOnlySpan<float> wIn = default,
+        ReadOnlySpan<float> wOut = default)
     {
         var bl = Chain.BufferL(n);
         var br = Chain.BufferR(n);
         bl.Clear();
         br.Clear();
+        if (fromFrame < 0) AddClips(posFrame, n, bl, br, default);
+        else
+        {
+            AddClips(fromFrame, n, bl, br, wOut);
+            AddClips(posFrame, n, bl, br, wIn);
+        }
+        RunChain(n, anySolo, masterL, masterR, reverbInL, reverbInR, delayInL, delayInR);
+    }
 
+    /// <summary>Adds every clip's samples for frames <c>[posFrame .. posFrame + n)</c>, times <paramref name="weight"/> if given.</summary>
+    void AddClips(long posFrame, int n, Span<float> bl, Span<float> br, ReadOnlySpan<float> weight)
+    {
         double invSr = 1.0 / sampleRate;
         var clips = Clips;
         for (int cIdx = 0; cIdx < clips.Count; cIdx++)
@@ -406,11 +422,16 @@ public sealed class LiveTrack
                 if (src < 0 || src >= left.Length) continue;
                 double timeSec = f * invSr;
                 float env = (float)ClipEnvelope.GainAt(timeSec, w.Start, w.End, fades.FadeIn, fades.FadeOut) * cg * (k + dk * (i % ClipGainCurve.Step));
+                if (!weight.IsEmpty) env *= weight[i];
                 bl[i] += left[src] * env;
                 br[i] += right[src] * env;
             }
         }
+    }
 
+    void RunChain(int n, bool anySolo, Span<float> masterL, Span<float> masterR, Span<float> reverbInL, Span<float> reverbInR,
+        Span<float> delayInL, Span<float> delayInR)
+    {
         var ch = Channel;
         Chain.Volume = ch.Volume;
         Chain.Pan = ch.Pan;

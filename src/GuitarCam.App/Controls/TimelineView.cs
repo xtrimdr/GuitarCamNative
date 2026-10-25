@@ -112,7 +112,7 @@ public sealed class TimelineView : Control
     /// <summary>The track dragged by its handle, or still gliding into place after the drop: drawn over the others.</summary>
     string? liftedId;
     bool fitMode = true;
-    readonly Dictionary<LiveClip, (StreamGeometry Geo, double Key)> waveCache = [];
+    readonly Dictionary<LiveClip, (StreamGeometry Geo, double Key, ClipGainCurve.Point[] Curve, double GainDb)> waveCache = [];
 
     public double Bpm { get; set; } = 120;
     public double LengthSec { get; set; }
@@ -178,6 +178,11 @@ public sealed class TimelineView : Control
     }
 
     public event Action<double>? SeekRequested;
+    /// <summary>A drag on the ruler started (true) or ended (false): the window holds playback meanwhile.</summary>
+    public event Action<bool>? ScrubChanged;
+    bool scrubHeld, scrubSought;
+    /// <summary>Pixels the pointer moves on the ruler before a click becomes a drag.</summary>
+    const double ScrubSlop = 3;
     public event Action<int>? SelectionChanged;
     /// <summary>Requests a channel edit from the window; true selects solo, false selects mute.</summary>
     public event Action<LiveTrack, bool>? TrackToggleRequested;
@@ -860,13 +865,18 @@ public sealed class TimelineView : Control
         }
     }
 
-    /// <summary>Min/max per pixel column, cached until the zoom, scroll or size changes.</summary>
+    /// <summary>
+    /// Min/max per pixel column with the clip gain and its curve applied, so the wave shows what is heard; cached
+    /// until the zoom, scroll, size or gain changes (every curve edit assigns a new array, see <see cref="LiveClip.Curve"/>).
+    /// </summary>
     StreamGeometry Waveform(LiveClip c, Clip model, ClipEnvelope.ClipWindow w, double top, double bottom, double W)
     {
         var a = c.Audio!;
+        var pts = CurveOf(c, model);
         double key = pps * 1e6 + scrollX * 7.3 + W * 0.013 + top * 0.0007 + bottom * 0.00011 + laneH
             + model.AtSec * 1.7e-3 + model.TrimStartSec * 3.1e-3 + model.TrimEndSec * 5.3e-3;
-        if (waveCache.TryGetValue(c, out var hit) && hit.Key == key) return hit.Geo;
+        if (waveCache.TryGetValue(c, out var hit) && hit.Key == key && hit.Curve == pts && hit.GainDb == model.GainDb) return hit.Geo;
+        double clipGain = Math.Pow(10, model.GainDb / 20);
         var geo = new StreamGeometry();
         double mid = (top + bottom) / 2, half = (bottom - top) / 2;
         double binsPerSec = a.SampleRate / (double)MediaAudio.PeakBin;
@@ -886,14 +896,15 @@ public sealed class TimelineView : Control
                     if (a.PeakMin[b] < mn) mn = a.PeakMin[b];
                     if (a.PeakMax[b] > mx) mx = a.PeakMax[b];
                 }
-                double ya = mid - Math.Min(1, mx) * half, yb = mid - Math.Max(-1, mn) * half;
+                double gain = clipGain * ClipGainCurve.GainAt(pts, Sec(px + 0.5) - w.Origin);
+                double ya = mid - Math.Min(1, mx * gain) * half, yb = mid - Math.Max(-1, mn * gain) * half;
                 if (yb - ya < 1) yb = ya + 1;
                 g.BeginFigure(new Point(px + 0.5, ya), false);
                 g.LineTo(new Point(px + 0.5, yb));
                 g.EndFigure(false);
             }
         }
-        waveCache[c] = (geo, key);
+        waveCache[c] = (geo, key, pts, model.GainDb);
         return geo;
     }
 
@@ -1265,7 +1276,21 @@ public sealed class TimelineView : Control
             ClampScroll();
         }
         else if (gesture == "scrub")
-            SeekRequested?.Invoke(Math.Max(0, ClipEditing.Snap(Sec(lastPointer.X), Grid, (modifiers & KeyModifiers.Alt) != 0)));
+        {
+            // a plain click is one jump, on press: seeking again on release (or on a pixel of jitter) sent the
+            // playhead back to where it already was and crossfaded again. A real drag holds playback (see ScrubChanged)
+            bool first = !scrubSought;
+            if (!scrubHeld && Math.Abs(lastPointer.X - down.X) >= ScrubSlop)
+            {
+                scrubHeld = true;
+                ScrubChanged?.Invoke(true);
+            }
+            if (first || scrubHeld)
+            {
+                scrubSought = true;
+                SeekRequested?.Invoke(Math.Max(0, ClipEditing.Snap(Sec(lastPointer.X), Grid, (modifiers & KeyModifiers.Alt) != 0)));
+            }
+        }
         else if (gesture == "volume")
         {
             var r = VolumeRect(fromIndex);
@@ -1372,6 +1397,12 @@ public sealed class TimelineView : Control
         }
         else if (gesture == "reorder") liftedId = null;
         gesture = null;
+        scrubSought = false;
+        if (scrubHeld)
+        {
+            scrubHeld = false;
+            ScrubChanged?.Invoke(false);
+        }
         var pointer = capturedPointer;
         capturedPointer = null;
         dragged = null;
