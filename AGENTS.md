@@ -85,7 +85,11 @@ Tres capas:
 
 - **Media**: grabaciones y archivos importados. **Nunca se reescriben.**
 - **Track**: el canal (volumen, paneo, mute/solo, saturación, compresor…), si lleva panel de video, y su color
-  (`Color`, "#rrggbb") e ícono de instrumento (`Icon`), null = sin color / con su número.
+  (`Color`, "#rrggbb") e ícono de instrumento (`Icon`), null = sin color / con su número; `FolderId` = su carpeta.
+- **Folder** (`Project.Folders`, solo nativa): agrupa pistas. Sus hijas van siempre juntas en `Project.Tracks` y la
+  carpeta va justo antes (`Folder.Index`). Toda edición de orden pasa por `TrackFolders` (la "secuencia" carpetas + pistas
+  que muestra el timeline) y `TrackFolders.Normalize` repara lo que quede raro. Su fader, M y S actúan como un VCA
+  (`TrackFolders.Mix`): en vivo (`LiveTrack.FolderGain` / `FolderMuted` / `FolderSolo`) y en la exportación.
 - **Clip**: un pedazo de un media puesto en una pista (`AtSec`, `TrimStartSec`, `TrimEndSec`, `GainDb`, encuadre).
 
 Convenciones:
@@ -333,12 +337,25 @@ Usá exactamente estos formatos (respetan la cultura del sistema, así que en es
   12 colores (`TrackIcons.Colors`, guardados en hex) y los íconos por categoría; el color deja el selector abierto y el
   ícono lo cierra. Con color, los clips de la pista se tiñen (relleno, borde y onda) y la tira del mixer lo lleva arriba.
   Los colores de pista son datos del usuario, no tokens: no se usan para estados de la interfaz.
+- **Carpetas de pistas** (solo nativa, pedido del usuario; `MainWindow.Folders.cs`): en el timeline, una fila propia de
+  `FolderH` = 34 px (manija, flecha para plegar, ícono y nombre, M S ×; en el carril, un bloque por clip de sus pistas) y sus
+  pistas con un riel de su color a la izquierda. Las filas se arman en píxeles (`TimelineView.Relayout`): las pistas se
+  arrastran por su manija adentro, afuera o entre carpetas (`FindDrop`: mitad de arriba / abajo de una pista; el tercio de
+  arriba de una carpeta cae antes, el resto adentro); el resto se corre para hacer lugar, la carpeta destino se marca con
+  su color y una etiqueta dice "Entra en…" / "Sale de…". Una carpeta arrastrada viaja plegada. Plegar es vista (sin
+  deshacer); el resto pasa por `FolderEdit` o `EditTimeline`. En el mixer, cada carpeta es un grupo teñido con su nombre
+  arriba (una franja de `FolderBandH` en todas las columnas, para que los faders queden parejos), un canal de carpeta
+  primero y sus pistas, plegable aparte (`Folder.MixerCollapsed`).
+- **Plantillas de pista** (solo nativa, pedido del usuario; `TrackPresets`, `%APPDATA%\GuitarCam Studio\pistas.json`):
+  clic derecho en una pista → "Guardar como plantilla" guarda su canal (sin mute ni solo), color, ícono, entrada y si va
+  en el video; "Nueva pista → Plantilla" crea una pista con eso. En el menú de nueva pista las explicaciones son tooltips
+  con 1 s de demora (`MenuTipDelay`), no texto al costado (pedido del usuario).
 - **Timeline**: clips como en la web: fondo `Hover` al 40 %, borde `Line` (acento al 60 % si está
   seleccionado), onda `Dim` (acento si está seleccionado, `Faint` si la pista no suena), sin el nombre
   adentro; un clip sin archivo, gris con "Sin conexión…". Con video y carriles de 52 px o más, la tira de
   miniaturas (`Video/VideoThumbnails.cs`) con la onda blanca abajo sobre un degradé, como `Filmstrip` de la web. Pista
   seleccionada con barra de acento de 2 px a la izquierda del encabezado; playhead de acento con triángulo.
-  Bordes de clip (solo nativa, pedido del usuario): en cada lado dos rayitas finas, una por mitad del clip
+  Bordes de clip (solo nativa, pedido del usuario): en cada lado dos manijas chicas como la de la columna (pestañita oscura con dos rayitas), una por mitad del clip
   (`DrawEdgeHandles`): la de arriba, donde termina el fade, mueve el fade; la de abajo, en el borde, recorta. El
   cursor lo dice (diagonal como la línea del fade, ↔ para recortar) y se ilumina la manija que vas a agarrar.
   Varios clips por pista (solo nativa): Alt+X divide en el cabezal y D duplica (`ClipEditing.Split` /

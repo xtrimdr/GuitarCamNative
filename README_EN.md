@@ -24,11 +24,14 @@ It is designed to be used with the guitar strapped on: one-key shortcuts, big bu
   camera (DirectShow or DroidCam over IP). Each take is written to disk as it happens, so a crash does not lose it.
 - **Edits on a timeline**: multiple tracks, clips you can move, trim, split and duplicate, fades, clip gain
   with its own volume curve, range delete, unlimited undo and redo, and import of outside audio (WAV, MP3, FLAC,
-  OGG, M4A, AIFF). Recording starts at the playhead, so you can redo just one part.
+  OGG, M4A, AIFF). Recording starts at the playhead, so you can redo just one part. Tracks group into **folders**
+  that fold, and drag in and out by their handle. A sound you like saves as a **track preset** and comes back from
+  New track → Preset.
 - **Mixes** with a per-track effects chain: saturation ("Vida", tube or tape), a compressor with presets
   (Strumming / Arpeggio / Lead), a 6-band EQ with live spectrum, and sends to reverb and delay, plus a master
   limiter, pan templates and a full mixer. Each track gets its own color and an instrument icon (guitars, bass,
-  drums, synths, strings, winds, percussion…), shown in the timeline, the inspector and the mixer.
+  drums, synths, strings, winds, percussion…), shown in the timeline, the inspector and the mixer. Each folder gets
+  its own mixer channel: its fader, M and S rule all its tracks, like a VCA.
 - **Composes the video**: a panel per track with cover-fit, zoom, pan and mirror, 16:9 / 9:16 / 1:1 aspect
   ratios, side-by-side or stacked layout, and a color tab (filters, adjustments, effects and templates).
 - **Exports** to MP4 (offline mix + FFmpeg, with progress and cancellation) or, in **Audio only** mode, to

@@ -95,8 +95,8 @@ de video y normalización ya están anotados arriba; el análisis amplía su alc
   reproducción y exportación; distinguirlo de las transiciones visuales.
 - [ ] **Conservar colas de efectos al exportar**: hoy la duración llega al último clip; dejar terminar
   reverb/delay con un límite y definir el cierre visual del MP4. Añadir también exportación de un rango.
-- [ ] **Presets de canal del usuario**: guardar y cargar un sonido en una pista existente, sin sus clips;
-  definir qué pasa con los envíos y los retornos compartidos.
+- [ ] **Aplicar una plantilla de pista a una pista existente**: hoy una plantilla (`TrackPresets`) solo crea una pista
+  nueva; cargarla sobre una pista con clips, sin tocarlos, y definir qué pasa con los envíos y los retornos compartidos.
 - [ ] **Bloquear edición de pistas o clips**: proteger contra mover, recortar, borrar y reemplazar al
   grabar, con deshacer y una regla compartida por ventana y `gclab`.
 - [ ] **Comparar mezclas A/B**: guardar estados de canales y buses para comparar sonidos dentro del

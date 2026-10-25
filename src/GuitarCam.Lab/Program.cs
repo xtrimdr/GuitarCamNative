@@ -103,6 +103,12 @@ static class Program
               proyecto editar carpeta inicio|fijar-corte|restaurar|quitar-clip clip | quitar-pista pista
               proyecto editar carpeta nueva-pista | agregar-toma medio [--pista pista]
               proyecto editar carpeta borrar-rango pista desde --hasta fin   saca ese tramo de los clips de la pista (queda el hueco)
+              proyecto editar carpeta nueva-carpeta [nombre] [--pistas id,id] | quitar-carpeta carpeta   agrupa pistas (quitarla las deja sueltas)
+              proyecto editar carpeta a-carpeta pista carpeta|raiz [--en n] | sacar-de-carpeta pista | mover-carpeta carpeta n
+              proyecto editar carpeta carpeta id [--nombre X] [--volumen 0.8] [--mute] [--solo] [--plegar]   fader, mute y solo de la carpeta (como un VCA)
+              proyecto editar carpeta guardar-plantilla pista [nombre] | usar-plantilla id|nombre   plantillas de pista (pistas.json)
+              proyecto plantillas-de-pista x   lista las plantillas de pista guardadas
+              proyecto verificar-carpetas  verifica el orden de carpetas y pistas, mover adentro y afuera, quitar y deshacer
               proyecto editar carpeta ganancia clip dB | curva clip "seg:dB,..."   volumen del clip y su curva (seg desde el inicio de la toma)
               proyecto verificar-tomas     verifica a qué pista va una toma nueva, su nombre y su canal
               proyecto importar-audio carpeta archivo [--en segundos] [--pista id]   copia un audio de afuera a media/ y lo pone en una pista

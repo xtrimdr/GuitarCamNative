@@ -232,6 +232,14 @@ public sealed class LiveTrack
     public double GrPeak, GrShow; // UI side: this tick's reduction, and the mixer's (instant attack, slow release)
     /// <summary>Silences the track while a take that replaces its clips is being recorded (set by the UI).</summary>
     public volatile bool RecordMuted;
+    /// <summary>
+    /// What the track's folder does to it (native only, <see cref="TrackFolders.Mix"/>): its fader multiplies the
+    /// track's, its mute and solo add to the track's. Set by the UI, read by the audio thread.
+    /// </summary>
+    public volatile float FolderGain = 1;
+    public volatile bool FolderMuted, FolderSolo;
+    public bool Soloed => Channel.Solo || FolderSolo;
+    public bool Silenced => Channel.Muted || FolderMuted;
 
     public LiveTrack(Track track, IReadOnlyList<LiveClip> clips, int sampleRate)
     {
@@ -270,10 +278,10 @@ public sealed class LiveTrack
     {
         if (ch != null) Track.Channel = ch;
         var cur = Track.Channel;
-        Chain.Volume = cur.Volume;
+        Chain.Volume = cur.Volume * FolderGain;
         Chain.Pan = cur.Pan;
-        Chain.Muted = cur.Muted;
-        Chain.Solo = cur.Solo;
+        Chain.Muted = cur.Muted || FolderMuted;
+        Chain.Solo = cur.Solo || FolderSolo;
         Chain.ReverbOn = cur.ReverbOn;
         Chain.ReverbSend = cur.ReverbSend;
         Chain.DelayOn = cur.DelayOn;
@@ -433,10 +441,10 @@ public sealed class LiveTrack
         Span<float> delayInL, Span<float> delayInR)
     {
         var ch = Channel;
-        Chain.Volume = ch.Volume;
+        Chain.Volume = ch.Volume * FolderGain;
         Chain.Pan = ch.Pan;
-        Chain.Muted = ch.Muted || RecordMuted;
-        Chain.Solo = ch.Solo;
+        Chain.Muted = ch.Muted || FolderMuted || RecordMuted;
+        Chain.Solo = ch.Solo || FolderSolo;
         Chain.ReverbOn = ch.ReverbOn;
         Chain.ReverbSend = ch.ReverbSend;
         Chain.DelayOn = ch.DelayOn;

@@ -25,10 +25,13 @@ de **grabar → mezclar → exportar**.
 - **Edita en un timeline**: varias pistas, clips que se mueven, recortan, dividen y duplican, fades, ganancia
   por clip con su curva de volumen, rango de borrado, deshacer y rehacer ilimitados, e importación de audio de
   afuera (WAV, MP3, FLAC, OGG, M4A, AIFF). Se graba desde donde esté el cabezal, para regrabar solo un pedazo.
+  Las pistas se agrupan en **carpetas** que se pliegan, y se arrastran adentro y afuera por su manija.
+  Un sonido que te gusta se guarda como **plantilla de pista** y vuelve desde Nueva pista → Plantilla.
 - **Mezcla** con una cadena de efectos por pista: saturación ("Vida", válvula o cinta), compresor con
   presets (Rasgueo / Arpegio / Punteo), EQ de 6 bandas con espectro en vivo, y envíos a reverb y delay,
   más limitador master, paneo con plantillas y un mixer completo. Cada pista lleva su color y un ícono de
   instrumento (guitarras, bajo, batería, synths, cuerdas, vientos, percusión…), en el timeline, el inspector y el mixer.
+  Cada carpeta tiene en el mixer su propio canal: su fader, M y S mandan sobre todas sus pistas, como un VCA.
 - **Compone el video**: un panel por pista con cover-fit, zoom, paneo y espejo, relaciones 16:9 / 9:16 / 1:1,
   disposición lado a lado o apilada, y una pestaña de color (filtros, ajustes, efectos y plantillas).
 - **Exporta** a MP4 (mezcla offline + FFmpeg, con progreso y cancelación) o, en el modo **Solo audio**, a
@@ -153,10 +156,12 @@ la consola, sin abrir la ventana.
 | `proyecto abrir\|clips\|versiones\|volver carpeta` | abre un proyecto, lista pistas y clips, y recorre el historial |
 | `proyecto toma\|cortar carpeta [--camara]` | graba un tono como la ventana / lo corta sin cerrar, para probar la recuperación |
 | `proyecto editar carpeta mover\|recortar-inicio\|recortar-final\|fade-in\|fade-out clip delta` | edita un clip como en el timeline (más: `a-pista`, `dividir`, `duplicar`, `ganancia`, `curva`, `quitar-clip`, `nueva-pista`…) |
+| `proyecto editar carpeta nueva-carpeta\|a-carpeta\|sacar-de-carpeta\|mover-carpeta\|quitar-carpeta\|carpeta …` | carpetas de pistas: agrupar, mover adentro y afuera, fader, mute y solo |
+| `proyecto editar carpeta guardar-plantilla pista [nombre] \| usar-plantilla nombre`, `proyecto plantillas-de-pista x` | plantillas de pista (`pistas.json`) |
 | `proyecto encuadre\|sincronia\|formato\|modo carpeta …` | encuadre del clip, ajuste de sincronía, formato del video y modo Video / Solo audio |
 | `proyecto importar-audio carpeta archivo` | copia un audio de afuera a `media/` y lo pone en una pista |
 | `proyecto historial carpeta` | tomas en uso y no usadas, exportaciones y actividad |
-| `proyecto verificar-deshacer\|verificar-clips\|verificar-tomas\|verificar-importar\|verificar-historial` | pruebas automáticas sobre una carpeta temporal |
+| `proyecto verificar-deshacer\|verificar-clips\|verificar-tomas\|verificar-importar\|verificar-historial\|verificar-carpetas` | pruebas automáticas sobre una carpeta temporal |
 | `proyectos lista\|plantillas\|nuevo\|renombrar\|duplicar\|borrar\|olvidar\|carpeta` | lo que hace el gestor de proyectos |
 | `proyectos guardar-plantilla\|borrar-plantilla` | plantillas de proyecto del usuario |
 | `proyectos plantillas-video\|guardar-plantilla-video\|aplicar-plantilla-video\|borrar-plantilla-video` | plantillas de video (filtro, ajustes y efectos) |

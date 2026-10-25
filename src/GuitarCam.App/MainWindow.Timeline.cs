@@ -154,12 +154,12 @@ public partial class MainWindow
             if (target != null) return ClipEditing.MoveToTrack(p, clip.Id, target, swap);
             return ClipEditing.Find(p, clip.Id).Track.Id;
         }, "clip-edited", clip.Id);
-        Timeline.ReorderRequested += async (from, to) => await EditTimeline(p =>
+        Timeline.TrackMoveRequested += async (id, at, folder) => await EditTimeline(p =>
         {
-            string id = p.Tracks[from].Id;
-            ClipEditing.Reorder(p, from, to);
+            TrackFolders.Move(p, id, at, folder);
             return id;
         }, "tracks-reordered");
+        InitFolders();
         Timeline.RemoveTrackRequested += async id => await EditTimeline(p => { ClipEditing.RemoveTrack(p, id); return null; }, "track-removed");
         Timeline.NewTrackRequested += ShowNewTrackMenu;
         Timeline.ClipContextRequested += ShowTimelineMenu;
@@ -257,7 +257,8 @@ public partial class MainWindow
         tracks = list;
         engine.UpdateTracks(list);
         Timeline.LengthSec = engine.LengthSec;
-        Timeline.UpdateTracks(list);
+        ApplyFolderMix(p, list);
+        Timeline.UpdateTracks(list, p.Folders);
         Preview.SetProject(list, p.Settings);
         if (dropped.Count > 0) _ = Task.Run(() => { foreach (var c in dropped) c.CloseVideo(); });
 
@@ -326,7 +327,11 @@ public partial class MainWindow
         if (copy != null) Timeline.SelectClip(Timeline.Selected, copy);
     }
 
-    static MenuItem MenuAction(string label, Func<Task> action, string? hint = null, bool enabled = true, bool danger = false, string? icon = null)
+    /// <summary>A menu entry's explanation waits this long under the pointer (asked by the user: the hints beside the
+    /// "nueva pista" entries were noise).</summary>
+    static readonly TimeSpan MenuTipDelay = TimeSpan.FromSeconds(1);
+
+    static MenuItem MenuAction(string label, Func<Task> action, string? hint = null, bool enabled = true, bool danger = false, string? icon = null, string? tip = null)
     {
         var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
         var text = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
@@ -345,6 +350,11 @@ public partial class MainWindow
             header.Children.Add(value);
         }
         var item = new MenuItem { Header = header, IsEnabled = enabled };
+        if (tip != null)
+        {
+            ToolTip.SetTip(item, tip);
+            ToolTip.SetShowDelay(item, (int)MenuTipDelay.TotalMilliseconds);
+        }
         if (danger) item.Classes.Add("danger");
         item.Click += async (_, _) => await action();
         return item;
@@ -380,15 +390,22 @@ public partial class MainWindow
         if (store == null || restoring) return;
         bool enabled = !store.ReadOnly;
         var list = new List<object>();
+        string tip = Loc.T("menu.emptyTrack.hint");
         if (AudioOnly)
-            list.Add(MenuAction(Loc.T("menu.emptyTrack"), () => EditTimeline(p => ClipEditing.AddEmpty(p, false), "track-added"), Loc.T("menu.emptyTrack.hint"), enabled, icon: "empty"));
+            list.Add(MenuAction(Loc.T("menu.emptyTrack"), () => EditTimeline(p => ClipEditing.AddEmpty(p, false), "track-added"), enabled: enabled, icon: "empty", tip: tip));
         else
         {
-            list.Add(MenuAction(Loc.T("menu.trackVideo"), () => EditTimeline(p => ClipEditing.AddEmpty(p, true), "track-added"), Loc.T("menu.emptyTrack.hint"), enabled, icon: "empty"));
-            list.Add(MenuAction(Loc.T("menu.trackAudio"), () => EditTimeline(p => ClipEditing.AddEmpty(p, false), "track-added"), Loc.T("menu.emptyTrack.hint"), enabled, icon: "empty"));
+            list.Add(MenuAction(Loc.T("menu.trackVideo"), () => EditTimeline(p => ClipEditing.AddEmpty(p, true), "track-added"), enabled: enabled, icon: "empty", tip: tip));
+            list.Add(MenuAction(Loc.T("menu.trackAudio"), () => EditTimeline(p => ClipEditing.AddEmpty(p, false), "track-added"), enabled: enabled, icon: "empty", tip: tip));
         }
-        list.Add(MenuAction(Loc.T("menu.import"), PickAudioToImport, Loc.T("menu.import.hint"), CanImport(), icon: ""));
-        OpenTimelineMenu(Popup(list, 288), point, 140);
+        list.Add(MenuAction(Loc.T("menu.folder"), () => NewFolder(), enabled: enabled, icon: "", tip: Loc.T("menu.folder.hint")));
+        var presets = PresetSubmenu(enabled);
+        ToolTip.SetTip(presets, Loc.T("preset.menu.hint"));
+        ToolTip.SetShowDelay(presets, (int)MenuTipDelay.TotalMilliseconds);
+        list.Add(presets);
+        list.Add(new Separator());
+        list.Add(MenuAction(Loc.T("menu.import"), PickAudioToImport, enabled: CanImport(), icon: "", tip: Loc.T("menu.import.hint")));
+        OpenTimelineMenu(Popup(list, 240), point, 200);
     }
 
     /// <summary>The "nueva pista" shortcut: audio-only projects add the track at once; in video mode it asks audio+video or audio only.</summary>
@@ -453,6 +470,10 @@ public partial class MainWindow
             list.Add(new Separator());
             list.Add(MenuAction(Loc.T("menu.removeClip"), () => Command(p => ClipEditing.RemoveClip(p, id), "clip-removed"), "Supr", enabled, danger: true));
         }
+        if (clip == null) list.Add(new Separator());
+        list.Add(FolderSubmenu(track, enabled));
+        list.Add(MenuAction(Loc.T("preset.save") + "…", () => { SavePreset(track, point); return Task.CompletedTask; }, enabled: true, icon: "", tip: Loc.T("preset.save.tip")));
+        list.Add(new Separator());
         list.Add(MenuAction(Loc.T("menu.removeTrack"), () => EditTimeline(p => { ClipEditing.RemoveTrack(p, track.Track.Id); return null; }, "track-removed"),
             clip == null ? "Supr" : null, enabled, danger: true));
         if (clip != null) list.Add(new MenuItem { IsEnabled = false, Header = new TextBlock
@@ -460,6 +481,6 @@ public partial class MainWindow
             Text = Loc.T(track.Clips.Count > 1 ? "menu.clipKept.many" : "menu.clipKept.last"), FontSize = 10.5,
             TextWrapping = Avalonia.Media.TextWrapping.Wrap, MaxWidth = 212,
         } });
-        OpenTimelineMenu(Popup(list, 240), point, clip == null ? 80 : 390);
+        OpenTimelineMenu(Popup(list, 240), point, clip == null ? 170 : 480);
     }
 }

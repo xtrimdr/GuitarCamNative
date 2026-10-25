@@ -1172,14 +1172,15 @@ public sealed partial class ExportDialog : UserControl
                 else bands[i] = TrackEq.DefaultBands[i];
             }
 
+            var folder = TrackFolders.Mix(p, trk);
             mixTracks.Add(new MixTrackSpec
             {
                 Name = trk.Name,
                 Clips = mixClips,
-                Volume = ch.Volume,
+                Volume = ch.Volume * folder.Gain,
                 Pan = ch.Pan,
-                Muted = ch.Muted,
-                Solo = ch.Solo,
+                Muted = ch.Muted || folder.Muted,
+                Solo = ch.Solo || folder.Solo,
                 Sat = sat,
                 Comp = comp,
                 EqOn = ch.Eq.On,

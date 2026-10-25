@@ -400,7 +400,8 @@ public partial class MainWindow : Window
         Tempo.Set(p.Settings.Bpm);
         Timeline.Bpm = p.Settings.Bpm;
         Timeline.LengthSec = engine.LengthSec;
-        Timeline.SetTracks(list, preserveView);
+        ApplyFolderMix(p, list);
+        Timeline.SetTracks(list, p.Folders, preserveView);
         Preview.SetProject(list, p.Settings);
         RefreshFormat();
         RefreshColorPanel();
@@ -663,18 +664,23 @@ public partial class MainWindow : Window
     {
         if (syncing || restoring || store == null || store.ReadOnly) return;
         var lit = tracks.Where(t => solo ? t.Channel.Solo : t.Channel.Muted).ToList();
-        if (lit.Count == 0) return;
+        var litFolders = store.Project.Folders.Where(f => solo ? f.Solo : f.Muted).ToList();
+        if (lit.Count == 0 && litFolders.Count == 0) return;
         undo.Checkpoint(store.Project);
         foreach (var t in lit)
         {
             if (solo) t.Channel.Solo = false; else t.Channel.Muted = false;
             t.ApplyChannel();
         }
+        foreach (var f in litFolders) { if (solo) f.Solo = false; else f.Muted = false; }
+        ApplyFolderMix(store.Project, tracks);
+        RefreshMixer();
         MarkDirty();
         UpdateUndoButtons();
         RefreshInspectorText();
         Timeline.InvalidateVisual();
-        string what = lit.Count == 1 ? Loc.T("tracks.one") : Loc.T("tracks.many", lit.Count);
+        int count = lit.Count + litFolders.Count;
+        string what = count == 1 ? Loc.T("tracks.one") : Loc.T("tracks.many", count);
         Status(Loc.T(solo ? "mute.clearedSolo" : "mute.clearedMute", what));
     }
 
@@ -684,7 +690,7 @@ public partial class MainWindow : Window
         bool editable = store != null && !store.ReadOnly && !restoring;
         foreach (var (b, solo) in new[] { (ClearMutesButton, false), (ClearSolosButton, true) })
         {
-            bool lit = tracks.Any(t => solo ? t.Channel.Solo : t.Channel.Muted);
+            bool lit = tracks.Any(t => solo ? t.Channel.Solo : t.Channel.Muted) || Folders.Any(f => solo ? f.Solo : f.Muted);
             if (b.Classes.Contains("lit") == lit && b.IsEnabled == editable) continue;
             b.IsEnabled = editable;
             b.Classes.Set("lit", lit);
@@ -728,10 +734,16 @@ public partial class MainWindow : Window
                 {
                     var restored = st.Project.Tracks[i];
                     tracks[i].Track.Name = restored.Name;
+                    tracks[i].Track.FolderId = restored.FolderId;
+                    tracks[i].Track.Color = restored.Color;
+                    tracks[i].Track.Icon = restored.Icon;
+                    tracks[i].Track.Input = restored.Input;
                     tracks[i].ApplyChannel(restored.Channel);
                     tracks[i].Track.Extra = restored.Extra;
                 }
                 st.Project.Tracks = tracks.Select(t => t.Track).ToList();
+                ApplyFolderMix(st.Project, tracks);
+                Timeline.UpdateTracks(tracks, st.Project.Folders);
                 engine.SetSettings(st.Project.Settings, glideDelay: true);
                 Timeline.Bpm = st.Project.Settings.Bpm;
                 Timeline.InvalidateVisual();

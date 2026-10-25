@@ -4,3 +4,6 @@ obj/
 *.user
 *.wav
 artifacts/
+
+# Promo material, kept local
+promo/

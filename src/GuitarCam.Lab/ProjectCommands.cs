@@ -15,6 +15,7 @@ static class ProjectCommands
         if (sub == "verificar-tomas") return TakeChecks.Run();
         if (sub == "verificar-importar") return ImportChecks.Run();
         if (sub == "verificar-historial") return HistoryCommands.Check();
+        if (sub == "verificar-carpetas") return FolderChecks();
         string? dir = a.Positional.Skip(1).FirstOrDefault();
         if (dir == null) throw new ArgumentException("Falta la carpeta del proyecto.");
         dir = Path.GetFullPath(dir);
@@ -31,6 +32,7 @@ static class ProjectCommands
             "sincronia" => Sync(dir, a),
             "formato" => Format(dir, a),
             "modo" => Mode(dir, a),
+            "plantillas-de-pista" => ListPresets(),
             "cortar" => Crash(dir, a.Double("segundos", 3), a.Flag("camara")),
             "toma" => RecordTake(dir, a.Double("segundos", 3), a.Get("pista"), a.Flag("camara")),
             _ => throw new ArgumentException("proyecto importar-audio|abrir|versiones|volver|cortar <carpeta>"),
@@ -98,6 +100,37 @@ static class ProjectCommands
                 ClipEditing.SetCurve(p, id, value.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(pt => pt.Split(':'))
                     .Select(pt => new GainPoint { Sec = double.Parse(pt[0], System.Globalization.CultureInfo.InvariantCulture), Db = double.Parse(pt[1], System.Globalization.CultureInfo.InvariantCulture) }));
                 break;
+            case "nueva-carpeta":
+                Console.WriteLine(TrackFolders.Add(p, id.Length > 0 ? id : null, a.Get("pistas")?.Split(',', StringSplitOptions.RemoveEmptyEntries)));
+                break;
+            case "a-carpeta":
+                // pista carpeta|raiz --en n: n = place among folders and tracks without it (default: the folder's end)
+                string? folder = value is "" or "raiz" ? null : value;
+                int at = a.Get("en") is { } en ? int.Parse(en) : folder == null ? TrackFolders.Sequence(p).Count
+                    : TrackFolders.Sequence(p).FindLastIndex(x => x is Track t && t.FolderId == folder || x is Folder f && f.Id == folder);
+                TrackFolders.Move(p, id, at, folder);
+                break;
+            case "sacar-de-carpeta": TrackFolders.TakeOut(p, id); break;
+            case "mover-carpeta": TrackFolders.MoveFolder(p, id, int.Parse(value)); break;
+            case "quitar-carpeta": TrackFolders.Remove(p, id); break;
+            case "carpeta":
+                var fd = p.Folders.Find(f => f.Id == id) ?? throw new ArgumentException("No encontré esa carpeta.");
+                if (a.Get("nombre") is { } name) fd.Name = name;
+                if (a.Get("volumen") is { } vol) fd.Volume = Math.Clamp(double.Parse(vol, System.Globalization.CultureInfo.InvariantCulture), 0, 1.5);
+                if (a.Flag("mute")) fd.Muted = !fd.Muted;
+                if (a.Flag("solo")) fd.Solo = !fd.Solo;
+                if (a.Flag("plegar")) fd.Collapsed = !fd.Collapsed;
+                break;
+            case "guardar-plantilla":
+                var src = p.Tracks.Find(t => t.Id == id) ?? throw new ArgumentException("No encontré esa pista.");
+                TrackPresets.Save(TrackPresets.From(src, value.Length > 0 ? value : src.Name));
+                Console.WriteLine($"Plantilla de pista guardada: {(value.Length > 0 ? value : src.Name)}");
+                break;
+            case "usar-plantilla":
+                var preset = TrackPresets.All().Find(t => t.Id == id || string.Equals(t.Name, id, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new ArgumentException("No encontré esa plantilla de pista (gclab proyecto plantillas-de-pista).");
+                Console.WriteLine(TrackPresets.AddTo(p, preset, p.Settings.AudioOnly));
+                break;
             case "borrar-rango":
                 Console.WriteLine($"{ClipEditing.DeleteRange(p, id, double.Parse(value, System.Globalization.CultureInfo.InvariantCulture), a.Double("hasta", 0))} clip(s) cambiados");
                 break;
@@ -106,7 +139,7 @@ static class ProjectCommands
                 {
                     "mover" => ClipEditMode.Move, "recortar-inicio" => ClipEditMode.TrimStart,
                     "recortar-final" => ClipEditMode.TrimEnd, "fade-in" => ClipEditMode.FadeIn, "fade-out" => ClipEditMode.FadeOut,
-                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar|a-pista|inicio|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar"),
+                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar|a-pista|inicio|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar; nueva-carpeta [nombre] --pistas id,id; a-carpeta pista carpeta|raiz [--en n]; sacar-de-carpeta pista; mover-carpeta carpeta n; quitar-carpeta carpeta; carpeta id [--nombre --volumen --mute --solo --plegar]; guardar-plantilla pista [nombre]; usar-plantilla id|nombre"),
                 };
                 var (_, clip) = ClipEditing.Find(p, id);
                 double dx = double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
@@ -191,6 +224,57 @@ static class ProjectCommands
         return 0;
     }
 
+    static int ListPresets()
+    {
+        var list = TrackPresets.All();
+        if (list.Count == 0) Console.WriteLine("Todavía no hay plantillas de pista.");
+        foreach (var t in list) Console.WriteLine($"{t.Id} · {t.Name} · {(t.Video ? "video" : "audio")} · {t.Summary}");
+        return 0;
+    }
+
+    /// <summary>Folder moves on a project in memory: order, membership, empty folders, removal and undo.</summary>
+    static int FolderChecks()
+    {
+        int failed = 0;
+        void Check(string what, bool ok)
+        {
+            Console.WriteLine($"{(ok ? "ok   " : "FALLA")} {what}");
+            if (!ok) failed++;
+        }
+        string Order(Project p) => string.Join(" ", TrackFolders.Sequence(p).Select(x => x is Folder f ? $"[{f.Name}]" : ((Track)x).FolderId != null ? "·" + ((Track)x).Name : ((Track)x).Name));
+        var p = new Project();
+        foreach (var n in new[] { "A", "B", "C", "D" }) p.Tracks.Add(new Track { Name = n });
+        string f1 = TrackFolders.Add(p, "F", [p.Tracks[1].Id, p.Tracks[2].Id]);
+        Check("una carpeta con B y C: " + Order(p), Order(p) == "A [F] ·B ·C D");
+        TrackFolders.Move(p, p.Tracks[0].Id, 3, f1);
+        Check("A al final de F: " + Order(p), Order(p) == "[F] ·B ·C ·A D");
+        TrackFolders.Move(p, p.Tracks.Find(t => t.Name == "B")!.Id, 0, null);
+        Check("B afuera, arriba: " + Order(p), Order(p) == "B [F] ·C ·A D");
+        string f2 = TrackFolders.Add(p, "G");
+        Check("carpeta vacía al final: " + Order(p), Order(p) == "B [F] ·C ·A D [G]");
+        TrackFolders.MoveFolder(p, f2, 1);
+        Check("G antes de F: " + Order(p), Order(p) == "B [G] [F] ·C ·A D");
+        TrackFolders.MoveFolder(p, f2, 3);
+        Check("G no queda dentro de F: " + Order(p), Order(p) == "B [F] ·C ·A [G] D");
+        TrackFolders.Move(p, p.Tracks.Find(t => t.Name == "D")!.Id, 5, f2);
+        Check("D a la carpeta vacía: " + Order(p), Order(p) == "B [F] ·C ·A [G] ·D");
+        var undo = new UndoManager();
+        undo.Checkpoint(p);
+        TrackFolders.Remove(p, f1);
+        Check("quitar F deja sus pistas: " + Order(p), Order(p) == "B C A [G] ·D");
+        undo.Undo(p);
+        Check("deshacer la vuelve: " + Order(p), Order(p) == "B [F] ·C ·A [G] ·D");
+        p.Folders.Find(f => f.Id == f1)!.Volume = 0.5;
+        Check("el fader de la carpeta multiplica", TrackFolders.Mix(p, p.Tracks.Find(t => t.Name == "C")!).Gain == 0.5);
+        ClipEditing.RemoveTrack(p, p.Tracks.Find(t => t.Name == "B")!.Id);
+        TrackFolders.Add(p, "H");
+        TrackFolders.MoveFolder(p, p.Folders.Find(f => f.Name == "H")!.Id, 0);
+        ClipEditing.RemoveTrack(p, p.Tracks.Find(t => t.Name == "D")!.Id);
+        Check("una carpeta vacía conserva su lugar: " + Order(p), Order(p) == "[H] [F] ·C ·A [G]");
+        Console.WriteLine(failed == 0 ? "Todo bien." : $"{failed} comprobación(es) fallaron.");
+        return failed == 0 ? 0 : 1;
+    }
+
     static int Versions(string dir)
     {
         if (!ProjectStore.IsProject(dir)) throw new IOException("Esa carpeta no es un proyecto de GuitarCam");
@@ -230,10 +314,16 @@ static class ProjectCommands
     {
         var p = store.Project;
         Console.WriteLine($"\"{p.Name}\" v{p.Version} · {p.Settings.Bpm:0.##} BPM · {p.Settings.Aspect} · {p.Media.Count} medios · {p.Tracks.Count} pistas");
-        foreach (var t in p.Tracks)
+        foreach (var item in TrackFolders.Sequence(p))
         {
+            if (item is Folder f)
+            {
+                Console.WriteLine($"  [{f.Name}] vol {f.Volume:0.00}{(f.Muted ? " mute" : "")}{(f.Solo ? " solo" : "")}{(f.Collapsed ? " plegada" : "")} · {f.Id}");
+                continue;
+            }
+            var t = (Track)item;
             string clips = string.Join(", ", t.Clips.Select(c => $"{p.FindMedia(c.MediaId)?.Name ?? "?"} @ {c.AtSec:0.000} s"));
-            Console.WriteLine($"  {t.Name,-24} vol {t.Channel.Volume:0.00} pan {t.Channel.Pan:+0.00;-0.00;0} {(t.Video ? "video" : "audio")} · {(clips == "" ? "vacía" : clips)}");
+            Console.WriteLine($"  {(t.FolderId != null ? "  " : "")}{t.Name,-24} vol {t.Channel.Volume:0.00} pan {t.Channel.Pan:+0.00;-0.00;0} {(t.Video ? "video" : "audio")} · {(clips == "" ? "vacía" : clips)}");
         }
         if (store.ReadOnly) Console.WriteLine($"Solo lectura: {store.ReadOnlyReason}");
         foreach (var n in store.Notices) Console.WriteLine($"Aviso: {n}");

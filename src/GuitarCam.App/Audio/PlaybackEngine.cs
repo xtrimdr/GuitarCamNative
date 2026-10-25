@@ -807,7 +807,7 @@ public sealed class PlaybackEngine : IDisposable
                 bool anySolo = false;
                 for (int i = 0; i < list.Length; i++)
                 {
-                    if (list[i].Channel.Solo) { anySolo = true; break; }
+                    if (list[i].Soloed) { anySolo = true; break; }
                 }
 
                 bool xf = xfFrom >= 0 && !isRec;

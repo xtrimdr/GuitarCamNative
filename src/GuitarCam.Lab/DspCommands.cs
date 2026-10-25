@@ -734,14 +734,15 @@ static class DspCommands
                         ? EqBandSpec.FromStrings(ch.Eq.Bands[i].On, ch.Eq.Bands[i].Type, ch.Eq.Bands[i].Freq, ch.Eq.Bands[i].Gain, ch.Eq.Bands[i].Q, ch.Eq.Bands[i].Slope, TrackEq.DefaultBands[i].Type)
                         : TrackEq.DefaultBands[i];
 
+                var folder = TrackFolders.Mix(p, trk);
                 mixTracks.Add(new MixTrackSpec
                 {
                     Name = trk.Name,
                     Clips = clips,
-                    Volume = ch.Volume,
+                    Volume = ch.Volume * folder.Gain,
                     Pan = ch.Pan,
-                    Muted = ch.Muted,
-                    Solo = ch.Solo,
+                    Muted = ch.Muted || folder.Muted,
+                    Solo = ch.Solo || folder.Solo,
                     Sat = sat,
                     Comp = comp,
                     EqOn = ch.Eq.On,

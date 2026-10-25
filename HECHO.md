@@ -3,6 +3,13 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-24: **carpetas de pistas, plantillas de pista y menú de nueva pista**: `Folder` / `Track.FolderId` y
+  `TrackFolders` (Projects: orden como secuencia, mover adentro / afuera, quitar, VCA con `Mix`); el timeline arma filas
+  en píxeles (`TimelineView.Relayout`, `FindDrop`) con fila de carpeta, riel de color, plegado y el lugar donde cae la pista
+  marcado; el mixer las muestra como grupos con un canal de carpeta (`MainWindow.Folders.cs`); el fader, M y S de la carpeta
+  llegan al motor (`LiveTrack.FolderGain`…) y a la exportación. `TrackPresets` (`pistas.json`): clic derecho en una pista →
+  Guardar como plantilla, y Nueva pista → Plantilla. Las ayudas del menú de nueva pista pasaron a tooltips con 1 s de demora.
+  `gclab proyecto verificar-carpetas`.
 - 2026-10-24: **color e ícono por pista**: `Track.Color` / `Track.Icon` (también en las plantillas) y una insignia
   (`TrackIcons.DrawBadge`, `Controls/TrackBadge`) en el encabezado del timeline, el inspector y el mixer; tocarla abre el
   selector (`MainWindow.TrackLook.cs`) con 12 colores y 53 íconos de instrumentos en 5 categorías: IconOven (MIT),

@@ -23,6 +23,8 @@ namespace GuitarCam.App;
 /// height, and narrow effect panels rearrange instead of cutting their controls. Wide strips keep their head and pan
 /// fixed and scroll only the effects, each in its own panel; compact strips put the record-arm ● under the name, since
 /// ● M S C don't fit side by side.
+/// Track folders (native only) show as a tinted group with their name above it: a folder strip first (its fader, M and S
+/// act on all its tracks like a VCA, its meter shows their loudest), then its tracks, unless the group is folded.
 /// </summary>
 public partial class MainWindow
 {
@@ -46,6 +48,8 @@ public partial class MainWindow
         public readonly Dictionary<string, (MixerMeter Meter, Action<double> Gr)> Meters = [];
         /// <summary>The track strips' cards, resized in place when only the strip width changes.</summary>
         public readonly List<Border> Boxes = [];
+        /// <summary>Folder strips' meters: the loudest of the folder's tracks.</summary>
+        public readonly List<(string FolderId, MixerMeter Meter)> FolderMeters = [];
         public MixerMeter? Reverb, Delay, Master;
         public TextBlock? Lim;
     }
@@ -197,7 +201,7 @@ public partial class MainWindow
             b.Click += (_, _) => ClearAllToggles(solo);
             headerRefresh.Add(() =>
             {
-                bool lit = tracks.Any(t => solo ? t.Channel.Solo : t.Channel.Muted);
+                bool lit = tracks.Any(t => solo ? t.Channel.Solo : t.Channel.Muted) || Folders.Any(f => solo ? f.Solo : f.Muted);
                 b.IsEnabled = store != null && !store.ReadOnly && !restoring && tracks.Any(t => t.Clips.Count > 0);
                 b.Background = lit ? (solo ? Palette.Fg : Palette.Accent) : Brushes.Transparent;
                 b.BorderBrush = lit ? (solo ? Palette.Fg : Palette.Accent) : Palette.Line;
@@ -291,12 +295,14 @@ public partial class MainWindow
     {
         if (!mixerView) return;
         double areaW = mixerScroll.Viewport.Width > 0 ? mixerScroll.Viewport.Width : MixerHost.Bounds.Width;
-        int n = Math.Max(1, tracks.Count);
-        double freeWide = (areaW - 2 * ReturnWideW - MasterW - 3 * StripGap) / n - StripGap;
+        // folder strips take their own width; folded groups hide their tracks
+        int n = Math.Max(1, tracks.Count(t => FolderOfTrack(t)?.MixerCollapsed != true));
+        double freeWide = (areaW - 2 * ReturnWideW - MasterW - 3 * StripGap - Folders.Count * (FolderStripW(true) + StripGap)) / n - StripGap;
         bool wide = mixerWidth == "wide" || (mixerWidth == "auto" && freeWide >= WideMin);
         double stripW = wide ? Math.Max(WideMin, Math.Min(WideMax, Math.Floor(freeWide))) : CompactW;
         // a new width or layout only resizes the cards or shows the other layout (see compactMixer)
-        string key = string.Join(",", tracks.Select(t => t.Track.Id + ":" + t.Clips.Count));
+        string key = string.Join(",", tracks.Select(t => t.Track.Id + ":" + t.Clips.Count + ":" + t.Track.FolderId))
+            + "|" + string.Join(",", Folders.Select(f => f.Id + ":" + f.Index + ":" + f.MixerCollapsed));
         if (key != mixerKey)
         {
             mixerKey = key;
@@ -341,6 +347,13 @@ public partial class MainWindow
         if (mx.Reverb != null) mx.Reverb.Level = reverbShow;
         if (mx.Delay != null) mx.Delay.Level = delayShow;
         if (mx.Lim != null) mx.Lim.Opacity = lim < -0.5 ? 1 : 0.25;
+        foreach (var (id, meter) in mx.FolderMeters)
+        {
+            float level = 0;
+            for (int i = 0; i < tracks.Count; i++)
+                if (tracks[i].Track.FolderId == id) level = Math.Max(level, Math.Max(tracks[i].ShowL, tracks[i].ShowR));
+            meter.Level = level;
+        }
     }
 
     // --- strips ----------------------------------------------------------------------------------------
@@ -351,6 +364,7 @@ public partial class MainWindow
         mx.Refresh.Clear();
         mx.Meters.Clear();
         mx.Boxes.Clear();
+        mx.FolderMeters.Clear();
         var mixerStrips = mx.Strips;
         mixerStrips.Children.Clear();
         var strips = new StackPanel { Orientation = Orientation.Horizontal };
@@ -362,11 +376,19 @@ public partial class MainWindow
             Grid.SetColumn(empty, 1);
             mixerStrips.Children.Add(empty);
         }
-        for (int i = 0; i < tracks.Count; i++) strips.Children.Add(Strip(tracks[i], i, wide, stripW));
+        // with folders every column gets the band their names sit in, so all faders stay level
+        bool bands = Folders.Count > 0;
+        foreach (var item in store == null ? [] : TrackFolders.Sequence(tracks.Select(t => t.Track).ToList(), Folders))
+        {
+            if (item is Folder f) strips.Children.Add(FolderGroup(f, wide, stripW));
+            else if (item is GuitarCam.Projects.Track { FolderId: null } tr && tracks.FirstOrDefault(t => t.Track == tr) is { } lt)
+                strips.Children.Add(bands ? Banded(null, Strip(lt, tracks.IndexOf(lt), wide, stripW)) : Strip(lt, tracks.IndexOf(lt), wide, stripW));
+        }
 
-        var reverb = ReverbReturn(wide); Grid.SetColumn(reverb, 2); mixerStrips.Children.Add(reverb);
-        var delay = DelayReturn(wide); Grid.SetColumn(delay, 3); mixerStrips.Children.Add(delay);
-        var master = Master(wide); Grid.SetColumn(master, 4); mixerStrips.Children.Add(master);
+        Control Column(Control c) => bands ? Banded(null, c) : c;
+        var reverb = Column(ReverbReturn(wide)); Grid.SetColumn(reverb, 2); mixerStrips.Children.Add(reverb);
+        var delay = Column(DelayReturn(wide)); Grid.SetColumn(delay, 3); mixerStrips.Children.Add(delay);
+        var master = Column(Master(wide)); Grid.SetColumn(master, 4); mixerStrips.Children.Add(master);
     }
 
     /// <summary>A strip as a card on the mixer's background, so each channel reads apart from its neighbours.</summary>
@@ -444,7 +466,7 @@ public partial class MainWindow
         mx.Refresh.Add(Paint);
 
         bool empty = t.Clips.Count == 0;
-        bool Silent() => empty || t.Channel.Muted || (tracks.Any(x => x.Clips.Count > 0 && x.Channel.Solo) && !t.Channel.Solo);
+        bool Silent() => empty || t.Silenced || (tracks.Any(x => x.Clips.Count > 0 && x.Soloed) && !t.Soloed);
         var name = new TextBlock { Text = t.Track.Name, FontSize = wide ? 12 : 11, FontWeight = wide ? FontWeight.Medium : FontWeight.Normal, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
         mx.Refresh.Add(() => { name.Text = t.Track.Name; name.Foreground = Silent() ? Palette.Faint : Palette.Fg; ToolTip.SetTip(name, t.Track.Name); });
         var emptyHint = new TextBlock { Text = Loc.T("mixer.emptyTag"), FontSize = 9, LetterSpacing = 0.8, Foreground = Palette.Faint, IsVisible = empty, VerticalAlignment = VerticalAlignment.Center };

@@ -182,7 +182,9 @@ public static class ClipEditing
     {
         if (p.Tracks.Find(t => t.Id == id) is not { } track) return;
         foreach (var c in track.Clips) Remember(p, track, c);
+        int index = p.Tracks.IndexOf(track);
         p.Tracks.Remove(track);
+        TrackFolders.TrackRemoved(p, index);
     }
 
     public static void Reorder(Project p, int from, int to)
@@ -192,6 +194,7 @@ public static class ClipEditing
         var track = p.Tracks[from];
         p.Tracks.RemoveAt(from);
         p.Tracks.Insert(to, track);
+        TrackFolders.Normalize(p);
     }
 
     public static void ToStart(Project p, string id, double? durationSec = null)

@@ -26,6 +26,8 @@ public sealed class Project
     public ProjectSettings Settings { get; set; } = new();
     public List<Media> Media { get; set; } = [];
     public List<Track> Tracks { get; set; } = [];
+    /// <summary>Native only: folders that group tracks (<see cref="Folder"/>, <see cref="TrackFolders"/>).</summary>
+    public List<Folder> Folders { get; set; } = [];
     public List<ExportRecord> Exports { get; set; } = [];
     public List<LogEntry> Log { get; set; } = [];
 
@@ -49,6 +51,7 @@ public sealed class Project
         Media.RemoveAll(m => m == null);
         Tracks.RemoveAll(t => t == null);
         foreach (var t in Tracks) t.Normalize();
+        TrackFolders.Normalize(this);
     }
 }
 
@@ -244,6 +247,8 @@ public sealed class Track
     public string? Color { get; set; }
     /// <summary>The track's instrument icon id ("electric-guitar", "drum-kit"…); null = its number. Native only.</summary>
     public string? Icon { get; set; }
+    /// <summary>The <see cref="Folder"/> the track is in; null = at the root. Native only.</summary>
+    public string? FolderId { get; set; }
     public Channel Channel { get; set; } = new();
     public List<Clip> Clips { get; set; } = [];
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
@@ -251,14 +256,46 @@ public sealed class Track
     internal void Normalize()
     {
         Input = GuitarCam.Audio.InputRoute.Parse(Input)?.Key;
-        Color = Color is { Length: 7 } hex && hex[0] == '#' && hex.Skip(1).All(Uri.IsHexDigit) ? hex.ToLowerInvariant() : null;
         Icon = string.IsNullOrWhiteSpace(Icon) || Icon.Length > 64 ? null : Icon.Trim();
+        Color = NormalizeColor(Color);
         Channel ??= new();
         Channel.Normalize();
         Clips ??= [];
         Clips.RemoveAll(c => c == null);
         foreach (var c in Clips) c.Normalize();
     }
+
+    /// <summary>"#rrggbb" in lower case, or null for anything else.</summary>
+    internal static string? NormalizeColor(string? color) =>
+        color is { Length: 7 } hex && hex[0] == '#' && hex.Skip(1).All(Uri.IsHexDigit) ? hex.ToLowerInvariant() : null;
+}
+
+/// <summary>
+/// A folder of tracks (native only, asked by the user): its children are the tracks with its <see cref="Track.FolderId"/>,
+/// always together in <see cref="Project.Tracks"/>, and the folder sits right before them. It folds in the timeline and
+/// in the mixer, and its fader, mute and solo act on all of them like a VCA (<see cref="TrackFolders.Mix"/>): the
+/// children keep their own channel strips.
+/// </summary>
+public sealed class Folder
+{
+    public string Id { get; set; } = Ids.New("fld");
+    public string Name { get; set; } = "";
+    /// <summary>"#rrggbb" or null (the accent), like <see cref="Track.Color"/>.</summary>
+    public string? Color { get; set; }
+    /// <summary>Folded in the timeline: only its own row shows.</summary>
+    public bool Collapsed { get; set; }
+    /// <summary>Folded in the mixer: only its own strip shows.</summary>
+    public bool MixerCollapsed { get; set; }
+    /// <summary>Multiplies the children's faders (0..1.5, like a track's).</summary>
+    public double Volume { get; set; } = 1;
+    public bool Muted { get; set; }
+    public bool Solo { get; set; }
+    /// <summary>
+    /// How many tracks come before it in <see cref="Project.Tracks"/>. With children it is the first child's index
+    /// (<see cref="TrackFolders.Normalize"/> keeps it so); an empty folder needs it to keep its place.
+    /// </summary>
+    public int Index { get; set; }
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 
 /// <summary>The channel strip of a track: stays with the track when its clips change.</summary>

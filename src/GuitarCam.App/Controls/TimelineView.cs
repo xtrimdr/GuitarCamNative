@@ -18,6 +18,10 @@ namespace GuitarCam.App.Controls;
 /// multiple clips per track swap only with the clip under the pointer. Thumbnails are not ported yet.
 /// The selected clip shows its volume line (clip gain + <see cref="Clip.GainCurve"/>, native only): a click on it
 /// adds a point, a point drags in time and level, a double click removes it.
+/// Track folders (native only): a folder has its own shorter row with a summary of its children's clips, its children
+/// carry a rail of its color and fold away with it. Rows are laid out in pixels (<see cref="Relayout"/>), so a dragged
+/// track can drop into a folder, out of it or between folders; the rows make room where it will land and the folder it
+/// goes into lights up.
 /// </summary>
 public sealed class TimelineView : Control
 {
@@ -107,10 +111,10 @@ public sealed class TimelineView : Control
     double originalPan;
     readonly DispatcherTimer dragScroll;
     /// <summary>
-    /// Where each track is drawn, in lanes, while it glides to its place during and after a reorder (native only:
-    /// the web jumps). Absent = drawn at its slot.
+    /// Where each row (track or folder, by id) is drawn, in px from the top of the content, while it glides to its place
+    /// during and after a reorder or a fold (native only: the web jumps). Absent = drawn at its place.
     /// </summary>
-    readonly Dictionary<string, double> shownSlot = [];
+    readonly Dictionary<string, double> shownTop = [];
     readonly DispatcherTimer slide;
     /// <summary>Share of the remaining distance a gliding track covers per 16 ms frame (about 150 ms to settle).</summary>
     const double SlideEase = 0.3;
@@ -161,7 +165,17 @@ public sealed class TimelineView : Control
     /// <summary>The track's badge was clicked: the window shows the color and icon picker there (native only).</summary>
     public event Action<LiveTrack, Point>? LookRequested;
     public event Action<Clip, string?, string?>? ClipEditCommitted;
-    public event Action<int, int>? ReorderRequested;
+    /// <summary>A track dropped by its handle: its id, its place in the folders-and-tracks sequence without it
+    /// (<see cref="TrackFolders.Move"/>) and the folder it lands in (null = the root).</summary>
+    public event Action<string, int, string?>? TrackMoveRequested;
+    /// <summary>A folder dropped by its handle: its id and its place in the sequence without it and its children.</summary>
+    public event Action<string, int>? FolderMoveRequested;
+    public event Action<Folder>? FolderFoldRequested;
+    /// <summary>The folder's M (false) or S (true).</summary>
+    public event Action<Folder, bool>? FolderToggleRequested;
+    public event Action<Folder>? FolderRemoveRequested;
+    public event Action<Folder, Point>? FolderRenameRequested;
+    public event Action<Folder, Point>? FolderContextRequested;
     public event Action<string>? RemoveTrackRequested;
     public event Action<LiveTrack, LiveClip?, Point>? ClipContextRequested;
     public event Action<Point>? NewTrackRequested;
@@ -247,12 +261,14 @@ public sealed class TimelineView : Control
     /// neighbours' meters as it covers the rest of their header.</summary>
     bool MetersOnLayer => liftedId == null && !slide.IsEnabled;
 
-    public void SetTracks(IReadOnlyList<LiveTrack> list, bool preserveView = false)
+    public void SetTracks(IReadOnlyList<LiveTrack> list, IReadOnlyList<Folder> folderList, bool preserveView = false)
     {
         tracks = list;
+        SetFolders(folderList);
         waveCache.Clear();
-        shownSlot.Clear();
+        shownTop.Clear();
         liftedId = null;
+        Relayout();
         if (!preserveView) SetFit(true);
         Selected = list.Count > 0 ? 0 : -1;
         if (!list.Any(t => t.Clips.Any(c => c.Clip.Id == SelectedClipId))) SelectedClipId = null;
@@ -261,9 +277,14 @@ public sealed class TimelineView : Control
     }
 
     /// <summary>After an edit applied in place: same view and selection, and only the waveforms of clips that left are dropped.</summary>
-    public void UpdateTracks(IReadOnlyList<LiveTrack> list)
+    public void UpdateTracks(IReadOnlyList<LiveTrack> list, IReadOnlyList<Folder> folderList)
     {
+        // rows that move (a reorder dropped, a folder folded) glide from where they are drawn now
+        foreach (var r in rows) { string id = RowIdOf(r); shownTop.TryAdd(id, Top(id)); }
         tracks = list;
+        SetFolders(folderList);
+        Relayout();
+        if (shownTop.Count > 0) slide.Start();
         var live = list.SelectMany(t => t.Clips).ToHashSet();
         foreach (var gone in waveCache.Keys.Where(c => !live.Contains(c)).ToList()) waveCache.Remove(gone);
         ClampScroll();
@@ -341,35 +362,179 @@ public sealed class TimelineView : Control
     double X(double sec) => HeaderW + sec * pps - scrollX;
 
     double Sec(double x) => (x - HeaderW + scrollX) / pps;
-    double LaneY(int i) => RulerH + ShownSlot(i) * laneH - scrollY;
-    /// <summary>The dragged track follows the pointer, in lanes from the top.</summary>
-    double DragSlot => Math.Clamp(fromIndex + (lastPointer.Y - down.Y + scrollY - downScrollY) / laneH, 0, Math.Max(0, tracks.Count - 1));
-    /// <summary>Where a track belongs right now: its lane, or the one it makes room in while another is dragged.</summary>
-    double TargetSlot(int i)
+    /// <summary>Where track <paramref name="i"/>'s row is drawn; past the last track, the extra rows under them
+    /// (a take going to a new track, "Nueva pista"). A track folded away is far above the view, so nothing draws it.</summary>
+    double LaneY(int i) => i >= tracks.Count ? RulerH + contentH + (i - tracks.Count) * laneH - scrollY
+        : hidden.Contains(tracks[i].Track.Id) && !IsDragged(tracks[i].Track.Id) ? -1e9 : RulerH + Top(tracks[i].Track.Id) - scrollY;
+    double FolderY(Folder f) => RulerH + Top(f.Id) - scrollY;
+
+    // --- rows and folders (native only) ----------------------------------------------------------
+
+    /// <summary>Height of a folder's own row.</summary>
+    public const double FolderH = 34;
+    IReadOnlyList<Folder> folders = [];
+    readonly Dictionary<string, Folder> folderById = [];
+    /// <summary>A row on screen: a track (its index) or a folder, with its place in px from the top of the content.</summary>
+    readonly record struct Row(int Track, Folder? Folder, double Top, double H);
+    /// <summary>The rows in order as they belong now (during a reorder: with room made where the dragged one lands).</summary>
+    readonly List<Row> rows = [];
+    readonly Dictionary<string, double> targetTop = [];
+    /// <summary>Tracks folded away in their folder.</summary>
+    readonly HashSet<string> hidden = [];
+    double contentH;
+
+    string RowIdOf(Row r) => r.Folder?.Id ?? tracks[r.Track].Track.Id;
+
+    void SetFolders(IReadOnlyList<Folder> list)
     {
-        if (gesture != "reorder" || !moved || i >= tracks.Count) return i;
-        if (i == fromIndex) return DragSlot;
-        if (fromIndex < overIndex && i > fromIndex && i <= overIndex) return i - 1;
-        if (fromIndex > overIndex && i >= overIndex && i < fromIndex) return i + 1;
-        return i;
+        folders = list;
+        folderById.Clear();
+        foreach (var f in list) folderById[f.Id] = f;
     }
-    double ShownSlot(int i) => i < tracks.Count && shownSlot.TryGetValue(tracks[i].Track.Id, out double s) ? s : TargetSlot(i);
+
+    public Folder? FolderOf(LiveTrack t) => t.Track.FolderId is { } id ? folderById.GetValueOrDefault(id) : null;
+    public static Color FolderColor(Folder f) => f.Color != null && Color.TryParse(f.Color, out var c) ? c : Palette.AccentColor;
+
+    /// <summary>Folders and tracks in order, as <see cref="TrackFolders.Sequence"/> keeps them.</summary>
+    List<object> Seq() => TrackFolders.Sequence(tracks.Select(t => t.Track).ToList(), folders);
+
+    /// <summary>Stacks a sequence: each visible item's top in <paramref name="tops"/>, folded tracks in <paramref name="folded"/>; returns the height.</summary>
+    double Stack(List<object> seq, Dictionary<string, double> tops, HashSet<string> folded, bool landing)
+    {
+        double y = 0;
+        foreach (var x in seq)
+        {
+            if (x is Folder f) { tops[f.Id] = y; y += FolderH; continue; }
+            var t = (Track)x;
+            string? fid = landing && t.Id == dragTrackId && drop is { } d ? d.Folder : t.FolderId;
+            // a folder being dragged travels folded
+            if (fid != null && folderById.TryGetValue(fid, out var parent) && (parent.Collapsed || parent == dragFolder && moved))
+            {
+                folded.Add(t.Id);
+                continue;
+            }
+            tops[t.Id] = y;
+            y += laneH;
+        }
+        return y;
+    }
+
+    /// <summary>Lays the rows out again: as they are, or, while a reorder has a place to drop, as they will be.</summary>
+    void Relayout()
+    {
+        targetTop.Clear();
+        hidden.Clear();
+        rows.Clear();
+        var seq = Seq();
+        bool landing = gesture == "reorder" && moved && drop != null;
+        if (landing)
+        {
+            var block = Dragged(seq);
+            seq.RemoveAll(block.Contains);
+            seq.InsertRange(Math.Clamp(drop!.Value.Pos, 0, seq.Count), block);
+        }
+        contentH = Stack(seq, targetTop, hidden, landing);
+        var index = new Dictionary<string, int>();
+        for (int i = 0; i < tracks.Count; i++) index[tracks[i].Track.Id] = i;
+        foreach (var x in seq)
+        {
+            if (x is Folder f) rows.Add(new Row(-1, f, targetTop[f.Id], FolderH));
+            else if (x is Track t && targetTop.TryGetValue(t.Id, out double top) && index.TryGetValue(t.Id, out int i)) rows.Add(new Row(i, null, top, laneH));
+        }
+        ClampScroll();
+    }
+
+    /// <summary>The dragged item: a track, or a folder with its children.</summary>
+    List<object> Dragged(List<object> seq) => dragFolder is { } df
+        ? seq.Where(x => x == df || x is Track t && t.FolderId == df.Id).ToList()
+        : seq.Where(x => x is Track t && t.Id == dragTrackId).ToList();
+
+    bool IsDragged(string id) => gesture == "reorder" && moved && id == (dragFolder?.Id ?? dragTrackId);
+
+    /// <summary>Where a row is drawn now, in px from the top of the content: the dragged one follows the pointer.</summary>
+    double Top(string id)
+    {
+        if (IsDragged(id)) return Math.Max(0, dragTop + lastPointer.Y - down.Y + scrollY - downScrollY);
+        return shownTop.TryGetValue(id, out double s) ? s : targetTop.GetValueOrDefault(id);
+    }
+
+    /// <summary>The row under a y in the view, or null (the ruler, the space under the rows).</summary>
+    Row? HitRow(double y)
+    {
+        if (y < RulerH) return null;
+        double cy = y - RulerH + scrollY;
+        foreach (var r in rows)
+            if (cy >= r.Top && cy < r.Top + r.H) return r;
+        return null;
+    }
+
+    int HitTrack(double y) => HitRow(y) is { Folder: null } r ? r.Track : -1;
+
+    // the reorder gesture: a track or a folder, where it was and where it will land
+    string? dragTrackId;
+    Folder? dragFolder;
+    double dragTop;
+    /// <summary>Where the dragged item lands: its place in the sequence without it, and the folder (tracks only).</summary>
+    (int Pos, string? Folder)? drop;
+    (int Pos, string? Folder) dropFrom;
+
+    /// <summary>
+    /// The place under the dragged row's middle, measured on the rows without it (so making room never moves the
+    /// target). Over a track: its upper half drops before it, its lower half after it, in its folder. Over a folder's
+    /// row: its top third drops before the folder, the rest into it (first if open, last if folded). A folder drops only
+    /// between items at the root.
+    /// </summary>
+    (int Pos, string? Folder) FindDrop()
+    {
+        var seq = Seq();
+        var block = Dragged(seq);
+        seq.RemoveAll(block.Contains);
+        var tops = new Dictionary<string, double>();
+        Stack(seq, tops, [], false);
+        double h = dragFolder != null ? FolderH : laneH;
+        double cy = Top(dragFolder?.Id ?? dragTrackId!) + h / 2;
+        static string Id(object x) => x is Folder f ? f.Id : ((Track)x).Id;
+        if (dragFolder != null)
+        {
+            for (int k = 0; k < seq.Count; k++)
+            {
+                if (seq[k] is Track { FolderId: not null }) continue;
+                double top = tops[Id(seq[k])];
+                double bottom = top + laneH;
+                if (seq[k] is Folder f)
+                    bottom = seq.OfType<Track>().Where(t => t.FolderId == f.Id && tops.ContainsKey(t.Id)).Select(t => tops[t.Id] + laneH).DefaultIfEmpty(top + FolderH).Max();
+                if (cy < (top + bottom) / 2) return (k, null);
+            }
+            return (seq.Count, null);
+        }
+        for (int k = 0; k < seq.Count; k++)
+        {
+            if (!tops.TryGetValue(Id(seq[k]), out double top)) continue;
+            if (seq[k] is Folder f)
+            {
+                if (cy >= top + FolderH) continue;
+                if (cy < top + FolderH / 3) return (k, null);
+                int children = seq.Count(x => x is Track t && t.FolderId == f.Id);
+                return (f.Collapsed ? k + 1 + children : k + 1, f.Id);
+            }
+            if (cy >= top + laneH) continue;
+            return (cy <= top + laneH / 2 ? k : k + 1, ((Track)seq[k]).FolderId);
+        }
+        return cy < 0 ? (0, null) : (seq.Count, null);
+    }
 
     void Slide()
     {
-        var live = new HashSet<string>();
-        for (int i = 0; i < tracks.Count; i++)
+        string? dragId = gesture == "reorder" ? dragFolder?.Id ?? dragTrackId : null;
+        foreach (var id in shownTop.Keys.ToList())
         {
-            string id = tracks[i].Track.Id;
-            live.Add(id);
-            if (!shownSlot.TryGetValue(id, out double s)) continue;
-            double target = TargetSlot(i);
+            if (!targetTop.TryGetValue(id, out double target) || id == dragId) { shownTop.Remove(id); continue; }
+            double s = shownTop[id];
             s += (target - s) * SlideEase;
-            if (Math.Abs(target - s) < 0.01 || (gesture == "reorder" && i == fromIndex)) shownSlot.Remove(id);
-            else shownSlot[id] = s;
+            if (Math.Abs(target - s) < 0.5) shownTop.Remove(id);
+            else shownTop[id] = s;
         }
-        foreach (var gone in shownSlot.Keys.Where(k => !live.Contains(k)).ToList()) shownSlot.Remove(gone);
-        if (shownSlot.Count == 0)
+        if (shownTop.Count == 0)
         {
             slide.Stop();
             if (gesture != "reorder") liftedId = null;
@@ -388,16 +553,19 @@ public sealed class TimelineView : Control
         }
         if (lifted >= 0) yield return lifted;
     }
+
+    /// <summary>The folders in drawing order: the lifted one last.</summary>
+    IEnumerable<Folder> FolderOrder() => folders.Where(f => f.Id != liftedId).Concat(folders.Where(f => f.Id == liftedId));
     double Grid => ClipEditing.GridSeconds(snapMode, Bpm);
     double ViewSec => Math.Max(8, Math.Max(LengthSec, Playhead + 2));
     double MinPps => Math.Max(0.01, (Bounds.Width - HeaderW) / Math.Max(600, ViewSec * 8));
-    void ClampScroll() => scrollY = Math.Clamp(scrollY, 0, Math.Max(0, (tracks.Count + ExtraRows) * laneH + 44 - (Bounds.Height - RulerH)));
+    void ClampScroll() => scrollY = Math.Clamp(scrollY, 0, Math.Max(0, contentH + ExtraRows * laneH + 44 - (Bounds.Height - RulerH)));
     public void SetTrackHeight(double height)
     {
         double next = Math.Clamp(Math.Round(height / 2) * 2, 40, 160); // the web's slider steps by 2 px
         if (Math.Abs(next - laneH) < 0.001) return;
         laneH = next;
-        ClampScroll();
+        Relayout();
         waveCache.Clear();
         TrackHeightChanged?.Invoke(laneH);
         InvalidateVisual();
@@ -529,7 +697,10 @@ public sealed class TimelineView : Control
         BuildGrid(W);
         using (ctx.PushClip(new Rect(HeaderW, RulerH, W - HeaderW, Math.Max(0, H - RulerH))))
         {
+            foreach (var f in folders) if (f.Id != liftedId) DrawFolderLane(ctx, f, W);
+            DrawDropHole(ctx, W);
             foreach (int i in DrawOrder()) DrawLane(ctx, i, W);
+            if (liftedId != null && folderById.TryGetValue(liftedId, out var liftedFolder)) DrawFolderLane(ctx, liftedFolder, W);
             if (recordingLanes != null)
                 foreach (int r in recordingLanes) DrawRecordingBar(ctx, r, W);
         }
@@ -540,7 +711,12 @@ public sealed class TimelineView : Control
         ctx.FillRectangle(Palette.Panel, new Rect(0, 0, HeaderW, RulerH));
         ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, RulerH - 0.5), new Point(W, RulerH - 0.5));
         using (ctx.PushClip(new Rect(0, RulerH, HeaderW, Math.Max(0, H - RulerH))))
+        {
+            foreach (var f in folders) if (f.Id != liftedId) DrawFolderHeader(ctx, f);
             foreach (int i in DrawOrder()) DrawHeader(ctx, i);
+            if (liftedId != null && folderById.TryGetValue(liftedId, out var liftedFolder)) DrawFolderHeader(ctx, liftedFolder);
+        }
+        using (ctx.PushClip(new Rect(0, RulerH, W, Math.Max(0, H - RulerH)))) DrawDropTarget(ctx, W);
         if (ExtraRows > 0) DrawRecordingHeader(ctx, LaneY(tracks.Count), W);
         double addY = LaneY(tracks.Count + ExtraRows);
         if (addY >= RulerH && addY < H)
@@ -550,7 +726,7 @@ public sealed class TimelineView : Control
             ctx.DrawText(Loc.T("timeline.newTrack"), 12, Palette.Dim, new Point(32, addY + 13));
             ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, addY + 43.5), new Point(W, addY + 43.5));
         }
-        if (tracks.Count == 0 && !Recording)
+        if (tracks.Count == 0 && folders.Count == 0 && !Recording)
         {
             ctx.DrawText(Loc.T("timeline.empty.title"), 12.5, Palette.Dim, new Point(HeaderW + 24, RulerH + 66), Palette.UiBold);
             ctx.DrawText(Loc.T("timeline.empty.a"), 12,
@@ -647,6 +823,123 @@ public sealed class TimelineView : Control
         var text = Palette.Text(Loc.T("timeline.recording"), 13, Palette.Rec);
         ctx.DrawText(text, new Point(42, y + (laneH - text.Height) / 2));
         ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, y + laneH - 0.5), new Point(W, y + laneH - 0.5));
+    }
+
+    static readonly Typeface Icons = new("Segoe Fluent Icons, Segoe MDL2 Assets");
+
+    /// <summary>A folder's lane: tinted with its color and a block for every clip of its children, so a folded folder still shows where it plays.</summary>
+    void DrawFolderLane(DrawingContext ctx, Folder f, double W)
+    {
+        double y = FolderY(f);
+        if (y + FolderH < RulerH || y > Bounds.Height) return;
+        var c = FolderColor(f);
+        var row = new Rect(HeaderW, y, Math.Max(0, W - HeaderW), FolderH);
+        if (f.Id == liftedId) ctx.FillRectangle(Palette.App, row);
+        ctx.FillRectangle(Palette.Alpha(c, 0.07), row);
+        var fill = Palette.Alpha(c, f.Muted ? 0.12 : 0.28);
+        var edge = Palette.Pen(Palette.Alpha(c, f.Muted ? 0.25 : 0.55));
+        foreach (var t in tracks)
+        {
+            if (t.Track.FolderId != f.Id) continue;
+            foreach (var clip in t.Clips)
+            {
+                var w = Window(clip);
+                double x0 = X(w.Start), x1 = X(w.End);
+                if (x1 < HeaderW || x0 > W) continue;
+                ctx.DrawRectangle(fill, edge, new Rect(x0, y + 8, Math.Max(2, x1 - x0), FolderH - 16), 3, 3);
+            }
+        }
+        ctx.DrawLine(Palette.Pen(Palette.Line), new Point(HeaderW, y + FolderH - 0.5), new Point(W, y + FolderH - 0.5));
+    }
+
+    Rect FoldRect(Folder f) => new(20, FolderY(f) + 5, 38, 24);
+    Rect FolderMuteRect(Folder f) => new(HeaderRight - 94, FolderY(f) + 5, 24, 24);
+    Rect FolderSoloRect(Folder f) => new(HeaderRight - 66, FolderY(f) + 5, 24, 24);
+    Rect FolderRemoveRect(Folder f) => new(HeaderRight - 38, FolderY(f) + 5, 24, 24);
+
+    /// <summary>A folder's header: its color rail, handle, fold arrow and icon, name and track count, M S and ×.</summary>
+    void DrawFolderHeader(DrawingContext ctx, Folder f)
+    {
+        double y = FolderY(f);
+        if (y + FolderH < RulerH || y > Bounds.Height) return;
+        var c = FolderColor(f);
+        var row = new Rect(0, y, HeaderW, FolderH);
+        ctx.FillRectangle(Palette.Panel, row);
+        ctx.FillRectangle(Palette.Alpha(c, 0.12), row);
+        ctx.FillRectangle(Palette.Alpha(c, 0.9), new Rect(0, y, 3, FolderH));
+        for (int k = 0; k < 3; k++)
+        {
+            ctx.FillRectangle(Palette.Faint, new Rect(8, y + 12 + k * 5, 2, 2));
+            ctx.FillRectangle(Palette.Faint, new Rect(13, y + 12 + k * 5, 2, 2));
+        }
+        bool overFold = gesture == null && FoldRect(f).Contains(lastPointer);
+        if (overFold) ctx.DrawRectangle(Palette.Hover, null, FoldRect(f), 4, 4);
+        ctx.DrawText(f.Collapsed ? "" : "", 10, Palette.Dim, new Point(24, y + 12), Icons);
+        ctx.DrawText(f.Collapsed ? "" : "", 15, Palette.Alpha(c, 1), new Point(38, y + 9), Icons);
+        int n = 0;
+        foreach (var t in tracks) if (t.Track.FolderId == f.Id) n++;
+        double maxW = Math.Max(20, FolderMuteRect(f).X - 62 - 64);
+        var name = Palette.Text(f.Name, 12.5, f.Muted ? Palette.Dim : Palette.Fg, Palette.UiBold);
+        ctx.DrawText(f.Name, 12.5, f.Muted ? Palette.Dim : Palette.Fg, new Point(62, y + 9), Palette.UiBold, maxW);
+        string count = n == 0 ? Loc.T("folder.empty") : n == 1 ? Loc.T("folder.count.one") : Loc.T("folder.count", n);
+        ctx.DrawText(count, 11, Palette.Faint, new Point(62 + Math.Min(name.Width, maxW) + 8, y + 11), Palette.Ui);
+        if (lastPointer.Y >= y && lastPointer.Y < y + FolderH && lastPointer.X < HeaderW)
+            ctx.DrawText("×", 16, Palette.Faint, new Point(FolderRemoveRect(f).X + 6, y + 4));
+        DrawToggle(ctx, FolderMuteRect(f), "M", f.Muted, Palette.Brush("#f59e0b"));
+        DrawToggle(ctx, FolderSoloRect(f), "S", f.Solo, Palette.Accent);
+        ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, y + FolderH - 0.5), new Point(HeaderW, y + FolderH - 0.5));
+    }
+
+    /// <summary>The folder the dragged track would land in, or the folder a track is in.</summary>
+    Folder? RailFolder(int i)
+    {
+        var t = tracks[i];
+        if (IsDragged(t.Track.Id) && drop is { } d) return d.Folder is { } id ? folderById.GetValueOrDefault(id) : null;
+        return FolderOf(t);
+    }
+
+    /// <summary>Where the dragged row will land: a tinted place with a dashed outline, under everything else.</summary>
+    void DrawDropHole(DrawingContext ctx, double W)
+    {
+        if (gesture != "reorder" || !moved || drop == null) return;
+        string id = dragFolder?.Id ?? dragTrackId!;
+        if (!targetTop.TryGetValue(id, out double top)) return;
+        double h = dragFolder != null ? FolderH : laneH;
+        var r = new Rect(1, RulerH + top - scrollY + 1, Math.Max(0, W - 2), h - 2);
+        var color = dragFolder != null ? FolderColor(dragFolder) : RailFolder(tracks.ToList().FindIndex(t => t.Track.Id == id)) is { } f ? FolderColor(f) : Palette.AccentColor;
+        ctx.DrawRectangle(Palette.Alpha(color, 0.08), new Pen(Palette.Alpha(color, 0.7), 1.5, new DashStyle([4, 3], 0)), r, 5, 5);
+    }
+
+    /// <summary>
+    /// What a dragged track does to folders, drawn over the rows: the folder it goes into gets an outline in its color
+    /// around its row and children, and a label next to the track says "Entra en …" or "Sale de …".
+    /// </summary>
+    void DrawDropTarget(DrawingContext ctx, double W)
+    {
+        if (gesture != "reorder" || !moved || drop is not { } d || dragFolder != null || dragTrackId == null) return;
+        int i = tracks.ToList().FindIndex(t => t.Track.Id == dragTrackId);
+        if (i < 0) return;
+        var from = FolderOf(tracks[i]);
+        var into = d.Folder is { } id ? folderById.GetValueOrDefault(id) : null;
+        if (into != null)
+        {
+            double top = FolderY(into), bottom = top + FolderH;
+            foreach (var r in rows)
+                if (r.Folder == null && (tracks[r.Track].Track.FolderId == into.Id || IsDragged(tracks[r.Track].Track.Id)) && targetTop.ContainsKey(tracks[r.Track].Track.Id))
+                {
+                    double ry = RulerH + r.Top - scrollY;
+                    if (ry >= top) bottom = Math.Max(bottom, ry + r.H);
+                }
+            var c = FolderColor(into);
+            ctx.DrawRectangle(null, Palette.Pen(Palette.Alpha(c, 1), 2), new Rect(1, top + 1, Math.Max(0, W - 2), bottom - top - 2), 6, 6);
+        }
+        string? text = into != null && into != from ? Loc.T("tl.drop.into", into.Name) : into == null && from != null ? Loc.T("tl.drop.out", from.Name) : null;
+        if (text == null) return;
+        var color = into != null ? FolderColor(into) : Palette.FgColor;
+        var label = Palette.Text(text, 11, Palette.Alpha(color, 1), Palette.UiBold);
+        double y = LaneY(i) + 8, x = HeaderW + 12;
+        ctx.DrawRectangle(Palette.Alpha(Palette.AppColor, 0.85), Palette.Pen(Palette.Alpha(color, 0.6)), new Rect(x - 6, y - 3, label.Width + 12, label.Height + 6), 4, 4);
+        ctx.DrawText(label, new Point(x, y));
     }
 
     void DrawRuler(DrawingContext ctx, double W)
@@ -757,6 +1050,7 @@ public sealed class TimelineView : Control
         // the lifted lane is opaque so the lanes it passes over don't show through
         if (t.Track.Id == liftedId) ctx.FillRectangle(Palette.App, new Rect(HeaderW, y, W - HeaderW, laneH));
         if (sel) ctx.FillRectangle(Palette.Alpha(Palette.RaisedColor, 0.6), new Rect(HeaderW, y, W - HeaderW, laneH));
+        if (RailFolder(i) is { } parent) ctx.FillRectangle(Palette.Alpha(FolderColor(parent), 0.035), new Rect(HeaderW, y, W - HeaderW, laneH));
         if (armed.Contains(i) && !Recording) ctx.FillRectangle(Palette.Alpha(Palette.RecColor, 0.06), new Rect(HeaderW, y, W - HeaderW, laneH));
         var majorPen = Palette.Pen(Palette.Alpha(Palette.LineColor, 0.55));
         var minorPen = Palette.Pen(Palette.Alpha(Palette.LineColor, 0.22));
@@ -778,7 +1072,7 @@ public sealed class TimelineView : Control
         // a track with a color tints its clips with it (native only); without one they stay as in the web
         var tint = TrackIcons.ColorOf(t.Track);
         var color = c.Offline ? Color.Parse("#71717a") : tint ?? Palette.AccentColor;
-        bool silent = t.Channel.Muted || tracks.Any(o => o.Channel.Solo) && !t.Channel.Solo;
+        bool silent = t.Silenced || tracks.Any(o => o.Soloed) && !t.Soloed;
         // the clip being carried to another track stays dimmed where it was until it is dropped
         bool carried = dragged == c && overIndex >= 0 && overIndex != fromIndex && !swapping;
         using var opacity = ctx.PushOpacity((!c.Offline && silent ? 0.5 : 1) * (carried ? 0.35 : 1));
@@ -866,18 +1160,22 @@ public sealed class TimelineView : Control
     {
         double mid = clip.Center.Y, quarter = clip.Height / 4;
         var lit = dragged == c ? dragMode : gesture == null && clip.Contains(lastPointer) ? HitHandle(c, lastPointer) : ClipEditMode.Move;
-        // a thin 2 px tick centered in its half: faint at rest, taller and in full color when it is the one you would grab
+        // a small dark tab with two short lines, like the column's grip, centered in its half; the one you would grab lights up
         void Tick(double x, double cy, ClipEditMode mode, Color color)
         {
             bool on = lit == mode;
-            double h = Math.Min(on ? 14 : 8, quarter * 2 - 4);
-            if (h < 3) return;
-            ctx.FillRectangle(Palette.Alpha(color, on ? 1 : 0.35), new Rect(Math.Round(x) - 1, Math.Round(cy - h / 2), 2, Math.Round(h)), 1);
+            double h = Math.Round(Math.Min(16, quarter * 2 - 4));
+            if (h < 8) return;
+            var tab = new Rect(Math.Round(x) - 3.5, Math.Round(cy - h / 2) + 0.5, 7, h);
+            ctx.DrawRectangle(Palette.Alpha(on ? Palette.HoverColor : Palette.AppColor, 0.85), Palette.Pen(on ? Palette.Alpha(color, 0.7) : Palette.Line), tab, 2, 2);
+            var line = Palette.Alpha(color, on ? 1 : 0.6);
+            ctx.FillRectangle(line, new Rect(tab.X + 1.5, tab.Y + 2.5, 1, h - 5));
+            ctx.FillRectangle(line, new Rect(tab.X + 3.5, tab.Y + 2.5, 1, h - 5));
         }
-        Tick(Math.Max(clip.Left + 3, fadeInX), mid - quarter, ClipEditMode.FadeIn, Palette.AccentColor);
-        Tick(Math.Min(clip.Right - 3, fadeOutX), mid - quarter, ClipEditMode.FadeOut, Palette.AccentColor);
-        Tick(clip.Left + 3, mid + quarter, ClipEditMode.TrimStart, Palette.FgColor);
-        Tick(clip.Right - 3, mid + quarter, ClipEditMode.TrimEnd, Palette.FgColor);
+        Tick(Math.Max(clip.Left + 5, fadeInX), mid - quarter, ClipEditMode.FadeIn, Palette.AccentColor);
+        Tick(Math.Min(clip.Right - 5, fadeOutX), mid - quarter, ClipEditMode.FadeOut, Palette.AccentColor);
+        Tick(clip.Left + 5, mid + quarter, ClipEditMode.TrimStart, Palette.FgColor);
+        Tick(clip.Right - 5, mid + quarter, ClipEditMode.TrimEnd, Palette.FgColor);
     }
 
     /// <summary>
@@ -975,7 +1273,10 @@ public sealed class TimelineView : Control
         ctx.FillRectangle(sel ? Palette.Raised : Palette.Panel, new Rect(0, y, HeaderW, laneH));
         bool isArmed = armed.Contains(i);
         if (isArmed || RecordingInto(i)) ctx.FillRectangle(Palette.Alpha(Palette.RecColor, 0.10), new Rect(0, y, HeaderW, laneH));
-        if (sel) ctx.FillRectangle(Palette.Accent, new Rect(0, y, 2, laneH));
+        // a track in a folder carries the folder's rail; selected, the accent bar sits right of it
+        var rail = RailFolder(i);
+        if (rail != null) ctx.FillRectangle(Palette.Alpha(FolderColor(rail), 0.9), new Rect(0, y, 3, laneH));
+        if (sel) ctx.FillRectangle(Palette.Accent, new Rect(rail != null ? 3 : 0, y, 2, laneH));
 
         for (int k = 0; k < 3; k++)
         {
@@ -1128,10 +1429,12 @@ public sealed class TimelineView : Control
             StartGesture("pan", e);
             return;
         }
-        int i = (int)Math.Floor((p.Y - RulerH + scrollY) / laneH);
+        var row = HitRow(p.Y);
+        int i = row is { Folder: null } h ? h.Track : -1;
         if (buttons.IsRightButtonPressed)
         {
-            if (i >= 0 && i < tracks.Count && p.Y >= RulerH)
+            if (row?.Folder is { } folder) FolderContextRequested?.Invoke(folder, p);
+            else if (i >= 0 && i < tracks.Count && p.Y >= RulerH)
             {
                 var clip = p.X > HeaderW ? ClipAt(i, p.X) : tracks[i].Clips.FirstOrDefault(c => c.Clip.Id == SelectedClipId) ?? tracks[i].Clips.FirstOrDefault();
                 SelectClip(i, clip?.Clip.Id);
@@ -1153,9 +1456,15 @@ public sealed class TimelineView : Control
             if (p.X > HeaderW) { StartGesture("scrub", e); UpdateGesture(); }
             return;
         }
+        if (row?.Folder is { } pressed)
+        {
+            FolderPressed(pressed, p, e);
+            return;
+        }
         if (i < 0 || i >= tracks.Count)
         {
-            if (i == tracks.Count && p.X < HeaderW && p.Y < LaneY(tracks.Count) + 44) NewTrackRequested?.Invoke(p);
+            double addY = LaneY(tracks.Count + ExtraRows);
+            if (p.X < HeaderW && p.Y >= addY && p.Y < addY + 44) NewTrackRequested?.Invoke(p);
             Select(-1);
             return;
         }
@@ -1164,9 +1473,7 @@ public sealed class TimelineView : Control
         if (p.X < HeaderW && Selected != i && !RemoveRect(i).Contains(p)) Select(i);
         if (p.X < 24)
         {
-            liftedId = tracks[i].Track.Id;
-            shownSlot.Remove(liftedId);
-            StartGesture("reorder", e);
+            StartReorder(tracks[i].Track.Id, null, e);
             return;
         }
         if (p.X < HeaderW && RemoveRect(i).Contains(p))
@@ -1270,6 +1577,38 @@ public sealed class TimelineView : Control
         InvalidateVisual();
     }
 
+    /// <summary>A press on a folder's row: its handle drags it, the arrow folds it, M S and × act on it, a double click on its name renames it.</summary>
+    void FolderPressed(Folder f, Point p, PointerPressedEventArgs e)
+    {
+        e.Handled = true;
+        if (p.X < 20) { StartReorder(null, f, e); return; }
+        if (p.X >= HeaderW)
+        {
+            if (e.ClickCount == 2) FolderFoldRequested?.Invoke(f);
+            return;
+        }
+        if (FoldRect(f).Contains(p)) FolderFoldRequested?.Invoke(f);
+        else if (FolderMuteRect(f).Contains(p)) FolderToggleRequested?.Invoke(f, false);
+        else if (FolderSoloRect(f).Contains(p)) FolderToggleRequested?.Invoke(f, true);
+        else if (FolderRemoveRect(f).Contains(p)) FolderRemoveRequested?.Invoke(f);
+        else if (e.ClickCount == 2) FolderRenameRequested?.Invoke(f, new Point(62, FolderY(f) + FolderH));
+    }
+
+    /// <summary>Lifts a track or a folder by its handle: it follows the pointer and the others make room (<see cref="FindDrop"/>).</summary>
+    void StartReorder(string? trackId, Folder? folder, PointerPressedEventArgs e)
+    {
+        dragTrackId = trackId;
+        dragFolder = folder;
+        string id = folder?.Id ?? trackId!;
+        liftedId = id;
+        dragTop = Top(id);
+        shownTop.Remove(id);
+        drop = null;
+        StartGesture("reorder", e);
+        var seq = Seq();
+        dropFrom = (seq.IndexOf(folder != null ? folder : tracks.First(t => t.Track.Id == trackId).Track), folder != null ? null : tracks.First(t => t.Track.Id == trackId).Track.FolderId);
+    }
+
     public void SelectClip(int index, string? clipId)
     {
         SelectedClipId = clipId;
@@ -1289,7 +1628,7 @@ public sealed class TimelineView : Control
         double mid = LaneY(tracks.ToList().FindIndex(t => t.Clips.Contains(clip))) + laneH / 2;
         if (p.Y < mid)
         {
-            double fadeOut = Math.Min(right - 4, right - f.FadeOut * pps), fadeIn = Math.Max(left + 4, left + f.FadeIn * pps);
+            double fadeOut = Math.Min(right - 5, right - f.FadeOut * pps), fadeIn = Math.Max(left + 5, left + f.FadeIn * pps);
             if (right - p.X < EdgeGrab || Math.Abs(p.X - fadeOut) <= EdgeGrab / 2) return ClipEditMode.FadeOut;
             if (p.X - left < EdgeGrab || Math.Abs(p.X - fadeIn) <= EdgeGrab / 2) return ClipEditMode.FadeIn;
             return ClipEditMode.Move;
@@ -1378,22 +1717,28 @@ public sealed class TimelineView : Control
         else
         {
             if (!moved && Math.Abs(dxPx) < 3 && Math.Abs(lastPointer.Y - down.Y) < 3) return;
+            bool wasMoved = moved;
             moved = true;
             if (gesture == "reorder")
             {
-                int over = (int)Math.Floor(DragSlot + 0.5);
-                if (over != overIndex)
+                var d = FindDrop();
+                // a lifted folder folds its children away; then each new place makes room again
+                if (!wasMoved || d != drop)
                 {
-                    // the tracks that make room glide from where they are drawn now
-                    for (int k = 0; k < tracks.Count; k++)
-                        if (k != fromIndex) shownSlot.TryAdd(tracks[k].Track.Id, TargetSlot(k));
-                    overIndex = over;
+                    // the rows that make room glide from where they are drawn now
+                    foreach (var r in rows)
+                    {
+                        string id = RowIdOf(r);
+                        if (!IsDragged(id)) shownTop.TryAdd(id, shownTop.TryGetValue(id, out double s) ? s : r.Top);
+                    }
+                    drop = d;
+                    Relayout();
                     slide.Start();
                 }
             }
             else if (dragged != null && original != null)
             {
-                int lane = (int)Math.Floor((lastPointer.Y - RulerH + scrollY) / laneH);
+                int lane = HitTrack(lastPointer.Y);
                 overIndex = dragMode == ClipEditMode.Move && lane >= 0 && lane < tracks.Count ? lane : fromIndex;
                 // Ctrl over another track swaps with the clip under the pointer, as in the web (the time stays); without
                 // it the clip lands on that track at the time under the pointer, shown by a ghost (native only).
@@ -1420,6 +1765,10 @@ public sealed class TimelineView : Control
         string? target = kind == "clip" && to >= 0 && to != from ? tracks[to].Track.Id : null;
         string? swap = swapId;
         bool changed = moved;
+        var landed = drop;
+        var from0 = dropFrom;
+        var movedFolder = dragFolder;
+        string? movedTrack = dragTrackId;
         ClearGesture();
         e.Pointer.Capture(null);
         if (kind == "range")
@@ -1429,7 +1778,11 @@ public sealed class TimelineView : Control
         }
         if (kind == "clip" && changed && value != null) ClipEditCommitted?.Invoke(value, target, swap);
         if (kind == "curve" && changed && value != null) ClipEditCommitted?.Invoke(value, null, null);
-        if (kind == "reorder" && changed && from != to) ReorderRequested?.Invoke(from, to);
+        if (kind == "reorder" && changed && landed is { } l && l != from0)
+        {
+            if (movedFolder != null) FolderMoveRequested?.Invoke(movedFolder.Id, l.Pos);
+            else if (movedTrack != null) TrackMoveRequested?.Invoke(movedTrack, l.Pos, l.Folder);
+        }
         e.Handled = true;
     }
 
@@ -1446,14 +1799,19 @@ public sealed class TimelineView : Control
     }
     void ClearGesture()
     {
-        if (gesture == "reorder" && moved)
+        bool reordered = gesture == "reorder" && moved;
+        if (reordered)
         {
-            // keep every track where it is drawn; once the window applies the new order they glide to their lanes
-            for (int k = 0; k < tracks.Count; k++) shownSlot[tracks[k].Track.Id] = ShownSlot(k);
+            // keep every row where it is drawn; once the window applies the new order they glide to their places
+            foreach (var r in rows) { string id = RowIdOf(r); shownTop[id] = Top(id); }
             slide.Start();
         }
         else if (gesture == "reorder") liftedId = null;
         gesture = null;
+        dragFolder = null;
+        dragTrackId = null;
+        drop = null;
+        if (reordered) Relayout();
         scrubSought = false;
         if (scrubHeld)
         {
@@ -1476,7 +1834,8 @@ public sealed class TimelineView : Control
 
     void UpdateHint()
     {
-        int i = (int)Math.Floor((lastPointer.Y - RulerH + scrollY) / laneH);
+        var row = HitRow(lastPointer.Y);
+        int i = row is { Folder: null } h ? h.Track : -1;
         string? tip = null;
         var cursor = StandardCursorType.Arrow;
         if (OnGrip(lastPointer))
@@ -1486,6 +1845,16 @@ public sealed class TimelineView : Control
         }
         else if (lastPointer.Y < RulerH && lastPointer.X >= HeaderW)
             tip = Loc.T("tl.tip.ruler");
+        else if (row?.Folder is { } fo)
+        {
+            if (lastPointer.X < 20) { tip = Loc.T("tl.tip.folderMove"); cursor = StandardCursorType.Hand; }
+            else if (lastPointer.X >= HeaderW) tip = Loc.T("tl.tip.folderLane");
+            else if (FoldRect(fo).Contains(lastPointer)) { tip = Loc.T(fo.Collapsed ? "tl.tip.unfold" : "tl.tip.fold"); cursor = StandardCursorType.Hand; }
+            else if (FolderMuteRect(fo).Contains(lastPointer)) tip = Loc.T(fo.Muted ? "tl.tip.folderUnmute" : "tl.tip.folderMute");
+            else if (FolderSoloRect(fo).Contains(lastPointer)) tip = Loc.T(fo.Solo ? "tl.tip.folderUnsolo" : "tl.tip.folderSolo");
+            else if (FolderRemoveRect(fo).Contains(lastPointer)) tip = Loc.T("tl.tip.folderRemove");
+            else tip = Loc.T("tl.tip.folderName");
+        }
         else if (i >= 0 && i < tracks.Count)
         {
             if (lastPointer.X < 24) { tip = Loc.T("tl.tip.reorder"); cursor = StandardCursorType.Hand; }
@@ -1557,7 +1926,7 @@ public sealed class TimelineView : Control
     {
         base.OnPointerWheelChanged(e);
         var p = e.GetPosition(this);
-        int i = (int)Math.Floor((p.Y - RulerH + scrollY) / laneH);
+        int i = HitTrack(p.Y);
         if (laneH >= 62 && p.Y >= RulerH && i >= 0 && i < tracks.Count && PanRect(i).Contains(p))
         {
             double pan = Math.Clamp(tracks[i].Channel.Pan + e.Delta.Y * ((e.KeyModifiers & KeyModifiers.Shift) != 0 ? 0.01 : 0.05), -1, 1);
