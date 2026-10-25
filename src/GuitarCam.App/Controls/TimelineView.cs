@@ -23,12 +23,13 @@ namespace GuitarCam.App.Controls;
 /// track can drop into a folder, out of it or between folders; the rows make room where it will land and the folder it
 /// goes into lights up.
 /// </summary>
-public sealed class TimelineView : Control
+public sealed partial class TimelineView : Control
 {
     /// <summary>The width the header rows are laid out for; a wider column gives the rest to the volume slider.</summary>
     const double LayoutHeaderW = 264;
     public const double MinHeaderW = 324, MaxHeaderW = 640;
-    public const double RulerH = 32;
+    /// <summary>The marker strip (<see cref="MarkerH"/>) and the ruler's numbers under it.</summary>
+    public const double RulerH = MarkerH + 32;
     /// <summary>Minimum px between minor ruler ticks before they get their own small number.</summary>
     const double MinorLabelPx = 30;
     /// <summary>Deepest horizontal zoom: two pixels per sample at 48 kHz, so single samples can be seen (native only).</summary>
@@ -929,8 +930,10 @@ public sealed class TimelineView : Control
             if (liftedId != null && folderById.TryGetValue(liftedId, out var liftedFolder)) DrawFolderLane(ctx, liftedFolder, W);
             if (recordingLanes != null)
                 foreach (int r in recordingLanes) DrawRecordingBar(ctx, r, W);
+            DrawStripGuides(ctx, W, H);
         }
         DrawRuler(ctx, W);
+        DrawStrip(ctx, W);
 
         // sticky headers
         ctx.FillRectangle(Palette.Panel, new Rect(0, 0, HeaderW, H));
@@ -1294,7 +1297,10 @@ public sealed class TimelineView : Control
 
     void DrawRuler(DrawingContext ctx, double W)
     {
-        ctx.FillRectangle(Palette.Panel, new Rect(HeaderW, 0, W - HeaderW, RulerH));
+        // the ruler's numbers sit under the marker strip
+        const double rulerH = RulerH - MarkerH;
+        using var _ = ctx.PushTransform(Matrix.CreateTranslation(0, MarkerH));
+        ctx.FillRectangle(Palette.Panel, new Rect(HeaderW, 0, W - HeaderW, rulerH));
         if (!bars)
         {
             double[] steps = TimeSteps;
@@ -1311,7 +1317,7 @@ public sealed class TimelineView : Control
                     for (int k = 1; k < div; k++)
                     {
                         double mx = X(s + k * seconds / div);
-                        ctx.DrawLine(minorPen, new Point(mx, RulerH - 6), new Point(mx, RulerH));
+                        ctx.DrawLine(minorPen, new Point(mx, rulerH - 6), new Point(mx, rulerH));
                         if (seconds * pps / div >= MinorLabelPx)
                         {
                             double ms = s + k * seconds / div;
@@ -1319,7 +1325,7 @@ public sealed class TimelineView : Control
                             ctx.DrawText(ml, 10, Palette.Faint, new Point(mx + 3, 17), Palette.Mono);
                         }
                     }
-                ctx.DrawLine(Palette.Pen(Palette.Line), new Point(x, 3), new Point(x, RulerH));
+                ctx.DrawLine(Palette.Pen(Palette.Line), new Point(x, 3), new Point(x, rulerH));
                 string label = s >= 60 ? (seconds < 1 ? $"{(int)(s / 60)}:{s % 60:00.###}" : $"{(int)(s / 60)}:{s % 60:00}") : $"{s:0.###}s";
                 ctx.DrawText(label, 15, Palette.Fg, new Point(x + 4, 3), Palette.MonoBold);
             }
@@ -1335,7 +1341,7 @@ public sealed class TimelineView : Control
         {
             double x = X(b * bar);
             if (x > W) break;
-            ctx.DrawLine(tick, new Point(x, 3), new Point(x, RulerH));
+            ctx.DrawLine(tick, new Point(x, 3), new Point(x, rulerH));
             ctx.DrawText((b + 1).ToString(), 15, Palette.Fg, new Point(x + 4, 3), Palette.MonoBold);
             // minor ticks: beats inside a bar, or single bars when the labels skip some; zoomed in, see below
             if (step == 1 && FineTick(beat) < beat) continue;
@@ -1345,7 +1351,7 @@ public sealed class TimelineView : Control
                 for (int k = 1; k < subN; k++)
                 {
                     double bx = X(b * bar + k * sub);
-                    ctx.DrawLine(beatPen, new Point(bx, RulerH - 6), new Point(bx, RulerH));
+                    ctx.DrawLine(beatPen, new Point(bx, rulerH - 6), new Point(bx, rulerH));
                     if (sub * pps >= MinorLabelPx)
                         ctx.DrawText((step == 1 ? k + 1 : b + k + 1).ToString(), 10, Palette.Faint, new Point(bx + 3, 17), Palette.Mono);
                 }
@@ -1360,7 +1366,7 @@ public sealed class TimelineView : Control
             if (tx > W) break;
             if (n % (perBeat * 4) == 0) continue;
             bool onBeat = n % perBeat == 0;
-            ctx.DrawLine(beatPen, new Point(tx, onBeat ? RulerH - 9 : RulerH - 5), new Point(tx, RulerH));
+            ctx.DrawLine(beatPen, new Point(tx, onBeat ? rulerH - 9 : rulerH - 5), new Point(tx, rulerH));
             if (onBeat) ctx.DrawText($"{n / (perBeat * 4) + 1}.{n / perBeat % 4 + 1}", 10, Palette.Faint, new Point(tx + 3, 17), Palette.Mono);
         }
     }
@@ -1882,7 +1888,7 @@ public sealed class TimelineView : Control
             var playColor = Recording ? Palette.Rec : Palette.Accent;
             var pen = Palette.Pen(playColor, 1.5);
             ctx.DrawLine(pen, new Point(px, 0), new Point(px, H));
-            using (ctx.PushTransform(Matrix.CreateTranslation(px, 0)))
+            using (ctx.PushTransform(Matrix.CreateTranslation(px, MarkerH)))
                 ctx.DrawGeometry(playColor, null, PlayheadTriangle);
         }
     }
@@ -1980,6 +1986,8 @@ public sealed class TimelineView : Control
         }
         var row = HitRow(p.Y);
         int i = row is { Folder: null } h ? h.Track : -1;
+        if (buttons.IsLeftButtonPressed || buttons.IsRightButtonPressed)
+            if (StripPressed(p, e, buttons.IsRightButtonPressed)) return;
         if (buttons.IsRightButtonPressed)
         {
             if (row?.Folder is { } folder) FolderContextRequested?.Invoke(folder, p);
@@ -2329,6 +2337,8 @@ public sealed class TimelineView : Control
                 SeekRequested?.Invoke(Math.Max(0, ClipEditing.Snap(Sec(lastPointer.X), Grid, (modifiers & KeyModifiers.Alt) != 0)));
             }
         }
+        else if (gesture is "marker" or "loop")
+            StripMoved();
         else if (gesture == "volume")
         {
             var r = VolumeRect(fromIndex);
@@ -2447,6 +2457,7 @@ public sealed class TimelineView : Control
             if (Range is { } r) RangeSelected?.Invoke(r.TrackId, r.Start, r.End);
             else ClearRange();
         }
+        if (kind is "marker" or "loop") StripReleased(kind, changed);
         if (kind == "clip" && changed && value != null) ClipEditCommitted?.Invoke(value, target, swap);
         if (kind == "curve" && changed && value != null) ClipEditCommitted?.Invoke(value, null, null);
         if (kind == "reorder" && changed && landed is { } l && (l != from0 || gathers))
@@ -2517,7 +2528,8 @@ public sealed class TimelineView : Control
         var row = HitRow(lastPointer.Y);
         int i = row is { Folder: null } h ? h.Track : -1;
         var cursor = StandardCursorType.Arrow;
-        if (OnGrip(lastPointer)) cursor = StandardCursorType.SizeWestEast;
+        if (InStrip(lastPointer)) cursor = StripCursor(lastPointer);
+        else if (OnGrip(lastPointer)) cursor = StandardCursorType.SizeWestEast;
         else if (AddRect.Contains(lastPointer)) cursor = StandardCursorType.Hand;
         else if (RowEdgeAt(lastPointer) != null) cursor = StandardCursorType.SizeNorthSouth;
         else if (row?.Folder is { } fo)

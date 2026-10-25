@@ -18,11 +18,17 @@ using GuitarCam.Projects;
 
 namespace GuitarCam.App.Dialogs;
 
+/// <summary>
+/// What the setup step chose. <c>Target</c> is the social preset (<see cref="ExportTargets"/>) and <c>TargetLufs</c>
+/// the loudness the mix is mastered to (the preset's, or −14 for "Exportar audio" with the box ticked; null = as it is).
+/// </summary>
 public sealed record ExportOptions(
     string? OutDir,
     string FileName,
     bool Overwrite,
-    ExportQuality Quality);
+    ExportQuality Quality,
+    string Target = ExportTargets.Project,
+    double? TargetLufs = null);
 
 public sealed record ExportSummary(
     int Width,
@@ -38,7 +44,9 @@ public sealed record ExportedVideo(
     string LoggedFile,
     long? Bytes = null,
     double? DurationSec = null,
-    double? ElapsedSec = null);
+    double? ElapsedSec = null,
+    double? Lufs = null,
+    double TailSec = 0);
 
 /// <summary>
 /// Port of <c>ExportSetupDialog</c>, <c>ExportProgressDialog</c>, <c>ExportErrorDialog</c> and
@@ -49,6 +57,9 @@ public sealed record ExportedVideo(
 /// <item><description>The post-export video preview uses <see cref="VideoDecoder"/> into a <see cref="WriteableBitmap"/> instead of an HTML <c>&lt;video&gt;</c> element.</description></item>
 /// <item><description>A solo audio project gets "Exportar audio" in the same dialog: WAV or MP3 instead of the quality,
 /// three steps (mix, MP3, save) and no picture when it is done (<see cref="AudioExporter"/>).</description></item>
+/// <item><description>"Destino" picks a social preset (<see cref="ExportTargets"/>): its frame for this video and the
+/// mix mastered to its loudness. "Proyecto" is the default and changes nothing, so grabo-mezclo-exporto has no extra
+/// step. The done screen shows the mix's integrated LUFS and the effect tail (<see cref="GuitarCam.Audio.Dsp.MixMaster"/>).</description></item>
 /// </list>
 /// </summary>
 public sealed partial class ExportDialog : UserControl
@@ -74,6 +85,7 @@ public sealed partial class ExportDialog : UserControl
     string fileName = "";
     string? folder;
     ExportQuality quality = ExportQuality.Alta;
+    string target = ExportTargets.Project;
     ExportCheck? check;
     string? checkError;
     bool picking;
@@ -162,6 +174,18 @@ public sealed partial class ExportDialog : UserControl
         QualityBorradorBtn.Click += (_, _) => SetQuality(ExportQuality.Borrador);
         FormatWavBtn.Click += (_, _) => SetAudioFormat(AudioFormat.Wav);
         FormatMp3Btn.Click += (_, _) => SetAudioFormat(AudioFormat.Mp3);
+        foreach (var t in ExportTargets.All)
+        {
+            var b = new Button
+            {
+                Classes = { "seg" },
+                Content = Loc.Or($"export.target.{t.Id}", t.Label),
+                Tag = t.Id,
+            };
+            ToolTip.SetTip(b, Loc.T($"export.target.{t.Id}.tip"));
+            b.Click += (_, _) => SetTarget(t.Id);
+            TargetButtons.Children.Add(b);
+        }
         UseSuggestedButton.Click += (_, _) =>
         {
             if (check == null) return;
@@ -255,7 +279,8 @@ public sealed partial class ExportDialog : UserControl
             record.File,
             record.Bytes > 0 ? record.Bytes : null,
             record.DurationSec > 0 ? record.DurationSec : null,
-            ElapsedSec: null));
+            ElapsedSec: null,
+            Lufs: record.Lufs));
     }
 
     public void HideDialog()
@@ -310,6 +335,8 @@ public sealed partial class ExportDialog : UserControl
         var savedQuality = Mp4Exporter.ParseQuality(p?.Settings.Export.Quality);
         if (initial == null) audioFormat = AudioExporter.ParseFormat(p?.Settings.Export.AudioFormat);
         if (initial == null) StemsCheck.IsChecked = p?.Settings.Export.Stems == true;
+        if (initial == null) AudioLufsCheck.IsChecked = p?.Settings.Export.AudioLufs == true;
+        target = ExportTargets.Get(initial?.Target ?? p?.Settings.Export.Target).Id;
 
         SetFileNameInput(initial?.FileName ?? defaultName);
         folder = initial != null ? initial.OutDir : savedFolder;
@@ -387,6 +414,12 @@ public sealed partial class ExportDialog : UserControl
     void SetQuality(ExportQuality q)
     {
         quality = q;
+        RenderSetupState();
+    }
+
+    void SetTarget(string id)
+    {
+        target = ExportTargets.Get(id).Id;
         RenderSetupState();
     }
 
@@ -474,15 +507,25 @@ public sealed partial class ExportDialog : UserControl
     {
         HeaderTitle.Text = audio ? Loc.T("export.audio") : Loc.T("export.mp4");
         string takesWord = Loc.T(summary.Takes == 1 ? "exp.channel.one" : "exp.channel.many");
+        var preset = ExportTargets.Get(target);
+        string aspect = ExportTargets.AspectFor(target, summary.AspectRatio);
+        var (outW, outH) = Mp4Exporter.ExportSize(aspect);
         int tracksWithClips = currentStore?.Project.Tracks.Count(t => t.Clips.Count > 0) ?? 0;
         HeaderSubtitle.Text = audio
             ? Loc.T("exp.sub.audio", Loc.T(tracksWithClips == 1 ? "tracks.one" : "tracks.many", tracksWithClips), Mp4Exporter.FormatTime(summary.DurationSec))
-            : $"{summary.Width}×{summary.Height} · {summary.AspectRatio} · {summary.Takes} {takesWord} · {Mp4Exporter.FormatTime(summary.DurationSec)}";
+            : $"{outW}×{outH} · {aspect} · {summary.Takes} {takesWord} · {Mp4Exporter.FormatTime(summary.DurationSec)}";
         ExtText.Text = Ext;
         FileNameBox.Watermark = Loc.T(audio ? "exp.mySong" : "exp.myVideo");
         QualityLabel.Text = Loc.T(audio ? "exp.format" : "exp.quality");
         FormatSeg.IsVisible = audio;
         QualitySeg.IsVisible = !audio;
+        TargetPanel.IsVisible = !audio;
+        AudioLufsCheck.IsVisible = audio;
+        foreach (var c in TargetButtons.Children)
+            if (c is Button b) SetActiveSegment(b, (string?)b.Tag == target);
+        TargetDescText.Text = preset.Lufs is { } lufs
+            ? Loc.T("exp.target.desc", outW, outH, aspect, Lufs(lufs))
+            : Loc.T("exp.target.project.desc", aspect);
         ToolTip.SetTip(HeaderSubtitle, null);
 
         string shownFolder = check?.Folder ?? (folder ?? Loc.T("exp.projectFolder"));
@@ -501,7 +544,7 @@ public sealed partial class ExportDialog : UserControl
 
         var qSpec = Mp4Exporter.GetQualitySpec(quality);
         double estBytes = audio ? AudioExporter.EstimateBytes(audioFormat, summary.DurationSec)
-            : Mp4Exporter.EstimateBytes(quality, summary.Width, summary.Height, summary.DurationSec);
+            : Mp4Exporter.EstimateBytes(quality, outW, outH, summary.DurationSec);
         EstBytesText.Text = $"≈ {Mp4Exporter.FormatBytes(estBytes)}";
         QualityDescText.Text = !audio ? qSpec.Title
             : audioFormat == AudioFormat.Mp3 ? Loc.T("exp.mp3.note")
@@ -550,7 +593,10 @@ public sealed partial class ExportDialog : UserControl
         if (currentStore == null || check == null || !check.FolderExists || checkError != null || picking) return;
         if (fileName.Trim().Length == 0) return;
 
-        var opts = new ExportOptions(folder, check.FileName, check.Exists, quality);
+        double? lufs = audio
+            ? (AudioLufsCheck.IsChecked == true ? ExportTargets.StreamingLufs : null)
+            : ExportTargets.Get(target).Lufs;
+        var opts = new ExportOptions(folder, check.FileName, check.Exists, quality, target, lufs);
         await RunExportJob(opts);
     }
 
@@ -602,6 +648,7 @@ public sealed partial class ExportDialog : UserControl
                 cts.Token);
 
             currentStore.Project.Settings.Export.Stems = withStems;
+            if (audio) currentStore.Project.Settings.Export.AudioLufs = opts.TargetLufs != null;
             RecordExport(currentStore.Project, opts, res, audio ? format : null);
             ExportCompleted?.Invoke(res);
             if (withStems)
@@ -613,7 +660,7 @@ public sealed partial class ExportDialog : UserControl
                     if (phase != Phase.Running) return;
                     stemsFraction = f;
                     RenderRunning();
-                }), cts.Token);
+                }), cts.Token, res.DurationSec);
                 doneStems = Loc.T("exp.done.stems", count, Path.GetFileName(stemFolder));
             }
 
@@ -624,7 +671,9 @@ public sealed partial class ExportDialog : UserControl
                 res.File,
                 res.Bytes,
                 res.DurationSec,
-                res.ElapsedSec));
+                res.ElapsedSec,
+                double.IsFinite(res.Lufs) ? res.Lufs : null,
+                res.TailSec));
         }
         catch (OperationCanceledException)
         {
@@ -862,15 +911,22 @@ public sealed partial class ExportDialog : UserControl
         AudioDoneRow.IsVisible = audio && !doneMissing;
         AudioDoneName.Text = doneVideo.FileName;
         bool mp3 = doneVideo.FileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase);
-        AudioDoneInfo.Text = Loc.T("exp.done.info", Mp4Exporter.FormatTime(doneDurationSec), mp3 ? "MP3 320 kbps" : Loc.T("exp.wav24"));
+        AudioDoneInfo.Text = Loc.T("exp.done.info", Mp4Exporter.FormatTime(doneDurationSec), mp3 ? "MP3 320 kbps" : Loc.T("exp.wav24"))
+            + (doneVideo.Lufs is { } al ? $" · {Lufs(al)} LUFS" : "");
         DoneRevealButton.IsEnabled = !doneMissing;
 
         var parts = new List<string>();
         if (doneBytes is > 0) parts.Add(Mp4Exporter.FormatBytes(doneBytes.Value));
         if (doneVideo.ElapsedSec is { } el) parts.Add(Loc.T("exp.done.in", Loc.T(audio ? "exp.done.exported" : "exp.done.rendered"), Mp4Exporter.FormatTime(el)));
         if (doneVideo.ElapsedSec != null && doneStems != null) parts.Add(doneStems);
+        if (doneVideo.Lufs is { } l && !audio) parts.Add($"{Lufs(l)} LUFS");
+        if (doneVideo.TailSec >= 0.1) parts.Add(Loc.T("exp.done.tail", doneVideo.TailSec.ToString("0.0")));
+        ToolTip.SetTip(DoneMetaText, doneVideo.Lufs != null ? Loc.T("exp.done.lufs.tip") : null);
         DoneMetaText.Text = string.Join(" · ", parts);
     }
+
+    /// <summary>"−14,0": loudness with one decimal and a real minus sign, in the system's culture.</summary>
+    static string Lufs(double v) => v.ToString("0.0").Replace('-', '−');
 
     void StartDonePreview(string path)
     {
@@ -1088,17 +1144,13 @@ public sealed partial class ExportDialog : UserControl
     }
 
     /// <summary>
-    /// Builds a complete <see cref="ExportJobSpec"/> from <paramref name="store"/>, reusing already-loaded
-    /// <see cref="LiveTrack"/> audio buffers when provided or loading audio via <see cref="AudioLoader"/>.
+    /// The mix as <see cref="MixRenderer"/> takes it: every track's clips (the loaded audio of <paramref name="liveTracks"/>
+    /// when there is, else loaded with <see cref="AudioLoader"/>) and channel, and the buses with the master.
     /// </summary>
-    public static ExportJobSpec BuildJob(
-        ProjectStore store,
-        ExportOptions options,
-        IReadOnlyList<LiveTrack>? liveTracks = null,
+    public static (List<MixTrackSpec> Tracks, MixBusSpec Bus) BuildMix(ProjectStore store, IReadOnlyList<LiveTrack>? liveTracks = null,
         int sampleRate = PlaybackEngine.SampleRate)
     {
         var p = store.Project;
-        var takes = ExtractVideoTakes(store, liveTracks);
         var mixTracks = new List<MixTrackSpec>();
         var audioCache = new Dictionary<string, (float[] L, float[] R, double RmsDb)>(StringComparer.OrdinalIgnoreCase);
 
@@ -1112,8 +1164,15 @@ public sealed partial class ExportDialog : UserControl
             {
                 var m = p.FindMedia(c.MediaId);
                 var lc = lt?.Clips.FirstOrDefault(x => x.Clip.Id == c.Id);
-                float[]? l = lc?.Audio?.L;
-                float[]? r = lc?.Audio?.R;
+                // what the clip plays when it is already its track's transpose, else the cache's (or made now)
+                float[]? l = null, r = null;
+                if (lc?.Sound is { } sound && lc.SoundSemis == trk.Transpose)
+                {
+                    l = sound.L;
+                    r = sound.R;
+                }
+                else if (lc?.Audio is { } live && store.Resolve(m?.Audio) is { } livePath)
+                    (l, r) = store.TrackAudio(trk, livePath, live.L, live.R);
                 if (l == null || r == null)
                 {
                     if (store.Resolve(m?.Audio) is not { } audioPath || !File.Exists(audioPath)) continue;
@@ -1124,8 +1183,7 @@ public sealed partial class ExportDialog : UserControl
                         cached = (loaded.Left, loaded.Right, rms);
                         audioCache[audioPath] = cached;
                     }
-                    l = cached.L;
-                    r = cached.R;
+                    (l, r) = store.TrackAudio(trk, audioPath, cached.L, cached.R);
                     firstRmsDb ??= cached.RmsDb;
                 }
                 mixClips.Add(new MixClipSpec
@@ -1210,7 +1268,24 @@ public sealed partial class ExportDialog : UserControl
                 dly.Duck,
                 dly.ReturnGain,
                 dly.Muted),
+            Master = p.Settings.Master.ToParams(),
         };
+        return (mixTracks, mixBus);
+    }
+
+    /// <summary>
+    /// Builds a complete <see cref="ExportJobSpec"/> from <paramref name="store"/>, reusing already-loaded
+    /// <see cref="LiveTrack"/> audio buffers when provided or loading audio via <see cref="AudioLoader"/>.
+    /// </summary>
+    public static ExportJobSpec BuildJob(
+        ProjectStore store,
+        ExportOptions options,
+        IReadOnlyList<LiveTrack>? liveTracks = null,
+        int sampleRate = PlaybackEngine.SampleRate)
+    {
+        var p = store.Project;
+        var takes = ExtractVideoTakes(store, liveTracks);
+        var (mixTracks, mixBus) = BuildMix(store, liveTracks, sampleRate);
 
         var col = p.Settings.Color;
         var vfx = p.Settings.VideoFx;
@@ -1224,7 +1299,8 @@ public sealed partial class ExportDialog : UserControl
             Overwrite = options.Overwrite,
             Quality = options.Quality,
             Layout = p.Settings.Layout,
-            AspectRatio = p.Settings.Aspect,
+            AspectRatio = ExportTargets.AspectFor(options.Target, p.Settings.Aspect),
+            TargetLufs = options.TargetLufs,
             BorderSize = 4,
             Color = new ExportColorSpec(
                 col.On,
@@ -1260,13 +1336,19 @@ public sealed partial class ExportDialog : UserControl
     {
         project.Settings.Export.Dir = string.IsNullOrWhiteSpace(options.OutDir) ? null : options.OutDir;
         if (audioFormat is { } f) project.Settings.Export.AudioFormat = AudioExporter.FormatId(f);
-        else project.Settings.Export.Quality = Mp4Exporter.QualityToId(options.Quality);
+        else
+        {
+            project.Settings.Export.Quality = Mp4Exporter.QualityToId(options.Quality);
+            project.Settings.Export.Target = ExportTargets.Get(options.Target).Id;
+        }
         project.Exports.Insert(0, new ExportRecord
         {
             File = result.File,
             CreatedAt = DateTime.UtcNow,
             Layout = audioFormat == null ? project.Settings.Layout : null,
-            Aspect = audioFormat == null ? project.Settings.Aspect : null,
+            Aspect = audioFormat == null ? ExportTargets.AspectFor(options.Target, project.Settings.Aspect) : null,
+            Target = audioFormat == null && options.Target != ExportTargets.Project ? options.Target : null,
+            Lufs = double.IsFinite(result.Lufs) ? Math.Round(result.Lufs, 1) : null,
             Quality = audioFormat is { } af ? AudioExporter.FormatId(af) : Mp4Exporter.QualityToId(options.Quality),
             DurationSec = Math.Round(result.DurationSec, 2),
             Bytes = result.Bytes,

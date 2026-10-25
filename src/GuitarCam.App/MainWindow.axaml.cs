@@ -119,6 +119,7 @@ public partial class MainWindow : Window
         ClearSolosButton.Click += (_, _) => ClearAllToggles(true);
         InitTimelineEditing();
         InitTransport();
+        InitMarkers();
         InitPreview();
         InitMode();
         InitImport();
@@ -201,7 +202,7 @@ public partial class MainWindow : Window
         {
             timer.Stop();
             // in solo audio the bottom row is closed: the heights remembered before stay
-            try { if (!audioMode) AppConfig.Set(mixerView ? "mixerHeight" : "timelineHeight", Root.RowDefinitions[3].ActualHeight.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
+            try { if (!audioMode && !(mixerView && masteringView)) AppConfig.Set(mixerView ? "mixerHeight" : "timelineHeight", Root.RowDefinitions[3].ActualHeight.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* View preference only. */ }
             engine.Dispose();
             camera.Dispose();
@@ -346,6 +347,8 @@ public partial class MainWindow : Window
         foreach (var t in tracks) t.CloseVideo();
         store?.Dispose();
         store = null;
+        ResetMaster();
+        RefreshMarkers();
         RefreshColorPanel();
         if (clearUndo)
         {
@@ -386,6 +389,7 @@ public partial class MainWindow : Window
         store = next;
         RecentProjects.Touch(dir, store.Project.Name);
         await ShowProject(store);
+        ResetMaster();
         UpdateUndoButtons();
         // once the screen is built: the load's garbage, collected now and not during the first play
         Dispatcher.UIThread.Post(() => { if (!engine.Playing && !RecordingBusy) AudioWarmUp.Compact(); }, DispatcherPriority.Background);
@@ -429,6 +433,7 @@ public partial class MainWindow : Window
         tracks = list;
         if (!preserveView) dirty = false;
         engine.SetTracks(list, p.Settings);
+        RefreshTranspose();
         SessionName.Text = p.Name;
         Title = WindowTitle(p.Name);
         Tempo.Set(p.Settings.Bpm);
@@ -436,6 +441,7 @@ public partial class MainWindow : Window
         Timeline.LengthSec = engine.LengthSec;
         ApplyFolderMix(p, list);
         Timeline.SetTracks(list, p.Folders, preserveView);
+        RefreshMarkers();
         UpdateResetHeights();
         Preview.SetProject(list, p.Settings);
         RefreshFormat();
@@ -480,7 +486,7 @@ public partial class MainWindow : Window
         shortcutTips.AddRange(
         [
             (SaveButton, Loc.T("title.save.tip"), "save"), (UndoButton, Loc.T("title.undo"), "undo"), (RedoButton, Loc.T("title.redo"), "redo"), (TimelineFitButton, Loc.T("timeline.fit.tip"), "fit"),
-            (ToStartButton, Loc.T("transport.start.tip"), "toStart"), (CountInToggle, Loc.T("transport.countin.tip"), "countIn"),
+            (ToStartButton, Loc.T("transport.start.tip"), "toStart"), (LoopToggle, Loc.T("transport.loop.tip"), "loop"),(CountInToggle, Loc.T("transport.countin.tip"), "countIn"),
             (ClickToggle, Loc.T("transport.click.tip"), "click"), (TunerToggle, Loc.T("transport.tuner.tip"), "tuner"), (ViewSwitch, Loc.T("transport.view.tip"), "mixer"), (FitButton, Loc.T("transport.fit.tip"), "fit"),
         ]);
         ApplyShortcutTips();
@@ -569,6 +575,21 @@ public partial class MainWindow : Window
             case "toStart":
                 engine.Seek(0);
                 break;
+            case "loop":
+                LoopToggle.IsChecked = LoopToggle.IsChecked != true;
+                break;
+            case "loopIn":
+                SetLoopStartHere();
+                break;
+            case "loopOut":
+                SetLoopEndHere();
+                break;
+            case "marker":
+                AddMarker(engine.PositionSec, rename: false);
+                break;
+            case "prevMarker" or "nextMarker":
+                JumpToMarker(action == "nextMarker");
+                break;
             case "fit":
                 Timeline.FitAll();
                 break;
@@ -579,7 +600,8 @@ public partial class MainWindow : Window
                 await DuplicateSelection();
                 break;
             case "mixer":
-                SetMixerView(!mixerView);
+                if (mixerView && !masteringView) SetMixerView(false);
+                else ShowBottomView(mastering: false);
                 break;
             case "click":
                 ClickToggle.IsChecked = ClickToggle.IsChecked != true;
@@ -649,6 +671,7 @@ public partial class MainWindow : Window
         if (RecordingBusy) RefreshRecording();
         var m = engine.TakeMeters();
         TickMixer(pos, m.OutL, m.OutR);
+        TickMaster();
         InputMeter.Push(m.InL, m.InR);
         Live.Meter.Push(m.InL, m.InR);
         TickCamera();
@@ -784,6 +807,7 @@ public partial class MainWindow : Window
                     tracks[i].Track.Color = restored.Color;
                     tracks[i].Track.Icon = restored.Icon;
                     tracks[i].Track.Input = restored.Input;
+                    tracks[i].Track.Transpose = restored.Transpose;
                     tracks[i].ApplyChannel(restored.Channel);
                     tracks[i].Track.Extra = restored.Extra;
                 }
@@ -792,6 +816,7 @@ public partial class MainWindow : Window
                 Timeline.UpdateTracks(tracks, st.Project.Folders);
                 UpdateResetHeights();
                 engine.SetSettings(st.Project.Settings, glideDelay: true);
+                RefreshMasterPanel();
                 Timeline.Bpm = st.Project.Settings.Bpm;
                 Timeline.InvalidateVisual();
                 Preview.SetProject(tracks, st.Project.Settings);
@@ -815,6 +840,8 @@ public partial class MainWindow : Window
             RefreshColorPanel();
             ApplyMode();
             RefreshMixer();
+            RefreshMarkers();
+            RefreshTranspose();
             MarkDirty();
             UpdateUndoButtons();
         }

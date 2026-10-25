@@ -4,7 +4,8 @@ namespace GuitarCam.Projects;
 
 /// <summary>
 /// Port of the editable snapshots in GuitarCam/src/App.tsx: lanes, layout, aspect and bus/video settings,
-/// plus the native project mode (video / solo audio) and track folders.
+/// plus the native project mode (video / solo audio), track folders and markers (the A–B loop range is transport
+/// state and stays out, like the tempo).
 /// Mutable native objects are serialized for isolation; media, exports, log, tempo and project identity
 /// stay outside undo, like the web. Same 200-step limit and 800 ms coalescing per nonempty key.
 /// </summary>
@@ -20,7 +21,8 @@ public sealed class UndoManager(TimeProvider? timeProvider = null)
 
     /// <summary>Only the editable state; serialized before every edit, never the immutable recordings.</summary>
     sealed record Editable(List<Track> Tracks, string Layout, string Aspect, ReverbSettings Reverb,
-        DelaySettings Delay, ColorGrade Color, VideoFx VideoFx, string? Mode = null, List<Folder>? Folders = null);
+        DelaySettings Delay, ColorGrade Color, VideoFx VideoFx, string? Mode = null, List<Folder>? Folders = null,
+        List<Marker>? Markers = null);
 
     public bool CanUndo => undo.Count > 0;
     public bool CanRedo => redo.Count > 0;
@@ -49,6 +51,7 @@ public sealed class UndoManager(TimeProvider? timeProvider = null)
         from.RemoveAt(from.Count - 1);
         project.Tracks = state.Tracks;
         project.Folders = state.Folders ?? [];
+        project.Markers = state.Markers ?? [];
         var s = project.Settings;
         s.Layout = state.Layout;
         s.Aspect = state.Aspect;
@@ -63,7 +66,7 @@ public sealed class UndoManager(TimeProvider? timeProvider = null)
     }
 
     static string Capture(Project p) => JsonSerializer.Serialize(new Editable(p.Tracks, p.Settings.Layout,
-        p.Settings.Aspect, p.Settings.Reverb, p.Settings.Delay, p.Settings.Color, p.Settings.VideoFx, p.Settings.Mode, p.Folders), ProjectStore.Json);
+        p.Settings.Aspect, p.Settings.Reverb, p.Settings.Delay, p.Settings.Color, p.Settings.VideoFx, p.Settings.Mode, p.Folders, p.Markers), ProjectStore.Json);
 
     public void Clear()
     {

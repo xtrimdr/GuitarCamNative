@@ -83,6 +83,7 @@ guitarcam.json.bak  el guardado anterior
 guitarcam.lock      mientras está abierto (una segunda ventana lo abre en solo lectura)
 historial/          copias para volver atrás
 media/              grabaciones e importados
+cache/              lo que se rehace desde media/ (tomas transpuestas, TransposeCache): borrarlo solo cuesta tiempo
 exports/
 ```
 
@@ -115,7 +116,7 @@ El callback de ASIO (`AsioDuplex.ProcessBlock`, `PlaybackEngine.Process`) corre 
 - Motor a 48 kHz (`PlaybackEngine.SampleRate`); los medios se remuestrean con `AudioLoader`. Si un cambio sube mucho la
   carga "DSP x %" de la barra de título, decilo.
 
-Cadena por pista: clips (fades, ganancia) → saturación → EQ del preset antes → compresor → EQ del preset después → EQ
+Cadena por pista: clips (fades, ganancia; el audio ya transpuesto si la pista tiene Transponer) → saturación → EQ del preset antes → compresor → EQ del preset después → EQ
 de pista → paneo → fader → suma; del fader salen los envíos post-fader a reverb y delay, que vuelven al master →
 limitador. El click va por fuera del limitador, atrasado la misma latencia. `TrackDspChain` y `MixGraphBus`
 (`GuitarCam.Audio/Dsp/MixRenderer.cs`) los usan igual la reproducción y la exportación: no los dupliques.

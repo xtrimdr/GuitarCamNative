@@ -11,6 +11,15 @@ using GuitarCam.Projects;
 namespace GuitarCam.App.Model;
 
 /// <summary>
+/// The samples a clip plays: its media's audio as recorded, or moved by its track's Transponer
+/// (<see cref="GuitarCam.Audio.Dsp.PitchShifter"/>, same length). Never changed once built, so the audio thread can hold it.
+/// </summary>
+public sealed class ClipSound(float[] left, float[] right)
+{
+    public readonly float[] L = left, R = right;
+}
+
+/// <summary>
 /// A media file's audio in memory (resampled to the engine's sample rate via <see cref="AudioLoader"/>),
 /// with its waveform peaks, measured level and compressor envelope. Shared by its clips.
 /// </summary>
@@ -20,6 +29,8 @@ public sealed class MediaAudio
 
     public float[] L { get; }
     public float[] R { get; }
+    /// <summary>The audio as recorded, as a clip plays it.</summary>
+    public ClipSound Sound { get; }
     public int SampleRate { get; }
     public int SourceSampleRate { get; }
     public float[] PeakMin { get; }
@@ -33,6 +44,7 @@ public sealed class MediaAudio
         var loaded = AudioLoader.Load(path, targetSampleRate);
         L = loaded.Left;
         R = loaded.Right;
+        Sound = new ClipSound(L, R);
         SampleRate = loaded.SampleRate;
         SourceSampleRate = loaded.SourceSampleRate;
 
@@ -79,6 +91,18 @@ public sealed class LiveClip
     public MediaAudio? Audio { get; }
     public bool Offline => Audio == null;
 
+    volatile ClipSound? sound;
+    /// <summary>
+    /// What it plays (its <see cref="Audio"/> as recorded, or transposed): the UI swaps it whole and the audio thread
+    /// crossfades to it over <see cref="LiveTrack.SoundFade"/> samples. The waveform and the level stay the recording's.
+    /// </summary>
+    public ClipSound? Sound { get => sound; set => sound = value; }
+    /// <summary>The semitones <see cref="Sound"/> is moved by (UI thread).</summary>
+    public double SoundSemis { get; set; }
+    // audio thread only: the sound it last played and the one it is fading out of
+    internal ClipSound? Heard, Fading;
+    internal int FadeLeft;
+
     public VideoDecoder? Video { get; private set; }
     /// <summary>The take's video file (it may be missing), for the lane's thumbnails; null for audio-only media.</summary>
     public string? VideoPath { get; init; }
@@ -98,6 +122,7 @@ public sealed class LiveClip
         RefreshCurve();
         Media = media;
         Audio = audio;
+        sound = audio?.Sound;
     }
 
     public string Name => Media?.Name ?? Loc.T("track.noMedia");
@@ -211,6 +236,8 @@ public sealed class LiveClip
 /// </summary>
 public sealed class LiveTrack
 {
+    /// <summary>10 ms at 48 kHz: a clip that starts playing its transposed audio crossfades to it, never clicks.</summary>
+    public const int SoundFade = 480;
     readonly int sampleRate;
 
     public Track Track { get; set; }
@@ -400,8 +427,16 @@ public sealed class LiveTrack
         for (int cIdx = 0; cIdx < clips.Count; cIdx++)
         {
             var c = clips[cIdx];
-            var a = c.Audio;
+            var a = c.Sound;
             if (a == null || a.L.Length == 0) continue;
+            if (a != c.Heard)
+            {
+                c.Fading = c.Heard;
+                c.Heard = a;
+                c.FadeLeft = c.Fading != null && c.Fading.L.Length == a.L.Length ? SoundFade : 0;
+            }
+            var old = c.FadeLeft > 0 ? c.Fading : null;
+            int fadeLeft = c.FadeLeft;
             var w = c.Window;
             if (w.End <= w.Start) continue;
             long startFrame = Math.Max(0, (long)Math.Round(w.Start * sampleRate));
@@ -431,9 +466,17 @@ public sealed class LiveTrack
                 double timeSec = f * invSr;
                 float env = (float)ClipEnvelope.GainAt(timeSec, w.Start, w.End, fades.FadeIn, fades.FadeOut) * cg * (k + dk * (i % ClipGainCurve.Step));
                 if (!weight.IsEmpty) env *= weight[i];
-                bl[i] += left[src] * env;
-                br[i] += right[src] * env;
+                float sl = left[src], sr = right[src];
+                if (old != null && fadeLeft > 0)
+                {
+                    float wOld = fadeLeft-- / (float)SoundFade;
+                    sl += (old.L[src] - sl) * wOld;
+                    sr += (old.R[src] - sr) * wOld;
+                }
+                bl[i] += sl * env;
+                br[i] += sr * env;
             }
+            c.FadeLeft = fadeLeft;
         }
     }
 

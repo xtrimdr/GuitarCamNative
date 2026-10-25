@@ -184,6 +184,10 @@ public sealed record ExportJobSpec
     public required IReadOnlyList<MixTrackSpec> MixTracks { get; init; }
     public required MixBusSpec MixBus { get; init; }
     public int SampleRate { get; init; } = 48000;
+    /// <summary>How long the reverb and delay may ring after the last clip (<see cref="MixMaster"/>); 0 = cut there.</summary>
+    public double TailSec { get; init; } = MixMaster.MaxTailSec;
+    /// <summary>Integrated loudness the mix is mastered to (a social preset, <see cref="ExportTargets"/>); null = as it is.</summary>
+    public double? TargetLufs { get; init; }
 }
 
 public sealed record ExportResult(
@@ -194,7 +198,9 @@ public sealed record ExportResult(
     bool IsDefaultFolder,
     long Bytes,
     double DurationSec,
-    double ElapsedSec);
+    double ElapsedSec,
+    double Lufs = double.NegativeInfinity,
+    double TailSec = 0);
 
 public sealed class ExportException : Exception
 {
@@ -213,7 +219,8 @@ public sealed class ExportException : Exception
 /// <c>src/components/ExportDialog.tsx</c>, <c>src/shared/panelLayout.js</c>, <c>src/shared/colorGrade.js</c>,
 /// and <c>src/shared/videoFx.js</c>):
 /// renders the audio mix offline via <see cref="MixRenderer"/> (same DSP graph as live playback, without
-/// master limiter look-ahead delay), builds the exact single-pass FFmpeg <c>filter_complex</c> (panel layout,
+/// master limiter look-ahead delay) and masters it with <see cref="MixMaster"/> (effect tails, loudness of a social
+/// preset), builds the exact single-pass FFmpeg <c>filter_complex</c> (panel layout,
 /// per-clip <c>SyncMs</c>/<c>VideoOffsetMs</c> alignment, 3D LUT <c>.cube</c>, grain, mirror, cover-scale + crop
 /// framing, vignette multiply mask, letterbox bars, <c>tpad</c> hold/delay, video fades and overlay), encodes
 /// <c>libx264</c> + <c>aac 320k</c> into a hidden <c>.part</c> file while parsing <c>-progress pipe:1</c>,
@@ -250,6 +257,7 @@ public static partial class Mp4Exporter
     {
         "9:16" => (1080, 1920),
         "1:1" => (1080, 1080),
+        "4:5" => (1080, 1350),
         _ => (1920, 1080),
     };
 
@@ -353,8 +361,14 @@ public static partial class Mp4Exporter
         int OutHeight,
         IReadOnlyList<string> TempFilesToClean);
 
+    /// <summary>A tail shorter than this is not worth freezing the picture for.</summary>
+    const double MinTailSec = 0.05;
+
     /// <summary>
     /// Builds the exact FFmpeg <c>filter_complex</c> and argument list from <c>server/index.js:201-379</c>.
+    /// <paramref name="audioSec"/> is the mastered mix's length: when the effect tails run past the last take, the
+    /// picture freezes on its last frame and fades to the background over the tail (native only), so the video
+    /// ends with the sound instead of cutting it or going black under it.
     /// When <paramref name="tempDir"/> is provided and color grade / vignette are active, writes the temporary
     /// <c>.cube</c> and <c>.gray</c> files into <paramref name="tempDir"/> using bare filenames (since FFmpeg
     /// runs with <c>WorkingDirectory = tempDir</c> to avoid escaping Windows drive colons in filter args).
@@ -364,7 +378,8 @@ public static partial class Mp4Exporter
         string mixWavPath,
         string partOutPath,
         string? tempDir = null,
-        string? runId = null)
+        string? runId = null,
+        double? audioSec = null)
     {
         if (job.Takes.Count == 0)
             throw new ExportException("No hay canales activos para exportar.");
@@ -418,8 +433,11 @@ public static partial class Mp4Exporter
         }
         double mixDur = MixRenderer.MixDurationSec(job.MixTracks, job.SampleRate);
         if (mixDur > maxDuration) maxDuration = mixDur;
+        double contentEnd = maxDuration;
+        double tail = audioSec is { } a && a - contentEnd > MinTailSec ? a - contentEnd : 0;
+        maxDuration += tail;
 
-        filterParts.Add($"color=c={BG}:s={outW}x{outH}:r=30:d={F3(maxDuration)}[base0]");
+        filterParts.Add($"color=c={BG}:s={outW}x{outH}:r=30:d={F3(contentEnd)}[base0]");
         string baseLabel = "base0";
 
         for (int i = 0; i < numTakes; i++)
@@ -526,7 +544,9 @@ public static partial class Mp4Exporter
             }
         }
 
-        filterParts.Add($"[{baseLabel}]null[vout]");
+        filterParts.Add(tail > 0
+            ? $"[{baseLabel}]tpad=stop_mode=clone:stop_duration={F3(tail)},fade=t=out:st={F3(contentEnd)}:d={F3(tail)}:color={BG}[vout]"
+            : $"[{baseLabel}]null[vout]");
         filterParts.Add($"[{numTakes}:a]aformat=sample_fmts=fltp:channel_layouts=stereo,apad[aout]");
 
         string filterComplex = string.Join(";", filterParts);
@@ -601,23 +621,25 @@ public static partial class Mp4Exporter
             double mixDur = MixRenderer.MixDurationSec(job.MixTracks, job.SampleRate);
             if (mixDur > maxDuration) maxDuration = mixDur;
 
-            var (mixL, mixR) = await Task.Run(() =>
-                MixRenderer.Render(
+            var mix = await Task.Run(() =>
+                MixMaster.Render(
                     job.MixTracks,
                     job.MixBus,
                     maxDuration,
                     job.SampleRate,
+                    job.TailSec,
+                    job.TargetLufs,
                     f => Report(ExportStage.Mix, f, 0, null),
                     ct), ct).ConfigureAwait(false);
 
             ct.ThrowIfCancellationRequested();
             Report(ExportStage.Upload, 1, 0, null);
 
-            await Task.Run(() => WriteFloatStereoWav(mixWavPath, mixL, mixR, job.SampleRate), ct).ConfigureAwait(false);
+            await Task.Run(() => WriteFloatStereoWav(mixWavPath, mix.Left, mix.Right, job.SampleRate), ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             Report(ExportStage.Upload, 1, 1, null);
 
-            var built = BuildFfmpegCommand(job, mixWavPath, partPath, tempWorkDir, runId);
+            var built = BuildFfmpegCommand(job, mixWavPath, partPath, tempWorkDir, runId, mix.DurationSec);
             extraTempFiles = built.TempFilesToClean;
 
             var videoStart = Stopwatch.StartNew();
@@ -758,7 +780,9 @@ public static partial class Mp4Exporter
                 target.IsDefault,
                 bytes,
                 built.MaxDurationSec,
-                sw.Elapsed.TotalSeconds);
+                sw.Elapsed.TotalSeconds,
+                mix.Lufs,
+                mix.TailSec);
         }
         finally
         {

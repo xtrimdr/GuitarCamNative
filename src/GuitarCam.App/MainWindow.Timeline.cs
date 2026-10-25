@@ -276,6 +276,7 @@ public partial class MainWindow
         var dropped = liveClips.Values.Where(c => !used.Contains(c)).ToList();
         tracks = list;
         engine.UpdateTracks(list);
+        RefreshTranspose();
         Timeline.LengthSec = engine.LengthSec;
         ApplyFolderMix(p, list);
         Timeline.UpdateTracks(list, p.Folders);
@@ -492,6 +493,8 @@ public partial class MainWindow
         Task Command(Action<Project> action, string type) => EditTimeline(p => { action(p); return track.Track.Id; }, type, clip?.Clip.Id);
         if (point.X > Timeline.HeaderW && Timeline.Range is { } range && range.TrackId == track.Track.Id)
         {
+            list.Add(MenuAction(Loc.T("menu.loopRange"), () => { Timeline.ClearRange(); SetLoopRange(range.Start, range.End); return Task.CompletedTask; },
+                icon: "", tip: Loc.T("menu.loopRange.tip")));
             list.Add(MenuAction(Loc.T("menu.deleteRange"), DeleteRangeSelection, Shortcuts.Label("delete"), enabled, danger: true));
             list.Add(new Separator());
         }

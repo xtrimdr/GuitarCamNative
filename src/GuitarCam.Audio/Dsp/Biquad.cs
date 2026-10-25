@@ -11,6 +11,8 @@ public enum BiquadType
     Peaking,
     Highshelf,
     Lowpass,
+    /// <summary>Native only (no Web Audio twin): flat magnitude, the phase of a Linkwitz-Riley crossover; Q linear.</summary>
+    Allpass,
 }
 
 /// <summary>
@@ -29,6 +31,7 @@ public readonly record struct BiquadSpec(BiquadType Type, double Freq, double Q,
         "peaking" => BiquadType.Peaking,
         "highshelf" => BiquadType.Highshelf,
         "lowpass" => BiquadType.Lowpass,
+        "allpass" => BiquadType.Allpass,
         _ => fallback,
     };
 
@@ -39,6 +42,7 @@ public readonly record struct BiquadSpec(BiquadType Type, double Freq, double Q,
         BiquadType.Peaking => "peaking",
         BiquadType.Highshelf => "highshelf",
         BiquadType.Lowpass => "lowpass",
+        BiquadType.Allpass => "allpass",
         _ => "peaking",
     };
 }
@@ -239,6 +243,25 @@ public sealed class Biquad
                 b2 = (A * (ap1 + am1 * cosw - beta)) / a0;
                 a1 = (2.0 * (am1 - ap1 * cosw)) / a0;
                 a2 = (ap1 - am1 * cosw - beta) / a0;
+                return;
+            }
+            case BiquadType.Allpass:
+            {
+                if (f <= 0.0 || f >= 1.0)
+                {
+                    b0 = 1;
+                    b1 = b2 = a1 = a2 = 0;
+                    return;
+                }
+                double q = Math.Max(1e-6, s.Q);
+                double alpha = Math.Sin(w0) / (2.0 * q);
+                double cosw = Math.Cos(w0);
+                double a0 = 1.0 + alpha;
+                b0 = (1.0 - alpha) / a0;
+                b1 = (-2.0 * cosw) / a0;
+                b2 = 1.0;
+                a1 = b1;
+                a2 = b0;
                 return;
             }
             default:

@@ -1,0 +1,141 @@
+using Avalonia.Controls;
+using Avalonia.Threading;
+using GuitarCam.App.Controls;
+using GuitarCam.App.Model;
+using GuitarCam.Audio;
+using GuitarCam.Projects;
+
+namespace GuitarCam.App;
+
+/// <summary>
+/// The track's Transponer (native only, asked by the user): its takes play moved by <see cref="Track.Transpose"/>
+/// semitones, the same length, so they stay in sync with the video. Moving a take takes seconds
+/// (<see cref="GuitarCam.Audio.Dsp.PitchShifter"/>), so it runs in the background and is kept in the project's cache
+/// (<see cref="TransposeCache"/>); meanwhile the clip keeps playing what it played, and switches with a short
+/// crossfade on the audio thread when the new one is ready (<see cref="LiveClip.Sound"/>). A value that is no longer
+/// wanted (the slider moved on, the project closed) cancels its work. The export uses the same cache.
+/// </summary>
+public partial class MainWindow
+{
+    readonly record struct TransposeKey(string MediaId, double Semis);
+
+    sealed class TransposeJob(string trackId)
+    {
+        public readonly CancellationTokenSource Cts = new();
+        public readonly string TrackId = trackId;
+        /// <summary>0 to 1, written by the worker.</summary>
+        public volatile float Progress;
+    }
+
+    readonly Dictionary<TransposeKey, ClipSound> transposed = [];
+    readonly Dictionary<TransposeKey, TransposeJob> transposing = [];
+    readonly HashSet<TransposeKey> transposeFailed = [];
+    ProjectStore? transposeStore;
+    readonly TextBlock transposeNote = new() { FontSize = 11, Foreground = Palette.Faint, IsVisible = false };
+    /// <summary>Refreshes the "Transponiendo… 40%" note while something is being moved.</summary>
+    readonly DispatcherTimer transposeClock = new() { Interval = TimeSpan.FromMilliseconds(250) };
+
+    void InitTranspose(StackPanel host)
+    {
+        host.Children.Add(transposeNote);
+        transposeClock.Tick += (_, _) => RefreshTransposeNote();
+        inspectorRefresh.Add(RefreshTransposeNote);
+    }
+
+    static string TransposeText(double v) =>
+        v == 0 ? Loc.T("insp.transpose.none") : Loc.T(Math.Abs(v) == 1 ? "insp.transpose.one" : "insp.transpose.value", $"{v:+0.##;-0.##}");
+
+    /// <summary>
+    /// Points every clip at the sound its track wants: the recording at 0, a transpose already in memory, or keeps
+    /// what it plays while the missing one is made. Call it after anything that may change tracks, clips or Transponer.
+    /// </summary>
+    void RefreshTranspose()
+    {
+        var st = store;
+        if (st != transposeStore)
+        {
+            foreach (var job in transposing.Values) job.Cts.Cancel();
+            transposing.Clear();
+            transposed.Clear();
+            transposeFailed.Clear();
+            transposeStore = st;
+        }
+        if (st == null) return;
+
+        var wanted = new HashSet<TransposeKey>();
+        foreach (var lt in tracks)
+        {
+            double semis = lt.Track.Transpose;
+            foreach (var lc in lt.Clips)
+            {
+                if (lc.Audio is not { } audio || lc.Media is not { } media) continue;
+                if (semis == 0)
+                {
+                    lc.Sound = audio.Sound;
+                    lc.SoundSemis = 0;
+                    continue;
+                }
+                var key = new TransposeKey(media.Id, semis);
+                wanted.Add(key);
+                if (transposed.TryGetValue(key, out var sound))
+                {
+                    lc.Sound = sound;
+                    lc.SoundSemis = semis;
+                }
+                else if (!transposing.ContainsKey(key) && !transposeFailed.Contains(key) && st.Resolve(media.Audio) is { } path)
+                    StartTranspose(st, key, path, audio, lt.Track.Id, string.IsNullOrWhiteSpace(lt.Track.Name) ? media.Name : lt.Track.Name);
+            }
+        }
+        foreach (var (key, job) in transposing.Where(x => !wanted.Contains(x.Key)).ToList())
+        {
+            job.Cts.Cancel();
+            transposing.Remove(key);
+        }
+        foreach (var key in transposed.Keys.Where(k => !wanted.Contains(k)).ToList()) transposed.Remove(key);
+        if (transposing.Count == 0) PruneTransposeCache(st);
+        transposeClock.IsEnabled = transposing.Count > 0;
+        RefreshTransposeNote();
+    }
+
+    void StartTranspose(ProjectStore st, TransposeKey key, string path, MediaAudio audio, string trackId, string name)
+    {
+        var job = new TransposeJob(trackId);
+        transposing[key] = job;
+        var ct = job.Cts.Token;
+        Task.Run(() => TransposeCache.Get(st.CachePath, path, audio.L, audio.R, key.Semis, p => job.Progress = (float)p, ct), ct)
+            .ContinueWith(t => Dispatcher.UIThread.Post(() =>
+            {
+                if (!transposing.TryGetValue(key, out var current) || current != job) return; // no longer wanted
+                transposing.Remove(key);
+                if (t.IsCompletedSuccessfully) transposed[key] = new ClipSound(t.Result.Left, t.Result.Right);
+                else if (!t.IsCanceled)
+                {
+                    transposeFailed.Add(key);
+                    Status(Loc.T("transpose.error", name, t.Exception?.GetBaseException().Message ?? ""));
+                }
+                RefreshTranspose();
+            }), TaskScheduler.Default);
+    }
+
+    /// <summary>The selected track's note: how far its transpose is, hidden when it plays what it should.</summary>
+    void RefreshTransposeNote()
+    {
+        var jobs = sel == null ? [] : transposing.Values.Where(j => j.TrackId == sel.Track.Id).ToList();
+        transposeNote.IsVisible = jobs.Count > 0;
+        if (jobs.Count > 0) transposeNote.Text = Loc.T("insp.transpose.working", $"{jobs.Average(j => j.Progress) * 100:0}");
+    }
+
+    /// <summary>Deletes the cached transposes no track uses any more (in the background; a read-only window leaves them).</summary>
+    void PruneTransposeCache(ProjectStore st)
+    {
+        if (st.ReadOnly) return;
+        var used = new List<(string Path, int Length, double Semis)>();
+        foreach (var lt in tracks)
+        {
+            if (lt.Track.Transpose == 0) continue;
+            foreach (var lc in lt.Clips)
+                if (lc.Audio != null && st.Resolve(lc.Media?.Audio) is { } path) used.Add((path, lc.Audio.L.Length, lt.Track.Transpose));
+        }
+        _ = Task.Run(() => TransposeCache.Prune(st.CachePath, used.Select(u => TransposeCache.PathFor(st.CachePath, u.Path, u.Length, u.Semis)).ToList()));
+    }
+}

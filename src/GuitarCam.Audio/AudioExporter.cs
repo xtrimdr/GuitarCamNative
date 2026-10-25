@@ -59,10 +59,11 @@ public static class AudioExporter
         try
         {
             Report(AudioExportStage.Mix, 0);
-            double duration = Math.Max(1.0, MixRenderer.MixDurationSec(job.MixTracks, job.SampleRate));
-            var (mixL, mixR) = await Task.Run(() => MixRenderer.Render(job.MixTracks, job.MixBus, duration, job.SampleRate,
-                f => Report(AudioExportStage.Mix, f), ct), ct).ConfigureAwait(false);
+            double content = Math.Max(1.0, MixRenderer.MixDurationSec(job.MixTracks, job.SampleRate));
+            var mix = await Task.Run(() => MixMaster.Render(job.MixTracks, job.MixBus, content, job.SampleRate, job.TailSec,
+                job.TargetLufs, f => Report(AudioExportStage.Mix, f), ct), ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
+            var (mixL, mixR, duration) = (mix.Left, mix.Right, mix.DurationSec);
 
             if (format == AudioFormat.Wav)
             {
@@ -92,7 +93,8 @@ public static class AudioExporter
             string loggedFile = !string.IsNullOrEmpty(rel) && !rel.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathRooted(rel)
                 ? rel.Replace('\\', '/')
                 : target.FullPath;
-            return new ExportResult(outFilename, loggedFile, target.FullPath, target.Folder, target.IsDefault, bytes, duration, sw.Elapsed.TotalSeconds);
+            return new ExportResult(outFilename, loggedFile, target.FullPath, target.Folder, target.IsDefault, bytes, duration,
+                sw.Elapsed.TotalSeconds, mix.Lufs, mix.TailSec);
         }
         finally
         {
@@ -104,12 +106,13 @@ public static class AudioExporter
     /// <summary>
     /// Writes one WAV per track that sounds in the mix (native only, "stems"), each alone through its own chain and
     /// sends without the master limiter (<see cref="MixRenderer.Render"/> with <c>only</c>), all from 0 and as long as
-    /// the mix so they line up when dropped into another program. 32-bit float, so a stem louder than 0 dBFS (no
+    /// the export (<c>durationSec</c>, effect tails included) so they line up when dropped into another program. They
+    /// keep the mix's level: the loudness gain of a social preset is for the finished mix only. 32-bit float, so a stem louder than 0 dBFS (no
     /// limiter) never clips. They go to "&lt;name&gt; - stems" next to the export ("(2)", "(3)"… when it exists and
     /// is not being overwritten); each file is written as a hidden .part and renamed. Returns the folder and the count.
     /// </summary>
     public static async Task<(string Folder, int Count)> ExportStemsAsync(ExportJobSpec job, string exportFullPath,
-        Action<double>? onProgress = null, CancellationToken ct = default)
+        Action<double>? onProgress = null, CancellationToken ct = default, double? durationSec = null)
     {
         var audible = MixRenderer.Audible(job.MixTracks).ToList();
         if (audible.Count == 0)
@@ -120,7 +123,7 @@ public static class AudioExporter
         for (int k = 2; Directory.Exists(folder) && !job.Overwrite; k++) folder = Path.Combine(parent, $"{baseName} ({k})");
         Directory.CreateDirectory(folder);
 
-        double duration = Math.Max(1.0, MixRenderer.MixDurationSec(job.MixTracks, job.SampleRate));
+        double duration = durationSec ?? Math.Max(1.0, MixRenderer.MixDurationSec(job.MixTracks, job.SampleRate));
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (int s = 0; s < audible.Count; s++)
         {

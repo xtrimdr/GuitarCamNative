@@ -47,7 +47,11 @@ public sealed class MixBusSpec
     public ReverbParams Reverb { get; init; } = ReverbParams.Defaults;
     public DelayParams Delay { get; init; } = DelayParams.Defaults;
     public double Bpm { get; init; } = 120;
+    public MasterParams Master { get; init; } = MasterParams.Off;
 }
+
+/// <summary>Receives a rendered stretch of the mix that starts at <paramref name="frame"/> (<see cref="MixRenderer.RenderTo"/>).</summary>
+public delegate void MixSink(int frame, ReadOnlySpan<float> left, ReadOnlySpan<float> right);
 
 /// <summary>
 /// Per-track DSP chain shared by live ASIO playback (<c>PlaybackEngine</c>) and offline export render
@@ -253,7 +257,8 @@ public sealed class TrackDspChain
 
 /// <summary>
 /// Master and return buses shared by live playback and offline export render:
-/// <see cref="ReverbBus"/> + <see cref="DelayBus"/> + <see cref="MasterLimiter"/>, with preallocated
+/// <see cref="ReverbBus"/> + <see cref="DelayBus"/> + <see cref="MasterChain"/> + Empuje + <see cref="SoftClipper"/> +
+/// <see cref="MasterLimiter"/>, with preallocated
 /// send accumulation buffers (8192 frames) so the audio callback never allocates.
 /// </summary>
 public sealed class MixGraphBus
@@ -266,6 +271,13 @@ public sealed class MixGraphBus
     public ReverbBus Reverb { get; }
     public DelayBus Delay { get; }
     public MasterLimiter Limiter { get; }
+    /// <summary>The master's EQ and multiband, between the returns and the limiter.</summary>
+    public MasterChain Master { get; }
+    /// <summary>The master's soft clip, between Empuje and the limiter.</summary>
+    public SoftClipper Clip { get; } = new();
+    /// <summary>The limiter's Empuje, linear: the target and where the glide toward it is.</summary>
+    volatile float driveTarget = 1;
+    float drive = 1;
 
     public float ReverbMeterL { get; private set; }
     public float ReverbMeterR { get; private set; }
@@ -276,6 +288,7 @@ public sealed class MixGraphBus
     {
         Reverb = new ReverbBus(sampleRate);
         Delay = new DelayBus(sampleRate);
+        Master = new MasterChain(sampleRate);
         int lookahead = (int)Math.Round(MasterLimiter.LookaheadSec * sampleRate);
         Limiter = new MasterLimiter(sampleRate, lookahead, MasterLimiter.CeilingDb);
     }
@@ -289,6 +302,20 @@ public sealed class MixGraphBus
     {
         Reverb.Set(spec.Reverb);
         Delay.Set(spec.Delay, spec.Bpm, glide: glideDelay);
+        SetMaster(spec.Master);
+        Master.Reset();
+        drive = driveTarget;
+    }
+
+    /// <summary>The master chain and the limiter's settings, live (both glide or swap without clicks).</summary>
+    public void SetMaster(MasterParams p)
+    {
+        Master.Set(p);
+        Limiter.Set(p.LimCeilingDb, p.LimReleaseMs);
+        Limiter.Bypass = !p.LimOn;
+        Clip.Set(p.On && p.ClipOn ? p.ClipDb : 0, p.LimCeilingDb);
+        // Empuje pushes into the limiter: with it off, it would only clip
+        driveTarget = p.LimOn ? (float)Math.Pow(10, Math.Clamp(double.IsFinite(p.LimDriveDb) ? p.LimDriveDb : 0, 0, MasterParams.DriveMaxDb) / 20) : 1;
     }
 
     public void ConfigureLive(MixBusSpec spec, bool glideDelay = true)
@@ -301,6 +328,8 @@ public sealed class MixGraphBus
     {
         Reverb.Reset();
         Delay.Reset();
+        Master.Reset();
+        Clip.Reset();
         Limiter.Reset();
     }
 
@@ -318,7 +347,8 @@ public sealed class MixGraphBus
         Span<float> rr,
         Span<float> dl,
         Span<float> dr,
-        bool limit = true)
+        bool limit = true,
+        bool master = true)
     {
         Reverb.Process(rl, rr);
         Delay.Process(dl, dr);
@@ -339,7 +369,24 @@ public sealed class MixGraphBus
         ReverbMeterR = rPkR;
         DelayMeterL = dPkL;
         DelayMeterR = dPkR;
-        if (limit) Limiter.Process(masterL, masterR);
+        if (master) Master.Process(masterL, masterR);
+        if (limit)
+        {
+            float d0 = drive, d1 = driveTarget;
+            if (d0 != 1 || d1 != 1)
+            {
+                int n = masterL.Length;
+                for (int i = 0; i < n; i++)
+                {
+                    float d = d0 + (d1 - d0) * (i + 1) / n;
+                    masterL[i] *= d;
+                    masterR[i] *= d;
+                }
+            }
+            drive = d1;
+            Clip.Process(masterL, masterR);
+            Limiter.Process(masterL, masterR);
+        }
     }
 }
 
@@ -384,7 +431,8 @@ public static class MixRenderer
     /// <summary>
     /// Renders the mix. With <paramref name="only"/> it renders that track alone (a stem, native only): its chain and
     /// its sends through the reverb and delay returns, without the master limiter, so the stems add up to the mix
-    /// before the limiter and none is squashed by it.
+    /// before the limiter and none is squashed by it. <paramref name="limit"/> = false leaves the limiter out of the
+    /// full mix too: <see cref="MixMaster"/> runs it afterwards with the loudness gain in front.
     /// </summary>
     public static (float[] Left, float[] Right) Render(
         IReadOnlyList<MixTrackSpec> tracks,
@@ -393,11 +441,38 @@ public static class MixRenderer
         int sampleRate = 48000,
         Action<double>? onProgress = null,
         CancellationToken ct = default,
-        int only = -1)
+        int only = -1,
+        bool limit = true)
+    {
+        int frames = Math.Max(1, (int)Math.Ceiling(durationSec * sampleRate));
+        var outL = new float[frames];
+        var outR = new float[frames];
+        RenderTo(tracks, busSpec, durationSec, (at, l, r) => { l.CopyTo(outL.AsSpan(at)); r.CopyTo(outR.AsSpan(at)); },
+            sampleRate, onProgress, ct, only, limit);
+        return (outL, outR);
+    }
+
+    /// <summary>
+    /// <see cref="Render"/> without keeping the result: every rendered stretch goes to <paramref name="sink"/> in order,
+    /// aligned to sample 0. <paramref name="master"/> = false leaves <see cref="MasterChain"/> out; stems never go
+    /// through it, like they never go through the limiter.
+    /// </summary>
+    public static void RenderTo(
+        IReadOnlyList<MixTrackSpec> tracks,
+        MixBusSpec busSpec,
+        double durationSec,
+        MixSink sink,
+        int sampleRate = 48000,
+        Action<double>? onProgress = null,
+        CancellationToken ct = default,
+        int only = -1,
+        bool limit = true,
+        bool master = true)
     {
         var bus = new MixGraphBus(sampleRate);
         bus.Configure(busSpec, glideDelay: false);
-        bool limit = only < 0;
+        limit &= only < 0;
+        master &= only < 0;
         int latency = limit ? bus.Limiter.Latency : 0;
         int frames = Math.Max(1, (int)Math.Ceiling(durationSec * sampleRate));
         int totalFrames = frames + latency;
@@ -419,8 +494,6 @@ public static class MixRenderer
         }
         if (only >= 0) anySolo = false;
 
-        var outL = new float[frames];
-        var outR = new float[frames];
         var masterL = new float[Quantum];
         var masterR = new float[Quantum];
 
@@ -448,17 +521,12 @@ public static class MixRenderer
                 chain.ProcessFilledBuffer(n, anySolo, ml, mr, rl, rr, dl, dr, out _, out _, out _);
             }
 
-            bus.ProcessReturnsAndLimiter(ml, mr, rl, rr, dl, dr, limit);
+            bus.ProcessReturnsAndLimiter(ml, mr, rl, rr, dl, dr, limit, master);
 
-            for (int i = 0; i < n; i++)
-            {
-                int dst = pos + i - latency;
-                if (dst >= 0 && dst < frames)
-                {
-                    outL[dst] = ml[i];
-                    outR[dst] = mr[i];
-                }
-            }
+            int skip = Math.Max(0, latency - pos);
+            int dst = pos + skip - latency;
+            int count = Math.Min(n - skip, frames - dst);
+            if (count > 0) sink(dst, ml.Slice(skip, count), mr.Slice(skip, count));
 
             if (onProgress != null && pos + n >= nextReport)
             {
@@ -468,6 +536,5 @@ public static class MixRenderer
         }
 
         onProgress?.Invoke(1.0);
-        return (outL, outR);
     }
 }

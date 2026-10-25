@@ -24,6 +24,8 @@ public sealed class ProjectStore : IDisposable
     public const string FileName = "guitarcam.json";
     public const string MediaDir = "media";
     public const string HistoryDir = "historial";
+    /// <summary>What can be made again from the media (transposed takes); deleting it only costs time.</summary>
+    public const string CacheDir = "cache";
     const string LockName = "guitarcam.lock";
     const string SnapshotStamp = "yyyy-MM-dd_HH-mm-ss";
 
@@ -331,6 +333,16 @@ public sealed class ProjectStore : IDisposable
     }
 
     /// <summary>Absolute path of a media file (relative paths are inside the project).</summary>
+    public string CachePath => Path.Combine(Dir, CacheDir);
+
+    /// <summary>
+    /// A take's audio as it plays on <paramref name="track"/>: moved by its <see cref="Track.Transpose"/>, from the
+    /// cache or computed now (seconds per minute of audio: call it off the UI thread), or the audio itself at 0.
+    /// </summary>
+    public (float[] Left, float[] Right) TrackAudio(Track track, string audioPath, float[] left, float[] right,
+        Action<double>? progress = null, CancellationToken ct = default) =>
+        TransposeCache.Get(CachePath, audioPath, left, right, track.Transpose, progress, ct);
+
     public string? Resolve(string? rel) => string.IsNullOrEmpty(rel) ? null : Path.IsPathRooted(rel) ? rel : Path.Combine(Dir, rel);
 
     /// <summary>Clips whose media file is gone stay in the project, marked as offline by the app.</summary>

@@ -91,6 +91,10 @@ Todo lo que se describe acá lo decidió el usuario: no lo cambies sin preguntar
 - La cantidad principal de cada efecto va en el knob grande (`EffectKnob`: Vida, envío a reverb, envío a delay); los
   ajustes finos siguen en sliders.
 - Con su encabezado "Toma" se pliega a una columna de íconos de 44, como la barra del proyecto, y se recuerda.
+- **Transponer** (en Mezcla, `MainWindow.Transpose.cs`, pedido del usuario): −12 a +12 semitonos en `Track.Transpose`,
+  mismo largo. Se calcula en segundo plano (`PitchShifter`, unos 5 s por 3 min) y queda en `cache/`; mientras tanto
+  la pista suena como estaba y una nota "Transponiendo… 40%" va debajo del slider. Al llegar, el clip pasa con un
+  crossfade de 10 ms. Mover el slider cancela lo que ya no se quiere.
 - El espectro en vivo del EQ sale de un `SpectrumTap` colgado solo de la pista seleccionada mientras el EQ está a la
   vista: el hilo de audio copia a un anillo preasignado y la FFT corre en el `Tick` de la UI.
 
@@ -132,7 +136,19 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 - **Arrastrar a otra pista** cambia la pista **y el tiempo** a la vez: el original queda atenuado y un fantasma
   punteado marca dónde cae (`DrawGhost`). Con Ctrl se intercambia con el clip de abajo.
 - **Rango**: Shift+arrastrar sobre una pista marca un rango; Supr o "Borrar el rango" del clic derecho lo saca de sus
-  clips (`ClipEditing.DeleteRange`) dejando el hueco. La selección se va con un clic, Esc o una edición.
+  clips (`ClipEditing.DeleteRange`) dejando el hueco. "Repetir este rango" lo pasa al rango A–B. La selección se va
+  con un clic, Esc o una edición.
+- **Franja de marcadores** (`Controls/TimelineView.Markers.cs`, `MainWindow.Markers.cs`): 18 px arriba de los números
+  de la regla (`MarkerH`, incluida en `RulerH`). Arrastrar en vacío dibuja el **rango A–B** del loop y lo prende; sus
+  bordes y su cuerpo se arrastran; acento con el loop prendido, gris apagado, y con el loop prendido sus bordes siguen
+  tenues por las pistas. Los **marcadores** son banderitas `Raised` con el nombre en `Dim` y una línea tenue hacia
+  abajo: se arrastran, un clic salta, doble clic los renombra en el lugar (`MainWindow.Rename.cs`); doble clic en
+  vacío agrega uno (y abre su nombre). Todo se imanta como los clips (Alt = libre). Clic derecho: el menú de la franja
+  o del marcador (nombres de la lista `MarkerNames`, "Repetir hasta el siguiente", borrar). Los marcadores van en
+  `Project.Markers` y se deshacen; el rango va en `ProjectSettings.LoopStartSec/LoopEndSec`, fuera del deshacer como el
+  tempo (`ProjectMarkers`). Atajos: L loop, I / O ponen A / B en el cabezal, K marcador, `,` / `.` saltan.
+- **Loop**: al cruzar B (o el final del tema, sin rango) vuelve a A con el crossfade de los saltos, sin reiniciar los
+  efectos (`PlaybackEngine.SetLoopRange`). Si arrancás después de B, sigue hasta el final y desde ahí vuelve a A.
 - **Clic derecho** (`ShowTimelineMenu`): sobre un clip, solo cosas del clip (dividir, duplicar, al inicio, corregir
   corte, restablecer, quitar clip); en el encabezado o en un tramo vacío del carril, solo cosas de la pista (panel de
   video, renombrar, carpeta, guardar como plantilla, quitar pista); en la parte vacía de la columna de encabezados,
@@ -271,6 +287,22 @@ tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
   (`FxNarrowW`) en vez de recortar controles.
 - En las tiras amplias la cabecera (● M S) y el paneo quedan fijos y solo scrollean los efectos, cada uno en su
   panel; en las compactas el ● va debajo del nombre, porque ● M S C no entran en una fila.
+- **Mastering** (`MainWindow.Master.cs`): la tercera vista del selector Timeline · Mixer · Mastering (la X sigue
+  alternando timeline / mixer). Usa el lugar del mixer (`MixerHost`, con su altura y su lugar en solo audio): esconde
+  la cabecera y las tiras y muestra la cadena. El botón "Master" del canal master (en acento con el master prendido)
+  también lleva ahí. Arriba: el ON del master y qué está haciendo. Abajo, la cadena de izquierda a derecha, un panel
+  por etapa con su ON y flechas entre ellos, perillas de 44 px (pedido del usuario): **Limpieza** (Corte, Barro;
+  `EqOn`) → **Multibanda** (una perilla "Cuánto" por banda con su barra de reducción en vivo, y dos perillas chicas
+  para los cruces; `BandsOn`) → **Color** (Graves, Presencia, Aire, Inclinación; `ColorOn`) → **Cinta** (Vida, la
+  cinta de las pistas más suave; `TapeOn`) → **Ancho** (Ancho y Graves mono; `WidthOn`) → **Soft clip** (Recorte y su
+  barra; `ClipOn`) → **Limitador** (Empuje, Techo, Release y su barra; `LimOn`, aparte del ON del master; apagado, los
+  picos pueden pasar de 0 dB) → **Volumen** (sin ON: LUFS de los últimos 3 s e integrado, el mismo medidor que la
+  celda LUFS, el pico de la pasada en rojo si tocó 0 dB, y cuánto falta para −14 LUFS).
+- La vista tiene justo el alto de la cadena (`FitMasteringHeight`) y no se estira: los divisores no hacen nada ahí y
+  la altura recordada del mixer no cambia.
+- No se mide nada: cada banda sigue su propio nivel mientras suena (`MasterBandComp`) y comprime lo que pasa de ahí,
+  así una perilla se escucha en el momento, con cualquier mezcla y a cualquier volumen. Sin limitador, la exportación
+  con destino de LUFS frena la ganancia donde el pico toca el Techo.
 - **Paneo**: un solo desplegable (`BuildPanMenu`) con la apertura arriba (30 % por defecto) y las plantillas con su
   descripción; elegir una la aplica y cierra el menú.
 
@@ -288,4 +320,17 @@ tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
 ## Exportar
 
 - **Stems**: la casilla del diálogo de exportar (MP4 o audio) deja además "<nombre> - stems" con un WAV float por
-  pista que suena, cada una sola con sus envíos y sin el limitador (`AudioExporter.ExportStemsAsync`).
+  pista que suena, cada una sola con sus envíos y sin el limitador (`AudioExporter.ExportStemsAsync`). Duran lo mismo
+  que la exportación, cola incluida, y no llevan la ganancia de loudness.
+- **Destino** (solo MP4): fila segmentada arriba de Calidad con Proyecto · Reels · TikTok · YouTube · IG 1:1 · IG 4:5
+  (`ExportTargets`). "Proyecto" es el de siempre (el cuadro del proyecto, la mezcla como está) y viene elegido, así que
+  no suma pasos; los demás cambian el cuadro solo para ese video (9:16, 16:9, 1:1, 4:5 = 1080×1350) y llevan la mezcla
+  a −14 LUFS. Se recuerda el último (`ExportSettings.Target`). En "Exportar audio" en su lugar hay una casilla
+  "Llevar la mezcla a −14 LUFS" (`ExportSettings.AudioLufs`).
+- **Masterizado y colas** (`Dsp/MixMaster.cs`): la mezcla se renderiza con el mismo `MixRenderer` sin limitador y hasta
+  8 s después del último clip; corta donde reverb y delay bajan de −66 dBFS (o funde el último segundo si siguen
+  sonando en el límite). Después va el `MasterLimiter` con la ganancia que lleva a los LUFS del destino, midiendo con
+  `LoudnessMeter.Measure` y corrigiendo hasta 4 pasadas (solo el limitador). En el MP4, durante la cola el último
+  cuadro queda congelado y se funde al fondo (`tpad` + `fade` en `Mp4Exporter.BuildFfmpegCommand`).
+- **Al terminar** se ven los LUFS integrados de la mezcla y los segundos de cola (en el pie, o en la línea del audio);
+  quedan en `ExportRecord.Lufs`, así que también se ven al abrir la exportación desde Historial.

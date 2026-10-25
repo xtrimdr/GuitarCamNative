@@ -2,25 +2,33 @@ namespace GuitarCam.Audio.Dsp;
 
 /// <summary>
 /// Port of gc-limiter (fxWorklet.ts): look-ahead peak limiter for the master bus, the output never
-/// exceeds the ceiling. Latency = <c>lookahead</c> samples.
+/// exceeds the ceiling. Latency = <c>lookahead</c> samples. Native only: the ceiling and the release can change while
+/// it plays (<see cref="Set"/>, the master card's Techo and Release), and <see cref="Bypass"/> turns it off without
+/// moving anything in time: the look-ahead delay stays, so the click and the export stay aligned.
 /// </summary>
 public sealed class MasterLimiter
 {
     public const double LookaheadSec = 0.003;
     public const double CeilingDb = -0.3;
+    public const double CeilingMinDb = -6;
+    public const double ReleaseMs = 80, ReleaseMinMs = 20, ReleaseMaxMs = 500;
 
     public static int LookaheadSamples(int sampleRate) => (int)Math.Round(LookaheadSec * sampleRate);
 
     readonly int N;
-    readonly double ceiling;
+    double ceiling;
     readonly float[] bufL, bufR, req;
-    readonly double aA, aR;
+    readonly double fs, aA;
+    double aR;
     int idx;
     double minReq = 1;
     int minAge;
     double g = 1;
 
     public int Latency => N;
+
+    /// <summary>Off: the delay line still runs, the gain glides back to 1 (the master card's Limitador ON).</summary>
+    public bool Bypass { get; set; }
 
     /// <summary>Lowest gain applied since the UI last read it (1 = not limiting); written once per block.</summary>
     float minGain = 1;
@@ -35,13 +43,21 @@ public sealed class MasterLimiter
     public MasterLimiter(double sampleRate, int lookahead, double ceilingDb = CeilingDb)
     {
         N = Math.Max(1, lookahead);
+        fs = sampleRate;
         ceiling = Math.Pow(10, ceilingDb / 20);
         bufL = new float[N];
         bufR = new float[N];
         req = new float[N];
         Array.Fill(req, 1f);
         aA = Math.Exp(-1 / (N / 4.0));
-        aR = Math.Exp(-1 / (0.08 * sampleRate));
+        aR = Math.Exp(-1 / (ReleaseMs / 1000 * sampleRate));
+    }
+
+    /// <summary>New ceiling (dB, <see cref="CeilingMinDb"/> to 0) and release (ms); a double write each, safe while it plays.</summary>
+    public void Set(double ceilingDb, double releaseMs)
+    {
+        ceiling = Math.Pow(10, Math.Clamp(double.IsFinite(ceilingDb) ? ceilingDb : CeilingDb, CeilingMinDb, 0) / 20);
+        aR = Math.Exp(-1 / (Math.Clamp(double.IsFinite(releaseMs) ? releaseMs : ReleaseMs, ReleaseMinMs, ReleaseMaxMs) / 1000 * fs));
     }
 
     public void Reset()
@@ -57,7 +73,8 @@ public sealed class MasterLimiter
 
     public void Process(Span<float> left, Span<float> right)
     {
-        double c = ceiling;
+        double c = ceiling, rel = aR;
+        bool off = Bypass;
         double lowest = 1;
         for (int i = 0; i < left.Length; i++)
         {
@@ -90,9 +107,9 @@ public sealed class MasterLimiter
                 minAge = 0;
             }
 
-            double target = minReq;
-            g = target < g ? aA * g + (1 - aA) * target : aR * g + (1 - aR) * target;
-            double gg = Math.Min(g, reqOut);
+            double target = off ? 1 : minReq;
+            g = target < g ? aA * g + (1 - aA) * target : rel * g + (1 - rel) * target;
+            double gg = off ? g : Math.Min(g, reqOut);
             if (gg < lowest) lowest = gg;
             left[i] = (float)(outL * gg);
             right[i] = (float)(outR * gg);

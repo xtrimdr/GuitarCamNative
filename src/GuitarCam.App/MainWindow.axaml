@@ -445,6 +445,7 @@
             <StackPanel Orientation="Horizontal">
               <Button x:Name="TimelineViewButton" Classes="seg on" Height="32" Padding="12,0" Content="{loc:T transport.view.timeline}" />
               <Button x:Name="MixerViewButton" Classes="seg" Height="32" Padding="12,0" Content="{loc:T transport.view.mixer}" />
+              <Button x:Name="MasteringViewButton" Classes="seg" Height="32" Padding="12,0" Content="{loc:T transport.view.mastering}" />
             </StackPanel>
           </Border>
           <Button x:Name="FitButton" Classes="tbtn" ToolTip.Tip="{loc:T transport.fit.tip}">

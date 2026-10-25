@@ -324,6 +324,10 @@ public partial class MainWindow
         var mix = Section("Mezcla", "\uE9E9", action: InspectorIcon("\uE74F", Loc.T("insp.mute.tip"), () => Edit(t => t.Channel.Muted = !t.Channel.Muted, "mute")));
         Slider(mix, Loc.T("insp.volume"), 0, 1.5, 0.01, 1, () => sel!.Channel.Volume, v => Edit(t => t.Channel.Volume = v, "volume"), v => $"{v * 100:0}%");
         Slider(mix, Loc.T("insp.pan"), -1, 1, 0.05, 0, () => sel!.Channel.Pan, v => Edit(t => t.Channel.Pan = Math.Abs(v) < 0.04 ? 0 : v, "pan"), v => v == 0 ? "C" : $"{(v < 0 ? "L" : "R")} {Math.Abs(v) * 100:0}");
+        // native only: the track's pitch, same length (MainWindow.Transpose.cs)
+        Slider(mix, Loc.T("insp.transpose"), -PitchShifter.MaxSemitones, PitchShifter.MaxSemitones, 1, 0,
+            () => sel!.Track.Transpose, v => { Edit(t => t.Track.Transpose = v, "transpose"); RefreshTranspose(); }, TransposeText, Loc.T("insp.transpose.tip"));
+        InitTranspose(mix);
         // native only: a track that sounds without a panel (a backing track, a click…)
         var inVideo = new CheckBox { Content = Loc.T("insp.inVideo"), FontSize = 12 };
         ToolTip.SetTip(inVideo, Loc.T("insp.inVideo.tip"));

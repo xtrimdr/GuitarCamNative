@@ -269,6 +269,7 @@ static class DspCommands
             defaultOut = Path.Combine(target, "exports", "mezcla.wav");
 
             var mediaCache = new Dictionary<string, (float[] L, float[] R, double RmsDb)>();
+            var mediaPaths = new Dictionary<string, string>();
             foreach (var m in p.Media)
             {
                 if (store.Resolve(m.Audio) is { } audioPath && File.Exists(audioPath))
@@ -277,6 +278,7 @@ static class DspCommands
                     float[][] ch = [loaded.Left, loaded.Right];
                     var (rms, _) = LevelAnalysis.Analyze(ch, loaded.SampleRate);
                     mediaCache[m.Id] = (loaded.Left, loaded.Right, rms);
+                    mediaPaths[m.Id] = audioPath;
                 }
             }
 
@@ -290,10 +292,11 @@ static class DspCommands
                     if (!mediaCache.TryGetValue(c.MediaId, out var ma)) continue;
                     var m = p.FindMedia(c.MediaId);
                     if (!hasRms) { trackRms = ma.RmsDb; hasRms = true; }
+                    var (tl, tr) = store.TrackAudio(t, mediaPaths[c.MediaId], ma.L, ma.R);
                     clips.Add(new MixClipSpec
                     {
-                        Left = ma.L,
-                        Right = ma.R,
+                        Left = tl,
+                        Right = tr,
                         DurationSec = m?.DurationSec > 0 ? m.DurationSec : ma.L.Length / (double)sr,
                         AtSec = c.AtSec,
                         TrimStartSec = c.TrimStartSec,
@@ -378,6 +381,7 @@ static class DspCommands
                     dly.Duck,
                     dly.ReturnGain,
                     dly.Muted),
+                Master = p.Settings.Master.ToParams(),
             };
             Console.WriteLine($"Proyecto: {p.Name} ({trackSpecs.Count} pistas, {p.Settings.Bpm:0.#} BPM)");
         }
@@ -589,6 +593,31 @@ static class DspCommands
         allOk &= lufsOk;
         Console.WriteLine($"{"LUFS seno 1 kHz -23 dBFS (y con silencio)",-36} {$"{lufs:0.00} / {lufsGated:0.00}",12} {"-23.00",10}  {(lufsOk ? "igual" : "DISTINTO")}");
 
+        // Export master (MixMaster): 2 s of a 220 Hz tone with a reverb send rings past its end, within the limit; a
+        // −14 LUFS target lands there under the limiter's ceiling; with no tail and no target it is the plain render
+        var tone220 = new float[sr48 * 2];
+        for (int i = 0; i < tone220.Length; i++) tone220[i] = (float)(0.25 * Math.Sin(2 * Math.PI * 220 * i / sr48));
+        MixTrackSpec[] noteMix = [new MixTrackSpec { Clips = [new MixClipSpec { Left = tone220, Right = tone220, DurationSec = 2 }], ReverbSend = 0.6 }];
+        var noteBus = new MixBusSpec();
+        var mastered = MixMaster.Render(noteMix, noteBus, 2, sr48, MixMaster.MaxTailSec, -14);
+        float ceiling = (float)Math.Pow(10, MasterLimiter.CeilingDb / 20);
+        float masteredPeak = 0;
+        for (int i = 0; i < mastered.Left.Length; i++) masteredPeak = Math.Max(masteredPeak, Math.Max(Math.Abs(mastered.Left[i]), Math.Abs(mastered.Right[i])));
+        bool tailOk = mastered.TailSec > 0.2 && mastered.TailSec <= MixMaster.MaxTailSec && Math.Abs(mastered.DurationSec - 2 - mastered.TailSec) < 1e-6;
+        bool masterLufsOk = Math.Abs(mastered.Lufs + 14) < 0.5 && masteredPeak <= ceiling + 1e-4;
+        var plain = MixMaster.Render(noteMix, noteBus, 2, sr48, 0);
+        var (plainRef, _) = MixRenderer.Render(noteMix, noteBus, 2, sr48);
+        double plainDiff = 0;
+        for (int i = 0; i < plainRef.Length - sr48 / 100; i++) plainDiff = Math.Max(plainDiff, Math.Abs(plainRef[i] - plain.Left[i]));
+        bool plainOk = plain.Left.Length == plainRef.Length && plain.TailSec == 0 && plainDiff < 1e-6;
+        allOk &= tailOk && masterLufsOk && plainOk;
+        Console.WriteLine($"{"Exportar: cola de reverb (máx 8 s)",-36} {$"{mastered.TailSec:0.00} s",12} {"> 0,2 s",10}  {(tailOk ? "igual" : "DISTINTO")}");
+        Console.WriteLine($"{"Exportar: mezcla a -14 LUFS, pico",-36} {$"{mastered.Lufs:0.0} / {20 * Math.Log10(masteredPeak):0.0}",12} {$"-14 / <={MasterLimiter.CeilingDb:0.0}",10}  {(masterLufsOk ? "igual" : "DISTINTO")}");
+        Console.WriteLine($"{"Exportar: sin cola ni LUFS = mezcla",-36} {$"{plainDiff:0.0e0}",12} {"0",10}  {(plainOk ? "igual" : "DISTINTO")}");
+
+        allOk &= MasterChecks(sr48);
+        allOk &= TransposeCommands.Check();
+
         Console.WriteLine();
         Console.WriteLine(allOk
             ? "Todo bien."
@@ -597,6 +626,92 @@ static class DspCommands
     }
 
     /// <summary>gclab lufs: the integrated loudness of a file, measured like the master's LUFS cell.</summary>
+    /// <summary>
+    /// The master on a WAV, like the window's Mastering view: runs <see cref="MasterChain"/> and the limiter with these
+    /// settings and tells what each band reduced (on average and at most), what the limiter took and how loud it came
+    /// in and out.
+    /// </summary>
+    public static int Master(Args a)
+    {
+        string file = a.Positional.ElementAtOrDefault(0) ?? throw new ArgumentException("masterizar: falta el archivo.");
+        string output = a.Get("salida", Path.ChangeExtension(file, null) + "_master.wav");
+        int sr = 48000;
+        var audio = AudioLoader.Load(file, sr);
+        double amount = a.Double("cuanto", MasterBands.DefaultAmount);
+        var p = MasterParams.Off with
+        {
+            On = true,
+            LowCutHz = a.Double("corte", 0),
+            MudDb = a.Double("barro", 0),
+            LowsDb = a.Double("graves", 0),
+            PresenceDb = a.Double("presencia", 0),
+            AirDb = a.Double("aire", 0),
+            TiltDb = a.Double("inclinacion", 0),
+            LowXHz = a.Double("cruce-graves", MasterBands.DefaultLowXHz),
+            HighXHz = a.Double("cruce-agudos", MasterBands.DefaultHighXHz),
+            Low = new MasterBandParams(a.Double("banda-graves", amount)),
+            Mid = new MasterBandParams(a.Double("banda-medios", amount)),
+            High = new MasterBandParams(a.Double("banda-agudos", amount)),
+            LimOn = !a.Flag("sin-limitador"),
+            LimDriveDb = a.Double("empuje", 0),
+            LimCeilingDb = a.Double("techo", MasterLimiter.CeilingDb),
+            LimReleaseMs = a.Double("release", MasterLimiter.ReleaseMs),
+            TapeAmount = a.Double("cinta", 0),
+            Width = a.Double("ancho", 1),
+            MonoBassHz = a.Double("graves-mono", 0),
+            ClipDb = a.Double("recorte", 0),
+        };
+        var l = (float[])audio.Left.Clone();
+        var r = (float[])audio.Right.Clone();
+        var bus = new MixGraphBus(sr);
+        bus.SetMaster(p);
+        bus.Reset();
+        double clipWorst = 0;
+        var (mean, worst, limWorst) = RunMaster(bus, l, r, () => clipWorst = Math.Max(clipWorst, -bus.Clip.TakeReductionDb()));
+        string[] names = ["Graves", "Medios", "Agudos"];
+        for (int b = 0; b < MasterBands.Count; b++)
+            Console.WriteLine(p.Band(b).Amount > 0
+                ? $"{names[b],-8} {p.Band(b).Amount * 100,4:0}%  comprime ~{mean[b]:0.0} dB (pico {worst[b]:0.0} dB)"
+                : $"{names[b],-8} {p.Band(b).Amount * 100,4:0}%  no comprime");
+        if (p.ClipDb > 0) Console.WriteLine($"Soft clip: recorte {p.ClipDb:0.0} dB, recorta hasta {clipWorst:0.0} dB");
+        Console.WriteLine(p.LimOn ? $"Limitador: empuje {p.LimDriveDb:+0.0} dB, techo {p.LimCeilingDb:0.0} dB, baja hasta {limWorst:0.0} dB" : "Limitador apagado");
+        // the limiter's look-ahead: the output starts that many samples late
+        int lat = bus.Limiter.Latency;
+        Console.WriteLine($"LUFS: entra {LoudnessMeter.Measure(audio.Left, audio.Right, sr):0.0}, sale {LoudnessMeter.Measure(l[lat..], r[lat..], sr):0.0}");
+        Wav.Write(output, l[lat..], r[lat..], sr);
+        Console.WriteLine($"Escrito: {output}");
+        return 0;
+    }
+
+    /// <summary>
+    /// Runs the master and the limiter over the whole file in 128-sample blocks, like the engine: each band's mean
+    /// reduction over the blocks where it compresses and its deepest one, and the limiter's deepest (dB, ≥ 0).
+    /// </summary>
+    static (double[] Mean, double[] Worst, double Limiter) RunMaster(MixGraphBus bus, float[] l, float[] r, Action? perBlock = null)
+    {
+        var sum = new double[MasterBands.Count];
+        var count = new int[MasterBands.Count];
+        var worst = new double[MasterBands.Count];
+        double lim = 0;
+        for (int i = 0; i < l.Length; i += Block)
+        {
+            int n = Math.Min(Block, l.Length - i);
+            bus.ProcessReturnsAndLimiter(l.AsSpan(i, n), r.AsSpan(i, n), bus.PrepareReverbL(n), bus.PrepareReverbR(n),
+                bus.PrepareDelayL(n), bus.PrepareDelayR(n));
+            for (int b = 0; b < MasterBands.Count; b++)
+            {
+                double gr = -bus.Master.TakeReductionDb(b);
+                if (gr > 0.05) { sum[b] += gr; count[b]++; }
+                worst[b] = Math.Max(worst[b], gr);
+            }
+            lim = Math.Max(lim, -bus.Limiter.TakeReductionDb());
+            perBlock?.Invoke();
+        }
+        var mean = new double[MasterBands.Count];
+        for (int b = 0; b < MasterBands.Count; b++) mean[b] = count[b] > 0 ? sum[b] / count[b] : 0;
+        return (mean, worst, lim);
+    }
+
     public static int Lufs(Args a)
     {
         string file = a.Positional.ElementAtOrDefault(0) ?? throw new ArgumentException("lufs: falta el archivo.");
@@ -623,17 +738,22 @@ static class DspCommands
     }
 
     /// <summary>--stems: one WAV per track that sounds, next to the export, like the window's "Stems" option.</summary>
-    static void ExportStems(ExportJobSpec job, string exportPath)
+    static void ExportStems(ExportJobSpec job, string exportPath, double durationSec)
     {
         string last = "";
         var (folder, count) = AudioExporter.ExportStemsAsync(job, exportPath, f =>
         {
             string line = $"  [Stems] {Math.Floor(f * 10) * 10:0}%";
             if (line != last) Console.WriteLine(last = line);
-        }).GetAwaiter().GetResult();
+        }, durationSec: durationSec).GetAwaiter().GetResult();
         Console.WriteLine($"Stems: {count} en {folder}");
         foreach (var f in Directory.GetFiles(folder, "*.wav").Order()) Console.WriteLine($"  {Path.GetFileName(f)}");
     }
+
+    /// <summary>The line after an export: the mix's integrated loudness, like the dialog's done screen, and the effect tail.</summary>
+    static string Loudness(ExportResult r) =>
+        (double.IsFinite(r.Lufs) ? $"Mezcla: {r.Lufs:0.0} LUFS integrado" : "Mezcla: silencio (no llega a -70 LUFS)")
+        + (r.TailSec > 0 ? $", {r.TailSec:0.0} s de cola de efectos" : ", sin cola");
 
     public static int Export(Args a)
     {
@@ -661,6 +781,13 @@ static class DspCommands
             string fileName = a.Get("salida", string.IsNullOrWhiteSpace(p.Name) ? "GuitarCam" : p.Name);
             bool overwrite = a.Flag("reemplazar") || testMode;
             int sr = 48000;
+            // --destino: a social preset like the dialog's "Destino" (its frame and loudness); --lufs overrides the
+            // loudness (also for --audio), --cola how long the effects may ring after the last clip (0 = cut there)
+            var target = ExportTargets.Get(a.Get("destino") ?? ExportTargets.Project);
+            if (a.Get("destino") is { } dest && target.Id != dest)
+                throw new ArgumentException($"--destino: \"{dest}\" no existe. Opciones: {string.Join(", ", ExportTargets.All.Select(t => t.Id))}.");
+            double? targetLufs = a.Get("lufs") != null ? a.Double("lufs", ExportTargets.StreamingLufs) : target.Lufs;
+            double tailSec = Math.Clamp(a.Double("cola", MixMaster.MaxTailSec), 0, MixMaster.MaxTailSec);
 
             var takes = new List<ExportTakeSpec>();
             var mixTracks = new List<MixTrackSpec>();
@@ -681,10 +808,11 @@ static class DspCommands
                         if (dur <= 0) dur = loaded.DurationSec;
                         var (rms, _) = LevelAnalysis.Analyze([loaded.Left, loaded.Right], sr);
                         if (!hasRms) { trackRms = rms; hasRms = true; }
+                        var (shiftedL, shiftedR) = store.TrackAudio(trk, ap, loaded.Left, loaded.Right);
                         clips.Add(new MixClipSpec
                         {
-                            Left = loaded.Left,
-                            Right = loaded.Right,
+                            Left = shiftedL,
+                            Right = shiftedR,
                             DurationSec = dur,
                             AtSec = c.AtSec,
                             TrimStartSec = c.TrimStartSec,
@@ -767,7 +895,7 @@ static class DspCommands
                 Overwrite = overwrite,
                 Quality = quality,
                 Layout = p.Settings.Layout,
-                AspectRatio = p.Settings.Aspect,
+                AspectRatio = ExportTargets.AspectFor(target.Id, p.Settings.Aspect),
                 BorderSize = 4,
                 Color = new ExportColorSpec(col.On, col.Look, col.Amount, col.Exposure, col.Contrast, col.Highlights, col.Shadows, col.Saturation, col.Vibrance, col.Temperature, col.Tint, col.Fade, col.Whites, col.Blacks, col.Light),
                 VideoFx = new ExportVideoFxSpec(vfx.On, vfx.Vignette, vfx.VignetteSize, vfx.Grain, vfx.Letterbox),
@@ -778,9 +906,13 @@ static class DspCommands
                     Bpm = p.Settings.Bpm,
                     Reverb = new ReverbParams(rev.Decay, rev.PreDelayMs, rev.Tone, rev.LowCut, rev.Width, rev.ReturnGain, rev.Muted),
                     Delay = new DelayParams(DelayParams.ParseMode(dly.Mode), dly.Sync, dly.Division, dly.TimeMs, dly.Feedback, dly.Tone, dly.LowCut, dly.Width, dly.Duck, dly.ReturnGain, dly.Muted),
+                    Master = p.Settings.Master.ToParams(),
                 },
                 SampleRate = sr,
+                TailSec = tailSec,
+                TargetLufs = targetLufs,
             };
+            Console.WriteLine($"Destino: {target.Label} ({job.AspectRatio}){(targetLufs is { } tl ? $", mezcla a {tl:0.0} LUFS" : "")}, cola hasta {tailSec:0.0} s");
 
             int lastPct = -1;
             // --audio wav|mp3, or a project in solo audio: the mix as an audio file, like the window's "Exportar audio"
@@ -794,7 +926,8 @@ static class DspCommands
                     if (line != last) Console.WriteLine(last = line);
                 }).GetAwaiter().GetResult();
                 Console.WriteLine($"Exportado: {ares.FullPath} ({Mp4Exporter.FormatBytes(ares.Bytes)}, {ares.DurationSec:0.0} s en {ares.ElapsedSec:0.0} s)");
-                if (a.Flag("stems")) ExportStems(job, ares.FullPath);
+                Console.WriteLine(Loudness(ares));
+                if (a.Flag("stems")) ExportStems(job, ares.FullPath, ares.DurationSec);
                 return 0;
             }
             var res = Mp4Exporter.ExportAsync(job, prog =>
@@ -807,7 +940,8 @@ static class DspCommands
             }).GetAwaiter().GetResult();
 
             Console.WriteLine($"Exportado: {res.FullPath} ({Mp4Exporter.FormatBytes(res.Bytes)}, {res.DurationSec:0.0} s en {res.ElapsedSec:0.0} s)");
-            if (a.Flag("stems")) ExportStems(job, res.FullPath);
+            Console.WriteLine(Loudness(res));
+            if (a.Flag("stems")) ExportStems(job, res.FullPath, res.DurationSec);
 
             if (testMode)
             {
@@ -953,6 +1087,208 @@ static class DspCommands
     }
 
     static string Db(double db) => double.IsNegativeInfinity(db) ? "exacto" : $"{db:0.0} dB";
+
+    /// <summary>
+    /// The master (<see cref="MasterChain"/>): with the EQ flat and the bands at 0 the crossover adds back to the input;
+    /// fitted to the mix, each band reduces about what its "Cuánto" asks and the level stays; the limiter holds the
+    /// card's Techo; off, it does not touch a sample.
+    /// </summary>
+    static bool MasterChecks(int sr)
+    {
+        bool ok = true;
+        static double Rms(float[] x, int from)
+        {
+            double s = 0;
+            for (int i = from; i < x.Length; i++) s += x[i] * (double)x[i];
+            return 10 * Math.Log10(Math.Max(1e-20, s / Math.Max(1, x.Length - from)));
+        }
+        static MasterChain Chain(int sr, MasterParams p)
+        {
+            var c = new MasterChain(sr);
+            c.Set(p);
+            c.Reset();
+            return c;
+        }
+
+        // flat: tones across the crossovers come out at their level
+        var flat = MasterParams.Off with { On = true };
+        double worst = 0;
+        foreach (double f in new[] { 40.0, 150, 600, 2500, 5000, 12000 })
+        {
+            var x = new float[sr];
+            for (int i = 0; i < x.Length; i++) x[i] = (float)(0.3 * Math.Sin(2 * Math.PI * f * i / sr));
+            var l = (float[])x.Clone();
+            var r = (float[])x.Clone();
+            var chain = Chain(sr, flat);
+            Run(l, r, chain.Process);
+            worst = Math.Max(worst, Math.Abs(Rms(l, sr / 2) - Rms(x, sr / 2)));
+        }
+        bool flatOk = worst < 0.05;
+        ok &= flatOk;
+        Console.WriteLine($"{"Master plano: suma de bandas",-36} {$"{worst:0.000} dB",12} {"< 0,05 dB",10}  {(flatOk ? "igual" : "DISTINTO")}");
+
+        // the live path, as the window does it: project settings → a bus that was never reset → +6 dB of air (a shelf
+        // at 10 kHz, so ~+4.5 dB at 12 kHz)
+        {
+            var settings = new GuitarCam.Projects.MasterSettings { On = true, AirDb = 6 };
+            var bus = new MixGraphBus(sr);
+            bus.Master.Set(settings.ToParams());
+            var x = new float[sr];
+            for (int i = 0; i < x.Length; i++) x[i] = (float)(0.1 * Math.Sin(2 * Math.PI * 12000 * i / sr));
+            var l = (float[])x.Clone();
+            var r = (float[])x.Clone();
+            var empty = new float[TrackDspChain.MaxBlockSize];
+            for (int i = 0; i < l.Length; i += 256)
+            {
+                int n = Math.Min(256, l.Length - i);
+                bus.ProcessReturnsAndLimiter(l.AsSpan(i, n), r.AsSpan(i, n), bus.PrepareReverbL(n), bus.PrepareReverbR(n),
+                    bus.PrepareDelayL(n), bus.PrepareDelayR(n), limit: false);
+            }
+            double gain = Rms(l, sr / 2) - Rms(x, sr / 2);
+            bool liveOk = gain is > 3.5 and < 6;
+            ok &= liveOk;
+            Console.WriteLine($"{"Master en vivo: Aire +6 a 12 kHz",-36} {$"{gain:+0.0} dB",12} {"+3,5 a +6",10}  {(liveOk ? "igual" : "DISTINTO")}");
+        }
+
+        // the limiter as the card sets it, in the export: Empuje pushes the mix in, Techo holds the peaks
+        {
+            var tone = new float[sr * 2];
+            for (int i = 0; i < tone.Length; i++) tone[i] = (float)(0.25 * Math.Sin(2 * Math.PI * 220 * i / sr));
+            MixTrackSpec[] mix = [new MixTrackSpec { Clips = [new MixClipSpec { Left = tone, Right = tone, DurationSec = 2 }] }];
+            var pushed = MixMaster.Render(mix, new MixBusSpec { Master = MasterParams.Off with { LimDriveDb = 12, LimCeilingDb = -1 } }, 2, sr, 0);
+            float pk = 0;
+            for (int i = 0; i < pushed.Left.Length; i++) pk = Math.Max(pk, Math.Abs(pushed.Left[i]));
+            double pkDb = 20 * Math.Log10(pk);
+            bool limOk = pkDb <= -1 + 1e-3 && pkDb > -1.5 && Math.Abs(pushed.GainDb - 12) < 1e-9;
+            ok &= limOk;
+            Console.WriteLine($"{"Limitador: empuje +12, techo -1",-36} {$"{pkDb:0.00} dB",12} {"-1,00 dB",10}  {(limOk ? "igual" : "DISTINTO")}");
+        }
+
+        // Cinta adds harmonics: a 200 Hz tone gets energy at 400 / 600 Hz (Goertzel), more with more Cinta
+        {
+            double Harm(double amount)
+            {
+                var l = new float[sr];
+                for (int i = 0; i < l.Length; i++) l[i] = (float)(0.3 * Math.Sin(2 * Math.PI * 200 * i / sr));
+                var r = (float[])l.Clone();
+                Run(l, r, Chain(sr, flat with { TapeAmount = amount }).Process);
+                double Bin(double f)
+                {
+                    double w = 2 * Math.PI * f / sr, c = 2 * Math.Cos(w), s1 = 0, s2 = 0;
+                    for (int i = sr / 2; i < sr; i++) { double v = l[i] + c * s1 - s2; s2 = s1; s1 = v; }
+                    return s1 * s1 + s2 * s2 - c * s1 * s2;
+                }
+                return 10 * Math.Log10((Bin(400) + Bin(600) + 1e-20) / Bin(200));
+            }
+            double none = Harm(0), some = Harm(0.5), full = Harm(1);
+            bool tapeOk = none < -90 && some > none + 20 && full > some;
+            ok &= tapeOk;
+            Console.WriteLine($"{"Cinta: armónicos 0 / 50 / 100 %",-36} {$"{none:0} / {some:0} / {full:0}",12} {"suben",10}  {(tapeOk ? "igual" : "DISTINTO")}");
+        }
+
+        // Ancho: 0 = mono; graves mono at 150 Hz takes the side out at 50 Hz and leaves it at 2 kHz
+        {
+            float[] SideTone(double f)
+            {
+                var x = new float[sr];
+                for (int i = 0; i < x.Length; i++) x[i] = (float)(0.2 * Math.Sin(2 * Math.PI * f * i / sr));
+                return x;
+            }
+            var l = SideTone(1000);
+            var r = l.Select(v => -v).ToArray();
+            Run(l, r, Chain(sr, flat with { Width = 0 }).Process);
+            double diff = 0;
+            for (int i = sr / 2; i < sr; i++) diff = Math.Max(diff, Math.Abs(l[i] - r[i]));
+            double Side(double f)
+            {
+                var a = SideTone(f);
+                var b = a.Select(v => -v).ToArray();
+                var src = (float[])a.Clone();
+                Run(a, b, Chain(sr, flat with { MonoBassHz = 150 }).Process);
+                return Rms(a, sr / 2) - Rms(src, sr / 2);
+            }
+            double low = Side(50), high = Side(2000);
+            bool widthOk = diff < 1e-4 && low < -15 && Math.Abs(high) < 0.2;
+            ok &= widthOk;
+            Console.WriteLine($"{"Ancho 0 = mono; graves mono 50/2k",-36} {$"{low:0} / {high:0.0} dB",12} {"< -15 / 0",10}  {(widthOk ? "igual" : "DISTINTO")}");
+        }
+
+        // off: bit for bit
+        var song = TestSignal(sr, 8);
+        var offL = (float[])song[0].Clone();
+        var offR = (float[])song[1].Clone();
+        Run(offL, offR, Chain(sr, MasterParams.Off).Process);
+        bool offOk = offL.AsSpan().SequenceEqual(song[0]) && offR.AsSpan().SequenceEqual(song[1]);
+        ok &= offOk;
+        Console.WriteLine($"{"Master apagado: no toca la mezcla",-36} {(offOk ? "exacto" : "cambia"),12} {"exacto",10}  {(offOk ? "igual" : "DISTINTO")}");
+
+        // soft clip: with Empuje +8 dB, Recorte 3 takes most of the work off the limiter and the peak stays at the Techo
+        {
+            double Lim(double clipDb)
+            {
+                var l = song[0].ToArray();
+                var r = song[1].ToArray();
+                var bus = new MixGraphBus(sr);
+                bus.SetMaster(flat with { LimDriveDb = 8, ClipDb = clipDb });
+                bus.Reset();
+                var (_, _, lim) = RunMaster(bus, l, r);
+                float pk = 0;
+                for (int i = 0; i < l.Length; i++) pk = Math.Max(pk, Math.Abs(l[i]));
+                if (20 * Math.Log10(pk) > MasterLimiter.CeilingDb + 1e-3) return double.NaN;
+                return lim;
+            }
+            double without = Lim(0), with = Lim(3);
+            bool clipOk = with < without - 2;
+            ok &= clipOk;
+            Console.WriteLine($"{"Soft clip 3 dB: lo que baja el lim.",-36} {$"{without:0.0} → {with:0.0} dB",12} {"menos",10}  {(clipOk ? "igual" : "DISTINTO")}");
+        }
+
+        // compressing: every band works at 70 %, the same 10 dB louder or quieter (it follows its own level), and the
+        // loudness stays
+        var band = new MasterBandParams(0.7);
+        var bandsOn = flat with { Low = band, Mid = band, High = band, LimOn = false };
+        double[] Mean(float gain, out double lufsIn, out double lufsOut)
+        {
+            var l = song[0].Select(v => v * gain).ToArray();
+            var r = song[1].Select(v => v * gain).ToArray();
+            lufsIn = LoudnessMeter.Measure(l, r, sr);
+            var bus = new MixGraphBus(sr);
+            bus.SetMaster(bandsOn);
+            bus.Reset();
+            var (mean, _, _) = RunMaster(bus, l, r);
+            lufsOut = LoudnessMeter.Measure(l, r, sr);
+            return mean;
+        }
+        var normal = Mean(1, out double lufsIn, out double lufsOut);
+        var quiet = Mean(0.316f, out _, out _);
+        bool grOk = true, sameOk = true;
+        for (int b = 0; b < MasterBands.Count; b++)
+        {
+            grOk &= normal[b] is > 0.8 and < 8;
+            sameOk &= Math.Abs(normal[b] - quiet[b]) < 1;
+        }
+        bool levelOk = Math.Abs(lufsOut - lufsIn) < 1.5;
+        ok &= grOk && sameOk && levelOk;
+        Console.WriteLine($"{"Multibanda 70%: reducción por banda",-36} {string.Join(" / ", normal.Select(v => $"{v:0.0}")),12} {"1 a 8 dB",10}  {(grOk ? "igual" : "DISTINTO")}");
+        Console.WriteLine($"{"Multibanda 70%: igual con -10 dB",-36} {string.Join(" / ", quiet.Select(v => $"{v:0.0}")),12} {"± 1 dB",10}  {(sameOk ? "igual" : "DISTINTO")}");
+        Console.WriteLine($"{"Multibanda 70%: LUFS entra / sale",-36} {$"{lufsIn:0.0} / {lufsOut:0.0}",12} {"± 1,5",10}  {(levelOk ? "igual" : "DISTINTO")}");
+
+        // limiter off: the export's loudness gain stops where the peak touches the Techo instead of clipping
+        {
+            var tone = new float[sr * 2];
+            for (int i = 0; i < tone.Length; i++) tone[i] = (float)(0.25 * Math.Sin(2 * Math.PI * 220 * i / sr));
+            MixTrackSpec[] mix = [new MixTrackSpec { Clips = [new MixClipSpec { Left = tone, Right = tone, DurationSec = 2 }] }];
+            var free = MixMaster.Render(mix, new MixBusSpec { Master = MasterParams.Off with { LimOn = false } }, 2, sr, 0, targetLufs: 0);
+            float pk = 0;
+            for (int i = 0; i < free.Left.Length; i++) pk = Math.Max(pk, Math.Abs(free.Left[i]));
+            double pkDb = 20 * Math.Log10(pk);
+            bool offLimOk = pkDb <= MasterLimiter.CeilingDb + 0.01 && pkDb > MasterLimiter.CeilingDb - 0.5;
+            ok &= offLimOk;
+            Console.WriteLine($"{"Sin limitador: LUFS 0 frena en techo",-36} {$"{pkDb:0.00} dB",12} {$"{MasterLimiter.CeilingDb:0.00} dB",10}  {(offLimOk ? "igual" : "DISTINTO")}");
+        }
+
+        return ok;
+    }
 
     static void Run(float[] l, float[] r, SpanAction process, int blockSize = Block)
     {

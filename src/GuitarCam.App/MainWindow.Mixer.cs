@@ -15,7 +15,7 @@ namespace GuitarCam.App;
 /// <summary>
 /// Port of Mixer.tsx and MiniTimeline.tsx: the bottom view that alternates with the timeline (X). One strip per track,
 /// empty ones too ("vacía": what you set there goes to the next take), wide with a panel per effect or compact with
-/// knobs; the reverb and delay returns with their presets; the master with its LIM light; pan templates for the whole
+/// knobs; the reverb and delay returns with their presets; the master with its LIM light and its card (MainWindow.Master.cs); pan templates for the whole
 /// mix. Every change is an undo step (same keys as the inspector), saved and heard live. Same as the web except: the
 /// toggle sits in the bottom transport bar (where the native transport is), the EQ summary has no live spectrum yet
 /// (like the inspector), and empty strips edit their channel without the take analysis (as in the web). Also unlike
@@ -70,6 +70,8 @@ public partial class MainWindow
     double timelineH = TimelineDefaultH, mixerH = MixerDefaultH;
     float masterShow, reverbShow, delayShow;
     bool mixerView;
+    /// <summary>The mixer's head row (title, width…): hidden while the Mastering view uses the mixer's place.</summary>
+    Control? mixerHeader;
 
     /// <summary>Preset names and hints come from the engine in Spanish: they are looked up by id (or by name for the buses) and fall back to that text.</summary>
     static string CompPresetName(CompPresetDef p) => Loc.Or("insp.comp." + p.Id, p.Label);
@@ -121,7 +123,7 @@ public partial class MainWindow
 
         miniTimeline.SeekRequested += sec => engine.Seek(sec);
         miniTimeline.ScrubChanged += Scrub;
-        var header = BuildMixerHeader();
+        var header = mixerHeader = BuildMixerHeader();
         mx = compactMixer;
         mixerStrips.Children.Add(compactMixer.Strips);
         mixerStrips.Children.Add(wideMixer.Strips);
@@ -131,10 +133,13 @@ public partial class MainWindow
         DockPanel.SetDock(header, Dock.Top);
         MixerHost.Children.Add(miniTimeline);
         MixerHost.Children.Add(header);
-        MixerHost.Children.Add(mixerScroll);
+        // the DockPanel fills only its last child: the mixer and the Mastering view share it, so both fill the place
+        MixerHost.Children.Add(new Panel { Children = { mixerScroll, masteringScroll } });
+        InitMastering();
 
         TimelineViewButton.Click += (_, _) => SetMixerView(false);
-        MixerViewButton.Click += (_, _) => SetMixerView(true);    }
+        MixerViewButton.Click += (_, _) => ShowBottomView(mastering: false);
+    }
 
     void SetMixerView(bool mixer)
     {
@@ -143,7 +148,8 @@ public partial class MainWindow
         // in solo audio both views fill the stage's place and the bottom row stays closed
         if (!audioMode)
         {
-            if (mixerView) mixerH = row.ActualHeight; else timelineH = row.ActualHeight;
+            // the Mastering view's fitted height is not the mixer's
+            if (mixerView) { if (!masteringView) mixerH = row.ActualHeight; } else timelineH = row.ActualHeight;
             row.MinHeight = mixer ? MixerMinH : TimelineMinH;
             row.Height = new GridLength(mixer ? mixerH : timelineH);
         }
@@ -157,12 +163,13 @@ public partial class MainWindow
         MixerViewButton.Classes.Set("on", mixer);
         SaveViewPref(mixer ? "timelineHeight" : "mixerHeight", (mixer ? timelineH : mixerH).ToString(System.Globalization.CultureInfo.InvariantCulture));
         RefreshMixer();
+        ApplyMasteringView();
     }
 
     /// <summary>Remembers the height of the view on screen (gc.timelineHeight / gc.mixerHeight in the web).</summary>
     void SaveBottomHeight()
     {
-        if (audioMode) return;
+        if (audioMode || (mixerView && masteringView)) return;
         double h = Root.RowDefinitions[3].ActualHeight;
         if (mixerView) mixerH = h; else timelineH = h;
         SaveViewPref(mixerView ? "mixerHeight" : "timelineHeight", h.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -294,7 +301,7 @@ public partial class MainWindow
 
     void RefreshMixer()
     {
-        if (!mixerView) return;
+        if (!mixerView || masteringView) return;
         double areaW = mixerScroll.Viewport.Width > 0 ? mixerScroll.Viewport.Width : MixerHost.Bounds.Width;
         // folder strips take their own width; folded groups hide their tracks
         int n = Math.Max(1, tracks.Count(t => FolderOfTrack(t)?.MixerCollapsed != true));
@@ -332,8 +339,9 @@ public partial class MainWindow
     void TickMixer(double pos, float outL, float outR)
     {
         var (rl, rr, dl, dr) = engine.TakeReturnMeters();
-        double lim = engine.Limiter.TakeReductionDb();
-        if (!mixerView) return;
+        double lim = masterLimDb = engine.Limiter.TakeReductionDb();
+        masterOutPeak = Math.Max(masterOutPeak, Math.Max(outL, outR));
+        if (!mixerView || masteringView) return;
         miniTimeline.SetPlayhead(pos, tracks.Count == 0 ? 0 : tracks.Max(t => t.EndSec), RecordingBusy);
         foreach (var t in tracks)
             if (mx.Meters.TryGetValue(t.Track.Id, out var m))
@@ -1106,7 +1114,7 @@ public partial class MainWindow
     {
         var box = StripCard(MasterW);
         var head = new StackPanel { Spacing = 4 };
-        head.Children.Add(new TextBlock { Text = Loc.T("mix.master"), FontSize = 11, FontWeight = FontWeight.SemiBold, Foreground = Palette.Dim, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 5, 0, 0) });
+        head.Children.Add(MasterButton());
         mx.Lim = new TextBlock { Text = "LIM", Classes = { "mono" }, FontSize = 9, FontWeight = FontWeight.Bold, LetterSpacing = 0.8, Foreground = Palette.Accent, Opacity = 0.25,
             HorizontalAlignment = HorizontalAlignment.Center };
         ToolTip.SetTip(mx.Lim, Loc.T("mix.master.lim.tip"));

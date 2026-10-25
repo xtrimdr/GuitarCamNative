@@ -11,7 +11,7 @@ namespace GuitarCam.App.Audio;
 /// <c>StudioAudioEngine</c> in <c>audioEngine.ts</c> + <c>mixGraph.ts</c>):
 /// per track: clip fades → saturator → compressor EQ → compressor → 6-band track EQ → pan → fader;
 /// post-fader sends into the shared <see cref="ReverbBus"/> and <see cref="DelayBus"/>;
-/// tracks + returns summed into <see cref="MasterLimiter"/>; click mixed outside the limiter (delayed by
+/// tracks + returns summed into the <see cref="MasterChain"/> (native only) and the <see cref="MasterLimiter"/>; click mixed outside the limiter (delayed by
 /// <see cref="MasterLimiter.Latency"/> so it lands on the same sample as the limited tracks).
 /// Also processes input 1-2 (<see cref="InputProcessor"/>: channel mode, pre-amp gain (0 dB default), soft-limiter,
 /// optional software monitoring), runs count-in + recording on the same sample clock via <see cref="TakeRecorder"/>,
@@ -52,6 +52,9 @@ public sealed class PlaybackEngine : IDisposable
     volatile bool playing;
     volatile bool recording;
     volatile bool loop;
+    /// <summary>The A–B range the loop repeats, in frames; null = the whole song (0 to the end). Swapped whole, like the tracks.</summary>
+    sealed record LoopFrames(long Start, long End);
+    volatile LoopFrames? loopRange;
     volatile bool softwareMonitor;
     volatile InputTap[] taps = [];
     volatile CalibrationSession? activeCalibration;
@@ -155,6 +158,14 @@ public sealed class PlaybackEngine : IDisposable
     }
 
     /// <summary>
+    /// The A–B range the loop repeats (<see cref="ProjectMarkers.SetLoop"/>); null = the whole song. Crossing B while
+    /// the loop is on jumps to A with the seek crossfade, so the effects keep their state; a playhead already past B
+    /// plays on to the end and loops back to A from there.
+    /// </summary>
+    public void SetLoopRange((double Start, double End)? range) =>
+        loopRange = range is { } r ? new LoopFrames((long)(r.Start * SampleRate), (long)(r.End * SampleRate)) : null;
+
+    /// <summary>
     /// Length of the fade when playback starts and stops (play, stop, the playhead drag), in ms. The seek crossfade
     /// stays at <see cref="TransportFadeSec"/>: longer, a jump would blur the two positions together.
     /// </summary>
@@ -218,6 +229,7 @@ public sealed class PlaybackEngine : IDisposable
     public ReverbBus Reverb => buses.Reverb;
     public DelayBus Delay => buses.Delay;
     public MasterLimiter Limiter => buses.Limiter;
+    public MasterChain Master => buses.Master;
 
     public double LoadPercent { get; private set; }
 
@@ -345,6 +357,7 @@ public sealed class PlaybackEngine : IDisposable
         bpm = Math.Clamp(s.Bpm, 20, 300);
         ApplyReverb(s.Reverb);
         ApplyDelay(s.Delay, glideDelay);
+        ApplyMaster(s.Master);
         var arr = tracks;
         for (int i = 0; i < arr.Length; i++)
             arr[i].SetProjectSettings(s);
@@ -361,6 +374,9 @@ public sealed class PlaybackEngine : IDisposable
             r.ReturnGain,
             r.Muted));
     }
+
+    /// <summary>The master's EQ, multiband and limiter, live: on and off crossfade (<see cref="MasterChain"/>).</summary>
+    public void ApplyMaster(MasterSettings m) => buses.SetMaster(m.ToParams());
 
     public void ApplyDelay(DelaySettings d, bool glide = true)
     {
@@ -389,7 +405,7 @@ public sealed class PlaybackEngine : IDisposable
         Interlocked.Exchange(ref cancelPause, 1);
         stopping = false;
         if (playing) return; // a fade-out pause still in flight: it fades back in where it is
-        if (endFrame > 0 && Interlocked.Read(ref position) >= endFrame) Seek(0);
+        if (endFrame > 0 && Interlocked.Read(ref position) >= endFrame) Seek(loop && loopRange is { } lr ? lr.Start / (double)SampleRate : 0);
         long pos = Interlocked.Read(ref position);
         Interlocked.CompareExchange(ref pendingSeek, NoSeek, pos); // a seek made while stopped already moved it
         playStartSec = Math.Max(0.0, pos / (double)SampleRate);
@@ -879,6 +895,7 @@ public sealed class PlaybackEngine : IDisposable
             outL = ol;
             outR = or;
 
+            long blockStart = pos;
             pos += n;
             if (fadeMode == -2 && fadeLevel <= 0)
             {
@@ -894,21 +911,24 @@ public sealed class PlaybackEngine : IDisposable
             else
             {
                 if (fadeMode == 1 && fadeLevel >= 1) fadeMode = 0;
-                if (!isRec && endFrame > 0 && pos >= endFrame)
+                var lr = loopRange;
+                long loopStart = lr?.Start ?? 0, loopEnd = lr?.End ?? endFrame;
+                bool crossedB = loop && loopEnd > loopStart && blockStart < loopEnd && pos >= loopEnd;
+                bool atEnd = endFrame > 0 && pos >= endFrame;
+                if (!isRec && (crossedB || atEnd && loop))
                 {
-                    if (loop)
-                    {
-                        pos = 0;
-                        nextBeat = 0;
-                        Interlocked.Exchange(ref position, 0);
-                        var curTracks = tracks;
-                        for (int i = 0; i < curTracks.Length; i++) curTracks[i].Chain.Reset();
-                    }
-                    else
-                    {
-                        Interlocked.Exchange(ref position, pos);
-                        playing = false;
-                    }
+                    // back to A like a seek: the old position plays on fading out while A fades in, and the effects
+                    // keep their state (resetting them here cut the reverb tails and clicked on every lap)
+                    long to = loopStart + (crossedB ? pos - loopEnd : 0);
+                    xfFrom = pos;
+                    xfLevel = 0;
+                    nextBeat = BeatAt(to);
+                    Interlocked.Exchange(ref position, to);
+                }
+                else if (!isRec && atEnd)
+                {
+                    Interlocked.Exchange(ref position, pos);
+                    playing = false;
                 }
                 else
                 {

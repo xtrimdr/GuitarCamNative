@@ -51,6 +51,8 @@ de **grabar → mezclar → exportar**.
 - Cadena de efectos por pista: saturación (**Vida**, válvula o cinta), **compresor** con presets (Rasgueo / Arpegio /
   Punteo), **EQ de 6 bandas** con espectro en vivo, y envíos a **reverb** y **delay**, más limitador master y paneo
   con plantillas.
+- **Transponer** por pista (−12 a +12 semitonos) sin cambiar el largo, así la toma sigue en sincronía con el video:
+  se calcula en segundo plano con un vocoder de fase de alta calidad y queda guardada en `cache/`.
 - **Mixer** completo; cada carpeta tiene su propio canal y su fader, M y S mandan sobre todas sus pistas, como un VCA.
 - Audio de nivel profesional: arrancar, parar, saltar y arrastrar el cabezal llevan su fundido, sin clics ni cortes.
 
@@ -166,6 +168,7 @@ guitarcam.json        el proyecto
 guitarcam.json.bak    el guardado anterior
 historial/            copias para volver atrás
 media/                grabaciones e importados (nunca se reescriben)
+cache/                tomas transpuestas (se rehacen solas si se borran)
 exports/              videos y audios exportados
 ```
 
@@ -195,8 +198,11 @@ la consola, sin abrir la ventana.
 | `click` | escribe todos los sonidos de click a un WAV |
 | `sistema [--segundos 5]` | CPU, GPU y RAM, y si FFmpeg está en el PATH |
 | `espectro [toma.wav]` | el espectro en vivo del EQ |
-| `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas, reinicio de la cadena, afinador y LUFS |
+| `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas, reinicio de la cadena, afinador, LUFS y mastering (bandas que suman plano, reducción por banda sin importar el nivel, Cinta, Ancho y graves mono, soft clip, limitador prendido y apagado) |
 | `looks [--look id] [--salida look.cube] [--blancos n] [--negros n] [--luz n]` | los looks de color con colores de prueba, comprobación de rango y, con `--look`, el LUT `.cube` de ese look con Blancos, Negros y Sensación de luz |
+| `masterizar archivo.wav [--cuanto 0.35] [--banda-graves\|--banda-medios\|--banda-agudos 0..1] [--corte] [--barro] [--graves] [--presencia] [--aire] [--inclinacion] [--cinta] [--ancho] [--graves-mono] [--recorte] [--empuje] [--techo] [--release] [--sin-limitador]` | el mastering de la ventana sobre un WAV: cuánto comprime cada banda, cuánto recortan el soft clip y el limitador y los LUFS de entrada y salida |
+| `transponer archivo.wav [--semitonos 2] [--salida x.wav]` | cambia el tono sin cambiar el largo, como el Transponer de la pista (de −12 a +12, admite cents) |
+| `proyecto editar carpeta transponer pista semitonos` | el Transponer de esa pista; deja sus tomas transpuestas en `cache/` |
 | `lufs archivo` / `afinar archivo [--en segundos] [--umbral -50]` | volumen integrado de un archivo / la nota que oye el afinador en ese momento, con la sensibilidad de la ventana (dB) |
 | `camara [listar]` | las cámaras que ve FFmpeg y sus formatos |
 | `camara grabar [--dispositivo X \| --ip 192.168.1.50:4747] [--segundos 5]` | graba video como una toma y lo revisa con ffprobe |

@@ -5,12 +5,13 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using GuitarCam.Projects;
 
 namespace GuitarCam.App;
 
 /// <summary>
-/// Renaming a track or a folder right on its header (native only, asked by the user), like a DAW: a double click on
-/// the name (or "Renombrar…" in its menu) lays a text box over it. Enter or a click elsewhere keeps the name, Esc
+/// Renaming a track, a folder or a marker right where it is drawn (native only, asked by the user), like a DAW: a
+/// double click on the name (or "Renombrar…" in its menu) lays a text box over it. Enter or a click elsewhere keeps the name, Esc
 /// drops it; a scroll keeps it too, since the box would no longer sit on its row. Each rename is one undo step.
 /// </summary>
 public partial class MainWindow
@@ -21,6 +22,8 @@ public partial class MainWindow
         FontSize = 12.5, FontWeight = FontWeight.SemiBold, Padding = new Thickness(4, 0), MinHeight = 0, VerticalContentAlignment = VerticalAlignment.Center,
     };
     string? nameEditId;
+    /// <summary>Narrowest box for a marker's name.</summary>
+    const double MarkerEditorW = 140;
 
     void InitNameEditor()
     {
@@ -50,13 +53,15 @@ public partial class MainWindow
     {
         if (store == null || store.ReadOnly || restoring) return;
         EndNameEdit(true);
-        string? name = FolderById(id)?.Name ?? tracks.Find(t => t.Track.Id == id)?.Track.Name;
+        var marker = store.Project.Markers.Find(m => m.Id == id);
+        string? name = FolderById(id)?.Name ?? tracks.Find(t => t.Track.Id == id)?.Track.Name ?? marker?.Name;
         if (name == null) return;
         nameEditId = id;
         Timeline.EditingNameId = id;
         var origin = Timeline.TranslatePoint(default, TimelineHost) ?? default;
         nameEditor.Margin = new Thickness(origin.X + r.X, origin.Y + r.Y, 0, 0);
-        nameEditor.Width = r.Width;
+        // a marker's flag is as wide as its name: the box leaves room to write a longer one
+        nameEditor.Width = marker != null ? Math.Max(r.Width, MarkerEditorW) : r.Width;
         nameEditor.Height = r.Height;
         nameEditor.Text = name;
         nameEditor.IsVisible = true;
@@ -76,6 +81,10 @@ public partial class MainWindow
         if (FolderById(id) is { } f)
         {
             if (f.Name != text) FolderEdit(f, x => x.Name = text, "name");
+        }
+        else if (store?.Project.Markers.Find(m => m.Id == id) is { } m)
+        {
+            if (m.Name != text) MarkerEdit(p => ProjectMarkers.Rename(p, id, text), $"marker:{id}:name");
         }
         else if (tracks.Find(t => t.Track.Id == id) is { } t && t.Track.Name != text) EditTrack(t, x => x.Track.Name = text, "name");
     }

@@ -16,6 +16,7 @@ static class ProjectCommands
         if (sub == "verificar-importar") return ImportChecks.Run();
         if (sub == "verificar-historial") return HistoryCommands.Check();
         if (sub == "verificar-carpetas") return FolderChecks();
+        if (sub == "verificar-marcadores") return MarkerChecks();
         string? dir = a.Positional.Skip(1).FirstOrDefault();
         if (dir == null) throw new ArgumentException("Falta la carpeta del proyecto.");
         dir = Path.GetFullPath(dir);
@@ -32,6 +33,8 @@ static class ProjectCommands
             "sincronia" => Sync(dir, a),
             "formato" => Format(dir, a),
             "modo" => Mode(dir, a),
+            "marcadores" => Markers(dir, a),
+            "repetir" => Loop(dir, a),
             "plantillas-de-pista" => ListPresets(),
             "cortar" => Crash(dir, a.Double("segundos", 3), a.Flag("camara")),
             "toma" => RecordTake(dir, a.Double("segundos", 3), a.Get("pista"), a.Flag("camara")),
@@ -115,6 +118,21 @@ static class ProjectCommands
             case "sacar-de-carpeta": TrackFolders.TakeOut(p, id); break;
             case "mover-carpeta": TrackFolders.MoveFolder(p, id, int.Parse(value)); break;
             case "quitar-carpeta": TrackFolders.Remove(p, id, a.Flag("con-pistas")); break;
+            case "transponer":
+                // like the inspector's Transponer: the track's semitones, and its takes rendered into the cache now
+                var tt = p.Tracks.Find(t => t.Id == id) ?? throw new ArgumentException("No encontré esa pista.");
+                double semis = double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+                if (Math.Abs(semis) > GuitarCam.Audio.Dsp.PitchShifter.MaxSemitones) throw new ArgumentException("transponer: de -12 a +12 semitonos.");
+                tt.Transpose = Math.Round(semis, 2);
+                foreach (var c in tt.Clips)
+                {
+                    if (store.Resolve(p.FindMedia(c.MediaId)?.Audio) is not { } ap || !File.Exists(ap)) continue;
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    var loaded = AudioLoader.Load(ap, 48000);
+                    store.TrackAudio(tt, ap, loaded.Left, loaded.Right);
+                    Console.WriteLine($"  {c.Id}: {loaded.DurationSec:0.0} s listos en {sw.Elapsed.TotalSeconds:0.0} s");
+                }
+                break;
             case "carpeta":
                 var fd = p.Folders.Find(f => f.Id == id) ?? throw new ArgumentException("No encontré esa carpeta.");
                 if (a.Get("nombre") is { } name) fd.Name = name;
@@ -141,7 +159,7 @@ static class ProjectCommands
                 {
                     "mover" => ClipEditMode.Move, "recortar-inicio" => ClipEditMode.TrimStart,
                     "recortar-final" => ClipEditMode.TrimEnd, "fade-in" => ClipEditMode.FadeIn, "fade-out" => ClipEditMode.FadeOut,
-                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar|a-pista|inicio|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar; nueva-carpeta [nombre] --pistas id,id; a-carpeta pista[,pista…] carpeta|raiz [--en n]; sacar-de-carpeta pista; mover-carpeta carpeta n; quitar-carpeta carpeta [--con-pistas]; carpeta id [--nombre --volumen --mute --solo --plegar]; guardar-plantilla pista [nombre]; usar-plantilla id|nombre"),
+                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar|a-pista|inicio|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar; nueva-carpeta [nombre] --pistas id,id; a-carpeta pista[,pista…] carpeta|raiz [--en n]; sacar-de-carpeta pista; mover-carpeta carpeta n; quitar-carpeta carpeta [--con-pistas]; carpeta id [--nombre --volumen --mute --solo --plegar]; transponer pista semitonos; guardar-plantilla pista [nombre]; usar-plantilla id|nombre"),
                 };
                 var (_, clip) = ClipEditing.Find(p, id);
                 double dx = double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
@@ -282,6 +300,102 @@ static class ProjectCommands
         Check("quitar G con sus pistas: " + Order(p), Order(p) == "[H] [F]" && p.Tracks.Count == 0);
         Console.WriteLine(failed == 0 ? "Todo bien." : $"{failed} comprobación(es) fallaron.");
         return failed == 0 ? 0 : 1;
+    }
+
+    /// <summary>Markers and the A–B range on a project in memory: order, names, jumps, undo and the saved file.</summary>
+    static int MarkerChecks()
+    {
+        int failed = 0;
+        void Check(string what, bool ok)
+        {
+            Console.WriteLine($"{(ok ? "ok   " : "FALLA")} {what}");
+            if (!ok) failed++;
+        }
+        string Names(Project p) => string.Join(" ", p.Markers.Select(m => $"{m.Name}@{m.Sec:0.#}"));
+        var p = new Project();
+        var undo = new UndoManager();
+        var solo = ProjectMarkers.Add(p, 30, "Solo");
+        ProjectMarkers.Add(p, 0, "Intro");
+        var first = ProjectMarkers.Add(p, 12);
+        Check("en orden y con nombre por defecto: " + Names(p), Names(p) == "Intro@0 Marcador 1@12 Solo@30");
+        Check("el siguiente nombre libre", ProjectMarkers.Add(p, 40).Name == "Marcador 2");
+        undo.Checkpoint(p);
+        ProjectMarkers.Move(p, solo.Id, 5);
+        Check("mover reordena: " + Names(p), Names(p) == "Intro@0 Solo@5 Marcador 1@12 Marcador 2@40");
+        undo.Undo(p);
+        Check("deshacer lo vuelve: " + Names(p), Names(p) == "Intro@0 Marcador 1@12 Solo@30 Marcador 2@40");
+        Check("siguiente desde el cabezal en un marcador", ProjectMarkers.Next(p, 12)?.Sec == 30);
+        Check("anterior parado", ProjectMarkers.Previous(p, 12.2, playing: false)?.Sec == 12);
+        Check("anterior sonando se saltea el que acaba de pasar", ProjectMarkers.Previous(p, 12.2, playing: true)?.Sec == 0);
+        ProjectMarkers.Rename(p, first.Id, "  Estribillo ");
+        Check("renombrar recorta espacios", p.Markers.Any(m => m.Name == "Estribillo"));
+        bool refused = false;
+        try { ProjectMarkers.Rename(p, first.Id, " "); } catch (ArgumentException) { refused = true; }
+        Check("sin nombre no", refused);
+        ProjectMarkers.SetLoop(p.Settings, 20, 8);
+        Check("el rango se ordena", ProjectMarkers.Loop(p.Settings) == (8, 20));
+        refused = false;
+        try { ProjectMarkers.SetLoop(p.Settings, 3, 3.01); } catch (ArgumentException) { refused = true; }
+        Check("un rango de 10 ms no", refused && ProjectMarkers.Loop(p.Settings) == (8, 20));
+        undo.Checkpoint(p);
+        ProjectMarkers.ClearLoop(p.Settings);
+        undo.Undo(p);
+        Check("el rango queda afuera del deshacer (como el tempo)", ProjectMarkers.Loop(p.Settings) == null);
+        ProjectMarkers.SetLoop(p.Settings, 8, 20);
+        var back = ProjectStore.Parse(System.Text.Json.JsonSerializer.Serialize(p, ProjectStore.Json));
+        Check("se guarda y se lee", Names(back) == Names(p) && back.Settings.LoopStartSec == 8 && back.Settings.LoopEndSec == 20);
+        back.Settings.LoopStartSec = 30;
+        back.Markers.Add(new Marker { Id = back.Markers[0].Id, Name = null!, Sec = -4 });
+        back = ProjectStore.Parse(System.Text.Json.JsonSerializer.Serialize(back, ProjectStore.Json));
+        Check("normalizar arregla lo roto", back.Settings.LoopEndSec == null && back.Markers.Any(m => m.Name == "" && m.Sec == 0)
+            && back.Markers.Select(m => m.Id).Distinct().Count() == back.Markers.Count);
+        Console.WriteLine(failed == 0 ? "Todo bien." : $"{failed} comprobación(es) fallaron.");
+        return failed == 0 ? 0 : 1;
+    }
+
+    /// <summary>The song's markers from the console: list, add, move, rename and remove (one save each).</summary>
+    static int Markers(string dir, Args a)
+    {
+        using var store = ProjectStore.Open(dir);
+        var p = store.Project;
+        string op = a.Positional.ElementAtOrDefault(2) ?? "";
+        string id = a.Positional.ElementAtOrDefault(3) ?? "";
+        string value = a.Positional.ElementAtOrDefault(4) ?? "";
+        double Sec(string s) => double.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+        if (op.Length > 0)
+        {
+            if (store.ReadOnly) throw new IOException(store.ReadOnlyReason);
+            switch (op)
+            {
+                case "agregar": Console.WriteLine(ProjectMarkers.Add(p, Sec(id), value.Length > 0 ? value : null).Id); break;
+                case "mover": ProjectMarkers.Move(p, id, Sec(value)); break;
+                case "renombrar": ProjectMarkers.Rename(p, id, value); break;
+                case "quitar": ProjectMarkers.Remove(p, id); break;
+                default: throw new ArgumentException("marcadores carpeta [agregar segundos [nombre] | mover id segundos | renombrar id nombre | quitar id]");
+            }
+            p.AddLog("markers-edited", op);
+            store.Save();
+        }
+        if (p.Markers.Count == 0) Console.WriteLine("Sin marcadores.");
+        foreach (var m in p.Markers) Console.WriteLine($"{m.Id} · {m.Sec,8:0.000} s · {m.Name}");
+        return 0;
+    }
+
+    /// <summary>The A–B range the loop repeats: shows it, sets it (either order) or removes it.</summary>
+    static int Loop(string dir, Args a)
+    {
+        using var store = ProjectStore.Open(dir);
+        var s = store.Project.Settings;
+        if (a.Flag("quitar") || a.Positional.Count > 3)
+        {
+            if (store.ReadOnly) throw new IOException(store.ReadOnlyReason);
+            if (a.Flag("quitar")) ProjectMarkers.ClearLoop(s);
+            else ProjectMarkers.SetLoop(s, double.Parse(a.Positional[2], System.Globalization.CultureInfo.InvariantCulture),
+                double.Parse(a.Positional[3], System.Globalization.CultureInfo.InvariantCulture));
+            store.Save();
+        }
+        Console.WriteLine(ProjectMarkers.Loop(s) is { } r ? $"Repite de {r.Start:0.000} s a {r.End:0.000} s ({r.End - r.Start:0.000} s)." : "Sin rango: el loop repite todo el tema.");
+        return 0;
     }
 
     static int Versions(string dir)

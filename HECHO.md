@@ -3,6 +3,49 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-25: **Transponer por pista**: slider en Mezcla del inspector (−12 a +12 semitonos, `Track.Transpose`) que
+  cambia el tono sin cambiar el largo, así sigue en sincronía con el video. `PitchShifter` corre el espectro de cada
+  cuadro (85 ms, FFT ×4) sin estirar ni remuestrear y rearma las fases desde los bins más fuertes (PVDR + phase
+  locking), con estéreo coherente; se hace en segundo plano y queda en `cache/` (`TransposeCache`), mientras tanto
+  suena el original y al llegar entra con un crossfade de 10 ms (`LiveClip.Sound`). Exportar y `gclab mezclar` /
+  `exportar` usan el mismo caché; `gclab transponer` y `proyecto editar … transponer`, y comprobaciones en `comprobar-dsp`.
+- 2026-10-25: **Cinta, Ancho, Soft clip y Volumen en el mastering**: tres etapas nuevas antes del limitador
+  (`Saturator` en modo cinta, `StereoWidth` con graves mono, `SoftClipper` con ADAA, igual en vivo y al exportar) y un
+  panel de LUFS / pico / "para −14" al final; la vista tiene el alto de la cadena y no se estira.
+- 2026-10-25: **vista Mastering y multibanda sin medir**: tercer botón Timeline · Mixer · Mastering con la cadena
+  en el lugar del mixer (en vez de la tarjeta flotante); cada banda fija su umbral siguiendo su propio nivel
+  (`MasterBandComp`), así no hay "Midiendo la mezcla" (se sacó `MasterAnalysis`); el limitador tiene ON
+  (`LimOn`, `MasterLimiter.Bypass`) y sin él la exportación con LUFS frena en el Techo.
+- 2026-10-25: **tarjeta del master en cadena horizontal y limitador ajustable**: un panel por etapa (Limpieza →
+  Multibanda → Color → Limitador) con perillas más grandes, ON propio para la EQ de color (`ColorOn`), y el limitador
+  con Empuje, Techo y Release (`MasterSettings.Lim*`, `MasterLimiter.Set`, `MixGraphBus.SetMaster`), igual en vivo y
+  al exportar (`MixMaster`). La medición ya no se cancela con cada edición. Sin Comparar.
+- 2026-10-25: **master, etapa 1**: el botón "Master" del mixer abre una tarjeta con una EQ (Corte · Barro antes del
+  multibanda; Graves · Presencia · Aire · Inclinación después), un compresor de 3 bandas Linkwitz-Riley con una
+  perilla "Cuánto" y un medidor por banda y cruces ajustables (tuvo un Comparar a igual volumen; el usuario lo sacó
+  porque no se entendía). Los umbrales salen de medir la mezcla en segundo plano y ajustar cada banda como el compresor de pista, con
+  makeup que conserva el volumen; se guardan en el proyecto, así la reproducción y la exportación suenan igual.
+  `Dsp/MasterChain.cs`, `Dsp/MasterAnalysis.cs`, `MasterSettings`, `MainWindow.Master.cs`; `gclab masterizar` y
+  comprobaciones en `comprobar-dsp`.
+
+- 2026-10-25: **rango A–B de reproducción**: franja arriba de la regla donde se arrastra el rango (bordes y cuerpo
+  móviles), I / O lo ponen en el cabezal, L prende el loop, y un rango de pista (Shift+arrastrar) se puede repetir
+  desde su menú. El loop vuelve a A con el crossfade de los saltos y sin reiniciar los efectos (antes volvía a 0 con
+  un corte y reiniciaba la cadena). `ProjectSettings.LoopStartSec/LoopEndSec`, `PlaybackEngine.SetLoopRange`,
+  `TimelineView.Markers.cs`, `MainWindow.Markers.cs`; `gclab proyecto repetir`.
+- 2026-10-25: **marcadores con nombre**: banderitas en la misma franja que se arrastran, renombran en el lugar y
+  saltan con un clic; K agrega uno en el cabezal, `,` / `.` van al anterior / siguiente, y el clic derecho ofrece
+  nombres (Intro, Estrofa, Estribillo, Puente, Solo, Final) y "Repetir hasta el siguiente". Se deshacen como las
+  pistas (`Project.Markers`, `ProjectMarkers`, `UndoManager`); `gclab proyecto marcadores`, `verificar-marcadores`.
+- 2026-10-25: **exportar con presets para redes**: fila "Destino" en el diálogo de exportar (Proyecto por defecto,
+  Reels · TikTok 9:16, YouTube 16:9, IG 1:1, IG 4:5 = 1080×1350), con la mezcla llevada a −14 LUFS; en "Exportar
+  audio", una casilla de −14 LUFS (`ExportTargets`, `ExportDialog`, `ExportSettings.Target` / `AudioLufs`;
+  `gclab exportar --destino --lufs`).
+- 2026-10-25: **LUFS de la mezcla al terminar de exportar**: el resultado se mide con `LoudnessMeter.Measure` (el
+  cálculo del medidor del master) y se ve en la pantalla final y en Historial (`ExportResult.Lufs`, `ExportRecord.Lufs`).
+- 2026-10-25: **colas de efectos al exportar**: la mezcla sigue hasta 8 s después del último clip y corta cuando la
+  reverb y el delay se apagan (−66 dBFS); el video congela el último cuadro y lo funde al fondo durante la cola
+  (`Dsp/MixMaster.cs`, `Mp4Exporter.BuildFfmpegCommand`, `gclab exportar --cola`; comprobado en `comprobar-dsp`).
 - 2026-10-25: **color de carpeta a sus pistas**: al elegirlo, el selector (y el inspector) pregunta si pinta también
   sus pistas con ese color (`MainWindow.TrackLook.FolderTracksAsk` / `PaintFolderTracks`, un paso de deshacer).
 - 2026-10-25: **24 colores de pista en dos filas**, en orden de arco iris (`TrackIcons.Colors`, `ColorsPerRow`;

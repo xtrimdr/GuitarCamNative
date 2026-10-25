@@ -27,7 +27,9 @@ static class Program
                 "comprobar-dsp" => DspCommands.Check(a),
                 "espectro" => DspCommands.Spectrum(a),
                 "lufs" => DspCommands.Lufs(a),
+                "masterizar" => DspCommands.Master(a),
                 "afinar" => DspCommands.Tune(a),
+                "transponer" => TransposeCommands.Run(a),
                 "looks" => VideoCommands.Looks(a),
                 "camara" => CameraCommands.Run(a),
                 "sistema" => SystemCommands.Run(a),
@@ -70,14 +72,28 @@ static class Program
                                            renderiza la mezcla completa offline (sin la demora del limitador)
               exportar  [carpeta-proyecto] [--salida nombre] [--carpeta destino] [--calidad alta|estandar|borrador]
                         [--reemplazar] [--prueba] [--audio wav|mp3] [--stems]
+                        [--destino project|reels|youtube|ig-square|ig-portrait] [--lufs -14] [--cola 8]
                                            exporta el proyecto a MP4 (o la mezcla en WAV / MP3) con mezcla offline y FFmpeg;
-                                           --stems deja además un WAV por pista en "<nombre> - stems"
+                                           --stems deja además un WAV por pista en "<nombre> - stems";
+                                           --destino usa el cuadro y el volumen de esa red (Reels/Shorts/TikTok 9:16,
+                                           YouTube 16:9, Instagram 1:1 y 4:5, todas a -14 LUFS); --lufs lleva la mezcla
+                                           a ese volumen integrado; --cola deja sonar reverb y delay hasta N s después
+                                           del último clip (8 por defecto, 0 = corta ahí). Muestra los LUFS del resultado
               click     [--salida clicks.wav] [--bpm 100]
                                            escribe todos los sonidos de click a un WAV para escucharlos
               lufs      archivo.wav|mp3        volumen integrado (EBU R128) del archivo, como el medidor LUFS del master
+              masterizar archivo.wav [--salida x_master.wav] [--cuanto 0.35] [--banda-graves|--banda-medios|--banda-agudos 0..1]
+                        [--corte 0|20..150] [--barro dB] [--graves dB] [--presencia dB] [--aire dB] [--inclinacion dB]
+                        [--cruce-graves 150] [--cruce-agudos 5000] [--cinta 0..1] [--ancho 0..2] [--graves-mono Hz]
+                        [--recorte 0..3] [--empuje 0] [--techo -0.3] [--release 80] [--sin-limitador]
+                                           el mastering de la ventana sobre un WAV: cuánto comprime cada banda
+                                           ("Cuánto", 0 = nada), cuánto baja el limitador y los LUFS de entrada y salida
               afinar    archivo.wav [--en segundos] [--umbral -50]
                                            la nota que oye el afinador en ese momento del archivo; --umbral es
                                            la sensibilidad de la ventana (dB, de -70 = muy sensible a -30)
+              transponer archivo.wav [--semitonos 2] [--salida x_+2st.wav]
+                                           cambia el tono sin cambiar el largo (de -12 a +12, admite fracciones = cents),
+                                           como el Transponer de la pista: vocoder de fase PVDR + remuestreo sinc
               espectro  [entrada.wav] [--hz 1000] [--nivel -6]
                                            el espectro en vivo del EQ (FFT de 8192 después del EQ, como la web);
                                            sin WAV, comprueba un seno contra el AnalyserNode de Web Audio
@@ -111,9 +127,15 @@ static class Program
               proyecto editar carpeta nueva-carpeta [nombre] [--pistas id,id] | quitar-carpeta carpeta   agrupa pistas (quitarla las deja sueltas)
               proyecto editar carpeta a-carpeta pista carpeta|raiz [--en n] | sacar-de-carpeta pista | mover-carpeta carpeta n
               proyecto editar carpeta carpeta id [--nombre X] [--volumen 0.8] [--mute] [--solo] [--plegar]   fader, mute y solo de la carpeta (como un VCA)
+              proyecto editar carpeta transponer pista semitonos   cambia el tono de la pista sin cambiar el largo (-12..+12, 0 = original)
+                                           y deja sus tomas transpuestas en cache/ (como el Transponer del inspector)
               proyecto editar carpeta guardar-plantilla pista [nombre] | usar-plantilla id|nombre   plantillas de pista (pistas.json)
               proyecto plantillas-de-pista x   lista las plantillas de pista guardadas
               proyecto verificar-carpetas  verifica el orden de carpetas y pistas, mover adentro y afuera, quitar y deshacer
+              proyecto marcadores carpeta [agregar segundos [nombre] | mover id segundos | renombrar id nombre | quitar id]
+                                           los marcadores del tema (Intro, Solo…); sin operación, los lista
+              proyecto repetir carpeta [desde hasta | --quitar]   el rango A–B que repite el loop; sin nada, lo muestra
+              proyecto verificar-marcadores verifica orden, nombres, saltos, deshacer y guardado de marcadores y del rango A–B
               proyecto editar carpeta ganancia clip dB | curva clip "seg:dB,..."   volumen del clip y su curva (seg desde el inicio de la toma)
               proyecto verificar-tomas     verifica a qué pista va una toma nueva, su nombre y su canal
               proyecto importar-audio carpeta archivo [--en segundos] [--pista id]   copia un audio de afuera a media/ y lo pone en una pista

@@ -21,6 +21,9 @@ _Ideas y mejoras para la nativa._
   cabezal (hecho, ver [HECHO.md](HECHO.md)); falta elegir qué clip se ve cuando se pisan
 - [x] Importar audio externo (hecho, ver [HECHO.md](HECHO.md)). Falta: que el clip importado siga el tempo del proyecto (hoy se
   usa tal cual) y importar el audio de un video
+- [ ] Transponer: que se vea en el timeline cuando una pista está transpuesta (hoy solo en el inspector), y probar
+  si conviene un modo "fino" en cents. Límite conocido: dos armónicos a menos de ~7 Hz (la 3ª de un acorde grave)
+  mantienen su batido original
 - [ ] Mejorar el mixer: inserts reordenables, más sends/buses, grupos, medidores más completos
 - …y más: ir sumando acá
 
@@ -57,6 +60,31 @@ _Ideas y mejoras para la nativa._
 - [x] Sistema de toasts y `--probar` (hecho, ver [HECHO.md](HECHO.md))
 - [ ] Decidir con el usuario qué avisos, además de "Para probar", salen como toast y cuáles quedan solo en la campanita
 
+#### 6. Masterización (pedido 2026-10-25)
+Un panel **Master** en el canal master, apagado por defecto (no suma pasos a "grabo, mezclo y exporto"). Cadena de
+orden fijo, la misma en la reproducción y la exportación (`MixGraphBus`), guardada por proyecto:
+
+**Corte de graves + Barro → Multibanda → Graves + Presencia + Aire + Inclinación → Soft clip → Limitador**
+
+Se usa entero (un look + una perilla "Cuánto") o por partes (cada etapa con su encendido, para escucharla sola).
+El orden sale de lo que se repite en foros de mastering (Gearspace, KVR, Sound On Sound): EQ correctiva antes de
+comprimir, EQ de color después (si el aire se sube antes, la banda de agudos lo comprime y lo deshace), clipper antes
+del limitador y el limitador al final, trabajando poco.
+
+- [x] **Etapa 1: EQ + Multibanda** (Comparar se sacó: no se entendía) (hecho, ver [HECHO.md](HECHO.md)). Falta: los cruces se corren con
+  dos perillas; queda pendiente el gráfico chico con la curva de las bandas.
+- [ ] **Etapa 2: Soft clip + limitador nuevo + volumen final en el master**
+  - Soft clip: hecho (perilla "Recorte" y medidor, ADAA en vez de sobremuestreo; ver [HECHO.md](HECHO.md)). Falta: con
+    un volumen final alto, repartir solo entre clipper y limitador.
+  - Limitador con techo en **−1 dB de pico real** (hoy se mide por muestra; Empuje, Techo y Release ya se ajustan
+    en la tarjeta, ver [HECHO.md](HECHO.md)). El AAC del MP4 puede clipear con −0,3.
+  - El destino de LUFS (Como está / YouTube / Instagram / TikTok…) pasa al master, para escucharlo al mezclar.
+  - Medición: LUFS integrado y de corto plazo, pico y reducción por banda ya están en la vista; falta el pico real.
+- [ ] **Etapa 3: looks y "Sugerime"**
+  - Looks (Natural, Pegadito, Brillante, Cálido, Al frente, Domar la púa…) con una perilla "Cuánto" que mueve todo.
+    "Domar la púa" trabaja 2–5 kHz (puede pedir una cuarta banda solo para ese look).
+  - "Sugerime": analiza la mezcla (`SpectrumTap`, `LevelAnalysis`) y propone EQ y compresión por banda.
+
 ### Sugerencias (para decidir)
 
 _Ideas que surgieron charlando. Todas apuntan al video._
@@ -79,10 +107,10 @@ _Ideas que surgieron charlando. Todas apuntan al video._
 - [ ] **Amp sim + cargador de IRs de gabinete**: grabar la guitarra directa (DI) y que suene bien sin VSTs
 - [ ] **Grabación en loop / tomas múltiples (comping)**: grabar varias pasadas del solo y elegir
   los mejores pedazos
-- [ ] **Exportar con presets para redes**: Reels/Shorts/TikTok (9:16), YouTube (16:9), Instagram
-  (1:1, 4:5), con el volumen normalizado al que pide cada una (ej. -14 LUFS)
-- [ ] **LUFS de la mezcla al terminar de exportar** (el medidor del master ya está, ver [HECHO.md](HECHO.md)):
-  sirve para los presets de redes
+- [ ] **Marcas de duración por red en el timeline**: una línea vertical donde termina el largo ideal o máximo de
+  cada red (historia de Instagram/Facebook 60 s, Reels, Shorts, TikTok…), para saber mientras grabás si entra o
+  vas a tener que cortarlo en varias historias. Que se pueda elegir cuál mostrar (o ninguna); podría salir del mismo
+  `ExportTargets` que usa el Destino de la exportación
 - [ ] **Visualizadores de audio** como capa del video (onda o espectro animado)
 - [ ] **Acordes / tablatura / letra en pantalla** mientras grabás (tipo teleprompter) y opcionalmente en el video
 - [ ] **Exportar con la GPU** (NVENC) para que el render sea mucho más rápido
@@ -94,17 +122,13 @@ sugerido están en [docs/FENDER_STUDIO_PRO_ANALISIS.md](docs/FENDER_STUDIO_PRO_A
 Estas ideas son opcionales, sin compromiso de implementación. Comping, MIDI, automatización, amp sim, importación
 de video y normalización ya están anotados arriba; el análisis amplía su alcance sin duplicarlos acá.
 
-- [ ] **Rango A–B de reproducción**: repetir un tramo para practicar o mezclar; base compartida para
-  regrabación y exportación parcial. Hoy el loop vuelve a cero al final del proyecto.
-- [ ] **Marcadores con nombre**: Intro / Estribillo / Solo, agregar en el cabezal y navegar con atajos;
-  empezar con posiciones en segundos, útiles también para el futuro director de video.
 - [ ] **Regrabar un rango automáticamente**: escuchar compases previos del tema, grabar solamente entre
   entrada y salida y escuchar el después. Amplía la grabación actual desde el cabezal; requiere silenciar
   la toma anterior solo dentro del tramo y conservar la sincronía de cámara.
 - [ ] **Fundidos cruzados de audio**: unir clips o correcciones con un fundido breve ajustable, igual en
   reproducción y exportación; distinguirlo de las transiciones visuales.
-- [ ] **Conservar colas de efectos al exportar**: hoy la duración llega al último clip; dejar terminar
-  reverb/delay con un límite y definir el cierre visual del MP4. Añadir también exportación de un rango.
+- [ ] **Exportar un rango**: solo el tramo A–B (o entre marcadores), con su cola de efectos como la exportación
+  completa.
 - [ ] **Aplicar una plantilla de pista a una pista existente**: hoy una plantilla (`TrackPresets`) solo crea una pista
   nueva; cargarla sobre una pista con clips, sin tocarlos, y definir qué pasa con los envíos y los retornos compartidos.
 - [ ] **Bloquear edición de pistas o clips**: proteger contra mover, recortar, borrar y reemplazar al

@@ -28,6 +28,8 @@ public sealed class Project
     public List<Track> Tracks { get; set; } = [];
     /// <summary>Native only: folders that group tracks (<see cref="Folder"/>, <see cref="TrackFolders"/>).</summary>
     public List<Folder> Folders { get; set; } = [];
+    /// <summary>Native only: named points of the song (Intro, Solo…), in time order (<see cref="ProjectMarkers"/>).</summary>
+    public List<Marker> Markers { get; set; } = [];
     public List<ExportRecord> Exports { get; set; } = [];
     public List<LogEntry> Log { get; set; } = [];
 
@@ -52,6 +54,7 @@ public sealed class Project
         Tracks.RemoveAll(t => t == null);
         foreach (var t in Tracks) t.Normalize();
         TrackFolders.Normalize(this);
+        ProjectMarkers.Normalize(this);
     }
 }
 
@@ -71,9 +74,17 @@ public sealed class ProjectSettings
     public string Aspect { get; set; } = "16:9";
     public ReverbSettings Reverb { get; set; } = new();
     public DelaySettings Delay { get; set; } = new();
+    /// <summary>Native only: the master's EQ and multiband (<see cref="Dsp.MasterChain"/>), off by default.</summary>
+    public MasterSettings Master { get; set; } = new();
     public ColorGrade Color { get; set; } = new();
     public VideoFx VideoFx { get; set; } = new();
     public ExportSettings Export { get; set; } = new();
+    /// <summary>
+    /// Native only: the A–B range that playback repeats while the loop is on (seconds); both null = the whole song.
+    /// Transport state like the tempo, outside undo. Set through <see cref="ProjectMarkers.SetLoop"/>.
+    /// </summary>
+    public double? LoopStartSec { get; set; }
+    public double? LoopEndSec { get; set; }
 
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
@@ -116,9 +127,13 @@ public sealed class ProjectSettings
         Aspect ??= "16:9";
         Reverb ??= new();
         Delay ??= new();
+        (Master ??= new()).Normalize();
         (Color ??= new()).Normalize();
         (VideoFx ??= new()).Normalize();
-        Export ??= new();
+        (Export ??= new()).Normalize();
+        if (LoopStartSec is not { } a || LoopEndSec is not { } b || !double.IsFinite(a) || !double.IsFinite(b)
+            || a < 0 || b - a < ProjectMarkers.MinLoopSec)
+            LoopStartSec = LoopEndSec = null;
     }
 }
 
@@ -132,6 +147,95 @@ public sealed class ReverbSettings
     public double ReturnGain { get; set; } = 0.8;
     public bool Muted { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+/// <summary>
+/// The master (native only): one EQ (low cut and mud go before the multiband, the rest after it) and a three-band
+/// compressor where each band only asks how much (it sets its threshold from its own level as it plays), and the
+/// limiter with its own ON.
+/// </summary>
+public sealed class MasterSettings
+{
+    public bool On { get; set; }
+    /// <summary>The cleanup before the multiband: low cut and mud.</summary>
+    public bool EqOn { get; set; } = true;
+    /// <summary>The colour after the multiband: lows, presence, air and tilt.</summary>
+    public bool ColorOn { get; set; } = true;
+    /// <summary>Hz; 0 = no low cut.</summary>
+    public double LowCutHz { get; set; }
+    public double MudDb { get; set; }
+    public double LowsDb { get; set; }
+    public double PresenceDb { get; set; }
+    public double AirDb { get; set; }
+    /// <summary>+ brighter, − darker, pivot at 1 kHz.</summary>
+    public double TiltDb { get; set; }
+    public bool BandsOn { get; set; } = true;
+    public double LowXHz { get; set; } = Dsp.MasterBands.DefaultLowXHz;
+    public double HighXHz { get; set; } = Dsp.MasterBands.DefaultHighXHz;
+    /// <summary>Always three: lows, mids, highs.</summary>
+    public List<MasterBand> Bands { get; set; } = Defaults();
+    /// <summary>The limiter, apart from the master's ON: its own ON, Empuje into it (dB), Techo (dBFS) and Release (ms).</summary>
+    public bool LimOn { get; set; } = true;
+    /// <summary>Cinta: tape saturation before the limiter, 0 to 1 (0 = nothing).</summary>
+    public bool TapeOn { get; set; } = true;
+    public double TapeAmount { get; set; }
+    /// <summary>Ancho: stereo width (1 = as it is, 0 = mono, 2 = twice) and the lows in mono under this (Hz; 0 = off).</summary>
+    public bool WidthOn { get; set; } = true;
+    public double Width { get; set; } = 1;
+    public double MonoBassHz { get; set; }
+    /// <summary>Soft clip before the limiter: how many dB of the peaks it takes (0 = off).</summary>
+    public bool ClipOn { get; set; } = true;
+    public double ClipDb { get; set; }
+    public double LimDriveDb { get; set; }
+    public double LimCeilingDb { get; set; } = Dsp.MasterLimiter.CeilingDb;
+    public double LimReleaseMs { get; set; } = Dsp.MasterLimiter.ReleaseMs;
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+
+    public static List<MasterBand> Defaults() => [new(), new(), new()];
+
+    public Dsp.MasterParams ToParams()
+    {
+        Dsp.MasterBandParams B(int i) => new(Bands[i].Amount);
+        return new(On, EqOn, LowCutHz, MudDb, LowsDb, PresenceDb, AirDb, TiltDb, BandsOn, LowXHz, HighXHz, B(0), B(1), B(2), ColorOn, LimDriveDb, LimCeilingDb, LimReleaseMs, LimOn,
+            TapeOn, TapeAmount, WidthOn, Width, MonoBassHz, ClipOn, ClipDb);
+    }
+
+    internal void Normalize()
+    {
+        static double Fin(double v, double lo, double hi, double fallback) => double.IsFinite(v) ? Math.Clamp(v, lo, hi) : fallback;
+        LowCutHz = LowCutHz < Dsp.MasterEq.LowCutMin || !double.IsFinite(LowCutHz) ? 0 : Math.Min(LowCutHz, Dsp.MasterEq.LowCutMax);
+        MudDb = Fin(MudDb, -Dsp.MasterEq.GainMax, Dsp.MasterEq.GainMax, 0);
+        LowsDb = Fin(LowsDb, -Dsp.MasterEq.GainMax, Dsp.MasterEq.GainMax, 0);
+        PresenceDb = Fin(PresenceDb, -Dsp.MasterEq.GainMax, Dsp.MasterEq.GainMax, 0);
+        AirDb = Fin(AirDb, -Dsp.MasterEq.GainMax, Dsp.MasterEq.GainMax, 0);
+        TiltDb = Fin(TiltDb, -Dsp.MasterEq.TiltMax, Dsp.MasterEq.TiltMax, 0);
+        LowXHz = Fin(LowXHz, Dsp.MasterBands.LowXMin, Dsp.MasterBands.LowXMax, Dsp.MasterBands.DefaultLowXHz);
+        HighXHz = Fin(HighXHz, Dsp.MasterBands.HighXMin, Dsp.MasterBands.HighXMax, Dsp.MasterBands.DefaultHighXHz);
+        LimDriveDb = Fin(LimDriveDb, 0, Dsp.MasterParams.DriveMaxDb, 0);
+        TapeAmount = Fin(TapeAmount, 0, 1, 0);
+        Width = Fin(Width, 0, Dsp.StereoWidth.MaxWidth, 1);
+        MonoBassHz = MonoBassHz < 20 || !double.IsFinite(MonoBassHz) ? 0 : Math.Min(MonoBassHz, Dsp.StereoWidth.MonoBassMaxHz);
+        ClipDb = Fin(ClipDb, 0, Dsp.SoftClipper.MaxDb, 0);
+        LimCeilingDb = Fin(LimCeilingDb, Dsp.MasterLimiter.CeilingMinDb, 0, Dsp.MasterLimiter.CeilingDb);
+        LimReleaseMs = Fin(LimReleaseMs, Dsp.MasterLimiter.ReleaseMinMs, Dsp.MasterLimiter.ReleaseMaxMs, Dsp.MasterLimiter.ReleaseMs);
+        Bands ??= [];
+        Bands.RemoveAll(b => b == null);
+        while (Bands.Count < Dsp.MasterBands.Count) Bands.Add(new());
+        if (Bands.Count > Dsp.MasterBands.Count) Bands.RemoveRange(Dsp.MasterBands.Count, Bands.Count - Dsp.MasterBands.Count);
+        foreach (var b in Bands) b.Normalize();
+    }
+}
+
+/// <summary>One band of the master's multiband: "Cuánto" (0 = off); the band sets its threshold as it plays.</summary>
+public sealed class MasterBand
+{
+    public double Amount { get; set; } = Dsp.MasterBands.DefaultAmount;
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+
+    internal void Normalize()
+    {
+        Amount = double.IsFinite(Amount) ? Math.Clamp(Amount, 0, 1) : Dsp.MasterBands.DefaultAmount;
+    }
 }
 
 public sealed class DelaySettings
@@ -215,7 +319,16 @@ public sealed class ExportSettings
     public string AudioFormat { get; set; } = "wav";
     /// <summary>Native only: each track that sounds also goes to its own WAV next to the export ("stems").</summary>
     public bool Stems { get; set; }
+    /// <summary>Native only: the last social preset of the MP4 (<c>ExportTargets</c> id); "project" = the project's frame, mix as it is.</summary>
+    public string Target { get; set; } = GuitarCam.Audio.ExportTargets.Project;
+    /// <summary>Native only: "Exportar audio" masters the mix to the streaming loudness (−14 LUFS).</summary>
+    public bool AudioLufs { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+
+    internal void Normalize()
+    {
+        if (!GuitarCam.Audio.ExportTargets.All.Any(t => t.Id == Target)) Target = GuitarCam.Audio.ExportTargets.Project;
+    }
 }
 
 /// <summary>A recording or an imported file. Its files are never rewritten; edits live in the clips.</summary>
@@ -260,6 +373,12 @@ public sealed class Track
     /// still scales a track made taller or shorter; null = 1. The lane stays within <see cref="MinHeight"/>..<see cref="MaxHeight"/> px. Native only.</summary>
     public double? HeightScale { get; set; }
     public const double MinHeight = 40, MaxHeight = 320;
+    /// <summary>
+    /// Semitones its audio is moved by without changing its length, so it stays in sync with the video
+    /// (<see cref="GuitarCam.Audio.Dsp.PitchShifter"/>, cached by <see cref="ProjectStore.TrackAudio"/>); fractions are
+    /// cents, 0 = as it was recorded. Native only.
+    /// </summary>
+    public double Transpose { get; set; }
     public Channel Channel { get; set; } = new();
     public List<Clip> Clips { get; set; } = [];
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
@@ -270,6 +389,9 @@ public sealed class Track
         Icon = string.IsNullOrWhiteSpace(Icon) || Icon.Length > 64 ? null : Icon.Trim();
         Color = NormalizeColor(Color);
         HeightScale = NormalizeHeight(HeightScale, 0.1, 8);
+        Transpose = double.IsFinite(Transpose)
+            ? Math.Round(Math.Clamp(Transpose, -GuitarCam.Audio.Dsp.PitchShifter.MaxSemitones, GuitarCam.Audio.Dsp.PitchShifter.MaxSemitones), 2)
+            : 0;
         Channel ??= new();
         Channel.Normalize();
         Clips ??= [];
@@ -501,8 +623,21 @@ public sealed class ExportRecord
     public string? Quality { get; set; }
     public double DurationSec { get; set; }
     public long Bytes { get; set; }
+    /// <summary>Native only: integrated loudness of the exported mix; null = not measured (older exports, silence).</summary>
+    public double? Lufs { get; set; }
+    /// <summary>Native only: the social preset it was exported with; null = the project's frame.</summary>
+    public string? Target { get; set; }
     /// <summary>The takes in the video (media ids), shown as "n canales" in Historial.</summary>
     public List<string> TakeIds { get; set; } = [];
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+/// <summary>A named point of the song on the timeline (native only): to jump there and to know where the solo starts.</summary>
+public sealed class Marker
+{
+    public string Id { get; set; } = Ids.New("mrk");
+    public string Name { get; set; } = "";
+    public double Sec { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 

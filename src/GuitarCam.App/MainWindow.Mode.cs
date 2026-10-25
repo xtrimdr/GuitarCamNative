@@ -83,7 +83,7 @@ public partial class MainWindow
         var row = Root.RowDefinitions[3];
         if (audio)
         {
-            if (row.ActualHeight > 0) { if (mixerView) mixerH = row.ActualHeight; else timelineH = row.ActualHeight; }
+            if (row.ActualHeight > 0) { if (mixerView) { if (!masteringView) mixerH = row.ActualHeight; } else timelineH = row.ActualHeight; }
             Root.Children.Remove(MixerHost);
             Root.Children.Remove(TimelineHost);
             // the timeline always stays on screen; the mixer opens under it (so no mini timeline there)
@@ -112,6 +112,7 @@ public partial class MainWindow
         TimelineHost.IsVisible = !mixerView || audio;
         miniTimeline.IsVisible = !audio;
         ApplyAudioMixerRows();
+        if (mixerView && masteringView) FitMasteringHeight();
         RefreshMixer();
     }
 
