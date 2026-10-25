@@ -3,6 +3,8 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-25: Release 0.9.5 en GitHub con su instalador. `tools\make-installer.ps1` ahora le pone la versión al exe y
+  publica en una carpeta limpia; el instalador lleva los DLL de FFmpeg de la preview (`ffmpeg\`).
 - 2026-10-25: Transiciones entre clips de una pista (Corte / Fundido cruzado / Pasar por negro, 0,1 a 3 s, 0,5 por
   defecto) que funden la imagen y el sonido. Un chip blanco (`|`, `X`, `V`), centrado en cada unión del timeline, abre el
   menú (`MainWindow.Transitions.cs`, `TimelineView.DrawJoins`); también desde el clic derecho del clip. Se guarda en el
