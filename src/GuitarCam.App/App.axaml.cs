@@ -14,6 +14,7 @@ public partial class App : Application
         UiTheme.Apply(UiTheme.Read(), persist: false);
         Shortcuts.Load();
         SaveMode.Load();
+        TrackKnobs.Load();
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var (dir, note) = ParseArgs(desktop.Args ?? []);

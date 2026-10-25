@@ -162,7 +162,7 @@ public partial class MainWindow
     static string SectionTitle(string id) => Loc.T(id switch
     {
         "Mezcla" => "insp.section.mix", "Saturación" => "insp.section.sat", "Compresor" => "insp.section.comp", "EQ" => "insp.section.eq",
-        "Reverb" => "insp.section.reverb", "Delay" => "insp.section.delay", "Sincronización" => "insp.section.sync", "Clip" => "insp.section.clip",
+        "Reverb" => "insp.section.reverb", "Delay" => "insp.section.delay", "Transponer" => "insp.section.transpose", "Sincronización" => "insp.section.sync", "Clip" => "insp.section.clip",
         "Encuadre" => "insp.section.frame", _ => id,
     });
     StackPanel Section(string title, string icon, Func<bool>? on = null, Action<bool>? power = null, Control? action = null)
@@ -324,10 +324,6 @@ public partial class MainWindow
         var mix = Section("Mezcla", "\uE9E9", action: InspectorIcon("\uE74F", Loc.T("insp.mute.tip"), () => Edit(t => t.Channel.Muted = !t.Channel.Muted, "mute")));
         Slider(mix, Loc.T("insp.volume"), 0, 1.5, 0.01, 1, () => sel!.Channel.Volume, v => Edit(t => t.Channel.Volume = v, "volume"), v => $"{v * 100:0}%");
         Slider(mix, Loc.T("insp.pan"), -1, 1, 0.05, 0, () => sel!.Channel.Pan, v => Edit(t => t.Channel.Pan = Math.Abs(v) < 0.04 ? 0 : v, "pan"), v => v == 0 ? "C" : $"{(v < 0 ? "L" : "R")} {Math.Abs(v) * 100:0}");
-        // native only: the track's pitch, same length (MainWindow.Transpose.cs)
-        Slider(mix, Loc.T("insp.transpose"), -PitchShifter.MaxSemitones, PitchShifter.MaxSemitones, 1, 0,
-            () => sel!.Track.Transpose, v => { Edit(t => t.Track.Transpose = v, "transpose"); RefreshTranspose(); }, TransposeText, Loc.T("insp.transpose.tip"));
-        InitTranspose(mix);
         // native only: a track that sounds without a panel (a backing track, a click…)
         var inVideo = new CheckBox { Content = Loc.T("insp.inVideo"), FontSize = 12 };
         ToolTip.SetTip(inVideo, Loc.T("insp.inVideo.tip"));
@@ -407,6 +403,13 @@ public partial class MainWindow
         var delay = Section("Delay", FxIcon.Delay, () => sel!.Channel.DelayOn, on => Edit(t => t.Channel.DelayOn = on, "delay.on"));
         EffectKnob(delay, Loc.T("insp.delay.send"), 0, () => sel!.Channel.DelaySend, v => Edit(t => { t.Channel.DelaySend = v; t.Channel.DelayOn = true; }, "delay.send"), v => $"{v * 100:0}%", SendDb,
             Loc.T("insp.delay.hint"));
+        // native only: the track's pitch, same length (MainWindow.Transpose.cs). A card of its own beside the other
+        // effects (asked by the user); it reads as off (dimmed) while the track plays at its original pitch.
+        var transpose = Section("Transponer", FxIcon.Transpose, () => sel!.Track.Transpose != 0);
+        Slider(transpose, Loc.T("insp.transpose.semis"), -PitchShifter.MaxSemitones, PitchShifter.MaxSemitones, 1, 0,
+            () => sel!.Track.Transpose, SetTranspose, TransposeText, Loc.T("insp.transpose.tip"));
+        transpose.Children.Add(Help(Loc.T("insp.transpose.hint")));
+        InitTranspose(transpose);
         InitClipInspector();
         UpdateCollapseButton();
     }

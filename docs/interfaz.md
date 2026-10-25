@@ -94,10 +94,20 @@ Todo lo que se describe acá lo decidió el usuario: no lo cambies sin preguntar
 - La cantidad principal de cada efecto va en el knob grande (`EffectKnob`: Vida, envío a reverb, envío a delay); los
   ajustes finos siguen en sliders.
 - Con su encabezado "Toma" se pliega a una columna de íconos de 44, como la barra del proyecto, y se recuerda.
-- **Transponer** (en Mezcla, `MainWindow.Transpose.cs`, pedido del usuario): −12 a +12 semitonos en `Track.Transpose`,
-  mismo largo. Se calcula en segundo plano (`PitchShifter`, unos 5 s por 3 min) y queda en `cache/`; mientras tanto
-  la pista suena como estaba y una nota "Transponiendo… 40%" va debajo del slider. Al llegar, el clip pasa con un
-  crossfade de 10 ms. Mover el slider cancela lo que ya no se quiere.
+- **Transponer** (`MainWindow.Transpose.cs`, pedido del usuario): su propia tarjeta, después de Delay, con el ícono
+  `FxIcon.Transpose`. −12 a +12 semitonos en `Track.Transpose`, mismo largo; no tiene ON/OFF: en "Original" (0) la
+  tarjeta queda atenuada como un efecto apagado. Se calcula en segundo plano (`PitchShifter`, unos 4 s por 3 min en
+  8 núcleos) y queda en `cache/`; los valores probados en la sesión quedan ahí (volver a uno es inmediato) y lo que no
+  se usa se borra una vez al abrir el proyecto. Mientras tanto la pista suena como estaba y **se ve que está
+  procesando** (pedido del usuario): sobre sus clips, la onda atenuada, una barra de progreso abajo y "♪ Transponiendo…
+  40%" (`TimelineView.DrawTransposing`); el knob Tono en gris con el porcentaje en lugar del nombre; la nota debajo del
+  slider. Al llegar, el clip pasa con un crossfade de 10 ms y, si tardó más de 1 s, un toast avisa que ya suena
+  transpuesta. Mover el slider cancela lo que ya no se quiere. Todo cambio pasa por `SetTranspose(pista, semis)`
+  (inspector, mixer y knob).
+- **El canal muestra que está transpuesto**: en el encabezado de pista del timeline, una etiqueta "♪ +2" después del
+  nombre (acento; gris mientras se calcula, con `TimelineView.TransposeProgress`); en la tira compacta del mixer, "+2"
+  debajo del nombre; en el encabezado alto, el knob Tono (ver la fila de knobs); en la amplia, un panel Transponer después de Delay con − valor + (doble clic en el valor vuelve
+  a 0). Mientras se calcula, `transposeClock` refresca esas marcas (`MixerLayout.Transpose`) cada 250 ms.
 - El espectro en vivo del EQ sale de un `SpectrumTap` colgado solo de la pista seleccionada mientras el EQ está a la
   vista: el hilo de audio copia a un anillo preasignado y la FFT corre en el `Tick` de la UI.
 
@@ -138,9 +148,20 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   la exportación (`ExportTakeSpec.Panel`).
 - **Arrastrar a otra pista** cambia la pista **y el tiempo** a la vez: el original queda atenuado y un fantasma
   punteado marca dónde cae (`DrawGhost`). Con Ctrl se intercambia con el clip de abajo.
+- **Grilla e imán** (pedido del usuario): el imán va de Compás a 1/64 (y 1/8T). El clic derecho en los números de la
+  regla elige cómo se dibuja la grilla (`TimelineView.GridMode`, `timelineGrid` en config.json): **Auto** (por
+  defecto) se afina con el zoom, **Igual que el imán** dibuja sus pasos y una subdivisión fija mantiene ese espaciado
+  con cualquier zoom; las líneas a menos de 6 px no se dibujan (`MinGridPx`, `FixedGrid`, `BarSubs`).
 - **Mover con grilla** (uno o varios): el clip avanza de a pasos enteros de la grilla y **conserva su desfasaje**: uno
   que no está justo en el tiempo cae igual de corrido un compás (o un tiempo) más allá, como se tocó
-  (`ClipEditing.Drag`). Para ponerlo en la grilla, Alt lo mueve libre. Sin grilla imantan el cabezal y los bordes.
+  (`ClipEditing.Drag`). **Imán a otros clips**: el selector al lado del imán (`SnapClipsBox`: No / Inicio / Final /
+  Ambos, `snapToClips` en config.json, No de entrada) elige qué borde visible del clip que movés se pega a los bordes
+  visibles de los otros, a menos de 8 px (`EdgePullPx`, `SnapEdges`). Con los dos imanes la grilla ubica el clip y el borde
+  solo lo corrige si el clip ya ubicado queda a menos de 8 px: nunca salta más que eso. Mientras está pegado, una línea de acento
+  cruza las pistas en ese borde (`stuckTo`, la guía). Anda también con la grilla en "Sin imán". Nada más tira: ni el cabezal ni el cero. Con los dos apagados, o con Alt, se mueve libre, de a muestra
+  (`ClipEditing.ToSample`: el milisegundo eran 96 px al zoom máximo). Para volver a ponerlo en sincro, el clic derecho
+  tiene **"Alinear a la grilla"**: lleva el comienzo de la toma a la línea más cercana con la subdivisión del imán
+  (`ClipEditing.AlignToGrid`; deshabilitada con el imán apagado). Sobre un clip marcado, alinea o quita todos los marcados.
 - **Selección de varios clips** (pedido del usuario): arrastrar en la parte vacía de las pistas (o debajo de la
   última) dibuja un rectángulo que marca cada clip que toca; con Ctrl suma a lo marcado (`boxed`, `UpdateBox`). Agarrar
   uno marcado por el cuerpo mueve todos el mismo tiempo, cada uno en su pista (`StartCarry`, `DragCarried`, evento `ClipsMoved`: un solo paso para deshacer); sus bordes recortan solo ese. Supr los saca a
@@ -199,8 +220,12 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 - La columna se ensancha arrastrando su manija: una sola franja de `GripW` = 8 px adentro del borde derecho, de todo
   el alto, con dos rayitas en el medio; nunca pisa un clip en 0 s. Va de 324 a 640 y se recuerda en `headerWidth`;
   las filas se arman para 264 y el sobrante va al volumen.
-- Con carriles más altos aparece debajo una fila de cuatro knobs, Vida · Comp · Reverb · Delay (pedido del usuario),
-  también en pistas vacías (`TimelineView.EffectRequested`). Son tan grandes como dejan el alto de la pista y el ancho
+- Con carriles más altos aparece debajo una fila de knobs, Vida · Comp · Reverb · Delay · Tono (Transponer; pedido
+  del usuario). Cuáles se ven lo elige el usuario en Configuración → Vista (`TrackKnobs`, `config.json`
+  "timeline.hiddenKnobs" guarda los apagados, así un knob nuevo aparece solo; vienen todos) y los que quedan reparten
+  el ancho (`TimelineView.SetKnobs`). El de Tono es bipolar: −12…+12 semitonos en 0…1, se ilumina desde arriba hacia
+  el lado que va, muestra "+2" adentro, la ruedita mueve un semitono y su nombre no prende ni apaga nada. También
+  en pistas vacías (`TimelineView.EffectRequested`). Son tan grandes como dejan el alto de la pista y el ancho
   de la columna (`FxKnobD`: de `FxKnobMin` = 20 a `FxKnobMax` = 64 px) y se achican con ella; si ni el mínimo entra, la
   fila no se muestra. Debajo de cada uno, ícono `FxIcon` + nombre (solo el ícono si no entra): clic prende/apaga. El
   knob se arrastra en vertical (Shift = fino), con la ruedita o doble clic para restablecer; la cantidad va adentro del

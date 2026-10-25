@@ -94,6 +94,9 @@
             <Button x:Name="SaveTab" Classes="nav">
               <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE74E;" FontSize="15" /><TextBlock Text="{loc:T settings.tab.save}" /></StackPanel>
             </Button>
+            <Button x:Name="ViewTab" Classes="nav">
+              <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE890;" FontSize="15" /><TextBlock Text="{loc:T settings.tab.view}" /></StackPanel>
+            </Button>
             <Button x:Name="ShortcutsTab" Classes="nav">
               <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE765;" FontSize="15" /><TextBlock Text="{loc:T settings.tab.shortcuts}" /></StackPanel>
             </Button>

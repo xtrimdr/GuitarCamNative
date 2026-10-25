@@ -64,7 +64,7 @@ seleccionado, borde 0,45 / 0,9). Los colores de pista son datos del usuario, no 
 - UI: **Segoe UI Variable Text** (fallback Segoe UI). Números y tiempos: **Cascadia Mono** (fallback Consolas).
   **Todo valor numérico va en mono** (`Classes="dim mono"`), alineado a la derecha de su etiqueta.
 - Íconos: **Segoe Fluent Icons** (fallback Segoe MDL2 Assets), `TextBlock` con clase `icon` y el glifo en `Text`. Sin
-  paquetes de íconos ni imágenes. Excepciones: los efectos (Vida, compresor, EQ, reverb, delay) siempre con `FxIcon`
+  paquetes de íconos ni imágenes. Excepciones: los efectos (Vida, compresor, EQ, reverb, delay, transponer) siempre con `FxIcon`
   (trazos de lucide), en todo lugar que muestre un efecto; los instrumentos de las pistas con `TrackIcons` (rellenos:
   Fluent Emoji High Contrast y lo que le falta de otros sets libres; licencias en `Assets/Icons/LICENSES.txt`,
   generados con `tools/make-track-icons.py`).

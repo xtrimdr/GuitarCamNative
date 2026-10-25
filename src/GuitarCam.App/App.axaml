@@ -66,6 +66,8 @@
     <!-- Segoe has no metronome: body with a window, pendulum and weight on a 16 px grid (nonzero fill) -->
     <StreamGeometry x:Key="MetronomeIcon">F1 M5,1 L11,1 L15,15 L1,15 Z M5.9,2.5 L3.6,10.5 L12.4,10.5 L10.1,2.5 Z M3.2,12 L2.7,13.7 L13.3,13.7 L12.8,12 Z M10.6,2.94 L11.8,3.46 L8.6,10.76 L7.4,10.24 Z M11.55,6.4 L10.91,7.86 L7.97,6.58 L8.61,5.12 Z</StreamGeometry>
     <!-- Segoe has no magnet: two pole caps over a U, on a 16 px grid (the web's Magnet icon in the snap box) -->
+    <!-- two clips butting against a line: the snap to other clips' edges -->
+    <StreamGeometry x:Key="SnapClipsIcon">F1 M1,4 L6.4,4 L6.4,12 L1,12 Z M9.6,4 L15,4 L15,12 L9.6,12 Z M7.4,1 L8.6,1 L8.6,15 L7.4,15 Z</StreamGeometry>
     <StreamGeometry x:Key="MagnetIcon">F1 M2,1 L5.6,1 L5.6,3.8 L2,3.8 Z M10.4,1 L14,1 L14,3.8 L10.4,3.8 Z M2,5 L5.6,5 L5.6,9 A2.4,2.4 0 0 0 10.4,9 L10.4,5 L14,5 L14,9 A6,6 0 0 1 2,9 Z</StreamGeometry>
     <!-- lucide ChevronsDownUp / ChevronsUpDown (the inspector's fold-all button), filled on a 24 px grid -->
     <StreamGeometry x:Key="CollapseAllIcon">M7,4 L12,9 L17,4 L17,6.2 L12,11.2 L7,6.2 Z M7,20 L12,15 L17,20 L17,17.8 L12,12.8 L7,17.8 Z</StreamGeometry>

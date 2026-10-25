@@ -57,11 +57,28 @@ public sealed partial class TimelineView : Control
     int fxRow;
     /// <summary>The dragged knob's value and the pointer's last height: the drag is relative, so Shift mid-drag doesn't jump.</summary>
     double fxDragValue, fxDragY;
-    /// <summary>The effect knobs of the header, left to right: key (<see cref="FxIcon"/> icon too), label, default amount.</summary>
+    /// <summary>The effect knobs of the header, left to right: key (<see cref="FxIcon"/> icon too), label, default amount.
+    /// Transponer's amount is its −12…+12 semitones mapped to 0…1 (0,5 = the original pitch).</summary>
     static readonly (string Key, string Label, double Default)[] FxRows =
-        [(FxIcon.Sat, Loc.T("fx.life"), 0.3), (FxIcon.Comp, Loc.T("fx.comp"), 0.5), (FxIcon.Reverb, "Reverb", 0), (FxIcon.Delay, "Delay", 0)];
+        [(FxIcon.Sat, Loc.T("fx.life"), 0.3), (FxIcon.Comp, Loc.T("fx.comp"), 0.5), (FxIcon.Reverb, "Reverb", 0), (FxIcon.Delay, "Delay", 0),
+         (FxIcon.Transpose, Loc.T("fx.transpose"), 0.5)];
+    const int TransposeRow = 4;
+    /// <summary>The rows of <see cref="FxRows"/> the headers show, left to right (the user picks them, see <see cref="SetKnobs"/>).</summary>
+    int[] fxShown = [0, 1, 2, 3, 4];
+    /// <summary>How far a track's transpose is being made (0 to 1), null when it plays what it should; set by the window.</summary>
+    public Func<LiveTrack, float?>? TransposeProgress { get; set; }
+    /// <summary>"-12" to "+12", made once so a header with a transposed track allocates nothing per frame.</summary>
+    static readonly string[] TransposeTags = [.. Enumerable.Range(-12, 25).Select(v => $"{v:+0;-0;0}")];
     /// <summary>Channel effect edit from a header row: track, effect key, toggle on/off, new amount (an amount also turns it on).</summary>
     public event Action<LiveTrack, string, bool, double?>? EffectRequested;
+
+    /// <summary>Shows only these knobs (<see cref="FxIcon"/> keys) in the headers, in their usual order; none hides the row.</summary>
+    public void SetKnobs(IReadOnlyCollection<string> keys)
+    {
+        fxShown = [.. Enumerable.Range(0, FxRows.Length).Where(k => keys.Contains(FxRows[k].Key))];
+        if (gesture == "fx") gesture = null;
+        InvalidateVisual();
+    }
 
     public void SetHeaderWidth(double w)
     {
@@ -76,35 +93,43 @@ public sealed partial class TimelineView : Control
 
     /// <summary>Left edge of the effect knobs' row (past the handle column) and how far it stays from the meters.</summary>
     double FxLeft(int i) => 48 + Indent(i);
-    double FxCellW(int i) => (HeaderRight - FxMeterGap - FxLeft(i)) / FxRows.Length;
+    double FxCellW(int i) => (HeaderRight - FxMeterGap - FxLeft(i)) / Math.Max(1, fxShown.Length);
     /// <summary>The knobs' diameter: as big as the lane height and the column width allow (asked by the user), 0 when
     /// even <see cref="FxKnobMin"/> doesn't fit and the row is hidden.</summary>
     double FxKnobD(int i)
     {
+        if (fxShown.Length == 0) return 0;
         double d = Math.Floor(Math.Min(FxKnobMax, Math.Min(FxCellW(i) - 10, LaneH(i) - BaseHeaderH - FxPadTop - FxLabelH - FxPadBottom)));
         return d >= FxKnobMin ? d : 0;
     }
     Rect FxKnobRect(int i, int k, double d) => new(FxLeft(i) + FxCellW(i) * (k + 0.5) - d / 2, LaneY(i) + BaseHeaderH + FxPadTop, d, d);
     Rect FxLabelRect(int i, int k, double d) => new(FxLeft(i) + FxCellW(i) * k, LaneY(i) + BaseHeaderH + FxPadTop + d + 2, FxCellW(i), FxLabelH - 2);
+    /// <summary>The knob under the point: its row in <see cref="FxRows"/>, and whether it is the dial or its label.</summary>
     (int Knob, bool Dial)? FxHit(int i, Point p)
     {
         double d = FxKnobD(i);
         if (d == 0) return null;
-        for (int k = 0; k < FxRows.Length; k++)
+        for (int k = 0; k < fxShown.Length; k++)
         {
-            if (FxKnobRect(i, k, d).Inflate(4).Contains(p)) return (k, true);
-            if (FxLabelRect(i, k, d).Contains(p)) return (k, false);
+            if (FxKnobRect(i, k, d).Inflate(4).Contains(p)) return (fxShown[k], true);
+            if (FxLabelRect(i, k, d).Contains(p)) return (fxShown[k], false);
         }
         return null;
     }
 
-    static (bool On, double Amount) FxState(Channel ch, int k) => k switch
+    /// <summary>A knob's state by its row; Transponer is "on" while the track is moved.</summary>
+    static (bool On, double Amount) FxState(LiveTrack t, int row)
     {
-        0 => (ch.Sat.On, ch.Sat.Amount),
-        1 => (ch.Comp.On, ch.Comp.Amount),
-        2 => (ch.ReverbOn, ch.ReverbSend),
-        _ => (ch.DelayOn, ch.DelaySend),
-    };
+        var ch = t.Channel;
+        return row switch
+        {
+            0 => (ch.Sat.On, ch.Sat.Amount),
+            1 => (ch.Comp.On, ch.Comp.Amount),
+            2 => (ch.ReverbOn, ch.ReverbSend),
+            3 => (ch.DelayOn, ch.DelaySend),
+            _ => (t.Track.Transpose != 0, (Math.Clamp(t.Track.Transpose, -12, 12) + 12) / 24),
+        };
+    }
 
     IReadOnlyList<LiveTrack> tracks = [];
     double pps = 10; // pixels per second
@@ -140,6 +165,8 @@ public sealed partial class TimelineView : Control
     /// <summary>The other boxed clips carried along with the grabbed one: each one as it was, and where it would land.</summary>
     readonly List<(LiveClip Clip, Clip Original)> carriedAlong = [];
     readonly Dictionary<LiveClip, Clip> carriedPreview = [];
+    /// <summary>The other clip's edge the dragged one is stuck to (snap to other clips), drawn as a guide; null = none.</summary>
+    double? stuckTo;
     /// <summary>
     /// The range selected with Shift+drag on one track (native only), to delete what is inside it. It stays after the
     /// mouse is released until another click, Esc, an edit or the delete itself.
@@ -162,7 +189,12 @@ public sealed partial class TimelineView : Control
     /// <summary>The other picked tracks carried with it: drawn over the others too.</summary>
     readonly HashSet<string> liftedAlso = [];
     bool fitMode = true;
-    readonly Dictionary<LiveClip, (StreamGeometry Geo, double Key, ClipGainCurve.Point[] Curve, double GainDb)> waveCache = [];
+    readonly Dictionary<LiveClip, (StreamGeometry Geo, WaveKey Key, ClipGainCurve.Point[] Curve, double GainDb)> waveCache = [];
+    /// <summary>
+    /// What a cached wave was drawn for, each value on its own. It was one sum (pps × 1e6 + … + AtSec × 1.7e-3): at the
+    /// deepest zoom the first term is ~1e11, where a double cannot see a small move, so a nudged clip kept its old wave.
+    /// </summary>
+    readonly record struct WaveKey(double Pps, double ScrollX, double W, double Top, double Bottom, double At, double TrimStart, double TrimEnd);
 
     public double Bpm { get; set; } = 120;
     public double LengthSec { get; set; }
@@ -175,6 +207,17 @@ public sealed partial class TimelineView : Control
     string? editingNameId;
     public string? SelectedClipId { get; private set; }
     public string SnapMode { get => snapMode; set { snapMode = value; InvalidateVisual(); } }
+    /// <summary>
+    /// How the bars-mode grid is drawn (asked by the user): "auto" splits beats finer as you zoom in, "snap" draws the
+    /// snap's steps and a subdivision ("1/16"…) keeps that spacing at any zoom. Lines closer than
+    /// <see cref="MinGridPx"/> are not drawn; with the snap off, "snap" works as "auto".
+    /// </summary>
+    public string GridMode { get => gridMode; set { gridMode = value; InvalidateVisual(); } }
+    string gridMode = "auto";
+    /// <summary>A right click on the ruler's numbers: the window offers the grid's spacing there.</summary>
+    public event Action<Point>? RulerMenuRequested;
+    /// <summary>Which edges of a moved clip stick to the edges of the others (the selector next to the snap; Alt still moves free).</summary>
+    public SnapEdges SnapToClips { get; set; }
     public bool RulerInBars { get => bars; set { bars = value; InvalidateVisual(); } }
     public double TrackHeight => laneH;
     bool showVideo = true;
@@ -1037,6 +1080,12 @@ public sealed partial class TimelineView : Control
             if (recordingLanes != null)
                 foreach (int r in recordingLanes) DrawRecordingBar(ctx, r, W);
             DrawStripGuides(ctx, W, H);
+            // the snap guide: the edge the dragged clip is stuck to, across every lane (asked by the user)
+            if (gesture == "clip" && stuckTo is { } guide && X(guide) >= HeaderW)
+            {
+                double gx = Math.Round(X(guide)) + 0.5;
+                ctx.DrawLine(Palette.Pen(Palette.Accent), new Point(gx, RulerH), new Point(gx, H));
+            }
             if (gesture == "box" && moved)
                 ctx.DrawRectangle(Palette.Alpha(Palette.AccentColor, 0.08), Palette.Pen(Palette.Alpha(Palette.AccentColor, 0.7)), BoxRect());
         }
@@ -1395,12 +1444,28 @@ public sealed partial class TimelineView : Control
     /// <summary>Px between the finest bars-mode ticks: zoomed in, beats split in halves until they get this close.</summary>
     const double FineTickPx = 12;
 
+    /// <summary>Px under which a fixed grid's lines are too close together to draw.</summary>
+    const double MinGridPx = 6;
+    /// <summary>The grid's fixed spacing in seconds (a subdivision, or the snap's when linked), or 0 when it follows the zoom.</summary>
+    double FixedGrid => gridMode switch { "auto" => 0, "snap" => Grid, _ => ClipEditing.GridSeconds(gridMode, Bpm) };
+
     /// <summary>Bars mode, one label per bar: the length of the finest minor tick (a beat, or a half of a half…).</summary>
     double FineTick(double beat)
     {
+        double g = FixedGrid;
+        if (g > 0) return g < beat && g * pps >= MinGridPx ? g : beat;
         double tick = beat;
         while (tick / 2 * pps >= FineTickPx * 2 && tick > 1e-4) tick /= 2;
         return tick;
+    }
+
+    /// <summary>Bars mode: the lines between two labelled bars (beats, or single bars when labels skip some; a fixed
+    /// grid of a beat or more draws its own spacing, down to none for "bar").</summary>
+    (double Sub, int N) BarSubs(int step, double beat, double bar)
+    {
+        if (step != 1) return (bar, step);
+        double g = FixedGrid;
+        return g >= beat ? (g, (int)Math.Round(bar / g)) : (beat, 4);
     }
 
     void DrawRuler(DrawingContext ctx, double W)
@@ -1453,15 +1518,14 @@ public sealed partial class TimelineView : Control
             ctx.DrawText((b + 1).ToString(), 15, Palette.Fg, new Point(x + 4, 3), Palette.MonoBold);
             // minor ticks: beats inside a bar, or single bars when the labels skip some; zoomed in, see below
             if (step == 1 && FineTick(beat) < beat) continue;
-            double sub = step == 1 ? beat : bar;
-            int subN = step == 1 ? 4 : step;
+            var (sub, subN) = BarSubs(step, beat, bar);
             if (sub * pps >= 6)
                 for (int k = 1; k < subN; k++)
                 {
                     double bx = X(b * bar + k * sub);
                     ctx.DrawLine(beatPen, new Point(bx, rulerH - 6), new Point(bx, rulerH));
                     if (sub * pps >= MinorLabelPx)
-                        ctx.DrawText((step == 1 ? k + 1 : b + k + 1).ToString(), 10, Palette.Faint, new Point(bx + 3, 17), Palette.Mono);
+                        ctx.DrawText((step == 1 ? (int)Math.Round(k * sub / beat) + 1 : b + k + 1).ToString(), 10, Palette.Faint, new Point(bx + 3, 17), Palette.Mono);
                 }
         }
         // zoomed in past the beats (native only): every half, quarter… of a beat, the beats labelled "bar.beat"
@@ -1513,8 +1577,7 @@ public sealed partial class TimelineView : Control
             if (x > W) break;
             grid.Add((x, true));
             if (step == 1 && FineTick(beat) < beat) continue;
-            double sub = step == 1 ? beat : bar;
-            int subN = step == 1 ? 4 : step;
+            var (sub, subN) = BarSubs(step, beat, bar);
             if (sub * pps >= 6)
                 for (int k = 1; k < subN; k++) grid.Add((X(b * bar + k * sub), false));
         }
@@ -1603,6 +1666,7 @@ public sealed partial class TimelineView : Control
                 var wave = silent ? Palette.Faint : thumbs && !sel ? Palette.Alpha(Colors.White, 0.85)
                     : tint != null ? Palette.Alpha(color, sel ? 1 : 0.8) : sel ? Palette.Accent : Palette.Alpha(Palette.DimColor, 0.8);
                 ctx.DrawGeometry(null, Palette.Pen(wave, 1), geo);
+                if (TransposeProgress?.Invoke(t) is { } progress) DrawTransposing(ctx, clip, Math.Max(x0, HeaderW), progress);
             }
             var f = ClipEnvelope.FitFades(model.FadeInSec, model.FadeOutSec, w.End - w.Start);
             void Fade(double a, double b, double edge)
@@ -1638,6 +1702,29 @@ public sealed partial class TimelineView : Control
             }
         }
     }
+
+    /// <summary>
+    /// A clip whose transpose is being made (asked by the user: you couldn't tell whether it worked): the wave dims,
+    /// a bar fills along its bottom and a label says how far it is. It keeps sounding as before meanwhile.
+    /// </summary>
+    void DrawTransposing(DrawingContext ctx, Rect clip, double left, float progress)
+    {
+        ctx.FillRectangle(Palette.Alpha(Colors.Black, 0.45), clip);
+        var track = new Rect(clip.X, clip.Bottom - 4, clip.Width, 4);
+        ctx.FillRectangle(Palette.Alpha(Colors.White, 0.08), track);
+        ctx.FillRectangle(Palette.Accent, new Rect(track.X, track.Y, track.Width * Math.Clamp(progress, 0, 1), track.Height));
+        int pct = Math.Clamp((int)(progress * 100), 0, 100);
+        var label = Palette.Text(TransposingTexts[pct], 11, Palette.Fg, Palette.Ui);
+        var pill = new Rect(left + 6, clip.Y + 6, label.Width + 30, 20);
+        if (pill.Right > clip.Right - 4) return; // a short clip keeps only the bar
+        ctx.DrawRectangle(Palette.Alpha(Colors.Black, 0.7), Palette.Pen(Palette.Alpha(Palette.AccentColor, 0.5)), pill, 4, 4);
+        FxIcon.Draw(ctx, FxIcon.Transpose, new Rect(pill.X + 7, pill.Center.Y - 6, 12, 12), Palette.Accent);
+        ctx.DrawText(label, new Point(pill.X + 24, pill.Center.Y - label.Height / 2));
+    }
+
+    /// <summary>"Transponiendo… 0%" to "100%", and the knob's bare "0%" to "100%", made once (nothing is built per frame).</summary>
+    static readonly string[] TransposingTexts = [.. Enumerable.Range(0, 101).Select(p => Loc.T("tl.transposing", p))],
+        PercentTexts = [.. Enumerable.Range(0, 101).Select(p => $"{p}%")];
 
     /// <summary>
     /// The clip's edge handles (native only): on each side a small tab split at the clip's middle. The top one sits
@@ -1706,8 +1793,7 @@ public sealed partial class TimelineView : Control
     {
         var a = c.Audio!;
         var pts = CurveOf(c, model);
-        double key = pps * 1e6 + scrollX * 7.3 + W * 0.013 + top * 0.0007 + bottom * 0.00011
-            + model.AtSec * 1.7e-3 + model.TrimStartSec * 3.1e-3 + model.TrimEndSec * 5.3e-3;
+        var key = new WaveKey(pps, scrollX, W, top, bottom, model.AtSec, model.TrimStartSec, model.TrimEndSec);
         if (waveCache.TryGetValue(c, out var hit) && hit.Key == key && hit.Curve == pts && hit.GainDb == model.GainDb) return hit.Geo;
         double clipGain = Math.Pow(10, model.GainDb / 20);
         var geo = new StreamGeometry();
@@ -1882,7 +1968,23 @@ public sealed partial class TimelineView : Control
             ctx.DrawText(Loc.T("timeline.recording"), 13, Palette.Rec, new Point(nameX, y + 11), Palette.Ui, nameW);
             ctx.DrawEllipse(Palette.Rec, null, new Point(RemoveRect(i).Center.X, y + 20), 4, 4);
         }
-        else if (editingNameId != t.Track.Id) ctx.DrawText(t.Track.Name, 12.5, Palette.Fg, new Point(nameX, y + 11), Palette.UiBold, nameW);
+        else if (editingNameId != t.Track.Id)
+        {
+            // a transposed track says so after its name ("+2", asked by the user), dim while the transpose is made
+            if (t.Track.Transpose != 0)
+            {
+                var progress = TransposeProgress?.Invoke(t);
+                var tag = Palette.Text(TransposeTags[Math.Clamp((int)Math.Round(t.Track.Transpose), -12, 12) + 12], 10.5, progress == null ? Palette.Accent : Palette.Faint, Palette.Mono);
+                double tw = tag.Width + 22;
+                double shown = Math.Min(Palette.Text(t.Track.Name, 12.5, Palette.Fg, Palette.UiBold).Width, Math.Max(0, nameW - tw - 6));
+                ctx.DrawText(t.Track.Name, 12.5, Palette.Fg, new Point(nameX, y + 11), Palette.UiBold, Math.Max(0, nameW - tw - 6));
+                var r = new Rect(nameX + shown + 6, y + 10, tw, 18);
+                ctx.DrawRectangle(progress == null ? Palette.AccentSoft : Palette.Hover, Palette.Pen(progress == null ? Palette.Alpha(Palette.AccentColor, 0.4) : Palette.Line), r, 4, 4);
+                FxIcon.Draw(ctx, FxIcon.Transpose, new Rect(r.X + 5, r.Center.Y - 5, 10, 10), progress == null ? Palette.Accent : Palette.Faint);
+                ctx.DrawText(tag, new Point(r.X + 18, r.Center.Y - tag.Height / 2));
+            }
+            else ctx.DrawText(t.Track.Name, 12.5, Palette.Fg, new Point(nameX, y + 11), Palette.UiBold, nameW);
+        }
         if (chip) DrawInputChip(ctx, InputRect(i), InputLabel!(t));
 
         if (!RecordingInto(i) && lastPointer.Y >= y && lastPointer.Y < y + lh)
@@ -1909,15 +2011,18 @@ public sealed partial class TimelineView : Control
         // effect knobs in one row, as big as the lane allows, empty tracks included (they are channel settings)
         double kd = FxKnobD(i);
         if (kd > 0)
-            for (int k = 0; k < FxRows.Length; k++)
+            for (int k = 0; k < fxShown.Length; k++)
             {
-                var (on, amount) = FxState(ch, k);
+                int row = fxShown[k];
+                var (on, amount) = FxState(t, row);
                 var kr = FxKnobRect(i, k, kd);
-                bool dragging = gesture == "fx" && fromIndex == i && fxRow == k;
+                bool dragging = gesture == "fx" && fromIndex == i && fxRow == row;
                 bool hot = dragging || (gesture == null && kr.Inflate(4).Contains(lastPointer));
-                DrawFxKnob(ctx, kr, amount, on, hot);
+                // Transponer while its transpose is made: grey (it still sounds as before) and its label shows how far
+                float? busy = row == TransposeRow ? TransposeProgress?.Invoke(t) : null;
+                DrawFxKnob(ctx, kr, amount, on && busy == null, hot, row == TransposeRow);
                 // the amount sits inside a big knob; a small one shows it in place of its label while touched
-                string value = $"{amount * 100:0}";
+                string value = row == TransposeRow ? TransposeTags[Math.Clamp((int)Math.Round(t.Track.Transpose), -12, 12) + 12] : $"{amount * 100:0}";
                 bool inside = kd >= 36;
                 if (inside)
                 {
@@ -1932,11 +2037,12 @@ public sealed partial class TimelineView : Control
                     continue;
                 }
                 var brush = on ? Palette.Accent : Palette.Faint;
-                var label = Palette.Text(FxRows[k].Label, 10.5, on ? Palette.Fg : Palette.Faint, Palette.Ui);
+                var label = busy is { } b ? Palette.Text(PercentTexts[Math.Clamp((int)(b * 100), 0, 100)], 10.5, Palette.Accent, Palette.Mono)
+                    : Palette.Text(FxRows[row].Label, 10.5, on ? Palette.Fg : Palette.Faint, Palette.Ui);
                 // a narrow cell keeps only the icon
                 bool withText = 16 + label.Width <= lr.Width - 4;
                 double lx = lr.Center.X - (withText ? 16 + label.Width : 12) / 2;
-                FxIcon.Draw(ctx, FxRows[k].Key, new Rect(lx, lr.Center.Y - 6, 12, 12), brush);
+                FxIcon.Draw(ctx, FxRows[row].Key, new Rect(lx, lr.Center.Y - 6, 12, 12), brush);
                 if (withText) ctx.DrawText(label, new Point(lx + 16, lr.Center.Y - label.Height / 2));
             }
 
@@ -1949,7 +2055,7 @@ public sealed partial class TimelineView : Control
     /// <summary>An effect knob, drawn like the mixer's big <see cref="Knob"/>: a cap, a 270° track lit from zero to the
     /// amount (accent when on, grey when off) and a pointer. The arcs are short round-capped lines instead of a
     /// geometry, so a redraw (every pointer move) allocates nothing.</summary>
-    static void DrawFxKnob(DrawingContext ctx, Rect r, double amount, bool on, bool hot)
+    static void DrawFxKnob(DrawingContext ctx, Rect r, double amount, bool on, bool hot, bool bipolar = false)
     {
         double d = r.Width, stroke = Math.Max(2.5, d / 12), rad = d / 2 - stroke;
         var c = r.Center;
@@ -1966,7 +2072,9 @@ public sealed partial class TimelineView : Control
         double angle = -135 + Math.Clamp(amount, 0, 1) * 270;
         ctx.DrawEllipse(Palette.Raised, Palette.Pen(hot ? Palette.Faint : Palette.Line), c, rad - stroke * 1.1, rad - stroke * 1.1);
         Arc(Palette.Pen(hot ? Palette.Faint : Palette.Line, stroke, PenLineCap.Round), -135, 135);
-        if (angle > -134.5) Arc(Palette.Pen(on ? Palette.Accent : Palette.Faint, stroke, PenLineCap.Round), -135, angle);
+        // a bipolar knob (Transponer) lights from the top, where its middle value is, to either side
+        if (bipolar) { if (Math.Abs(angle) > 0.5) Arc(Palette.Pen(on ? Palette.Accent : Palette.Faint, stroke, PenLineCap.Round), Math.Min(0, angle), Math.Max(0, angle)); }
+        else if (angle > -134.5) Arc(Palette.Pen(on ? Palette.Accent : Palette.Faint, stroke, PenLineCap.Round), -135, angle);
         // a big knob keeps its centre for the amount, so its pointer is a short tick at the rim
         ctx.DrawLine(Palette.Pen(on ? Palette.Fg : Palette.Dim, d >= 36 ? 2.5 : 2, PenLineCap.Round),
             Polar(angle, d >= 36 ? rad * 0.62 : rad * 0.3), Polar(angle, rad - stroke * 1.6));
@@ -2098,7 +2206,8 @@ public sealed partial class TimelineView : Control
             if (StripPressed(p, e, buttons.IsRightButtonPressed)) return;
         if (buttons.IsRightButtonPressed)
         {
-            if (row?.Folder is { } folder) FolderContextRequested?.Invoke(folder, p);
+            if (p.Y < RulerH && p.X > HeaderW) RulerMenuRequested?.Invoke(p);
+            else if (row?.Folder is { } folder) FolderContextRequested?.Invoke(folder, p);
             // the empty part of the header, under the last row, offers a new track
             else if (row == null && p.X < HeaderW && p.Y >= RulerH) NewTrackRequested?.Invoke(p);
             else if (i >= 0 && i < tracks.Count && p.Y >= RulerH)
@@ -2212,7 +2321,7 @@ public sealed partial class TimelineView : Control
             else if (e.ClickCount == 2) EffectRequested?.Invoke(tracks[i], fx, false, FxRows[hit.Knob].Default);
             else
             {
-                fxDragValue = FxState(tracks[i].Channel, hit.Knob).Amount;
+                fxDragValue = FxState(tracks[i], hit.Knob).Amount;
                 fxDragY = p.Y;
                 StartGesture("fx", e);
             }
@@ -2539,9 +2648,12 @@ public sealed partial class TimelineView : Control
             {
                 // the boxed clips move in time together, each on its own track (no swapping, no landing elsewhere)
                 overIndex = fromIndex;
-                preview = ClipEditing.Drag(original, dragged.Media, dragMode, dxPx / pps, pps, Playhead, Grid, (modifiers & KeyModifiers.Alt) != 0,
-                    tracks.SelectMany(t => t.Clips).Where(c => c != dragged && !boxed.Contains(c.Clip.Id)).Select(c => Window(c)), dragged.LengthSec);
+                preview = ClipEditing.Drag(original, dragged.Media, dragMode, dxPx / pps, Grid, (modifiers & KeyModifiers.Alt) != 0, out stuckTo, dragged.LengthSec,
+                    SnapToClips != SnapEdges.None ? tracks.SelectMany(t => t.Clips).Where(c => c != dragged && !boxed.Contains(c.Clip.Id)).Select(c => Window(c)) : null, SnapToClips, pps);
+                double at = preview.AtSec;
                 DragCarried();
+                // a carried clip that would cross zero holds them all back, off the edge they stuck to
+                if (preview.AtSec != at) stuckTo = null;
             }
             else if (dragged != null && original != null)
             {
@@ -2551,9 +2663,10 @@ public sealed partial class TimelineView : Control
                 // it the clip lands on that track at the time under the pointer, shown by a ghost (native only).
                 swapping = overIndex != fromIndex && (modifiers & KeyModifiers.Control) != 0;
                 swapId = swapping ? ClipAt(overIndex, lastPointer.X)?.Clip.Id : null;
+                stuckTo = null;
                 if (swapping) preview = ClipEditing.Copy(original);
-                else preview = ClipEditing.Drag(original, dragged.Media, dragMode, dxPx / pps, pps, Playhead, Grid,
-                    (modifiers & KeyModifiers.Alt) != 0, tracks.SelectMany(t => t.Clips).Where(c => c != dragged).Select(c => Window(c)), dragged.LengthSec);
+                else preview = ClipEditing.Drag(original, dragged.Media, dragMode, dxPx / pps, Grid, (modifiers & KeyModifiers.Alt) != 0, out stuckTo, dragged.LengthSec,
+                    SnapToClips != SnapEdges.None ? tracks.SelectMany(t => t.Clips).Where(c => c != dragged).Select(c => Window(c)) : null, SnapToClips, pps);
             }
         }
         InvalidateVisual();
@@ -2650,6 +2763,7 @@ public sealed partial class TimelineView : Control
         original = preview = null;
         carriedAlong.Clear();
         carriedPreview.Clear();
+        stuckTo = null;
         curvePoint = -1;
         swapId = null;
         swapping = false;
@@ -2710,7 +2824,8 @@ public sealed partial class TimelineView : Control
         else if (p.Y >= RulerH && i >= 0 && i < tracks.Count && p.X < HeaderW && FxHit(i, p) is { Dial: true } fx)
         {
             // like the mixer's knobs: 50 steps over the range, Shift = fine
-            double amount = FxState(tracks[i].Channel, fx.Knob).Amount + Math.Sign(e.Delta.Y) * ((e.KeyModifiers & KeyModifiers.Shift) != 0 ? 0.004 : 0.02);
+            // Transponer: a semitone per notch
+            double amount = FxState(tracks[i], fx.Knob).Amount + Math.Sign(e.Delta.Y) * (fx.Knob == TransposeRow ? 1.0 / 24 : (e.KeyModifiers & KeyModifiers.Shift) != 0 ? 0.004 : 0.02);
             EffectRequested?.Invoke(tracks[i], FxRows[fx.Knob].Key, false, Math.Round(Math.Clamp(amount, 0, 1) * 1000) / 1000);
         }
         // plain wheel: up and down; the modifiers for zoom, sideways and track height are the user's (Shortcuts.Wheel:

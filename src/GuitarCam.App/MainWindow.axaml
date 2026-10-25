@@ -271,9 +271,16 @@
           </StackPanel>
         </Border>
         <!-- snap: the magnet lights up with the accent while clips, the playhead, trims and fades stick to the grid -->
-        <Panel Grid.Column="1" x:Name="SnapPanel" Width="90" Height="28" VerticalAlignment="Center">
-          <c:SelectButton x:Name="SnapBox" Classes="snap" Width="90" Height="28" Padding="25,0,6,0" CornerRadius="6" AutomationProperties.Name="{loc:T snap.name}" />
+        <Panel Grid.Column="1" x:Name="SnapPanel" Width="86" Height="28" VerticalAlignment="Center">
+          <c:SelectButton x:Name="SnapBox" Classes="snap" Width="86" Height="28" Padding="25,0,6,0" CornerRadius="6" AutomationProperties.Name="{loc:T snap.name}" />
           <PathIcon x:Name="SnapIcon" Data="{StaticResource MagnetIcon}" Width="13" Height="13" Margin="8,0,0,0"
+                    HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False" />
+        </Panel>
+        <!-- snap to other clips (asked by the user): which edges of a moved clip stick to theirs, a selector like the
+             snap's, lit the same way while it is on (MainWindow.Timeline.cs ShowSnap) -->
+        <Panel Grid.Column="2" x:Name="SnapClipsPanel" Width="72" Height="28" Margin="4,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center">
+          <c:SelectButton x:Name="SnapClipsBox" Classes="snap" Width="72" Height="28" Padding="25,0,6,0" CornerRadius="6" AutomationProperties.Name="{loc:T snap.clips.name}" />
+          <PathIcon x:Name="SnapClipsIcon" Data="{StaticResource SnapClipsIcon}" Width="13" Height="13" Margin="8,0,0,0"
                     HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False" />
         </Panel>
         <Button Grid.Column="3" x:Name="TimelineFitButton" Classes="ghost" Width="28" Height="28" Padding="0" MinWidth="0"

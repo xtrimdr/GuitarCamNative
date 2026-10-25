@@ -119,7 +119,10 @@ static class Program
               proyecto formato  carpeta [--relacion 16:9|9:16|1:1] [--disposicion lado-a-lado|apilado]
                                            como la ventana: 9:16 pasa a apilado y 16:9 a lado a lado
               proyecto editar carpeta mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos
-                        [--libre] [--iman 1/4] [--pps 100] [--cabezal 0]
+                        [--libre] [--iman 1/4] [--a-clips inicio|final|ambos|no] [--pps 100]   con imán, de a pasos
+                        enteros; --a-clips: ese borde se pega al de otro clip a menos de 8 px (a ese zoom), si queda más
+                        cerca que el paso de la grilla; sin imán ni --a-clips, o --libre, sin pegarse a nada
+              proyecto editar carpeta alinear clip [--iman 1/4]   el comienzo de la toma a la línea del imán más cercana
               proyecto editar carpeta a-pista clip pista [--intercambiar clip] | reordenar desde hasta
               proyecto editar carpeta inicio|fijar-corte|restaurar|quitar-clip clip | quitar-pista pista
               proyecto editar carpeta nueva-pista | agregar-toma medio [--pista pista]

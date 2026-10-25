@@ -23,10 +23,17 @@ public partial class MainWindow
     /// <summary>The control a menu opened from (the input chip) and the one whose press just dismissed it, so a second
     /// press on the same chip closes its menu instead of opening it again.</summary>
     Control? menuAnchor, menuDismissedBy;
-    static readonly string[] SnapIds = ["off", "bar", "1/2", "1/4", "1/8", "1/8T", "1/16"];
-    static readonly string[] SnapLabels = [Loc.T("snap.label.0"), Loc.T("snap.label.1"), "1/2", "1/4", "1/8", "1/8T", "1/16"];
+    static readonly string[] SnapIds = ["off", "bar", "1/2", "1/4", "1/8", "1/8T", "1/16", "1/32", "1/64"];
+    static readonly string[] SnapLabels = [Loc.T("snap.label.0"), Loc.T("snap.label.1"), "1/2", "1/4", "1/8", "1/8T", "1/16", "1/32", "1/64"];
     /// <summary>What each grid snaps to, in musician's words: the snap box's tooltip and the hint of each option.</summary>
-    static readonly string[] SnapHints = [Loc.T("snap.hint.0"), Loc.T("snap.hint.1"), Loc.T("snap.hint.2"), Loc.T("snap.hint.3"), Loc.T("snap.hint.4"), Loc.T("snap.hint.5"), Loc.T("snap.hint.6")];
+    static readonly string[] SnapHints = [.. Enumerable.Range(0, 9).Select(i => Loc.T($"snap.hint.{i}"))];
+    /// <summary>The snap to other clips: which edges of a moved clip stick (stored by these ids in config.json).</summary>
+    static readonly string[] ClipSnapIds = ["off", "start", "end", "both"];
+    static readonly SnapEdges[] ClipSnapValues = [SnapEdges.None, SnapEdges.Start, SnapEdges.End, SnapEdges.Both];
+    static readonly string[] ClipSnapLabels = [.. ClipSnapIds.Select(id => Loc.T($"snap.clips.label.{id}"))];
+    static readonly string[] ClipSnapHints = [.. ClipSnapIds.Select(id => Loc.T($"snap.clips.hint.{id}"))];
+    /// <summary>The grid's spacing options for the ruler's menu (<see cref="TimelineView.GridMode"/>): auto, the snap's, or fixed.</summary>
+    static readonly string[] GridIds = ["auto", "snap", "bar", "1/2", "1/4", "1/8", "1/8T", "1/16", "1/32", "1/64"];
 
     void SetRulerMode(bool bars)
     {
@@ -56,6 +63,40 @@ public partial class MainWindow
         ToolTip.SetTip(SnapPanel, on
             ? Loc.T("snap.on.tip", SnapLabels[i], SnapHints[i].ToLowerInvariant())
             : Loc.T("snap.off.tip"));
+        // the snap to other clips, lit the same way while it is on
+        int k = Array.IndexOf(ClipSnapValues, Timeline.SnapToClips);
+        bool lit = k > 0;
+        SnapClipsIcon.Foreground = lit ? Palette.Accent : Palette.Faint;
+        SnapClipsBox.Foreground = lit ? Palette.Accent : Palette.Dim;
+        SnapClipsBox.Background = lit ? Palette.AccentSoft : Palette.Raised;
+        SnapClipsBox.BorderBrush = lit ? (Avalonia.Media.IBrush)this.FindResource("Accent40")! : Palette.Line;
+        ToolTip.SetTip(SnapClipsPanel, lit ? Loc.T("snap.clips.on.tip", ClipSnapHints[k].ToLowerInvariant()) : Loc.T("snap.clips.off.tip"));
+    }
+
+    /// <summary>The ruler's right click: how the grid is drawn, the current choice checked.</summary>
+    void ShowGridMenu(Point point)
+    {
+        string label(string id) => id switch
+        {
+            "auto" => Loc.T("grid.auto"), "snap" => Loc.T("grid.snap"), "bar" => Loc.T("snap.label.1"), _ => id,
+        };
+        string hint(string id) => id switch
+        {
+            "auto" => Loc.T("grid.auto.hint"), "snap" => Loc.T("grid.snap.hint"), _ => Loc.T("grid.fixed.hint", label(id)),
+        };
+        var list = new List<object> { new MenuItem { Header = Loc.T("grid.title"), IsEnabled = false, FontSize = 11 } };
+        foreach (var id in GridIds)
+        {
+            list.Add(MenuAction(label(id), () =>
+            {
+                Timeline.GridMode = id;
+                timelinePrefs?.Stop();
+                timelinePrefs?.Start();
+                return Task.CompletedTask;
+            }, icon: Timeline.GridMode == id ? "" : " ", tip: hint(id)));
+            if (id == "snap") list.Add(new Separator());
+        }
+        OpenTimelineMenu(Popup(list, 240), point, MenuHeight(list));
     }
 
     void InitTimelineEditing()
@@ -64,6 +105,13 @@ public partial class MainWindow
         string snap = AppConfig.Get("timelineSnap") ?? "1/4";
         SnapBox.SelectedIndex = Math.Max(0, Array.IndexOf(SnapIds, snap));
         Timeline.SnapMode = SnapIds[SnapBox.SelectedIndex];
+        SnapClipsBox.SetItems(ClipSnapLabels, ClipSnapHints);
+        // "true" was the on/off toggle before the selector: both edges
+        string clipSnap = AppConfig.Get("snapToClips") is "true" ? "both" : AppConfig.Get("snapToClips") ?? "off";
+        SnapClipsBox.SelectedIndex = Math.Max(0, Array.IndexOf(ClipSnapIds, clipSnap));
+        Timeline.SnapToClips = ClipSnapValues[SnapClipsBox.SelectedIndex];
+        Timeline.GridMode = AppConfig.Get("timelineGrid") is { } gm && GridIds.Contains(gm) ? gm : "auto";
+        Timeline.RulerMenuRequested += ShowGridMenu;
         Timeline.RulerInBars = AppConfig.Get("rulerMode") != "time";
         if (double.TryParse(AppConfig.Get("trackHeight"), CultureInfo.InvariantCulture, out double height))
         {
@@ -76,6 +124,8 @@ public partial class MainWindow
             timelinePrefs.Stop();
             string mode = Timeline.RulerInBars ? "bars" : "time";
             string grid = Timeline.SnapMode;
+            string toClips = ClipSnapIds[Math.Max(0, Array.IndexOf(ClipSnapValues, Timeline.SnapToClips))];
+            string gridMode = Timeline.GridMode;
             string h = Timeline.TrackHeight.ToString(CultureInfo.InvariantCulture);
             string hw = Timeline.HeaderW.ToString(CultureInfo.InvariantCulture);
             try
@@ -84,6 +134,8 @@ public partial class MainWindow
                 {
                     AppConfig.Set("rulerMode", mode);
                     AppConfig.Set("timelineSnap", grid);
+                    AppConfig.Set("snapToClips", toClips);
+                    AppConfig.Set("timelineGrid", gridMode);
                     AppConfig.Set("trackHeight", h);
                     AppConfig.Set("headerWidth", hw);
                 });
@@ -100,6 +152,13 @@ public partial class MainWindow
         {
             SnapBox.SelectedIndex = i;
             Timeline.SnapMode = SnapIds[Math.Clamp(i, 0, SnapIds.Length - 1)];
+            ShowSnap();
+            Prefs();
+        };
+        SnapClipsBox.Selected += i =>
+        {
+            SnapClipsBox.SelectedIndex = i;
+            Timeline.SnapToClips = ClipSnapValues[Math.Clamp(i, 0, ClipSnapValues.Length - 1)];
             ShowSnap();
             Prefs();
         };
@@ -126,8 +185,17 @@ public partial class MainWindow
             if (volume is { } v) t.Channel.Volume = v;
             if (pan is { } p) t.Channel.Pan = p;
         }, volume != null ? "volume" : "pan");
+        // the header's knobs are the user's pick (Configuración → Vista)
+        Timeline.SetKnobs(TrackKnobs.Visible);
+        TrackKnobs.Changed += () => Timeline.SetKnobs(TrackKnobs.Visible);
         Timeline.EffectRequested += (track, fx, toggle, amount) =>
         {
+            // Transponer has no on/off (its label does nothing); the knob's 0…1 is −12…+12 semitones
+            if (fx == FxIcon.Transpose)
+            {
+                if (amount is { } a) SetTranspose(track, a * 24 - 12);
+                return;
+            }
             if (fx == FxIcon.Comp)
             {
                 StripComp(track, c => { if (toggle) c.On = !c.On; if (amount is { } a) { c.Amount = a; c.On = true; } }, toggle ? "on" : "amount");

@@ -40,7 +40,8 @@ de **grabar → mezclar → exportar**.
   FLAC, OGG, M4A, AIFF).
 - **Carpetas** que se pliegan y agrupan pistas; varias pistas se marcan con Ctrl+clic / Shift+clic y se mueven juntas.
   Cada pista tiene su **color** (24, en orden de arco iris) y un **ícono de instrumento** (guitarras, bajo, batería,
-  synths, cuerdas, vientos, percusión…), su propio alto y sus knobs de Vida, Comp, Reverb y Delay en el encabezado.
+  synths, cuerdas, vientos, percusión…), su propio alto y sus knobs de Vida, Comp, Reverb, Delay y Tono en el
+  encabezado (cuáles se ven, en Configuración → Vista).
 - Un sonido que te gusta se guarda como **plantilla de pista** y vuelve desde Nueva pista → Plantilla.
 - Arriba de la regla, un **rango A–B** para repetir un tramo (practicar el solo, mezclar un pedazo) y **marcadores**
   con nombre (Intro, Estribillo, Solo…) para saltar de una parte a otra. Zoom de un tiempo a toda la canción con
@@ -52,7 +53,8 @@ de **grabar → mezclar → exportar**.
   Punteo), **EQ de 6 bandas** con espectro en vivo, y envíos a **reverb** y **delay**, más limitador master y paneo
   con plantillas.
 - **Transponer** por pista (−12 a +12 semitonos) sin cambiar el largo, así la toma sigue en sincronía con el video:
-  se calcula en segundo plano con un vocoder de fase de alta calidad y queda guardada en `cache/`.
+  se calcula en segundo plano (unos 4 s por 3 min) con un vocoder de fase de alta calidad, se ve el progreso sobre los
+  clips y queda guardada en `cache/`.
 - **Mixer** completo; cada carpeta tiene su propio canal y su fader, M y S mandan sobre todas sus pistas, como un VCA.
 - Audio de nivel profesional: arrancar, parar, saltar y arrastrar el cabezal llevan su fundido, sin clics ni cortes.
 
@@ -132,6 +134,7 @@ Todos se pueden cambiar en ⚙ Configuración → Atajos de teclado (menos Esc).
 | Supr | quitar el clip (o los marcados, o la pista vacía) |
 | Ctrl+Z / Ctrl+Y | deshacer / rehacer |
 | Ctrl+Shift+N | nueva pista |
+| Clic derecho en la regla | cómo se dibuja la grilla: Auto, igual que el imán o una subdivisión fija |
 | Arrastrar en vacío sobre las pistas (Ctrl: sumar) | marcar varios clips con un rectángulo para moverlos o borrarlos juntos |
 | Ctrl+clic / Shift+clic en un encabezado | marcar varias pistas (una por una / un rango) para moverlas juntas |
 | Ctrl+S | guardar ya |

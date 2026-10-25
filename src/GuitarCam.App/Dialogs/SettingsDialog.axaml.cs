@@ -41,7 +41,7 @@ public sealed partial class SettingsDialog : UserControl
     bool reopening;
     bool filling;
 
-    readonly StackPanel audioPage = new(), cameraPage = new(), syncPage = new(), shortcutsPage = new(), languagePage = new(), savePage = new();
+    readonly StackPanel audioPage = new(), cameraPage = new(), syncPage = new(), shortcutsPage = new(), languagePage = new(), savePage = new(), viewPage = new();
     /// <summary>The action waiting for a key in "Atajos de teclado", and what the last change took from another one.</summary>
     string? capturing, capturingWheel;
     string? shortcutNote;
@@ -88,7 +88,9 @@ public sealed partial class SettingsDialog : UserControl
         ShortcutsTab.Click += (_, _) => ShowTab("shortcuts");
         LanguageTab.Click += (_, _) => ShowTab("language");
         SaveTab.Click += (_, _) => ShowTab("save");
+        ViewTab.Click += (_, _) => ShowTab("view");
         BuildLanguage();
+        BuildView();
         saveMinutes = BuildSave();
         Shortcuts.Changed += BuildShortcuts;
         AddHandler(PointerWheelChangedEvent, OnCaptureWheel, Avalonia.Interactivity.RoutingStrategies.Tunnel);
@@ -326,10 +328,11 @@ public sealed partial class SettingsDialog : UserControl
         ShortcutsTab.Classes.Set("active", id == "shortcuts");
         LanguageTab.Classes.Set("active", id == "language");
         SaveTab.Classes.Set("active", id == "save");
+        ViewTab.Classes.Set("active", id == "view");
         StopCapture();
         if (id == "save") RefreshSave();
         if (id == "shortcuts") { shortcutNote = null; BuildShortcuts(); }
-        Body.Content = id switch { "camera" => cameraPage, "sync" => syncPage, "shortcuts" => shortcutsPage, "language" => languagePage, "save" => savePage, _ => audioPage };
+        Body.Content = id switch { "camera" => cameraPage, "sync" => syncPage, "shortcuts" => shortcutsPage, "language" => languagePage, "save" => savePage, "view" => viewPage, _ => audioPage };
         Refresh();
     }
 
@@ -627,6 +630,37 @@ public sealed partial class SettingsDialog : UserControl
         savePage.Children.Add(Card(s));
         return minutes;
     }
+
+    /// <summary>"Vista" (native only): which effect knobs the timeline's track headers show (<see cref="TrackKnobs"/>);
+    /// all by default, applied at once.</summary>
+    void BuildView()
+    {
+        var s = Section(Loc.T("set.view.knobs"));
+        s.Children.Add(Help(Loc.T("set.view.knobs.help")));
+        var list = new StackPanel { Spacing = 6 };
+        foreach (string key in TrackKnobs.All)
+        {
+            var icon = FxIcon.Create(key, 13);
+            FxIcon.SetColor(icon, Palette.Accent);
+            icon.VerticalAlignment = VerticalAlignment.Center;
+            var name = new TextBlock { Text = KnobName(key), VerticalAlignment = VerticalAlignment.Center };
+            var box = new CheckBox { IsChecked = TrackKnobs.Shows(key), FontSize = 12,
+                Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { icon, name } } };
+            box.IsCheckedChanged += (_, _) => TrackKnobs.Set(key, box.IsChecked == true);
+            list.Children.Add(box);
+        }
+        s.Children.Add(list);
+        viewPage.Children.Add(Card(s));
+    }
+
+    static string KnobName(string key) => key switch
+    {
+        FxIcon.Sat => Loc.T("fx.life"),
+        FxIcon.Comp => Loc.T("insp.section.comp"),
+        FxIcon.Reverb => Loc.T("insp.section.reverb"),
+        FxIcon.Delay => Loc.T("insp.section.delay"),
+        _ => Loc.T("insp.section.transpose"),
+    };
 
     void RefreshSave()
     {

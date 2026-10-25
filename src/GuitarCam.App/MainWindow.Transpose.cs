@@ -1,8 +1,12 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Threading;
 using GuitarCam.App.Controls;
 using GuitarCam.App.Model;
 using GuitarCam.Audio;
+using GuitarCam.Audio.Dsp;
 using GuitarCam.Projects;
 
 namespace GuitarCam.App;
@@ -25,7 +29,15 @@ public partial class MainWindow
         public readonly string TrackId = trackId;
         /// <summary>0 to 1, written by the worker.</summary>
         public volatile float Progress;
+        /// <summary>Since it started: one that came from the cache in a blink needs no "ready" toast.</summary>
+        public readonly System.Diagnostics.Stopwatch Clock = System.Diagnostics.Stopwatch.StartNew();
     }
+
+    /// <summary>A transpose that took at least this long says so with a toast when it is ready.</summary>
+    static readonly TimeSpan TransposeToastAfter = TimeSpan.FromSeconds(1);
+    /// <summary>The cache of the open project was cleaned of unused transposes (once per project: the ones tried
+    /// meanwhile stay, so going back to a value is immediate).</summary>
+    bool transposePruned;
 
     readonly Dictionary<TransposeKey, ClipSound> transposed = [];
     readonly Dictionary<TransposeKey, TransposeJob> transposing = [];
@@ -40,6 +52,89 @@ public partial class MainWindow
         host.Children.Add(transposeNote);
         transposeClock.Tick += (_, _) => RefreshTransposeNote();
         inspectorRefresh.Add(RefreshTransposeNote);
+        Timeline.TransposeProgress = TransposeProgress;
+    }
+
+    /// <summary>The selected track's Transponer, from the inspector.</summary>
+    void SetTranspose(double semis) { if (sel != null) SetTranspose(sel, semis); }
+
+    /// <summary>Any track's Transponer (inspector or mixer strip), clamped to what <see cref="PitchShifter"/> does.</summary>
+    void SetTranspose(LiveTrack track, double semis)
+    {
+        semis = Math.Clamp(Math.Round(semis), -PitchShifter.MaxSemitones, PitchShifter.MaxSemitones);
+        if (semis == track.Track.Transpose) return;
+        EditTrack(track, t => t.Track.Transpose = semis, "transpose");
+        RefreshTranspose();
+        RefreshMixer();
+    }
+
+    /// <summary>How far the track's transpose is (0 to 1), or null when it already plays what it should.</summary>
+    float? TransposeProgress(LiveTrack track)
+    {
+        float sum = 0;
+        int n = 0;
+        foreach (var job in transposing.Values)
+            if (job.TrackId == track.Track.Id) { sum += job.Progress; n++; }
+        return n == 0 ? null : sum / n;
+    }
+
+    /// <summary>The short form the channel shows (timeline header, mixer strip): "+2", "-5".</summary>
+    static string TransposeTag(double v) => $"{v:+0;-0}";
+
+    /// <summary>The tooltip of the channel's tag: how far it is moved, and how far the transpose is while it is made.</summary>
+    string TransposeTagTip(LiveTrack t) => TransposeProgress(t) is { } p
+        ? Loc.T("insp.transpose.working", $"{p * 100:0}") : Loc.T("mix.transpose.tag.tip", TransposeText(t.Track.Transpose));
+
+    /// <summary>The wide mixer strip's Transponer, beside the reverb and delay sends (asked by the user): − and + a
+    /// semitone around the value, lit while the track is moved. There is no ON/OFF: 0 is the original.</summary>
+    void TransposePanel(StackPanel fx, LiveTrack t)
+    {
+        var panel = FxPanel(fx, Loc.T("insp.section.transpose"), FxIcon.Transpose, () => t.Track.Transpose != 0, null, _ => "");
+        Button Step(string glyph, int delta, string tip)
+        {
+            var b = new Button { Classes = { "chip" }, Width = 26, Height = 26, MinHeight = 26, Padding = new Thickness(0), CornerRadius = new CornerRadius(4),
+                Content = new TextBlock { Classes = { "icon" }, Text = glyph, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
+            ToolTip.SetTip(b, tip);
+            b.Click += (_, _) => SetTranspose(t, t.Track.Transpose + delta);
+            mx.Refresh.Add(() => b.IsEnabled = Math.Abs(t.Track.Transpose + delta) <= PitchShifter.MaxSemitones);
+            return b;
+        }
+        var value = new TextBlock { Classes = { "mono" }, FontSize = 14, FontWeight = FontWeight.SemiBold, MinWidth = 30, TextAlignment = TextAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center, Background = Brushes.Transparent };
+        ToolTip.SetTip(value, Loc.T("mix.transpose.reset.tip"));
+        value.DoubleTapped += (_, _) => SetTranspose(t, 0);
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        row.Children.Add(Step("", -1, Loc.T("mix.transpose.down.tip")));
+        row.Children.Add(value);
+        row.Children.Add(Step("", 1, Loc.T("mix.transpose.up.tip")));
+        var info = new TextBlock { FontSize = 11, Foreground = Palette.Dim, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 4, 0, 0) };
+        void Show()
+        {
+            double v = t.Track.Transpose;
+            value.Text = v == 0 ? "0" : TransposeTag(v);
+            info.Text = TransposeProgress(t) is { } p ? Loc.T("mix.transpose.working", $"{p * 100:0}") : TransposeText(v);
+        }
+        mx.Refresh.Add(Show);
+        mx.Transpose.Add(Show);
+        panel.Body.Children.Add(row);
+        panel.Body.Children.Add(info);
+    }
+
+    /// <summary>The compact strip's mark of a transposed track ("+2" in the accent, under its name), hidden at 0.</summary>
+    TextBlock TransposeTagText(LiveTrack t)
+    {
+        var tag = new TextBlock { Classes = { "mono" }, FontSize = 10, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+        void Show()
+        {
+            double v = t.Track.Transpose;
+            tag.IsVisible = v != 0;
+            tag.Text = TransposeTag(v);
+            tag.Foreground = TransposeProgress(t) != null ? Palette.Faint : Palette.Accent;
+            ToolTip.SetTip(tag, TransposeTagTip(t));
+        }
+        mx.Refresh.Add(Show);
+        mx.Transpose.Add(Show);
+        return tag;
     }
 
     static string TransposeText(double v) =>
@@ -59,6 +154,7 @@ public partial class MainWindow
             transposed.Clear();
             transposeFailed.Clear();
             transposeStore = st;
+            transposePruned = false;
         }
         if (st == null) return;
 
@@ -92,7 +188,11 @@ public partial class MainWindow
             transposing.Remove(key);
         }
         foreach (var key in transposed.Keys.Where(k => !wanted.Contains(k)).ToList()) transposed.Remove(key);
-        if (transposing.Count == 0) PruneTransposeCache(st);
+        if (transposing.Count == 0 && !transposePruned)
+        {
+            transposePruned = true;
+            PruneTransposeCache(st);
+        }
         transposeClock.IsEnabled = transposing.Count > 0;
         RefreshTransposeNote();
     }
@@ -107,7 +207,14 @@ public partial class MainWindow
             {
                 if (!transposing.TryGetValue(key, out var current) || current != job) return; // no longer wanted
                 transposing.Remove(key);
-                if (t.IsCompletedSuccessfully) transposed[key] = new ClipSound(t.Result.Left, t.Result.Right);
+                if (t.IsCompletedSuccessfully)
+                {
+                    transposed[key] = new ClipSound(t.Result.Left, t.Result.Right);
+                    // the last of the track's takes is ready: say so, unless it came straight from the cache
+                    if (job.Clock.Elapsed >= TransposeToastAfter && !transposing.Values.Any(j => j.TrackId == trackId)
+                        && tracks.FirstOrDefault(x => x.Track.Id == trackId) is { } lt && lt.Track.Transpose == key.Semis)
+                        Toast(Loc.T("transpose.done", name, TransposeText(key.Semis)));
+                }
                 else if (!t.IsCanceled)
                 {
                     transposeFailed.Add(key);
@@ -117,12 +224,15 @@ public partial class MainWindow
             }), TaskScheduler.Default);
     }
 
-    /// <summary>The selected track's note: how far its transpose is, hidden when it plays what it should.</summary>
+    /// <summary>The selected track's note: how far its transpose is, hidden when it plays what it should. The
+    /// channel's tags (timeline header, mixer strip) show the same progress.</summary>
     void RefreshTransposeNote()
     {
-        var jobs = sel == null ? [] : transposing.Values.Where(j => j.TrackId == sel.Track.Id).ToList();
-        transposeNote.IsVisible = jobs.Count > 0;
-        if (jobs.Count > 0) transposeNote.Text = Loc.T("insp.transpose.working", $"{jobs.Average(j => j.Progress) * 100:0}");
+        var progress = sel == null ? null : TransposeProgress(sel);
+        transposeNote.IsVisible = progress != null;
+        if (progress is { } p) transposeNote.Text = Loc.T("insp.transpose.working", $"{p * 100:0}");
+        if (mx != null && mixerView && !masteringView) foreach (var r in mx.Transpose) r();
+        Timeline.InvalidateVisual();
     }
 
     /// <summary>Deletes the cached transposes no track uses any more (in the background; a read-only window leaves them).</summary>

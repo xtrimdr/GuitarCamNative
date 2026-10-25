@@ -7,6 +7,10 @@ namespace GuitarCam.Projects;
 /// <summary>The five clip handles in GuitarCam/src/components/Timeline.tsx.</summary>
 public enum ClipEditMode { Move, TrimStart, TrimEnd, FadeIn, FadeOut }
 
+/// <summary>Which edges of a moved clip stick to the edges of the others (the snap to other clips).</summary>
+[Flags]
+public enum SnapEdges { None = 0, Start = 1, End = 2, Both = Start | End }
+
 /// <summary>
 /// Port of Timeline.tsx clip gestures and App.tsx lane operations. Times use native seconds instead of
 /// audioOffsetMs. Native tracks keep their IDs/channels; on multi-clip tracks only the clip under the
@@ -25,7 +29,7 @@ public static class ClipEditing
     public static double GridSeconds(string mode, double bpm) => (mode switch
     {
         "bar" => 4, "1/2" => 2, "1/4" => 1, "1/8" => 0.5,
-        "1/8T" => 1.0 / 3, "1/16" => 0.25, _ => 0,
+        "1/8T" => 1.0 / 3, "1/16" => 0.25, "1/32" => 0.125, "1/64" => 0.0625, _ => 0,
     }) * 60 / Math.Max(1, bpm);
 
     // JavaScript Math.round: half ties go toward positive infinity, including negative offsets.
@@ -39,10 +43,23 @@ public static class ClipEditing
     static double Limit(double v, double max) => Math.Max(0, Math.Min(max, v));
     public static double Snap(double sec, double grid, bool free) => free || grid <= 0 ? sec : JsRound(sec / grid) * grid;
 
-    /// <summary>Calculates a gesture from its original clip, never incrementally from the previous pointer move.</summary>
-    public static Clip Drag(Clip original, Media? media, ClipEditMode mode, double dx, double pps,
-        double playhead, double grid, bool free, IEnumerable<ClipEnvelope.ClipWindow> others, double? durationSec = null)
+    /// <summary>Px within which a moved clip's edge sticks to another clip's edge (SNAP_PX in Timeline.tsx).</summary>
+    public const double EdgePullPx = 8;
+
+    /// <summary>
+    /// Calculates a gesture from its original clip, never incrementally from the previous pointer move. With
+    /// <paramref name="others"/> and <paramref name="sticky"/> (the snap to other clips) a moved clip's visible start
+    /// and/or end sticks to their visible edges within <see cref="EdgePullPx"/>.
+    /// </summary>
+    public static Clip Drag(Clip original, Media? media, ClipEditMode mode, double dx, double grid, bool free,
+        double? durationSec = null, IEnumerable<ClipEnvelope.ClipWindow>? others = null, SnapEdges sticky = SnapEdges.None, double pps = 100) =>
+        Drag(original, media, mode, dx, grid, free, out _, durationSec, others, sticky, pps);
+
+    /// <summary>The same, saying in <paramref name="stuckTo"/> the other clip's edge it stuck to (the timeline draws a guide there).</summary>
+    public static Clip Drag(Clip original, Media? media, ClipEditMode mode, double dx, double grid, bool free, out double? stuckTo,
+        double? durationSec = null, IEnumerable<ClipEnvelope.ClipWindow>? others = null, SnapEdges sticky = SnapEdges.None, double pps = 100)
     {
+        stuckTo = null;
         var c = Copy(original);
         var w = Window(original, media, durationSec);
         var fades = ClipEnvelope.FitFades(c.FadeInSec, c.FadeOutSec, w.End - w.Start);
@@ -50,27 +67,31 @@ public static class ClipEditing
         switch (mode)
         {
             case ClipEditMode.Move:
-                double shift = dx;
-                if (!free)
+                // With a grid the clip moves in whole grid steps, relative (asked by the user): a clip off the grid
+                // keeps its offset and lands a bar (or a beat) away, as played; "Alinear a la grilla" puts it on a line.
+                // Other clips pull only with their own snap on (asked by the user), and only their visible edges: the
+                // take's start hides left of a trimmed clip. Both magnets together are seamless (asked by the user):
+                // the grid places the clip and an edge only fine-tunes it, when the clip as placed is within
+                // EdgePullPx of it, so it never jumps more than that. Measured from the pointer instead, with a
+                // bar's step the clip leapt ~26 px off the grid to an edge the pointer was near but the clip wasn't.
+                double shift = Snap(dx, grid, free);
+                if (!free && others != null && sticky != SnapEdges.None)
                 {
-                    // Native only: with a grid the clip moves in whole grid steps and edges don't pull it. Near the start
-                    // the edges of every take cluster there, and mixing both magnets made the clip jump between them.
-                    // The step is relative (asked by the user): a clip off the grid keeps its offset and lands a bar (or
-                    // a beat) away, as played; putting it on the grid is a free move with Alt.
-                    if (grid > 0) shift = Snap(dx, grid, false);
-                    double best = grid > 0 ? 0 : 8 / Math.Max(0.001, pps); // SNAP_PX in Timeline.tsx.
-                    var targets = new List<double> { 0, Math.Max(0, playhead) };
-                    foreach (var other in others) { targets.Add(other.Anchor); targets.Add(other.End); }
-                    foreach (double target in targets)
-                        foreach (double edge in new[] { w.Anchor, w.End })
+                    double best = EdgePullPx / Math.Max(0.001, pps), placed = shift;
+                    foreach (var other in others)
+                        for (int k = 0; k < 4; k++)
                         {
-                            double delta = target - (edge + dx);
+                            bool fromStart = k < 2;
+                            if (!sticky.HasFlag(fromStart ? SnapEdges.Start : SnapEdges.End)) continue;
+                            double target = k % 2 == 0 ? other.Start : other.End;
+                            double delta = target - ((fromStart ? w.Start : w.End) + placed);
                             if (Math.Abs(delta) >= best) continue;
                             best = Math.Abs(delta);
-                            shift = dx + delta;
+                            shift = placed + delta;
+                            stuckTo = target;
                         }
                 }
-                shift = Math.Max(shift, ClipEnvelope.MinClipSec - w.End);
+                if (shift < ClipEnvelope.MinClipSec - w.End) { shift = ClipEnvelope.MinClipSec - w.End; stuckTo = null; }
                 c.AtSec = ToSample(c.AtSec + shift);
                 break;
             case ClipEditMode.TrimStart:

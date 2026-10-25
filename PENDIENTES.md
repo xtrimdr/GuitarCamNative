@@ -21,9 +21,8 @@ _Ideas y mejoras para la nativa._
   cabezal (hecho, ver [HECHO.md](HECHO.md)); falta elegir qué clip se ve cuando se pisan
 - [x] Importar audio externo (hecho, ver [HECHO.md](HECHO.md)). Falta: que el clip importado siga el tempo del proyecto (hoy se
   usa tal cual) y importar el audio de un video
-- [ ] Transponer: que se vea en el timeline cuando una pista está transpuesta (hoy solo en el inspector), y probar
-  si conviene un modo "fino" en cents. Límite conocido: dos armónicos a menos de ~7 Hz (la 3ª de un acorde grave)
-  mantienen su batido original
+- [ ] Transponer: probar si conviene un modo "fino" en cents. Límite conocido: dos armónicos a menos de ~7 Hz (la 3ª
+  de un acorde grave) mantienen su batido original
 - [ ] Mejorar el mixer: inserts reordenables, más sends/buses, grupos, medidores más completos
 - …y más: ir sumando acá
 

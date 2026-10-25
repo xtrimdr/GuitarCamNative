@@ -93,6 +93,7 @@ static class ProjectCommands
             case "reordenar": ClipEditing.Reorder(p, int.Parse(id) - 1, int.Parse(value) - 1); break;
             case "a-pista": ClipEditing.MoveToTrack(p, id, value, a.Get("intercambiar")); break;
             case "inicio": ClipEditing.ToStart(p, id); break;
+            case "alinear": ClipEditing.AlignToGrid(p, id, ClipEditing.GridSeconds(a.Get("iman", "1/4"), p.Settings.Bpm)); break;
             case "fijar-corte": ClipEditing.FixCut(p, id); break;
             case "restaurar": ClipEditing.Reset(p, id); break;
             case "dividir": Console.WriteLine(ClipEditing.Split(p, id, double.Parse(value, System.Globalization.CultureInfo.InvariantCulture))); break;
@@ -159,14 +160,18 @@ static class ProjectCommands
                 {
                     "mover" => ClipEditMode.Move, "recortar-inicio" => ClipEditMode.TrimStart,
                     "recortar-final" => ClipEditMode.TrimEnd, "fade-in" => ClipEditMode.FadeIn, "fade-out" => ClipEditMode.FadeOut,
-                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar|a-pista|inicio|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar; nueva-carpeta [nombre] --pistas id,id; a-carpeta pista[,pista…] carpeta|raiz [--en n]; sacar-de-carpeta pista; mover-carpeta carpeta n; quitar-carpeta carpeta [--con-pistas]; carpeta id [--nombre --volumen --mute --solo --plegar]; transponer pista semitonos; guardar-plantilla pista [nombre]; usar-plantilla id|nombre"),
+                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar|a-pista|inicio|alinear|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar; nueva-carpeta [nombre] --pistas id,id; a-carpeta pista[,pista…] carpeta|raiz [--en n]; sacar-de-carpeta pista; mover-carpeta carpeta n; quitar-carpeta carpeta [--con-pistas]; carpeta id [--nombre --volumen --mute --solo --plegar]; transponer pista semitonos; guardar-plantilla pista [nombre]; usar-plantilla id|nombre"),
                 };
                 var (_, clip) = ClipEditing.Find(p, id);
                 double dx = double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
-                var others = p.Tracks.SelectMany(t => t.Clips).Where(c => c.Id != id)
-                    .Select(c => ClipEditing.Window(c, p.FindMedia(c.MediaId)));
-                ClipEditing.Replace(p, ClipEditing.Drag(clip, p.FindMedia(clip.MediaId), mode, dx, a.Double("pps", 100),
-                    a.Double("cabezal", 0), ClipEditing.GridSeconds(a.Get("iman", "1/4"), p.Settings.Bpm), a.Flag("libre"), others));
+                var sticky = a.Get("a-clips", "no") switch
+                {
+                    "inicio" => SnapEdges.Start, "final" => SnapEdges.End, "ambos" => SnapEdges.Both, "no" => SnapEdges.None,
+                    var x => throw new ArgumentException($"--a-clips {x}: inicio|final|ambos|no"),
+                };
+                var others = p.Tracks.SelectMany(t => t.Clips).Where(c => c.Id != id).Select(c => ClipEditing.Window(c, p.FindMedia(c.MediaId)));
+                ClipEditing.Replace(p, ClipEditing.Drag(clip, p.FindMedia(clip.MediaId), mode, dx,
+                    ClipEditing.GridSeconds(a.Get("iman", "1/4"), p.Settings.Bpm), a.Flag("libre"), null, others, sticky, a.Double("pps", 100)));
                 break;
         }
         p.AddLog("timeline-edited", op);

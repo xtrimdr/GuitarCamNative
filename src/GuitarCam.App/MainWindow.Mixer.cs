@@ -45,6 +45,8 @@ public partial class MainWindow
     {
         public readonly Grid Strips = new() { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto,Auto"), IsVisible = false };
         public readonly List<Action> Refresh = [];
+        /// <summary>The strips' Transponer tags, refreshed while a transpose is being made (its progress).</summary>
+        public readonly List<Action> Transpose = [];
         public readonly Dictionary<string, (MixerMeter Meter, Action<double> Gr)> Meters = [];
         /// <summary>The track strips' cards, resized in place when only the strip width changes.</summary>
         public readonly List<Border> Boxes = [];
@@ -371,6 +373,7 @@ public partial class MainWindow
     {
         mx = layout;
         mx.Refresh.Clear();
+        mx.Transpose.Clear();
         mx.Meters.Clear();
         mx.Boxes.Clear();
         mx.FolderMeters.Clear();
@@ -539,7 +542,7 @@ public partial class MainWindow
             h.Children.Add(name);
             // ● M S C don't fit across a compact strip: the ● goes under the name, beside "VACÍA" or its input
             var under = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, HorizontalAlignment = HorizontalAlignment.Center };
-            under.Children.Add(arm); under.Children.Add(emptyHint); under.Children.Add(input);
+            under.Children.Add(arm); under.Children.Add(emptyHint); under.Children.Add(input); under.Children.Add(TransposeTagText(t));
             h.Children.Add(under);
             head = h;
             var stack = new StackPanel { Spacing = 6 };
@@ -720,6 +723,7 @@ public partial class MainWindow
         // Reverb and delay sends
         SendPanel(fx, t, "Reverb", FxIcon.Reverb, true);
         SendPanel(fx, t, "Delay", FxIcon.Delay, false);
+        TransposePanel(fx, t);
     }
 
     void SendPanel(StackPanel fx, LiveTrack t, string title, string icon, bool reverb)
@@ -760,15 +764,17 @@ public partial class MainWindow
 
     /// <summary>Port of FxPanel: power, icon and name over the effect's controls, which grey out while it is off.
     /// Narrower than <see cref="FxNarrowW"/> the power button keeps only its glyph and the icon goes, so the name fits.</summary>
-    (Border Box, StackPanel Body) FxPanel(StackPanel host, string title, string icon, Func<bool> on, Action toggle, Func<bool, string> tip, Control? extra = null)
+    (Border Box, StackPanel Body) FxPanel(StackPanel host, string title, string icon, Func<bool> on, Action? toggle,Func<bool, string> tip, Control? extra = null)
     {
         var glyph = new TextBlock { Classes = { "icon" }, Text = "", FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
         var state = new TextBlock { FontSize = 10, FontWeight = FontWeight.Bold, VerticalAlignment = VerticalAlignment.Center };
         var power = new Button { Classes = { "chip" }, Height = 24, MinHeight = 24, Padding = new Thickness(6, 0), CornerRadius = new CornerRadius(4),
             Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Children = { glyph, state } } };
-        power.Click += (_, _) => toggle();
+        // no toggle: an effect that is on by its amount alone (Transponer); the panel still lights up with it
+        power.Click += (_, _) => toggle?.Invoke();
+        power.IsVisible = toggle != null;
         var iconText = FxIcon.Create(icon, 12);
-        iconText.VerticalAlignment = VerticalAlignment.Center; iconText.Margin = new Thickness(8, 0, 0, 0);
+        iconText.VerticalAlignment = VerticalAlignment.Center; iconText.Margin = new Thickness(toggle == null ? 0 : 8, 0, 0, 0);
         var name = new TextBlock { Text = title.ToUpperInvariant(), FontSize = 10, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.8, VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(6, 0, 4, 0) };
         var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto"), Height = 32, Margin = new Thickness(6, 0) };

@@ -17,21 +17,38 @@ static class ClipChecks
         bool Near(double a, double b) => Math.Abs(a - b) < 1e-9;
         var media = new Media { DurationSec = 10, SyncMs = -80, Audio = "media/original.wav" };
         var original = new Clip { MediaId = media.Id, AtSec = 0.92 };
-        Clip Drag(Clip c, ClipEditMode mode, double dx, bool free = false, double head = 0, params ClipEnvelope.ClipWindow[] others) =>
-            ClipEditing.Drag(c, media, mode, dx, 100, head, 0.5, free, others);
-        // with a grid a move goes in grid steps and nothing else pulls it; the magnets work with the grid off
-        Clip Magnet(double dx, double head, params ClipEnvelope.ClipWindow[] others) =>
-            ClipEditing.Drag(original, media, ClipEditMode.Move, dx, 100, head, 0, false, others);
+        Clip Drag(Clip c, ClipEditMode mode, double dx, bool free = false) => ClipEditing.Drag(c, media, mode, dx, 0.5, free);
+        // with the grid off nothing pulls unless the snap to other clips is on (then their edges pull within 8 px)
+        Clip Magnet(double dx, double grid, params ClipEnvelope.ClipWindow[]? others) =>
+            ClipEditing.Drag(original, media, ClipEditMode.Move, dx, grid, false, null, others, SnapEdges.Both, 100);
         var moved = Drag(original, ClipEditMode.Move, 0.41);
         Check(Near(moved.AtSec, 1.42) && Near(ClipEditing.Window(moved, media).Anchor, 1.5), "el anclaje cae en grilla y conserva 80 ms de sincronía");
         Check(Near(original.AtSec, 0.92) && media.SyncMs == -80, "calcular un gesto no muta el clip ni la grabación");
         var offGrid = Drag(new Clip { MediaId = media.Id, AtSec = 0.72 }, ClipEditMode.Move, 0.41);
         Check(Near(offGrid.AtSec, 1.22) && Near(ClipEditing.Window(offGrid, media).Anchor, 1.3), "fuera de grilla, se mueve un paso y conserva su desfasaje");
         Check(Near(Drag(original, ClipEditMode.Move, 0.413, true).AtSec, 1.333), "Alt evita todos los imanes");
-        Check(Near(Magnet(0.41, 1.44).AtSec, 1.36), "sin grilla, el cabezal imanta dentro de 8 píxeles");
-        Check(Near(Drag(original, ClipEditMode.Move, 0.41, false, 1.44).AtSec, 1.42), "con grilla, el cabezal no tira");
+        Check(Math.Abs(Drag(original, ClipEditMode.Move, 0.0002, true).AtSec - 0.9202) < 1.0 / 48000, "Alt mueve más fino que un milisegundo (de a muestra)");
+        var loose = new Project { Media = [media], Tracks = [new Track { Clips = [new Clip { MediaId = media.Id, AtSec = 0.72 }] }] };
+        string looseId = loose.Tracks[0].Clips[0].Id;
+        ClipEditing.AlignToGrid(loose, looseId, 0.25);
+        Check(Near(ClipEditing.Window(loose.Tracks[0].Clips[0], media).Anchor, 0.75), "alinear pone el anclaje en la línea del imán más cercana");
         var other = ClipEnvelope.Window(3, 4.05);
-        Check(Near(Magnet(3, 0, other).AtSec, 3.97), "sin grilla, el anclaje se imanta al borde de otro clip");
+        Check(Near(Magnet(0.03, 0, null).AtSec, 0.95), "sin imán no se pega a nada: ni al cero, ni al cabezal");
+        Check(Near(Magnet(3.1, 0, other).AtSec, 4.05), "con imán a otros clips, el borde visible se pega al borde de otro clip");
+        ClipEditing.Drag(original, media, ClipEditMode.Move, 3.1, 0, false, out var stuck, null, [other], SnapEdges.Both, 100);
+        ClipEditing.Drag(original, media, ClipEditMode.Move, 1, 0, false, out var loose2, null, [other], SnapEdges.Both, 100);
+        var gridNearer = ClipEditing.Drag(original, media, ClipEditMode.Move, 3.06, 0.5, false, out var gridStuck, null, [other], SnapEdges.Both, 100);
+        Check(Near(gridNearer.AtSec, 3.92) && gridStuck == null, "con grilla, el borde no tira si el clip ya ubicado queda lejos");
+        // the video's case: a bar's step, the pointer next to an edge but the clip a quarter of a step away: no leap
+        var barStep = ClipEditing.Drag(original, media, ClipEditMode.Move, 2.6, 2, false, out var barStuck, null, [ClipEnvelope.Window(3, 3.47)], SnapEdges.Both, 100);
+        Check(Near(barStep.AtSec, 2.92) && barStuck == null, "con pasos grandes, un borde cerca del mouse no hace saltar al clip");
+        Check(Near(ClipEditing.Drag(original, media, ClipEditMode.Move, 3.1, 0, false, null, [other], SnapEdges.End, 100).AtSec, 4.02),
+            "con imán solo al final, el comienzo no se pega");
+        var trimmedOther = ClipEnvelope.Window(3, 3.55, 0.5);
+        Check(Near(Magnet(3.1, 0, trimmedOther).AtSec, 4.05), "se pega al borde visible de un clip recortado, no al comienzo escondido de la toma");
+        Check(stuck is { } s && Near(s, 4.05) && loose2 == null, "informa contra qué borde se pegó (para la guía), y nada si no se pegó");
+        Check(Near(Magnet(3.12, 0.5, ClipEnvelope.Window(3, 3.97)).AtSec, 3.97) && Near(Magnet(3.12, 0.5, null).AtSec, 3.92),
+            "con grilla, el borde corrige el paso cuando el clip ubicado queda a menos de 8 px");
         Check(Near(ClipEditing.Window(Drag(original, ClipEditMode.Move, -100, true), media).End, 0.1), "siempre quedan 0,1 segundos visibles al cruzar cero");
         var cut = new Clip { MediaId = media.Id, AtSec = -2, TrimStartSec = 0.5 };
         Check(Near(Drag(cut, ClipEditMode.TrimStart, 0.2, true).TrimStartSec, 2.2), "recorte positivo incorpora la parte cortada por cero");
@@ -103,7 +120,7 @@ static class ClipChecks
         Check(overrideClip.EffectiveSyncMs(media) == -30 && overrideClip.EffectiveVideoOffsetMs(media) == -25
             && media.SyncMs == -80 && media.VideoOffsetMs == 80 && original.SyncMs == null,
             "los overrides no cambian el medio ni sus otros clips");
-        var snapped = ClipEditing.Drag(overrideClip, media, ClipEditMode.Move, .41, 100, 0, .5, false, []);
+        var snapped = ClipEditing.Drag(overrideClip, media, ClipEditMode.Move, .41, .5, false);
         Check(Near(ClipEditing.Window(snapped, media).Anchor, 1.5), "el imán usa el override del clip");
         var zero = new Clip { SyncMs = 0, VideoOffsetMs = 0 };
         Check(zero.EffectiveSyncMs(media) == 0 && zero.EffectiveVideoOffsetMs(media) == 0,
@@ -112,7 +129,7 @@ static class ClipChecks
         var loaded = new Clip();
         var loadedWindow = ClipEditing.Window(loaded, incomplete, 10.000020833333);
         Check(Near(loadedWindow.End, 10.000020833333), "la edición usa el largo decodificado aun con metadatos sin duración");
-        var trimmed = ClipEditing.Drag(loaded, incomplete, ClipEditMode.TrimEnd, -100, 100, 0, 0, true, [], 10);
+        var trimmed = ClipEditing.Drag(loaded, incomplete, ClipEditMode.TrimEnd, -100, 0, true, 10);
         Check(Near(trimmed.TrimEndSec, 9.9) && Near(ClipEditing.Window(trimmed, incomplete, 10).End, .1),
             "el recorte usa la misma duración cargada que reproducción");
         var roundTrip = System.Text.Json.JsonSerializer.Deserialize<Clip>(System.Text.Json.JsonSerializer.Serialize(overrideClip, ProjectStore.Json), ProjectStore.Json)!;

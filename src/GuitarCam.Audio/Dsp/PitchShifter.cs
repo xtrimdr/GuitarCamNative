@@ -11,7 +11,8 @@ namespace GuitarCam.Audio.Dsp;
 /// stay put and ratio 1 gives back the input. Both channels turn by the same phase rotation, taken from their sum, so
 /// the stereo image and a mono take stay exactly as they were. Frequencies that would pass Nyquist are simply not
 /// read, so nothing aliases. The analysis and the synthesis of a block of frames run in parallel; only the phase
-/// integration goes frame by frame. Runs on worker threads, never on the audio thread.
+/// integration goes frame by frame, and the other blocks' analysis and synthesis run beside it (a pipeline), so the
+/// whole takes about what the integration alone takes. Runs on worker threads, never on the audio thread.
 /// </summary>
 public static class PitchShifter
 {
@@ -37,7 +38,7 @@ public static class PitchShifter
     const int Coarse = Half / Grid + 1;
     /// <summary>A bin this far under the frame's loudest (−100 dB) does not steer the phase of its neighbours.</summary>
     const double Tolerance = 1e-5;
-    /// <summary>Frames analysed and synthesised at once, in parallel (about 25 MB of buffers).</summary>
+    /// <summary>Frames analysed and synthesised at once, in parallel (about 25 MB of buffers per block, three in flight).</summary>
     const int Block = 32;
 
     /// <summary>One frame: the sum's magnitude and phase, each channel relative to the sum (Q = X·conj(S)/|S|), the new phases and the FFT buffers.</summary>
@@ -46,8 +47,13 @@ public static class PitchShifter
         public readonly double[] Mag = new double[Bins], Phase = new double[Bins];
         public readonly double[] QlRe = new double[Bins], QlIm = new double[Bins], QrRe = new double[Bins], QrIm = new double[Bins];
         public readonly double[] Psi = new double[Bins];
-        /// <summary>What the output bins take from it: magnitude, frequency (rad/sample) and phase step to the next bin.</summary>
-        public readonly double[] Omega = new double[Bins], YMag = new double[Bins], YOmega = new double[Bins], Slope = new double[Bins];
+        /// <summary>Instantaneous frequency of each input bin, and the phase step from each output bin to the next.</summary>
+        public readonly double[] Omega = new double[Bins], Slope = new double[Bins];
+        /// <summary>
+        /// What every Grid-th output bin takes from the input (magnitude, frequency in rad/sample) and the phase step to
+        /// the next one: all the phase integration reads, kept small because it runs on one core beside the others.
+        /// </summary>
+        public readonly double[] YMag = new double[Coarse], YOmega = new double[Coarse], CoarseSlope = new double[Coarse];
         /// <summary>The loudness rank of every Grid-th output bin, for the phase integration's queue.</summary>
         public readonly int[] Rank = new int[Coarse];
         public double YMax;
@@ -81,8 +87,13 @@ public static class PitchShifter
         }
 
         var fft = new Fft(n);
-        var block = new Frame[Block];
-        for (int i = 0; i < Block; i++) block[i] = new Frame();
+        // three blocks in flight: one analysed, one integrated, one synthesised (see the pipeline below)
+        var sets = new Frame[3][];
+        for (int s = 0; s < 3; s++)
+        {
+            sets[s] = new Frame[Block];
+            for (int i = 0; i < Block; i++) sets[s][i] = new Frame();
+        }
         var outL = new double[len];
         var outR = new double[len];
         var norm = new double[len];
@@ -94,57 +105,38 @@ public static class PitchShifter
             double s = b / ratio;
             src[b] = s >= Half ? -1 : (int)Math.Round(s);
         }
-        // the last frame of the previous block
-        var phasePrev = new double[Bins];
-        var yMagPrev = new double[Bins];
-        var rankPrev = new int[Coarse];
-        var psiPrev = new double[Bins];
         var done = new bool[Coarse];
-        var coarseSlope = new double[Coarse];
         var heap = new RankQueue(2 * Coarse);
         var seeds = new RankQueue(Coarse);
-        double yMaxPrev = 0;
-        var options = new ParallelOptions { CancellationToken = ct };
+        // one core stays for the phase integration, which runs beside the parallel work
+        var options = new ParallelOptions { CancellationToken = ct, MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1) };
+        int blocks = (frames + Block - 1) / Block;
 
-        for (int f0 = 0; f0 < frames; f0 += Block)
+        // A pipeline (the phase integration is the one part that goes frame by frame, on one core): while block j is
+        // integrated, block j+1 is analysed and block j-1 synthesised on the other cores. None writes what another
+        // reads: the integration writes the Grid-th bins of Psi and reads Phase, YMag and Rank (and the Grid-th bins
+        // of the previous frame's Psi); the analysis writes its own block and reads only the Phase of block j's last
+        // frame; the synthesis writes the other bins of Psi, and Re and Im.
+        Prepare(0);
+        for (int j = 0; j <= blocks; j++)
         {
             ct.ThrowIfCancellationRequested();
-            progress?.Invoke(f0 / (double)frames);
-            int count = Math.Min(Block, frames - f0);
-            Parallel.For(0, count, options, k => Analyze(block[k], (f0 + k) * Hop));
-            Parallel.For(0, count, options, k => Read(block[k], f0 + k == 0, k > 0 ? block[k - 1].Phase : phasePrev));
-
-            for (int k = 0; k < count; k++)
+            progress?.Invoke(j / (double)(blocks + 1));
+            int next = j + 1, prev = j - 1;
+            var prepare = next < blocks ? Task.Run(() => Prepare(next), ct) : Task.CompletedTask;
+            var emit = prev >= 0 ? Task.Run(() => Emit(prev), ct) : Task.CompletedTask;
+            try
             {
-                var fr = block[k];
-                if (f0 + k == 0)
-                {
-                    for (int b = 0; b < Bins; b++) fr.Psi[b] = src[b] < 0 ? 0 : fr.Phase[src[b]];
-                }
-                else if (k == 0) Integrate(fr, psiPrev, yMagPrev, rankPrev, yMaxPrev);
-                else Integrate(fr, block[k - 1].Psi, block[k - 1].YMag, block[k - 1].Rank, block[k - 1].YMax);
+                if (j < blocks) IntegrateBlock(j);
             }
-            var last = block[count - 1];
-            Array.Copy(last.Phase, phasePrev, Bins);
-            Array.Copy(last.Psi, psiPrev, Bins);
-            Array.Copy(last.YMag, yMagPrev, Bins);
-            Array.Copy(last.Rank, rankPrev, Coarse);
-            yMaxPrev = last.YMax;
-
-            Parallel.For(0, count, options, k => Synthesize(block[k]));
-            for (int k = 0; k < count; k++)
+            finally
             {
-                var fr = block[k];
-                int center = (f0 + k) * Hop;
-                for (int o = -reach; o <= reach; o++)
+                // never leave a worker running on these buffers, whatever happened here
+                try { Task.WaitAll(prepare, emit); }
+                catch (AggregateException e)
                 {
-                    int t = center + o;
-                    if ((uint)t >= (uint)len) continue;
-                    double w = synthWin[o + reach];
-                    int p = (o + n) & (n - 1);
-                    outL[t] += fr.Re[p] * w;
-                    outR[t] += fr.Im[p] * w;
-                    norm[t] += w * w;
+                    ct.ThrowIfCancellationRequested();
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(e.InnerExceptions[0]).Throw();
                 }
             }
         }
@@ -159,6 +151,60 @@ public static class PitchShifter
             r[i] = (float)(outR[i] * g);
         }
         return (l, r);
+
+        Frame[] Set(int j) => sets[j % 3];
+        int Count(int j) => Math.Min(Block, frames - j * Block);
+
+        // analysis and reading of block j (in parallel); its first frame reads against the last of block j-1
+        void Prepare(int j)
+        {
+            var set = Set(j);
+            int f0 = j * Block, count = Count(j);
+            Parallel.For(0, count, options, k => Analyze(set[k], (f0 + k) * Hop));
+            double[]? before = j > 0 ? Set(j - 1)[Block - 1].Phase : null;
+            Parallel.For(0, count, options, k => Read(set[k], f0 + k == 0, k > 0 ? set[k - 1].Phase : before!));
+        }
+
+        // the phases of block j, frame by frame
+        void IntegrateBlock(int j)
+        {
+            var set = Set(j);
+            int f0 = j * Block, count = Count(j);
+            for (int k = 0; k < count; k++)
+            {
+                var fr = set[k];
+                if (f0 + k == 0)
+                {
+                    for (int b = 0; b < Bins; b++) fr.Psi[b] = src[b] < 0 ? 0 : fr.Phase[src[b]];
+                    continue;
+                }
+                var prev = k > 0 ? set[k - 1] : Set(j - 1)[Block - 1];
+                Integrate(fr, prev.Psi, prev.YMag, prev.Rank, prev.YMax);
+            }
+        }
+
+        // synthesis of block j (in parallel) and its overlap-add into the output
+        void Emit(int j)
+        {
+            var set = Set(j);
+            int f0 = j * Block, count = Count(j);
+            Parallel.For(0, count, options, k => Synthesize(set[k], f0 + k == 0));
+            for (int k = 0; k < count; k++)
+            {
+                var fr = set[k];
+                int center = (f0 + k) * Hop;
+                for (int o = -reach; o <= reach; o++)
+                {
+                    int t = center + o;
+                    if ((uint)t >= (uint)len) continue;
+                    double w = synthWin[o + reach];
+                    int p = (o + n) & (n - 1);
+                    outL[t] += fr.Re[p] * w;
+                    outR[t] += fr.Im[p] * w;
+                    norm[t] += w * w;
+                }
+            }
+        }
 
         // windowed frame centered on `center`, zero-phase and zero-padded, L in the real part and R in the imaginary
         void Analyze(Frame fr, int center)
@@ -217,65 +263,71 @@ public static class PitchShifter
             double yMax = 0;
             for (int b = 0; b < Bins; b++)
             {
+                bool coarse = b % Grid == 0;
                 if (src[b] < 0)
                 {
-                    fr.YMag[b] = 0;
-                    fr.YOmega[b] = 0;
+                    if (coarse) fr.YMag[b / Grid] = fr.YOmega[b / Grid] = 0;
                     fr.Slope[b] = 0;
                     continue;
                 }
                 double s = b / ratio;
                 int i = Math.Min(Half - 1, (int)s);
                 double v = mag[i] + (mag[i + 1] - mag[i]) * (s - i);
-                fr.YMag[b] = v;
-                fr.YOmega[b] = omega[src[b]] * ratio;
+                if (coarse)
+                {
+                    fr.YMag[b / Grid] = v;
+                    fr.YOmega[b / Grid] = omega[src[b]] * ratio;
+                }
                 // phase change per bin = where in the frame the sound sits: kept as it is, so attacks stay put
                 int j = Math.Min(Half - 1, (int)((b + 0.5) / ratio));
                 fr.Slope[b] = PrincArg(fr.Phase[j + 1] - fr.Phase[j]);
                 if (v > yMax) yMax = v;
             }
             fr.YMax = yMax;
-            for (int c = 0; c < Coarse; c++) fr.Rank[c] = RankQueue.Rank(fr.YMag[c * Grid]);
+            for (int c = 0; c < Coarse; c++) fr.Rank[c] = RankQueue.Rank(fr.YMag[c]);
+            for (int c = 0; c + 1 < Coarse; c++)
+            {
+                double step = 0;
+                for (int k = c * Grid; k < (c + 1) * Grid; k++) step += fr.Slope[k];
+                fr.CoarseSlope[c] = step;
+            }
         }
 
         // the frame's phases grown from the previous frame, loudest bins first (PVDR, algorithm 1), on every
-        // Grid-th bin; the bins in between follow the louder of their two neighbours with the phase step per bin
+        // Grid-th bin (the bins in between are filled in by Synthesize, on the other cores)
         void Integrate(Frame fr, double[] psiPrev, double[] yMagPrev, int[] rankPrev, double yMaxPrev)
         {
             var rank = fr.Rank;
             var psi = fr.Psi;
             var yMag = fr.YMag;
             var yOmega = fr.YOmega;
-            var slope = fr.Slope;
+            var coarseSlope = fr.CoarseSlope;
             double tol = Tolerance * Math.Max(fr.YMax, yMaxPrev);
-            for (int c = 0; c + 1 < Coarse; c++)
-            {
-                double step = 0;
-                for (int k = c * Grid; k < (c + 1) * Grid; k++) step += slope[k];
-                coarseSlope[c] = step;
-            }
             int remaining = 0;
-            seeds.Clear();
+            bool seeded = false;
             for (int c = 0; c < Coarse; c++)
             {
                 int b = c * Grid;
-                done[c] = yMag[b] < tol;
-                if (done[c]) psi[b] = psiPrev[b] + Hop * yOmega[b];
-                else
-                {
-                    remaining++;
-                    seeds.Push(rank[c], c);
-                }
+                done[c] = yMag[c] < tol;
+                if (done[c]) psi[b] = psiPrev[b] + Hop * yOmega[c];
+                else remaining++;
             }
             heap.Clear();
             for (int c = 0; c < Coarse; c++)
-                if (yMagPrev[c * Grid] >= tol) heap.Push(rankPrev[c], c);
+                if (yMagPrev[c] >= tol) heap.Push(rankPrev[c], c);
 
             while (remaining > 0)
             {
                 if (heap.Count == 0)
                 {
-                    // nothing left to grow from (sound out of silence): the loudest free bin keeps its own phase
+                    // nothing left to grow from (sound out of silence): the loudest free bin keeps its own phase.
+                    // The queue of free bins is only built when it is needed, which is seldom.
+                    if (!seeded)
+                    {
+                        seeds.Clear();
+                        for (int c = 0; c < Coarse; c++) if (!done[c]) seeds.Push(rank[c], c);
+                        seeded = true;
+                    }
                     int best = seeds.Pop();
                     while (done[best]) best = seeds.Pop();
                     psi[best * Grid] = fr.Phase[src[best * Grid]];
@@ -289,7 +341,7 @@ public static class PitchShifter
                 {
                     if (done[v]) continue;
                     int b = v * Grid;
-                    psi[b] = psiPrev[b] + Hop * yOmega[b];
+                    psi[b] = psiPrev[b] + Hop * yOmega[v];
                     done[v] = true;
                     remaining--;
                     heap.Push(rank[v], v + Coarse);
@@ -313,11 +365,20 @@ public static class PitchShifter
                     }
                 }
             }
+        }
 
-            for (int c = 0; c + 1 < Coarse; c++)
+        // each channel = its part of the sum read at b/ratio, turned to the new phase; the grain is left in Re (L) and Im (R)
+        void Synthesize(Frame fr, bool first)
+        {
+            // the bins between the Grid-th ones follow the louder of their two neighbours with the phase step per bin
+            // (the first frame has all its phases already)
+            var psi = fr.Psi;
+            var yMag = fr.YMag;
+            var slope = fr.Slope;
+            for (int c = 0; c + 1 < Coarse && !first; c++)
             {
                 int b0 = c * Grid, b1 = b0 + Grid;
-                if (yMag[b0] >= yMag[b1])
+                if (yMag[c] >= yMag[c + 1])
                 {
                     double p = psi[b0];
                     for (int b = b0 + 1; b < b1; b++) psi[b] = p += slope[b - 1];
@@ -328,11 +389,7 @@ public static class PitchShifter
                     for (int b = b1 - 1; b > b0; b--) psi[b] = p -= slope[b];
                 }
             }
-        }
 
-        // each channel = its part of the sum read at b/ratio, turned to the new phase; the grain is left in Re (L) and Im (R)
-        void Synthesize(Frame fr)
-        {
             var re = fr.Re;
             var im = fr.Im;
             double scale = 1 / (ratio * n);

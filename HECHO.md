@@ -3,9 +3,41 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-25: **Transponer más rápido y con feedback**: el `PitchShifter` analiza y sintetiza otros bloques mientras
+  integra las fases (resultado idéntico, 3 min de 7,0 s a 4,2 s), los clips muestran "Transponiendo… %" con una barra,
+  el knob Tono queda gris con el porcentaje y un toast avisa cuando está lista; los valores probados quedan en caché
+  durante la sesión. `PitchShifter.Shift`, `TimelineView.DrawTransposing`, `MainWindow.Transpose.cs`.
+- 2026-10-25: **knob de Transponer en el encabezado de pista y elegir qué knobs se ven**: Tono se suma a Vida · Comp ·
+  Reverb · Delay (bipolar, −12…+12) y Configuración → Vista los prende y apaga (todos por defecto). `TrackKnobs`,
+  `TimelineView.SetKnobs`, `SettingsDialog.BuildView`.
+- 2026-10-25: **Transponer se ve en el canal y es un efecto más**: tarjeta propia en el inspector (después de Delay,
+  atenuada en Original), panel − / + en la tira amplia del mixer, "+2" en la compacta y una etiqueta "♪ +2" junto al
+  nombre en el encabezado de pista (gris mientras se calcula). `MainWindow.Transpose.cs`, `TimelineView.DrawHeader`.
 - 2026-10-25: **avisa al cerrar con cambios sin guardar**: en los modos cada X minutos o a mano (o si un guardado
   falló) cerrar la ventana pregunta Guardar y cerrar / Cerrar sin guardar / Cancelar, y si no puede guardar no cierra.
   `Dialogs/UnsavedDialog`, `Closing` en `MainWindow.axaml.cs`.
+- 2026-10-25: **la grilla manda, el borde corrige**: con imán y bordes a la vez, la cercanía al borde se mide desde
+  donde la grilla pone el clip y no desde el mouse (con pasos de compás saltaba ~26 px fuera de la grilla, visto en
+  un video del usuario). `ClipEditing.Drag`, caso en `gclab proyecto verificar-clips`.
+- 2026-10-25: **imanes sin saltos y selector de imán a clips**: con los dos imanes gana el más cercano (el paso de
+  la grilla o un borde a menos de 8 px); antes el borde ganaba siempre y al entrar o salir de su alcance el clip
+  saltaba medio paso. Se pega a bordes visibles, y el botón pasó a ser un selector No / Inicio / Final / Ambos.
+  `ClipEditing.Drag` (`SnapEdges`), `MainWindow.Timeline.cs`, `gclab proyecto editar --a-clips`.
+- 2026-10-25: **guía del imán a otros clips**: mientras un clip está pegado al borde de otro, una línea de acento
+  cruza las pistas en ese borde. `ClipEditing.Drag` (`stuckTo`), `TimelineView`.
+- 2026-10-25: **la onda sigue al clip con el zoom al máximo**: la clave del caché de ondas era una sola suma y a
+  96 000 px/s no veía los movimientos chicos (la onda quedaba vieja hasta hacer zoom); ahora cada valor va aparte
+  (`TimelineView.WaveKey`).
+- 2026-10-25: **grilla elegible e imán hasta 1/64**: el clic derecho en la regla elige la grilla (Auto, Igual que el
+  imán, o una subdivisión fija que no cambia con el zoom) y el imán suma 1/32 y 1/64. `TimelineView.GridMode`,
+  `MainWindow.Timeline.cs` (`ShowGridMenu`), `ClipEditing.GridSeconds`.
+- 2026-10-25: **imán a la grilla e imán a otros clips, por separado**: "Sin imán" ya no pega al cabezal, al cero ni a
+  los bordes (el imán de 8 px heredado de la web); los bordes de otros clips son un toggle propio al lado del imán,
+  guardado en config.json. `ClipEditing.Drag` (`edges`), `MainWindow.Timeline.cs`, `gclab proyecto editar --a-clips`.
+- 2026-10-25: **mover fino y alinear a la grilla**: los clips se mueven, recortan y fundan de a muestra (antes de a
+  ms, que al zoom máximo eran 96 px, más grueso que la grilla aun con Alt) y el clic derecho suma "Alinear a la
+  grilla" con la subdivisión del imán, para uno o todos los marcados ("Quitar" también los saca a todos).
+  `ClipEditing.ToSample` / `AlignToGrid`, `MainWindow.Timeline.cs`, casos en `gclab proyecto verificar-clips`.
 - 2026-10-25: **mover con grilla conserva el desfasaje**: un clip (o varios) que no está justo en la grilla se
   mueve de a pasos enteros sin saltar a la línea, así cae igual de corrido en otro compás; Alt sigue siendo libre.
   `ClipEditing.Drag`, caso nuevo en `gclab proyecto verificar-clips`.
