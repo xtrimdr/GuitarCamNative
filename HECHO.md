@@ -3,6 +3,8 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-26: Release 0.9.6 en GitHub. La versión vive en `Directory.Build.props`: la leen el Acerca de (antes decía
+  1.0.0), el exe y `tools\make-installer.ps1`.
 - 2026-10-26: Arreglado el mixer que quedaba sin responder después de arrastrar una tira hasta un clic en el timeline:
   se refrescaba durante la edición (deshabilitado) y nadie lo volvía a habilitar (`EditTimeline` lo refresca al terminar).
 - 2026-10-26: El timeline muestra solo las perillas de los envíos de cada pista, sin fijas (`TimelineView.SendKnobs`);

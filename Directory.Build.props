@@ -1,0 +1,7 @@
+<Project>
+  <!-- The app's version, for every project: the About dialog, the exe's file properties and the installer
+       (tools/make-installer.ps1) read it from here. Bump it here for each release. -->
+  <PropertyGroup>
+    <Version>0.9.6</Version>
+  </PropertyGroup>
+</Project>

@@ -1,10 +1,13 @@
 # Publishes the app self-contained and builds the Inno Setup installer into artifacts\.
-# Needs Inno Setup 6 (winget install JRSoftware.InnoSetup). Usage: .\tools\make-installer.ps1 [-Version 0.1.0]
-param([string]$Version = "0.1.0")
+# Needs Inno Setup 6 (winget install JRSoftware.InnoSetup). Usage: .\tools\make-installer.ps1
+# The version comes from Directory.Build.props (-Version overrides it, for a one-off build).
+param([string]$Version)
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 Push-Location $root
 try {
+    if (-not $Version) { $Version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version }
+    if (-not $Version) { throw "no Version in Directory.Build.props" }
     # a clean folder so files from an older publish don't end up in the installer
     if (Test-Path artifacts\publish) { Remove-Item artifacts\publish -Recurse -Force }
     dotnet publish src\GuitarCam.App -c Release -r win-x64 --self-contained true -o artifacts\publish "-p:Version=$Version"
