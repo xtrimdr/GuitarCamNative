@@ -1278,33 +1278,18 @@ public sealed partial class ExportDialog : UserControl
                 Muted = ch.Muted || folder.Muted,
                 Solo = ch.Solo || folder.Solo,
                 Inserts = ChannelDsp.Specs(ch, firstRmsDb ?? -24.0),
+                Folder = ChannelDsp.FolderIndex(p, trk),
                 ReverbOn = ch.ReverbOn,
                 ReverbSend = ch.ReverbSend,
                 DelayOn = ch.DelayOn,
                 DelaySend = ch.DelaySend,
+                ReverbPre = ch.ReverbPre,
+                DelayPre = ch.DelayPre,
+                Sends = ChannelDsp.Sends(p, ch),
             });
         }
 
-        var rev = p.Settings.Reverb;
-        var dly = p.Settings.Delay;
-        var mixBus = new MixBusSpec
-        {
-            Bpm = p.Settings.Bpm,
-            Reverb = new ReverbParams(rev.Decay, rev.PreDelayMs, rev.Tone, rev.LowCut, rev.Width, rev.ReturnGain, rev.Muted),
-            Delay = new DelayParams(
-                DelayParams.ParseMode(dly.Mode),
-                dly.Sync,
-                dly.Division,
-                dly.TimeMs,
-                dly.Feedback,
-                dly.Tone,
-                dly.LowCut,
-                dly.Width,
-                dly.Duck,
-                dly.ReturnGain,
-                dly.Muted),
-            Master = p.Settings.Master.ToParams(),
-        };
+        var mixBus = ChannelDsp.Bus(p);
         return (mixTracks, mixBus);
     }
 

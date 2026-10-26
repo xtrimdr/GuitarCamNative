@@ -158,7 +158,8 @@ public partial class MainWindow
         ToolTip.SetTip(b, tip); b.Click += (_, _) => click(); return b;
     }
     /// <summary>Sections are keyed (and remembered folded) by their Spanish id; this is the text shown.</summary>
-    static string SectionTitle(string id) => BaseTitle(id) is var b && b != id ? $"{SectionTitle(b)} {id[(b.Length + 1)..]}" : Loc.T(id switch
+    static string SectionTitle(string id) => SendTitles.TryGetValue(id, out var send) ? send
+        : BaseTitle(id) is var b && b != id ? $"{SectionTitle(b)} {id[(b.Length + 1)..]}" : Loc.T(id switch
     {
         "Mezcla" => "insp.section.mix", "Saturación" => "insp.section.sat", "Compresor" => "insp.section.comp", "EQ" => "insp.section.eq",
         "Reverb" => "insp.section.reverb", "Delay" => "insp.section.delay", "Transponer" => "insp.section.transpose", "Sincronización" => "insp.section.sync", "Clip" => "insp.section.clip",
@@ -195,7 +196,8 @@ public partial class MainWindow
                 toggle.Classes.Set("lit", on());
                 toggle.Background = on() ? Palette.Accent : Brushes.Transparent;
                 toggle.Foreground = on() ? Palette.App : Palette.Faint;
-                ToolTip.SetTip(toggle, Loc.T("insp.power." + (BaseTitle(title) switch { "EQ" => "eq", "Saturación" => "sat", "Compresor" => "comp", "Reverb" => "reverb", _ => "delay" }) + (on() ? ".off" : ".on")));
+                ToolTip.SetTip(toggle, SendTitles.TryGetValue(title, out var send) ? Loc.T(on() ? "send.power.off" : "send.power.on", send)
+                    : Loc.T("insp.power." + (BaseTitle(title) switch { "EQ" => "eq", "Saturación" => "sat", "Compresor" => "comp", "Reverb" => "reverb", _ => "delay" }) + (on() ? ".off" : ".on")));
             });
         }
         header.SetTrailing(action, powerButton);
@@ -326,12 +328,17 @@ public partial class MainWindow
         videoOnly.Add(inVideo);
         // the insert slots, in their order (RebuildInspectorChain)
         takeSections.Children.Add(inspectorChain);
-        var reverb = Section("Reverb", FxIcon.Reverb, () => sel!.Channel.ReverbOn, on => Edit(t => t.Channel.ReverbOn = on, "reverb.on"));
+        // every send can be taken before the fader: its PRE chip, in the section's header
+        var reverbPre = PreChip(() => sel!.Channel.ReverbPre, () => Edit(t => t.Channel.ReverbPre = !t.Channel.ReverbPre, "reverb.pre"), inspectorRefresh);
+        var reverb = Section("Reverb", FxIcon.Reverb, () => sel!.Channel.ReverbOn, on => Edit(t => t.Channel.ReverbOn = on, "reverb.on"), reverbPre);
         EffectKnob(reverb, Loc.T("insp.reverb.send"), 0, () => sel!.Channel.ReverbSend, v => Edit(t => t.Channel.ReverbSend = v, "reverb.send"), v => $"{v * 100:0}%", SendDb,
             Loc.T("insp.reverb.hint"));
-        var delay = Section("Delay", FxIcon.Delay, () => sel!.Channel.DelayOn, on => Edit(t => t.Channel.DelayOn = on, "delay.on"));
+        var delayPre = PreChip(() => sel!.Channel.DelayPre, () => Edit(t => t.Channel.DelayPre = !t.Channel.DelayPre, "delay.pre"), inspectorRefresh);
+        var delay = Section("Delay", FxIcon.Delay, () => sel!.Channel.DelayOn, on => Edit(t => t.Channel.DelayOn = on, "delay.on"), delayPre);
         EffectKnob(delay, Loc.T("insp.delay.send"), 0, () => sel!.Channel.DelaySend, v => Edit(t => { t.Channel.DelaySend = v; t.Channel.DelayOn = true; }, "delay.send"), v => $"{v * 100:0}%", SendDb,
             Loc.T("insp.delay.hint"));
+        // the sends to the extra returns, one section each (RebuildInspectorSends)
+        takeSections.Children.Add(inspectorSends);
         // native only: the track's pitch, same length (MainWindow.Transpose.cs). A card of its own beside the other
         // effects (asked by the user); it reads as off (dimmed) while the track plays at its original pitch.
         var transpose = Section("Transponer", FxIcon.Transpose, () => sel!.Track.Transpose != 0);
@@ -617,8 +624,10 @@ public partial class MainWindow
             if (sel != null && c != null)
             {
                 RebuildInspectorChain(sel);
+                RebuildInspectorSends(sel);
                 foreach (var refresh in inspectorRefresh) refresh();
                 foreach (var refresh in chainRefresh) refresh();
+                foreach (var refresh in sendRefresh) refresh();
             }
         }
         finally { syncing = false; }

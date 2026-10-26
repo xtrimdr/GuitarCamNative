@@ -89,6 +89,67 @@ public sealed class EqInsert(int sampleRate) : ITrackInsert
 }
 
 /// <summary>
+/// The reverb as a slot, for a return's chain (<see cref="ReturnDspChain"/>): the same <see cref="ReverbBus"/> as the fixed
+/// Reverb return, so a return with only this slot sounds exactly like it. Off (<see cref="ReverbParams.Muted"/>) it is
+/// bypassed, like every other slot that is off. The first <see cref="Set"/> builds its impulse at once (the export, a new
+/// slot); later ones build it in the background, like the fixed return's knobs.
+/// </summary>
+public sealed class ReverbInsert(int sampleRate) : ITrackInsert
+{
+    public ReverbBus Bus { get; } = new(sampleRate);
+    public string Kind => TrackInserts.Reverb;
+    public int LatencySamples => 0;
+    bool set;
+    volatile bool bypass;
+
+    public void Set(ReverbParams p)
+    {
+        bypass = p.Muted;
+        var on = p with { Muted = false };
+        if (set) Bus.SetLive(on);
+        else Bus.Set(on);
+        set = true;
+    }
+
+    public void Process(Span<float> left, Span<float> right)
+    {
+        if (!bypass) Bus.Process(left, right);
+    }
+
+    public void Reset() => Bus.Reset();
+    public double TakeGrDb() => 0;
+}
+
+/// <summary>
+/// The delay as a slot, for a return's chain: the same <see cref="DelayBus"/> as the fixed Delay return, following the
+/// project's tempo (<see cref="InsertSpec.Bpm"/>). The first <see cref="Set"/> snaps to its settings, later ones glide,
+/// like the fixed return. Off it is bypassed.
+/// </summary>
+public sealed class DelayInsert(int sampleRate) : ITrackInsert
+{
+    public DelayBus Bus { get; } = new(sampleRate);
+    public string Kind => TrackInserts.Delay;
+    public int LatencySamples => 0;
+    bool set;
+    volatile bool bypass;
+
+    public void Set(DelayParams p, double bpm)
+    {
+        bypass = p.Muted;
+        Bus.Set(p with { Muted = false }, bpm, glide: set);
+        set = true;
+    }
+
+    public void Process(Span<float> left, Span<float> right)
+    {
+        if (!bypass) Bus.Process(left, right);
+    }
+
+    public void Reset() => Bus.Reset();
+    public double TakeGrDb() => 0;
+}
+
+/// <summary>
 /// One slot's settings as the engine takes them (the export builds a chain from these; the live engine updates its
 /// inserts with them). <see cref="Id"/> ties it to its insert, so an edit or a reorder keeps the effect's state.
 /// </summary>
@@ -98,26 +159,40 @@ public sealed record InsertSpec(string Id, string Kind)
     public CompState Comp { get; init; } = CompState.Defaults;
     public bool EqOn { get; init; }
     public EqBandSpec[] EqBands { get; init; } = TrackEq.DefaultBands;
+    /// <summary>A reverb slot's settings; <see cref="ReverbParams.Muted"/> = the slot is off (bypassed).</summary>
+    public ReverbParams Reverb { get; init; } = ReverbParams.Defaults;
+    /// <summary>A delay slot's settings (<see cref="DelayParams.Muted"/> = off) and the tempo its note values follow.</summary>
+    public DelayParams Delay { get; init; } = DelayParams.Defaults;
+    public double Bpm { get; init; } = 120;
 }
 
 /// <summary>
 /// The kinds of insert slot and how a list of <see cref="InsertSpec"/> becomes the chain's inserts. A new channel gets
 /// <see cref="DefaultOrder"/>, the order the chain was fixed in before slots existed, so an old project sounds the same.
+/// <see cref="Reverb"/> and <see cref="Delay"/> work in any chain, but only a return's "+ Efecto" offers them
+/// (<see cref="ReturnOnly"/>): on a track they would be a whole reverb per track, which is what the sends are for.
 /// </summary>
 public static class TrackInserts
 {
     public const string Sat = "sat";
     public const string Comp = "comp";
     public const string Eq = "eq";
+    public const string Reverb = "reverb";
+    public const string Delay = "delay";
     public static readonly string[] DefaultOrder = [Sat, Comp, Eq];
 
-    public static bool IsKind(string? kind) => kind is Sat or Comp or Eq;
+    public static bool IsKind(string? kind) => kind is Sat or Comp or Eq or Reverb or Delay;
+
+    /// <summary>The kinds only a return's chain offers (a track's and a folder's menus don't).</summary>
+    public static bool ReturnOnly(string? kind) => kind is Reverb or Delay;
 
     public static ITrackInsert Create(string kind, int sampleRate) => kind switch
     {
         Sat => new SatInsert(sampleRate),
         Comp => new CompInsert(sampleRate),
         Eq => new EqInsert(sampleRate),
+        Reverb => new ReverbInsert(sampleRate),
+        Delay => new DelayInsert(sampleRate),
         _ => throw new ArgumentException($"unknown insert kind '{kind}'", nameof(kind)),
     };
 
@@ -128,6 +203,8 @@ public static class TrackInserts
             case SatInsert s: s.Set(spec.Sat); break;
             case CompInsert c: c.Set(spec.Comp); break;
             case EqInsert e: e.Set(spec.EqOn, spec.EqBands); break;
+            case ReverbInsert r: r.Set(spec.Reverb); break;
+            case DelayInsert d: d.Set(spec.Delay, spec.Bpm); break;
         }
     }
 

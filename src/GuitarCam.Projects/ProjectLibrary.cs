@@ -430,6 +430,7 @@ public static partial class ProjectLibrary
             Delay = Clone(p.Settings.Delay),
             Color = Clone(p.Settings.Color),
             VideoFx = Clone(p.Settings.VideoFx),
+            Returns = p.Settings.Returns.Count > 0 ? Clone(p.Settings.Returns) : null,
         },
     };
 

@@ -319,6 +319,16 @@ public sealed class LiveTrack
     /// </summary>
     public volatile float FolderGain = 1;
     public volatile bool FolderMuted, FolderSolo;
+    /// <summary>
+    /// Its folder's bus (<see cref="PlaybackEngine.SetFolders"/>), or null: while the bus has slots, the engine sends
+    /// this track's post-fader output there instead of the master. Set by the UI, read by the audio thread once per block.
+    /// </summary>
+    public volatile BusDspChain? Bus;
+    /// <summary>
+    /// The engine's extra returns by id (<see cref="PlaybackEngine.SetReturns"/>), for <see cref="ApplySends"/>; null
+    /// until the engine hands them over. UI thread only.
+    /// </summary>
+    public IReadOnlyDictionary<string, ReturnDspChain>? Returns { get; set; }
     /// <summary>The Escuchar tool is playing this track alone (native only): a solo that is not saved and does not light S.</summary>
     public volatile bool ListenSolo;
     public bool Soloed => Channel.Solo || FolderSolo || ListenSolo;
@@ -448,7 +458,34 @@ public sealed class LiveTrack
         Chain.ReverbSend = cur.ReverbSend;
         Chain.DelayOn = cur.DelayOn;
         Chain.DelaySend = cur.DelaySend;
+        Chain.ReverbPre = cur.ReverbPre;
+        Chain.DelayPre = cur.DelayPre;
         ApplyInserts();
+        ApplySends();
+    }
+
+    /// <summary>
+    /// Hands the chain its sends to the extra returns as a new immutable array (<see cref="TrackDspChain.Sends"/>): the
+    /// ones that are on, above 0 and whose return the engine has. UI thread, after any edit of the sends or the returns.
+    /// </summary>
+    public void ApplySends()
+    {
+        var map = Returns;
+        var list = Channel.Sends;
+        int n = 0;
+        foreach (var s in list)
+            if (s.On && s.Level > 0 && map != null && map.ContainsKey(s.ReturnId)) n++;
+        if (n == 0)
+        {
+            if (Chain.Sends.Length > 0) Chain.Sends = [];
+            return;
+        }
+        var next = new TrackSend[n];
+        int k = 0;
+        foreach (var s in list)
+            if (s.On && s.Level > 0 && map!.TryGetValue(s.ReturnId, out var to))
+                next[k++] = new TrackSend(to, -1, (float)Math.Clamp(s.Level, 0, 1), s.Pre);
+        Chain.Sends = next;
     }
 
     public void ApplyAll() => ApplyChannel();
@@ -478,7 +515,8 @@ public sealed class LiveTrack
     /// <summary>
     /// Samples all clips on this track for frames <c>[posFrame .. posFrame + n)</c> with their trim window,
     /// <c>SyncMs</c> offset, linear fade-in/out envelope and clip gain, then runs the full insert chain and
-    /// accumulates into the master and reverb/delay send buffers. Zero allocations. During a seek crossfade
+    /// accumulates into the master and reverb/delay send buffers, and into its extra returns' buffers from
+    /// <paramref name="sendOffset"/> on (the block's part where the tracks play). Zero allocations. During a seek crossfade
     /// (<paramref name="fromFrame"/> &gt;= 0) the clips at the old position, weighted by <paramref name="wOut"/>, are
     /// summed with the new ones, weighted by <paramref name="wIn"/>, before the chain, so its state stays continuous.
     /// </summary>
@@ -492,6 +530,7 @@ public sealed class LiveTrack
         Span<float> reverbInR,
         Span<float> delayInL,
         Span<float> delayInR,
+        int sendOffset,
         long fromFrame = -1,
         ReadOnlySpan<float> wIn = default,
         ReadOnlySpan<float> wOut = default)
@@ -507,6 +546,14 @@ public sealed class LiveTrack
             AddClips(posFrame, n, bl, br, wIn);
         }
         RunChain(n, anySolo, masterL, masterR, reverbInL, reverbInR, delayInL, delayInR);
+        var sends = Chain.BlockSends;
+        for (int k = 0; k < sends.Length; k++)
+        {
+            var to = sends[k].To;
+            if (to == null) continue;
+            Chain.AddSend(n, sends[k].Level, sends[k].Pre, to.BufferL(sendOffset + n).Slice(sendOffset),
+                to.BufferR(sendOffset + n).Slice(sendOffset));
+        }
     }
 
     /// <summary>Adds every clip's samples for frames <c>[posFrame .. posFrame + n)</c>, times <paramref name="weight"/> if given.</summary>
@@ -586,6 +633,8 @@ public sealed class LiveTrack
         Chain.ReverbSend = ch.ReverbSend;
         Chain.DelayOn = ch.DelayOn;
         Chain.DelaySend = ch.DelaySend;
+        Chain.ReverbPre = ch.ReverbPre;
+        Chain.DelayPre = ch.DelayPre;
 
         Chain.ProcessFilledBuffer(
             n,

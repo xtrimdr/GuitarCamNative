@@ -22,3 +22,10 @@ hasta −6 dB, ámbar de −6 a 0, rojo arriba de −1 dB (pico) o −0,3 dB (lu
 hasta que se hace clic en el medidor. Los medidores del mixer usan otro degradé (verde → amarillo → rojo,
 `Palette.Meter*`). Los picos los escribe el hilo de audio y los lee y resetea la UI en su `Tick` (16 ms); la caída
 visual (×0,82 por tick en pistas, 24 dB/s en el estéreo) se hace del lado de la UI.
+
+`MixerMeter` (las tiras del mixer): RMS sólido + pico tenue con una rayita, pico máximo en dBFS arriba y luz de clip
+(mismo umbral de −0,3 dB que el `StereoMeter`) que queda prendida; un clic en el medidor reinicia pico máximo y luz.
+La ventana le pasa `Level` (pico con su caída, que también alimenta el máximo y la luz) y `Rms` (amplitud ya
+integrada); cualquier tira puede alimentarlo así. El RMS lo suma el hilo de audio en un `RmsTap`
+(`GuitarCam.Audio.Dsp`: suma de cuadrados por bloque en totales que solo crecen, sin reset desde la UI) y la UI lo
+toma una vez por tick (`TakeMixerRms`) y lo suaviza ~300 ms. El texto del máximo se rearma solo cuando cambia su décima.

@@ -313,44 +313,33 @@ static class DspCommands
                 }
 
                 var ch = t.Channel;
+                // its folder as in the app: a VCA on its fader, mute and solo, and a bus with the folder's slots
+                var folder = TrackFolders.Mix(p, t);
 
                 trackSpecs.Add(new MixTrackSpec
                 {
                     Name = t.Name,
                     Clips = clips,
-                    Volume = ch.Volume,
+                    Volume = ch.Volume * folder.Gain,
                     Pan = ch.Pan,
-                    Muted = ch.Muted,
-                    Solo = ch.Solo,
+                    Muted = ch.Muted || folder.Muted,
+                    Solo = ch.Solo || folder.Solo,
                     Inserts = ChannelDsp.Specs(ch, trackRms),
+                    Folder = ChannelDsp.FolderIndex(p, t),
                     ReverbOn = ch.ReverbOn,
                     ReverbSend = ch.ReverbSend,
                     DelayOn = ch.DelayOn,
                     DelaySend = ch.DelaySend,
+                    ReverbPre = ch.ReverbPre,
+                    DelayPre = ch.DelayPre,
+                    Sends = ChannelDsp.Sends(p, ch),
                 });
             }
 
-            var rev = p.Settings.Reverb;
-            var dly = p.Settings.Delay;
-            busSpec = new MixBusSpec
-            {
-                Bpm = p.Settings.Bpm,
-                Reverb = new ReverbParams(rev.Decay, rev.PreDelayMs, rev.Tone, rev.LowCut, rev.Width, rev.ReturnGain, rev.Muted),
-                Delay = new DelayParams(
-                    DelayParams.ParseMode(dly.Mode),
-                    dly.Sync,
-                    dly.Division,
-                    dly.TimeMs,
-                    dly.Feedback,
-                    dly.Tone,
-                    dly.LowCut,
-                    dly.Width,
-                    dly.Duck,
-                    dly.ReturnGain,
-                    dly.Muted),
-                Master = p.Settings.Master.ToParams(),
-            };
+            busSpec = ChannelDsp.Bus(p);
             Console.WriteLine($"Proyecto: {p.Name} ({trackSpecs.Count} pistas, {p.Settings.Bpm:0.#} BPM)");
+            int buses = busSpec.Folders.Count(f => f.Inserts.Count > 0);
+            if (buses > 0) Console.WriteLine($"Carpetas con efectos: {buses} (sus pistas suman en su bus)");
         }
         else
         {
@@ -617,6 +606,8 @@ static class DspCommands
         allOk &= MasterChecks(sr48);
         allOk &= TransposeCommands.Check();
         allOk &= InsertCommands.Check();
+        allOk &= ReturnCommands.Check();
+        allOk &= MeterChecks.Check();
 
         Console.WriteLine();
         Console.WriteLine(allOk
@@ -927,15 +918,17 @@ static class DspCommands
                     Muted = ch.Muted || folder.Muted,
                     Solo = ch.Solo || folder.Solo,
                     Inserts = ChannelDsp.Specs(ch, trackRms),
+                    Folder = ChannelDsp.FolderIndex(p, trk),
                     ReverbOn = ch.ReverbOn,
                     ReverbSend = ch.ReverbSend,
                     DelayOn = ch.DelayOn,
                     DelaySend = ch.DelaySend,
+                    ReverbPre = ch.ReverbPre,
+                    DelayPre = ch.DelayPre,
+                    Sends = ChannelDsp.Sends(p, ch),
                 });
             }
 
-            var rev = p.Settings.Reverb;
-            var dly = p.Settings.Delay;
             var col = p.Settings.Color;
             var vfx = p.Settings.VideoFx;
             var job = new ExportJobSpec
@@ -953,13 +946,7 @@ static class DspCommands
                 VideoFx = new ExportVideoFxSpec(vfx.On, vfx.Vignette, vfx.VignetteSize, vfx.Grain, vfx.Letterbox, vfx.LetterboxHeight),
                 Takes = takes,
                 MixTracks = mixTracks,
-                MixBus = new MixBusSpec
-                {
-                    Bpm = p.Settings.Bpm,
-                    Reverb = new ReverbParams(rev.Decay, rev.PreDelayMs, rev.Tone, rev.LowCut, rev.Width, rev.ReturnGain, rev.Muted),
-                    Delay = new DelayParams(DelayParams.ParseMode(dly.Mode), dly.Sync, dly.Division, dly.TimeMs, dly.Feedback, dly.Tone, dly.LowCut, dly.Width, dly.Duck, dly.ReturnGain, dly.Muted),
-                    Master = p.Settings.Master.ToParams(),
-                },
+                MixBus = ChannelDsp.Bus(p),
                 SampleRate = sr,
                 TailSec = tailSec,
                 TargetLufs = targetLufs,

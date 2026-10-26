@@ -55,7 +55,8 @@ de **grabar → mezclar → exportar**.
 - **Transponer** por pista (−12 a +12 semitonos) sin cambiar el largo, así la toma sigue en sincronía con el video:
   se calcula en segundo plano (unos 4 s por 3 min) con un vocoder de fase de alta calidad, se ve el progreso sobre los
   clips y queda guardada en `cache/`.
-- **Mixer** completo; cada carpeta tiene su propio canal y su fader, M y S mandan sobre todas sus pistas, como un VCA.
+- **Mixer** completo; cada carpeta tiene su propio canal y su fader, M y S mandan sobre todas sus pistas, como un VCA, y
+  puede llevar sus propios efectos, que procesan la suma de sus pistas (un compresor para todas las guitarras).
 - Audio de nivel profesional: arrancar, parar, saltar y arrastrar el cabezal llevan su fundido, sin clics ni cortes.
 
 ### Armar el video
@@ -248,6 +249,10 @@ la consola, sin abrir la ventana.
 | `proyecto marcadores carpeta [agregar\|mover\|renombrar\|quitar …]`, `proyecto repetir carpeta [desde hasta \| --quitar]` | marcadores del tema y rango A–B del loop |
 | `proyecto historial carpeta` | tomas en uso y no usadas, exportaciones y actividad |
 | `proyecto insertos carpeta pista [agregar vida\|comp\|eq [--en n] \| quitar n \| mover n m \| duplicar n \| prender n \| apagar n]` | los slots de efectos de la pista en su orden; sin operación, los lista |
+| `proyecto insertos carpeta --carpeta id\|n [agregar … \| quitar n \| …]` | lo mismo para el bus de una carpeta: sus pistas suman ahí y pasan por esos efectos antes del master |
+| `proyecto insertos carpeta --retorno id\|n [agregar reverb\|delay\|vida\|comp\|eq … \| quitar n \| …]` | lo mismo para un retorno agregado (la reverb y el delay solo van en retornos) |
+| `proyecto retornos carpeta [agregar [nombre] [--tipo reverb\|delay] \| quitar n \| renombrar n nombre \| volumen n x \| mute n]` | los retornos agregados (además de la Reverb y el Delay fijos) con sus slots; quitar uno se lleva los envíos que le mandaban |
+| `proyecto envios carpeta pista [reverb\|delay\|n [nivel] [--pre\|--post] [--apagar\|--prender]]` | los envíos de la pista (a la Reverb, al Delay y a cada retorno agregado), con su PRE; las opciones van después del nivel |
 | `proyecto verificar-deshacer\|verificar-clips\|verificar-tomas\|verificar-importar\|verificar-historial\|verificar-carpetas\|verificar-marcadores` | pruebas automáticas sobre una carpeta temporal |
 | `proyectos lista\|plantillas\|nuevo\|renombrar\|duplicar\|borrar\|olvidar\|carpeta\|buscar` | lo que hace el gestor de proyectos (`buscar`: qué abre "Abrir carpeta") |
 | `proyectos guardar-plantilla\|borrar-plantilla` | plantillas de proyecto del usuario |

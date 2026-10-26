@@ -3,6 +3,13 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-25: Mixer más completo. **Carpetas como bus**: con efectos, la carpeta suma sus pistas y las pasa por su
+  cadena de slots (`Folder.Inserts`, `InsertRack`, `BusDspChain`, `MixFolderSpec`); sin efectos suena idéntica y el VCA
+  sigue igual. **Medidores**: RMS con el pico, pico máximo en dBFS, luz de clip que queda prendida y LUFS de corto plazo
+  en el master (`MixerMeter`, `RmsTap`). **Retornos propios** ("+ Retorno": otra reverb u otro delay con su cadena,
+  `ProjectSettings.Returns`, `ReverbInsert`/`DelayInsert`) y **envíos pre/post fader** por pista (`Channel.ReverbPre`,
+  `DelayPre`, `Sends`; `MainWindow.Returns.cs`). gclab: `proyecto insertos --carpeta|--retorno`, `proyecto retornos`,
+  `proyecto envios` y las comprobaciones Carpetas / Medidor / Retornos de `comprobar-dsp`.
 - 2026-10-25: Efectos en slots por canal (etapa 1 de los plugins). Cada efecto es un `ITrackInsert`
   (`GuitarCam.Audio/Dsp/TrackInserts.cs`) y `TrackDspChain` corre una lista que la UI reemplaza entera: reusa el efecto
   de cada slot por id y, si cambia la lista, funde 5 ms y 5 ms sin clic. El canal guarda `inserts` (proyecto versión 2);

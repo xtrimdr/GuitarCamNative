@@ -32,6 +32,7 @@ public sealed class ProjectTemplate
         if (s.Delay != null) p.Settings.Delay = ProjectLibrary.Clone(s.Delay);
         if (s.Color != null) p.Settings.Color = ProjectLibrary.Clone(s.Color);
         if (s.VideoFx != null) p.Settings.VideoFx = ProjectLibrary.Clone(s.VideoFx);
+        if (s.Returns != null) p.Settings.Returns = ProjectLibrary.Clone(s.Returns);
         foreach (var t in Tracks) p.Tracks.Add(new Track { Name = t.Name, Color = t.Color, Icon = t.Icon, Channel = ProjectLibrary.Clone(t.Channel) });
         p.Normalize();
     }
@@ -72,6 +73,8 @@ public sealed class TemplateSettings
     public DelaySettings? Delay { get; set; }
     public ColorGrade? Color { get; set; }
     public VideoFx? VideoFx { get; set; }
+    /// <summary>The extra returns (native only), so the template's tracks keep their sends to them.</summary>
+    public List<ReturnBus>? Returns { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 

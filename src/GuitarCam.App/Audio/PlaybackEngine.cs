@@ -10,7 +10,8 @@ namespace GuitarCam.App.Audio;
 /// Plays the timeline and records takes through ASIO on a single sample clock (port of
 /// <c>StudioAudioEngine</c> in <c>audioEngine.ts</c> + <c>mixGraph.ts</c>):
 /// per track: clip fades → saturator → compressor EQ → compressor → 6-band track EQ → pan → fader;
-/// post-fader sends into the shared <see cref="ReverbBus"/> and <see cref="DelayBus"/>;
+/// post-fader (or pre-fader) sends into the shared <see cref="ReverbBus"/> and <see cref="DelayBus"/> and into the
+/// extra returns the user added (<see cref="SetReturns"/>, native only);
 /// tracks + returns summed into the <see cref="MasterChain"/> (native only) and the <see cref="MasterLimiter"/>; click mixed outside the limiter (delayed by
 /// <see cref="MasterLimiter.Latency"/> so it lands on the same sample as the limited tracks).
 /// Also processes input 1-2 (<see cref="InputProcessor"/>: channel mode, pre-amp gain (0 dB default), soft-limiter,
@@ -27,6 +28,15 @@ public sealed class PlaybackEngine : IDisposable
 
     AsioDuplex? io;
     volatile LiveTrack[] tracks = [];
+    /// <summary>The folders' buses (<see cref="BusDspChain"/>), swapped whole like the tracks; by folder id on the UI side.</summary>
+    volatile BusDspChain[] folderBuses = [];
+    readonly Dictionary<string, BusDspChain> folderBusById = [];
+    /// <summary>The extra returns (<see cref="ReturnDspChain"/>), swapped whole like the tracks; by return id on the UI side.</summary>
+    volatile ReturnDspChain[] returns = [];
+    readonly Dictionary<string, ReturnDspChain> returnById = [];
+    /// <summary>The project settings the returns were last built from, so a tempo change can update their delays.</summary>
+    ProjectSettings? returnSettings;
+    readonly float[] rampGain = new float[TrackDspChain.MaxBlockSize];
     readonly MixGraphBus buses = new(SampleRate);
     readonly InputProcessor inputProcessor = new();
     readonly float[] inProcL = new float[TrackDspChain.MaxBlockSize];
@@ -218,6 +228,8 @@ public sealed class PlaybackEngine : IDisposable
         {
             bpm = Math.Clamp(value, 20, 300);
             buses.Delay.Set(lastDelay, bpm, glide: true);
+            // the extra returns' delays follow the tempo too
+            if (returnSettings != null) ApplyReturnSlots(returnSettings);
         }
     }
 
@@ -321,6 +333,81 @@ public sealed class PlaybackEngine : IDisposable
             Status = Loc.T("engine.noAudio", e.Message);
         }
     }
+
+    /// <summary>
+    /// The folders as buses (native only): each folder keeps its <see cref="BusDspChain"/> by id (its slots keep their
+    /// state, a new list of slots fades over), and every track points at its folder's. A folder without slots is
+    /// still there but unused: its tracks go straight to the master. UI thread, after any edit of folders or tracks.
+    /// </summary>
+    public void SetFolders(Project p, IReadOnlyList<LiveTrack> list)
+    {
+        var next = new BusDspChain[p.Folders.Count];
+        bool same = next.Length == folderBuses.Length;
+        for (int i = 0; i < next.Length; i++)
+        {
+            var f = p.Folders[i];
+            bool known = folderBusById.TryGetValue(f.Id, out var bus);
+            bus ??= new BusDspChain(SampleRate);
+            // a new bus isn't on the audio thread yet: it starts with its slots, no fade
+            bus.SetInserts(ChannelDsp.FolderSpecs(f), fade: known);
+            next[i] = bus;
+            // && and not &=: with more folders than before, folderBuses[i] would be past its end
+            same = same && folderBuses[i] == bus;
+        }
+        folderBusById.Clear();
+        for (int i = 0; i < next.Length; i++) folderBusById[p.Folders[i].Id] = next[i];
+        // the array first, then the tracks: a track never points at a bus the audio thread doesn't run
+        if (!same) folderBuses = next;
+        foreach (var t in list)
+            t.Bus = t.Track.FolderId is { } id && folderBusById.TryGetValue(id, out var bus) ? bus : null;
+    }
+
+    /// <summary>A folder's bus (for its strip's meter), or null.</summary>
+    public BusDspChain? FolderBus(string folderId) => folderBusById.GetValueOrDefault(folderId);
+
+    /// <summary>
+    /// The extra returns (native only): each keeps its <see cref="ReturnDspChain"/> by id (its slots keep their state, a
+    /// new list of slots fades over), the audio thread gets the new list as one array, and then every track rebuilds its
+    /// sends against it (<see cref="LiveTrack.ApplySends"/>). UI thread, after any edit of returns, sends or tracks.
+    /// </summary>
+    public void SetReturns(Project p, IReadOnlyList<LiveTrack> list)
+    {
+        var s = p.Settings;
+        returnSettings = s;
+        var next = new ReturnDspChain[s.Returns.Count];
+        bool same = next.Length == returns.Length;
+        for (int i = 0; i < next.Length; i++)
+        {
+            var r = s.Returns[i];
+            bool known = returnById.TryGetValue(r.Id, out var chain);
+            chain ??= new ReturnDspChain(SampleRate);
+            chain.Volume = r.Volume;
+            chain.Muted = r.Muted;
+            // a new return isn't on the audio thread yet: it starts with its slots, no fade
+            chain.SetInserts(ChannelDsp.ReturnSpecs(r, bpm), fade: known);
+            next[i] = chain;
+            same = same && returns[i] == chain;
+        }
+        returnById.Clear();
+        for (int i = 0; i < next.Length; i++) returnById[s.Returns[i].Id] = next[i];
+        // the array first, then the sends: a send never points at a return the audio thread doesn't clear
+        if (!same) returns = next;
+        foreach (var t in list)
+        {
+            t.Returns = returnById;
+            t.ApplySends();
+        }
+    }
+
+    /// <summary>The slots of every extra return again (the tempo changed: their delays follow it).</summary>
+    void ApplyReturnSlots(ProjectSettings s)
+    {
+        foreach (var r in s.Returns)
+            if (returnById.TryGetValue(r.Id, out var chain)) chain.SetInserts(ChannelDsp.ReturnSpecs(r, bpm));
+    }
+
+    /// <summary>An extra return's chain (for its strip's meter), or null.</summary>
+    public ReturnDspChain? Return(string returnId) => returnById.GetValueOrDefault(returnId);
 
     public void SetTracks(IEnumerable<LiveTrack> list, ProjectSettings? settings = null)
     {
@@ -507,18 +594,31 @@ public sealed class PlaybackEngine : IDisposable
 
     /// <summary>
     /// Moves <paramref name="level"/> one step per sample toward 1 (fade in) or 0 and scales the block's track mix
-    /// and sends by its smoothstep, so the fade starts and ends without a corner. Once at 0 the rest is silence.
+    /// and sends (the extra returns' too) by its smoothstep, so the fade starts and ends without a corner. Once at 0
+    /// the rest is silence.
     /// </summary>
-    static void TransportRamp(ref float level, bool fadeIn, float rate, int n, Span<float> ml, Span<float> mr, Span<float> rl, Span<float> rr, Span<float> dl, Span<float> dr)
+    static void TransportRamp(ref float level, bool fadeIn, float rate, int n, float[] gain, Span<float> ml, Span<float> mr, Span<float> rl, Span<float> rr,
+        Span<float> dl, Span<float> dr, ReturnDspChain[] extra)
     {
         float x = level, step = fadeIn ? rate : -rate;
         for (int i = 0; i < n; i++)
         {
             x = Math.Clamp(x + step, 0f, 1f);
             float g = x * x * (3 - 2 * x);
+            gain[i] = g;
             ml[i] *= g; mr[i] *= g; rl[i] *= g; rr[i] *= g; dl[i] *= g; dr[i] *= g;
         }
         level = x;
+        for (int k = 0; k < extra.Length; k++)
+        {
+            var el = extra[k].BufferL(n);
+            var er = extra[k].BufferR(n);
+            for (int i = 0; i < n; i++)
+            {
+                el[i] *= gain[i];
+                er[i] *= gain[i];
+            }
+        }
     }
 
     // --- Recording (§5.8) ------------------------------------------------------------------------
@@ -706,6 +806,9 @@ public sealed class PlaybackEngine : IDisposable
 
     // --- Meters & Callback -----------------------------------------------------------------------
 
+    /// <summary>The RMS of what goes out (the same signal as the master's peak), for the mixer's master meter.</summary>
+    public RmsTap OutRms { get; } = new();
+
     /// <summary>Peak levels since the last call (input 1-2 after pre-amp gain + soft limit, master out).</summary>
     public (float InL, float InR, float OutL, float OutR) TakeMeters()
     {
@@ -763,13 +866,19 @@ public sealed class PlaybackEngine : IDisposable
             return;
         }
 
+        var rets = returns;
         if (Interlocked.Exchange(ref pendingBusReset, 0) != 0)
+        {
             buses.Reset();
+            for (int i = 0; i < rets.Length; i++) rets[i].Reset();
+        }
 
         if (Interlocked.Exchange(ref pendingTrackReset, 0) != 0)
         {
             var curTracks = tracks;
             for (int i = 0; i < curTracks.Length; i++) curTracks[i].Chain.Reset();
+            var curBuses = folderBuses;
+            for (int i = 0; i < curBuses.Length; i++) curBuses[i].Reset();
         }
 
         var ml = mixL.AsSpan(0, n);
@@ -780,6 +889,7 @@ public sealed class PlaybackEngine : IDisposable
         var rr = buses.PrepareReverbR(n);
         var dl = buses.PrepareDelayL(n);
         var dr = buses.PrepareDelayR(n);
+        for (int i = 0; i < rets.Length; i++) rets[i].Begin(n);
 
         var preview = Interlocked.Exchange(ref previewClick, null);
         if (preview != null)
@@ -840,9 +950,17 @@ public sealed class PlaybackEngine : IDisposable
 
                 bool xf = xfFrom >= 0 && !isRec;
                 if (xf) CrossfadeWeights(ref xfLevel, playCount, xfIn, xfOut);
+                // a folder with slots sums its tracks' post-fader output in its bus; their sends go straight to the returns
+                var fb = folderBuses;
+                for (int i = 0; i < fb.Length; i++) fb[i].Begin(playCount);
                 for (int i = 0; i < list.Length; i++)
-                    list[i].MixInto(trackPos, playCount, anySolo, subMl, subMr, subRl, subRr, subDl, subDr,
-                        xf ? xfFrom : -1, xfIn.AsSpan(0, playCount), xfOut.AsSpan(0, playCount));
+                {
+                    var bus = list[i].Bus;
+                    bool toBus = bus != null && bus.Routed;
+                    list[i].MixInto(trackPos, playCount, anySolo, toBus ? bus!.BufferL(playCount) : subMl, toBus ? bus!.BufferR(playCount) : subMr,
+                        subRl, subRr, subDl, subDr, playOffset, xf ? xfFrom : -1, xfIn.AsSpan(0, playCount), xfOut.AsSpan(0, playCount));
+                }
+                for (int i = 0; i < fb.Length; i++) fb[i].End(playCount, subMl, subMr);
                 if (xf)
                 {
                     xfFrom += playCount;
@@ -862,7 +980,9 @@ public sealed class PlaybackEngine : IDisposable
                 }
             }
 
-            if (fadeMode != 0) TransportRamp(ref fadeLevel, fadeMode > 0, rampStep, n, ml, mr, rl, rr, dl, dr);
+            if (fadeMode != 0) TransportRamp(ref fadeLevel, fadeMode > 0, rampStep, n, rampGain, ml, mr, rl, rr, dl, dr, rets);
+            // the extra returns into the master first, then the fixed ones (the export adds them in the same order)
+            for (int i = 0; i < rets.Length; i++) rets[i].End(n, ml, mr);
             buses.ProcessReturnsAndLimiter(ml, mr, rl, rr, dl, dr);
             Loudness.Process(ml, mr);
             TruePeak.Process(ml, mr);
@@ -958,7 +1078,8 @@ public sealed class PlaybackEngine : IDisposable
             long req = Interlocked.Exchange(ref pendingSeek, NoSeek);
             if (req != NoSeek) Interlocked.Exchange(ref position, req);
             // Transport stopped: keep processing the shared return buses with silent input so reverb
-            // and delay tails decay naturally in real time (matching MixBus in the web app).
+            // and delay tails decay naturally in real time (matching MixBus in the web app). The extra returns too.
+            for (int i = 0; i < rets.Length; i++) rets[i].End(n, ml, mr);
             buses.ProcessReturnsAndLimiter(ml, mr, rl, rr, dl, dr);
             float ol = outL, or = outR;
             for (int i = 0; i < n; i++)
@@ -988,6 +1109,7 @@ public sealed class PlaybackEngine : IDisposable
                 if (curTaps[k].Monitored) Monitor(output, curTaps[k].BlockL, curTaps[k].BlockR, n);
         }
 
+        OutRms.Add(output[0], output[1], n);
         UpdateLoad(t0, n);
     }
 

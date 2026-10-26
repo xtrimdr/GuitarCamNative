@@ -26,7 +26,8 @@ _Ideas y mejoras para la nativa._
   de un acorde grave) mantienen su batido original
 - [x] Efectos en slots por canal, etapa 1 con los efectos internos (hecho, ver [HECHO.md](HECHO.md)). Queda para la
   etapa 2: compensar la latencia de los slots (hoy todos dan 0) y el estado guardable de un plugin
-- [ ] Mejorar el mixer: más sends/buses, grupos, medidores más completos
+- [x] Mejorar el mixer: carpetas como bus, medidores completos, retornos propios y envíos pre/post (hecho, ver
+  [HECHO.md](HECHO.md)). Queda: la cadena de la carpeta en la pestaña Canal (hoy solo en la tira ancha)
 - …y más: ir sumando acá
 
 #### 2. Soporte de plugins VST

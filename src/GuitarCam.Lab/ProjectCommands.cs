@@ -31,6 +31,8 @@ static class ProjectCommands
             "editar" => EditClips(dir, a),
             "historial" => HistoryCommands.Run(dir, a),
             "insertos" => InsertCommands.Run(dir, a),
+            "retornos" => ReturnCommands.Returns(dir, a),
+            "envios" => ReturnCommands.Sends(dir, a),
             "encuadre" => Frame(dir, a),
             "sincronia" => Sync(dir, a),
             "formato" => Format(dir, a),

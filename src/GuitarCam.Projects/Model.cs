@@ -15,7 +15,11 @@ namespace GuitarCam.Projects;
 public sealed class Project
 {
     public const string FormatId = "guitarcam-project";
-    /// <summary>2: the channel's effects are insert slots (<see cref="Channel.Inserts"/>) instead of fixed sat/comp/eq.</summary>
+    /// <summary>
+    /// 2: the channel's effects are insert slots (<see cref="Channel.Inserts"/>) instead of fixed sat/comp/eq. Later
+    /// additions (folder buses, extra returns and sends, pre-fader sends) only add fields with defaults that sound like
+    /// before, and an older version keeps them untouched in <c>Extra</c>, so they didn't need a new version.
+    /// </summary>
     public const int CurrentVersion = 2;
 
     public string Format { get; set; } = FormatId;
@@ -54,6 +58,7 @@ public sealed class Project
         Media.RemoveAll(m => m == null);
         Tracks.RemoveAll(t => t == null);
         foreach (var t in Tracks) t.Normalize();
+        ProjectReturns.Normalize(this);
         TrackFolders.Normalize(this);
         ProjectMarkers.Normalize(this);
     }
@@ -86,6 +91,11 @@ public sealed class ProjectSettings
     /// </summary>
     public double? LoopStartSec { get; set; }
     public double? LoopEndSec { get; set; }
+    /// <summary>
+    /// Native only: the returns the user added besides the fixed <see cref="Reverb"/> and <see cref="Delay"/>
+    /// (<see cref="ReturnBus"/>, <see cref="ProjectReturns"/>), in the mixer's order. Empty by default.
+    /// </summary>
+    public List<ReturnBus> Returns { get; set; } = [];
 
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
@@ -132,12 +142,19 @@ public sealed class ProjectSettings
         (Color ??= new()).Normalize();
         (VideoFx ??= new()).Normalize();
         (Export ??= new()).Normalize();
+        Returns ??= [];
+        Returns.RemoveAll(r => r == null);
+        foreach (var r in Returns) r.Normalize();
         if (LoopStartSec is not { } a || LoopEndSec is not { } b || !double.IsFinite(a) || !double.IsFinite(b)
             || a < 0 || b - a < ProjectMarkers.MinLoopSec)
             LoopStartSec = LoopEndSec = null;
     }
 }
 
+/// <summary>
+/// The fixed Reverb return's settings, and a reverb slot's (<see cref="InsertSlot.Reverb"/>, in an extra return's chain):
+/// there <see cref="Muted"/> means the slot is off (bypassed) and <see cref="ReturnGain"/> is its own level.
+/// </summary>
 public sealed class ReverbSettings
 {
     public double Decay { get; set; } = 1.8;
@@ -278,6 +295,7 @@ public sealed class MasterBand
     }
 }
 
+/// <summary>The fixed Delay return's settings, and a delay slot's (<see cref="InsertSlot.Delay"/>), like <see cref="ReverbSettings"/>.</summary>
 public sealed class DelaySettings
 {
     /// <summary>stereo | pingpong</summary>
@@ -462,7 +480,8 @@ public sealed class Track
 /// A folder of tracks (native only, asked by the user): its children are the tracks with its <see cref="Track.FolderId"/>,
 /// always together in <see cref="Project.Tracks"/>, and the folder sits right before them. It folds in the timeline and
 /// in the mixer, and its fader, mute and solo act on all of them like a VCA (<see cref="TrackFolders.Mix"/>): the
-/// children keep their own channel strips.
+/// children keep their own channel strips. It is also a bus: with insert slots (<see cref="Inserts"/>), the children's
+/// post-fader output adds up and goes through them on its way to the master (their sends don't).
 /// </summary>
 public sealed class Folder
 {
@@ -489,7 +508,18 @@ public sealed class Folder
     /// (<see cref="TrackFolders.Normalize"/> keeps it so); an empty folder needs it to keep its place.
     /// </summary>
     public int Index { get; set; }
+    /// <summary>
+    /// The bus's insert slots, in the order the sound goes through them (<see cref="ChannelInserts"/>). Empty by default:
+    /// a folder without slots is no bus, its tracks go to the master exactly as before.
+    /// </summary>
+    public List<InsertSlot> Inserts { get; set; } = [];
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+
+    internal void Normalize()
+    {
+        Inserts ??= [];
+        InsertSlot.NormalizeList(Inserts);
+    }
 }
 
 /// <summary>The channel strip of a track: stays with the track when its clips change.</summary>
@@ -514,7 +544,15 @@ public sealed class Channel
     public double ReverbSend { get; set; }
     public bool DelayOn { get; set; } = true;
     public double DelaySend { get; set; }
+    /// <summary>Native only: the reverb and delay sends taken before the fader (after the slots and the pan); false = after it.</summary>
+    public bool ReverbPre { get; set; }
+    public bool DelayPre { get; set; }
+    /// <summary>Native only: its sends to the extra returns (<see cref="ProjectSettings.Returns"/>), one per return at most.</summary>
+    public List<Send> Sends { get; set; } = [];
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+
+    /// <summary>Its send to the return <paramref name="returnId"/>, or null (no send: nothing goes there).</summary>
+    public Send? SendTo(string returnId) => Sends.Find(s => s.ReturnId == returnId);
 
     // version 1's fixed effects, read only to turn them into slots (never written: null after Upgrade)
     [JsonPropertyName("sat")] public SatSettings? OldSat { get; set; }
@@ -630,13 +668,55 @@ public sealed class Channel
     internal void Normalize()
     {
         Upgrade();
-        Inserts!.RemoveAll(s => s == null);
-        foreach (var s in Inserts) s.Normalize();
-        // two slots with one id would share one effect in the engine
-        var seen = new HashSet<string>();
-        foreach (var s in Inserts)
-            if (!seen.Add(s.Id)) { s.Id = Ids.New("fx"); seen.Add(s.Id); }
+        InsertSlot.NormalizeList(Inserts!);
         AdoptSpares();
+        if (!double.IsFinite(ReverbSend)) ReverbSend = 0;
+        if (!double.IsFinite(DelaySend)) DelaySend = 0;
+        Sends ??= [];
+        Sends.RemoveAll(s => s == null || string.IsNullOrEmpty(s.ReturnId));
+        // one send per return: the first one wins
+        var seen = new HashSet<string>();
+        Sends.RemoveAll(s => !seen.Add(s.ReturnId));
+        foreach (var s in Sends) s.Level = double.IsFinite(s.Level) ? Math.Clamp(s.Level, 0, 1) : 0;
+    }
+}
+
+/// <summary>
+/// A track's send to an extra return (native only): how much of it goes there (0..1, like the reverb and delay sends),
+/// its ON, and whether it is taken before the fader (<see cref="Pre"/>). A send to a return that no longer exists is
+/// dropped when the project is normalized.
+/// </summary>
+public sealed class Send
+{
+    public string ReturnId { get; set; } = "";
+    public double Level { get; set; }
+    public bool On { get; set; } = true;
+    public bool Pre { get; set; }
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+/// <summary>
+/// A return the user added (native only), next to the fixed Reverb and Delay: the tracks send to it
+/// (<see cref="Channel.Sends"/>), and what they send goes through its insert slots (a reverb or a delay is one more slot:
+/// <see cref="InsertSlot.Reverb"/>, <see cref="InsertSlot.Delay"/>), its fader and its mute into the master.
+/// </summary>
+public sealed class ReturnBus
+{
+    public string Id { get; set; } = Ids.New("ret");
+    public string Name { get; set; } = "";
+    /// <summary>Its fader, 0..1.5 like a track's.</summary>
+    public double Volume { get; set; } = 1;
+    public bool Muted { get; set; }
+    public List<InsertSlot> Inserts { get; set; } = [];
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+
+    internal void Normalize()
+    {
+        if (string.IsNullOrEmpty(Id)) Id = Ids.New("ret");
+        Name ??= "";
+        Volume = double.IsFinite(Volume) ? Math.Clamp(Volume, 0, 1.5) : 1;
+        Inserts ??= [];
+        InsertSlot.NormalizeList(Inserts);
     }
 }
 
@@ -646,14 +726,18 @@ public sealed class Channel
 /// </summary>
 public sealed class InsertSlot
 {
-    public const string SatKind = Dsp.TrackInserts.Sat, CompKind = Dsp.TrackInserts.Comp, EqKind = Dsp.TrackInserts.Eq;
+    public const string SatKind = Dsp.TrackInserts.Sat, CompKind = Dsp.TrackInserts.Comp, EqKind = Dsp.TrackInserts.Eq,
+        ReverbKind = Dsp.TrackInserts.Reverb, DelayKind = Dsp.TrackInserts.Delay;
 
     public string Id { get; set; } = Ids.New("fx");
-    /// <summary>sat | comp | eq</summary>
+    /// <summary>sat | comp | eq | reverb | delay (the last two, in a return's chain)</summary>
     public string Type { get; set; } = EqKind;
     public SatSettings? Sat { get; set; }
     public CompSettings? Comp { get; set; }
     public EqSettings? Eq { get; set; }
+    /// <summary>A reverb or delay slot's settings; their <c>Muted</c> is the slot's OFF.</summary>
+    public ReverbSettings? Reverb { get; set; }
+    public DelaySettings? Delay { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
     [JsonIgnore] public bool Known => Dsp.TrackInserts.IsKind(Type);
@@ -662,7 +746,11 @@ public sealed class InsertSlot
     [JsonIgnore]
     public bool On
     {
-        get => Type switch { SatKind => Sat?.On == true, CompKind => Comp?.On == true, EqKind => Eq?.On == true, _ => false };
+        get => Type switch
+        {
+            SatKind => Sat?.On == true, CompKind => Comp?.On == true, EqKind => Eq?.On == true,
+            ReverbKind => Reverb?.Muted == false, DelayKind => Delay?.Muted == false, _ => false,
+        };
         set
         {
             Normalize();
@@ -671,6 +759,8 @@ public sealed class InsertSlot
                 case SatKind: Sat!.On = value; break;
                 case CompKind: Comp!.On = value; break;
                 case EqKind: Eq!.On = value; break;
+                case ReverbKind: Reverb!.Muted = !value; break;
+                case DelayKind: Delay!.Muted = !value; break;
             }
         }
     }
@@ -682,14 +772,27 @@ public sealed class InsertSlot
         return s;
     }
 
+    /// <summary>A list of slots (a channel's or a folder's) without nulls, each normalized, no two with one id.</summary>
+    internal static void NormalizeList(List<InsertSlot> slots)
+    {
+        slots.RemoveAll(s => s == null);
+        foreach (var s in slots) s.Normalize();
+        // two slots with one id would share one effect in the engine
+        var seen = new HashSet<string>();
+        foreach (var s in slots)
+            if (!seen.Add(s.Id)) { s.Id = Ids.New("fx"); seen.Add(s.Id); }
+    }
+
     internal void Normalize()
     {
         if (string.IsNullOrEmpty(Id)) Id = Ids.New("fx");
         switch (Type)
         {
-            case SatKind: Sat ??= new(); Comp = null; Eq = null; break;
-            case CompKind: Comp ??= new(); Comp.Eq ??= new(); Sat = null; Eq = null; break;
-            case EqKind: Eq ??= new(); Eq.Normalize(); Sat = null; Comp = null; break;
+            case SatKind: Sat ??= new(); Comp = null; Eq = null; Reverb = null; Delay = null; break;
+            case CompKind: Comp ??= new(); Comp.Eq ??= new(); Sat = null; Eq = null; Reverb = null; Delay = null; break;
+            case EqKind: Eq ??= new(); Eq.Normalize(); Sat = null; Comp = null; Reverb = null; Delay = null; break;
+            case ReverbKind: Reverb ??= new(); Sat = null; Comp = null; Eq = null; Delay = null; break;
+            case DelayKind: Delay ??= new(); Delay.Mode ??= "stereo"; Delay.Division ??= "1/8."; Sat = null; Comp = null; Eq = null; Reverb = null; break;
         }
     }
 }

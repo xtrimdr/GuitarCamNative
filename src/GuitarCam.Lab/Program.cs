@@ -175,6 +175,20 @@ static class Program
               proyecto insertos carpeta pista [agregar vida|comp|eq [--en n] | quitar n | mover n m | duplicar n | prender n | apagar n]
                                            los slots de efectos de la pista (número o id), en el orden en que suenan; sin
                                            operación, los lista. Como el menú de cada efecto en la tira ancha del mixer
+              proyecto insertos carpeta --carpeta id|n [agregar … | quitar n | …]
+                                           lo mismo para el bus de una carpeta: sus pistas suman ahí y pasan por esos
+                                           efectos antes del master (sin efectos, la carpeta no cambia el sonido)
+              proyecto insertos carpeta --retorno id|n [agregar reverb|delay|vida|comp|eq … | quitar n | …]
+                                           lo mismo para un retorno agregado (la reverb y el delay solo van en retornos)
+              proyecto retornos carpeta [agregar [nombre] [--tipo reverb|delay] | quitar n | renombrar n nombre |
+                        volumen n 0.8 | mute n]
+                                           los retornos agregados, además de la Reverb y el Delay fijos, con sus slots;
+                                           uno nuevo trae una reverb (o un delay) con sus valores por defecto; quitar
+                                           uno se lleva los envíos que le mandaban las pistas
+              proyecto envios carpeta pista [reverb|delay|n [nivel] [--pre|--post] [--apagar|--prender]]
+                                           los envíos de la pista (Reverb, Delay y cada retorno agregado, por número
+                                           o id); --pre lo saca antes del fader (no lo cambian el fader ni el de su
+                                           carpeta). Las opciones van después del nivel
               proyecto historial carpeta   tomas (en uso / no usadas), exportaciones y actividad, como la pestaña Historial
               proyecto historial carpeta quitar|usar medio | borrar-no-usadas | borrar-exportacion n
               proyecto verificar-historial verifica el registro de tomas, la Papelera y las frases de la actividad

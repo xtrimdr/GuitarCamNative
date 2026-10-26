@@ -59,6 +59,7 @@ public static class TrackFolders
             f.Volume = double.IsFinite(f.Volume) ? Math.Clamp(f.Volume, 0, 1.5) : 1;
             f.Height = Track.NormalizeHeight(f.Height, Folder.MinHeight, Folder.MaxHeight);
             f.HeightScale = Track.NormalizeHeight(f.HeightScale, 0.1, 8);
+            f.Normalize();
         }
         foreach (var t in p.Tracks) if (t.FolderId != null && !ids.Contains(t.FolderId)) t.FolderId = null;
 

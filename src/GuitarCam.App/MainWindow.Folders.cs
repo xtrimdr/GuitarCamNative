@@ -77,9 +77,15 @@ public partial class MainWindow
     /// <summary>The folder selected in the timeline (or the mixer), or null; then no track is selected.</summary>
     Folder? SelectedFolder => Timeline.SelectedFolderId is { } id ? FolderById(id) : null;
 
-    /// <summary>Tells every live track what its folder does to it (read by the audio thread on the next block).</summary>
-    static void ApplyFolderMix(Project p, IReadOnlyList<LiveTrack> list)
+    /// <summary>
+    /// Tells every live track what its folder does to it (read by the audio thread on the next block): the VCA, and
+    /// the folder's bus with its slots (<see cref="PlaybackEngine.SetFolders"/>). Also hands the engine the extra
+    /// returns and every track its sends to them (<see cref="PlaybackEngine.SetReturns"/>).
+    /// </summary>
+    void ApplyFolderMix(Project p, IReadOnlyList<LiveTrack> list)
     {
+        engine.SetFolders(p, list);
+        engine.SetReturns(p, list);
         foreach (var t in list)
         {
             var (gain, muted, solo) = TrackFolders.Mix(p, t.Track);
@@ -249,7 +255,34 @@ public partial class MainWindow
     Folder? FolderOfTrack(LiveTrack t) => t.Track.FolderId is { } id ? FolderById(id) : null;
     /// <summary>The band above the strips where folder names sit (every column gets it while the project has folders).</summary>
     const double FolderBandH = 26;
-    static double FolderStripW(bool wide) => wide ? 132 : CompactW;
+    /// <summary>A wide folder strip is as wide as the narrowest track strip: its slots' panels need the same room.</summary>
+    static double FolderStripW(bool wide) => wide ? WideMin : CompactW;
+
+    /// <summary>A folder bus's slots, for the panels (<see cref="SlotPanels"/>): edited as folder edits, with their undo.</summary>
+    SlotOwner SlotsOf(Folder folder)
+    {
+        string id = folder.Id;
+        Folder F() => FolderById(id) ?? folder;
+        return new()
+        {
+            Slots = () => F().Inserts,
+            Edit = (change, key) => FolderEdit(F(), x => change(x.Inserts), key),
+            Recalculate = c => RecalculateFolderComp(F(), c),
+            AddTip = Loc.T("mix.slot.add.folder.tip"),
+        };
+    }
+
+    /// <summary>
+    /// A folder compressor's preset, measured against its first track with audio (a bus has no take of its own; with
+    /// none, its values stay as they are, like an empty track's).
+    /// </summary>
+    void RecalculateFolderComp(Folder f, CompSettings c)
+    {
+        if (tracks.FirstOrDefault(t => t.Track.FolderId == f.Id && t.Envelope != null)?.Envelope is not { } env) return;
+        double gr = ChannelDsp.RecalculateComp(c, env);
+        c.Extra ??= [];
+        c.Extra["estGrDb"] = System.Text.Json.JsonSerializer.SerializeToElement(gr);
+    }
 
     /// <summary>A mixer column with the folder band on top (empty for strips at the root and the returns).</summary>
     static Grid Banded(Control? band, Control body)
@@ -309,7 +342,10 @@ public partial class MainWindow
         return new Grid { Children = { decor, Banded(band, strips) } };
     }
 
-    /// <summary>The folder's own strip: its fader multiplies its tracks' faders, M and S act on all of them, the meter shows the loudest.</summary>
+    /// <summary>
+    /// The folder's own strip: its fader multiplies its tracks' faders, M and S act on all of them. Wide, it shows the
+    /// bus's insert slots like a track strip; the meter shows the bus's output while it has slots, else the loudest track.
+    /// </summary>
     Control FolderStrip(Folder folder, bool wide)
     {
         string id = folder.Id;
@@ -348,10 +384,21 @@ public partial class MainWindow
         var toggles = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center, Children = { mute, solo } };
         if (wide)
         {
-            head = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Height = 28, Children = { glyph, tag } };
+            var h = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), Height = 28 };
             tag.VerticalAlignment = glyph.VerticalAlignment = VerticalAlignment.Center;
-            toggles.Orientation = Orientation.Vertical;
-            controls = toggles;
+            tag.HorizontalAlignment = HorizontalAlignment.Left;
+            tag.Margin = new Thickness(8, 0);
+            h.Children.Add(glyph);
+            Grid.SetColumn(tag, 1); h.Children.Add(tag);
+            Grid.SetColumn(toggles, 2); h.Children.Add(toggles);
+            head = h;
+            // the bus's slots, scrolling like a track strip's effects
+            var fx = new StackPanel { Spacing = 8, Margin = new Thickness(0, 0, 4, 6) };
+            wideGr = null;
+            SlotPanels(fx, SlotsOf(folder));
+            mx.FolderGr[id] = wideGr ?? (_ => { });
+            wideGr = null;
+            controls = new ScrollViewer { Content = fx, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         }
         else
         {
@@ -475,6 +522,7 @@ public partial class MainWindow
         solo.IsCheckedChanged += (_, _) => { if (!syncing && SelectedFolder is { } f && f.Solo != (solo.IsChecked == true)) FolderEdit(f, x => x.Solo = solo.IsChecked == true, "solo"); };
         card.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { mute, solo } });
         card.Children.Add(Help(Loc.T("folder.mix.hint")));
+        card.Children.Add(Help(Loc.T("folder.fx.hint")));
         folderPanel.Children.Add(new Border { Classes = { "section" }, Background = Palette.Panel, BorderThickness = new Thickness(0, 1), CornerRadius = new CornerRadius(0),
             Margin = new Thickness(-14, 4, -14, 0), Padding = new Thickness(16, 14, 16, 16), Child = card });
 
