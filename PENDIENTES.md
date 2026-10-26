@@ -68,7 +68,6 @@ _Ideas y mejoras para la nativa._
   - [ ] Importar LUT .cube
   - [ ] HSL de 8 colores; después Curvas y ruedas lift/gamma/gain
   - [ ] Look brumoso/pastel (como "Sueño de Mistwood"): en CapCut es un shader de 4 colores con ruido, no un LUT
-  - [ ] Looks que dependen de filtros espaciales: Soñado (con glow) y HDR (con Claridad)
   - [ ] (Para después, lo pidió el usuario 2026-10-25) Efectos de movimiento: sacudida, zoom y destello al pulso del
     click, glitch
   - [ ] Light leak y partículas de luz (bokeh, luciérnagas, chispas) con semilla fija, igual en vista previa y exportación
@@ -89,7 +88,7 @@ Decidido con el usuario:
 Etapas (cada una sirve sola):
 - [x] **Etapas 1 y 2: paneles que se mueven sin reconstruirse y diseños Clásico / Vertical** (hecho, ver
   [HECHO.md](HECHO.md)).
-- [ ] **Etapa 3: sacar a otra ventana.** Botón en el encabezado del panel; cerrar la ventana lo devuelve a su lugar. Se
+- [ ] **Etapa 3: sacar a otra ventana.** _En pausa (el usuario, 2026-10-26: no es prioridad hoy)._ Botón en el encabezado del panel; cerrar la ventana lo devuelve a su lugar. Se
   recuerdan monitor, posición y tamaño; si el monitor ya no está, vuelve a la principal. Preview con pantalla completa
   (monitor para grabar lejos de la compu). Con el mixer afuera se ven timeline y mixer a la vez: la X lo trae al frente.
   Los atajos funcionan desde cualquier ventana. Ojo: dos ventanas dibujando tampoco pueden generar basura por cuadro, y la

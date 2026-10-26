@@ -4,10 +4,11 @@ using GuitarCam.Audio;
 namespace GuitarCam.Lab;
 
 /// <summary>
-/// <c>nitidez</c>: checks that sharpness and clarity (<see cref="VideoDetail"/>) give the same picture in the preview
+/// <c>nitidez</c>: checks that sharpness, clarity and glow (<see cref="VideoDetail"/>) give the same picture in the preview
 /// and in the export. Runs the export's FFmpeg filters and the preview's C# on the same frame, at the export's size
 /// (the math matches) and at the preview's 640 wide against the export scaled down (what the eye compares), and
-/// measures what the preview pays per frame and that it allocates nothing.
+/// measures what the preview pays per frame and that it allocates nothing. With <c>--look</c> it adds that look's share
+/// (HDR, Soñado) by its intensity; only the spatial part, the look's LUT is checked by <c>looks</c>.
 /// </summary>
 static class DetailCommands
 {
@@ -17,7 +18,9 @@ static class DetailCommands
     {
         string? video = a.Positional.FirstOrDefault();
         int h = a.Int("alto", 1080);
-        var fx = new ExportVideoFxSpec(Sharpness: a.Double("nitidez", 60), Clarity: a.Double("claridad", 60));
+        var fx = new ExportVideoFxSpec(Sharpness: a.Double("nitidez", 60), Clarity: a.Double("claridad", 60), Glow: a.Double("resplandor", 0));
+        var look = new ExportColorSpec(Look: a.Get("look", "none"), Amount: a.Double("intensidad", 100));
+        var amounts = VideoDetail.For(look, fx);
         string dir = a.Get("carpeta") ?? Path.Combine(Path.GetTempPath(), "gclab-nitidez");
         Directory.CreateDirectory(dir);
 
@@ -35,13 +38,14 @@ static class DetailCommands
             w = (h * 16 / 9) & ~1;
             src = Pattern(w, h);
         }
-        Console.WriteLine($"Cuadro {w}×{h}, nitidez {fx.Sharpness:0}, claridad {fx.Clarity:0} · radio de claridad {VideoDetail.ClarityRadius(h, w, h)} px, unsharp {2 * VideoDetail.SharpSteps(h) + 1}×{2 * VideoDetail.SharpSteps(h) + 1}");
+        Console.WriteLine($"Cuadro {w}×{h}, nitidez {fx.Sharpness:0}, claridad {fx.Clarity:0}, resplandor {fx.Glow:0}, look {look.Look} {look.Amount:0}%"
+            + $" · radio de claridad {VideoDetail.ClarityRadius(h, w, h)} px, unsharp {2 * VideoDetail.SharpSteps(h) + 1}×{2 * VideoDetail.SharpSteps(h) + 1}, radio del resplandor {VideoDetail.GlowRadius(h, w, h)} px");
 
         // export: the exporter's filters on the frame, and the same trip through YUV without them
-        byte[] exported = Export(src, w, h, fx);
-        byte[] plain = Export(src, w, h, ExportVideoFxSpec.Defaults);
+        byte[] exported = Export(src, w, h, amounts);
+        byte[] plain = Export(src, w, h, default);
         byte[] mine = (byte[])src.Clone();
-        new VideoDetail.Processor().Apply(mine, w, h, h, VideoColorProcessor.NormalizeVideoFx(fx));
+        new VideoDetail.Processor().Apply(mine, w, h, h, amounts);
         Console.WriteLine($"Ida y vuelta a YUV sin filtros (piso): {Diff(plain, src)}");
         Console.WriteLine($"Cuánto cambia el filtro:              {Diff(exported, plain)}");
         Console.WriteLine($"Exportación vs C#, a {w}×{h}:     {Diff(exported, mine)}");
@@ -53,7 +57,7 @@ static class DetailCommands
         byte[] smallPlain = Scale(plain, w, h, pw, ph);
         byte[] exportedSmall = Scale(exported, w, h, pw, ph);
         byte[] preview = (byte[])small.Clone();
-        new VideoDetail.Processor().Apply(preview, pw, ph, ph, VideoColorProcessor.NormalizeVideoFx(fx));
+        new VideoDetail.Processor().Apply(preview, pw, ph, ph, amounts);
         Console.WriteLine($"Preview ({pw}×{ph}) vs exportación achicada: {Diff(preview, exportedSmall)}  (sin filtro serían {Diff(smallPlain, exportedSmall)})");
 
         Png(src, w, h, Path.Combine(dir, "original.png"));
@@ -69,12 +73,11 @@ static class DetailCommands
             byte[] frame = Scale(src, w, h, bw, bh);
             byte[] work = new byte[frame.Length];
             var proc = new VideoDetail.Processor();
-            var norm = VideoColorProcessor.NormalizeVideoFx(fx);
             // past the JIT's first tiers, as in the app after a few seconds of playing
             for (int i = 0; i < 60; i++)
             {
                 Buffer.BlockCopy(frame, 0, work, 0, frame.Length);
-                proc.Apply(work, bw, bh, bh, norm);
+                proc.Apply(work, bw, bh, bh, amounts);
             }
             Thread.Sleep(300);
             const int Iters = 40;
@@ -83,7 +86,7 @@ static class DetailCommands
             for (int i = 0; i < Iters; i++)
             {
                 Buffer.BlockCopy(frame, 0, work, 0, frame.Length);
-                proc.Apply(work, bw, bh, bh, norm);
+                proc.Apply(work, bw, bh, bh, amounts);
             }
             sw.Stop();
             long alloc = GC.GetAllocatedBytesForCurrentThread() - bytes0;
@@ -93,10 +96,10 @@ static class DetailCommands
     }
 
     /// <summary>The exporter's filter chain (<see cref="VideoDetail.ExportFilters"/>) over a raw BGRA frame.</summary>
-    static byte[] Export(byte[] src, int w, int h, ExportVideoFxSpec fx)
+    static byte[] Export(byte[] src, int w, int h, VideoDetail.Amounts amounts)
     {
         var chain = new List<string>();
-        string picture = VideoDetail.ExportFilters(fx, w, h, "[0:v]null", chain, "0");
+        string picture = VideoDetail.ExportFilters(amounts, w, h, "[0:v]null", chain, "0");
         if (!picture.Contains("yuv444p")) picture += ",format=yuv444p";
         chain.Add($"{picture},format=bgra[out]");
         return Ffmpeg(["-f", "rawvideo", "-pix_fmt", "bgra", "-s", $"{w}x{h}", "-i", "-",

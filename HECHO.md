@@ -3,6 +3,15 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-26: Arreglado el cierre al abrir por falta de memoria: con "Ver todo", un timeline apenas más ancho que los
+  encabezados (mientras se acomoda la ventana) daba zoom 0 o negativo y la grilla crecía sin fin (`TimelineView.Render` /
+  `BuildGrid`).
+- 2026-10-26: Resplandor (glow) en Color → Efectos (`VideoFx.Glow`) y los looks **Soñado** y **HDR**. El resplandor
+  toma lo que pasa de un umbral en cada canal, lo desenfoca ancho y lo suma en modo pantalla: en la preview
+  (`VideoDetail.Processor`, ~1,6 ms por cuadro de 640×360, ~5 ms vertical, sin asignar memoria) y en la exportación
+  (`lutrgb` + `boxblur` + `blend`) da lo mismo. Los dos looks son un LUT más y suman su parte espacial según la
+  Intensidad (`VideoDetail.For`: Soñado, resplandor; HDR, claridad y algo de nitidez). `gclab nitidez --resplandor` /
+  `--look` los compara.
 - 2026-10-26: Nitidez y Claridad en Color → Efectos (`VideoFx.Sharpness` / `Clarity`, 0 = apagado). Se calculan sobre
   la luma, con el radio relativo al alto que muestra el panel, así la preview (`VideoDetail.Processor`, en
   `LiveClip.UpdateVideo`, sin asignar memoria y repartida en `BandPool`: menos de 1 ms por cuadro de 640×360, ~3 ms

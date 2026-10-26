@@ -146,11 +146,11 @@ Se agrupan como en CapCut, por familia. ✅ = ya está en GuitarCam.
 | **Natural** | Fresco / Limpio (más brillo, colores naturales), Brillante, Clásico (casi sin cambio) | ❌ Fresco · ❌ Limpio |
 | **Cálidos** | Cálido, Dorado / Otoño, Verano | ✅ Cálido · ✅ Dorado · ✅ Desierto |
 | **Cine** | Cine (sombras hondas), Teal & Orange, Película, Moody (oscuro y con contraste) | ✅ Cine · ✅ Blockbuster (= teal & orange) · ✅ Película · ❌ Moody |
-| **Suaves** | Crema (colores suaves sin perder brillo), Suave / Soñado (menos contraste + brillo difuso), Pastel | ❌ Crema · ❌ Soñado (necesita glow) |
+| **Suaves** | Crema (colores suaves sin perder brillo), Suave / Soñado (menos contraste + brillo difuso), Pastel | ✅ Crema · ✅ Soñado (con Resplandor) |
 | **Retro** | Retro / película desvaída, Vintage, VHS | ✅ Vintage · ✅ Bleach · ✅ Sepia |
 | **B/N** | B/N, B/N de alto contraste, color selectivo | ✅ B/N · ✅ Noir · ✅ Plata · ✅ Solo rojo · ✅ Brujo |
 | **Noche** | Noche, Neón (azules y violetas), frío | ✅ Noche · ✅ Noche azul · ✅ Neón · ✅ Frío · ✅ Hielo · ✅ Nórdico · ✅ Sci-fi |
-| **Intensos** | Vívido, HDR (detalle en luces y sombras) | ✅ Vivo · ❌ HDR (necesita Claridad) |
+| **Intensos** | Vívido, HDR (detalle en luces y sombras) | ✅ Vivo · ✅ HDR (con Claridad) |
 
 Conclusión: **ya cubrimos casi todo lo popular.** Faltan 4 looks de color puro (**Fresco, Limpio, Moody, Crema**), que
 salen gratis en el LUT, y 2 que dependen de filtros espaciales (**Soñado** = glow, **HDR** = Claridad). Las guías

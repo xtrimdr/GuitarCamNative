@@ -307,6 +307,8 @@ public partial class MainWindow
             v => $"{v:0}", Loc.T("color.fx.sharpness.hint"));
         ColorSlider(fx, Loc.T("color.fx.clarity"), 0, 100, 0, () => ProjectFx.Clarity, v => ColorEdit(s => s.VideoFx.Clarity = v, "videoFx:clarity"),
             v => $"{v:0}", Loc.T("color.fx.clarity.hint"));
+        ColorSlider(fx, Loc.T("color.fx.glow"), 0, 100, 0, () => ProjectFx.Glow, v => ColorEdit(s => s.VideoFx.Glow = v, "videoFx:glow"),
+            v => $"{v:0}", Loc.T("color.fx.glow.hint"));
         ColorSlider(fx, Loc.T("color.fx.vignette"), 0, 100, 0, () => ProjectFx.Vignette, v => ColorEdit(s => s.VideoFx.Vignette = v, "videoFx:vignette"),
             v => $"{v:0}", Loc.T("color.fx.vignette.hint"));
         var size = ColorSlider(fx, Loc.T("color.fx.vignetteSize"), 0, 100, 50, () => ProjectFx.VignetteSize, v => ColorEdit(s => s.VideoFx.VignetteSize = v, "videoFx:vignetteSize"),

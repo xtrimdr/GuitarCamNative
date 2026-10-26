@@ -138,11 +138,11 @@ public sealed class LiveClip
     int lastGrainLevels = -1;
     int lastFrameSeed = int.MinValue;
     VideoDetail.Processor? detail;
-    (int, int, double, double) lastDetailKey;
+    (int, int, int, VideoDetail.Amounts) lastDetailKey;
 
     /// <summary>
     /// How many rows of <see cref="Frame"/> its panel shows (cover fit and zoom), set by the preview when it draws:
-    /// sharpness and clarity size their radius by it, as the export does by the cropped panel. 0 = all of them.
+    /// sharpness, clarity and glow size their radius by it, as the export does by the cropped panel. 0 = all of them.
     /// </summary>
     public double VisibleHeight { get; set; }
 
@@ -175,7 +175,7 @@ public sealed class LiveClip
 
     /// <summary>
     /// Asks the decoder for the frame at a timeline time, applies the 3D LUT trilinear color grade and
-    /// monochrome film grain (<see cref="VideoColorProcessor"/>), then sharpness and clarity (<see cref="VideoDetail"/>),
+    /// monochrome film grain (<see cref="VideoColorProcessor"/>), then sharpness, clarity and glow (<see cref="VideoDetail"/>, the look's share included),
     /// and copies the result into <see cref="Frame"/>.
     /// Returns true when the picture changed (new decoded frame, color/grain/detail edit while paused, or animated grain).
     /// Outside the clip the panel is empty.
@@ -224,9 +224,10 @@ public sealed class LiveClip
         var fxSpec = PreviewVideoFx.ToSpec(videoFx ?? Settings?.VideoFx);
         int grainLevels = VideoColorProcessor.GrainLevels(fxSpec);
         int frameSeed = (int)Math.Floor(Math.Max(0, timelineSec) * VideoDecoder.Fps);
-        bool hasDetail = VideoDetail.HasDetail(fxSpec);
+        var detailAmounts = VideoDetail.For(colSpec, fxSpec);
+        bool hasDetail = detailAmounts.Any;
         double visibleH = VisibleHeight > 0 ? Math.Min(VisibleHeight, video.Height) : video.Height;
-        var detailKey = hasDetail ? VideoDetail.Processor.Key(fxSpec, video.Width, video.Height, visibleH) : default;
+        var detailKey = hasDetail ? VideoDetail.Processor.Key(detailAmounts, video.Width, video.Height, visibleH) : default;
 
         bool needWrite = newRaw
             || lastColorSpec != colSpec
@@ -260,7 +261,7 @@ public sealed class LiveClip
                 grainLevels,
                 frameSeed);
             // after the color and the grain, like the export, which filters the cropped panel
-            if (hasDetail) (detail ??= new()).Apply(gradedFrame, video.Width, video.Height, visibleH, fxSpec);
+            if (hasDetail) (detail ??= new()).Apply(gradedFrame, video.Width, video.Height, visibleH, detailAmounts);
             srcToCopy = gradedFrame;
         }
 

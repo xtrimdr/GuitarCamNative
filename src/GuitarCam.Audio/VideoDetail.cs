@@ -4,13 +4,17 @@ using System.Numerics;
 namespace GuitarCam.Audio;
 
 /// <summary>
-/// Sharpness ("Nitidez") and clarity ("Claridad"): the two spatial filters of the video effects, built so the preview
-/// (<see cref="Processor"/>, on the decoded BGRA frame) and the MP4 export (<see cref="ExportFilters"/>, FFmpeg's
-/// <c>boxblur</c> + <c>lut2</c> and <c>unsharp</c>) give the same picture:
+/// Sharpness ("Nitidez"), clarity ("Claridad") and glow ("Resplandor"): the spatial filters of the video effects, built so
+/// the preview (<see cref="Processor"/>, on the decoded BGRA frame) and the MP4 export (<see cref="ExportFilters"/>, FFmpeg's
+/// <c>boxblur</c> + <c>lut2</c>, <c>unsharp</c>, and <c>lutrgb</c> + <c>boxblur</c> + <c>blend</c>) give the same picture:
 /// <list type="bullet">
-/// <item><description>Both work on the luma only (the same change added to R, G and B), like <c>unsharp</c> with no chroma amount.</description></item>
+/// <item><description>Sharpness and clarity work on the luma only (the same change added to R, G and B), like <c>unsharp</c> with no chroma amount.</description></item>
 /// <item><description>Clarity: <c>y + k·w(y)·(y − blur(y))</c>, a 3-pass box blur with a wide radius and <c>w</c> peaking in the mid-tones,
 /// so it adds local contrast without crushing blacks or burning whites. Sharpness: FFmpeg's <c>unsharp</c> (a binomial blur) on top.</description></item>
+/// <item><description>Glow: what's over a threshold, per channel (a red light glows red), blurred wide and laid back with a screen blend,
+/// last of the three, so it softens what the other two marked.</description></item>
+/// <item><description>The looks that need them (HDR, Soñado) add their share on top of the sliders, scaled by the look's intensity
+/// (<see cref="For"/>); the color part of those looks is just a LUT like the rest.</description></item>
 /// <item><description>Radii are a fraction of the panel's visible height, not pixels: the preview decodes at 640 wide and the export
 /// filters each panel at its final size, so a fixed pixel radius would look different in each.</description></item>
 /// </list>
@@ -21,28 +25,63 @@ public static class VideoDetail
     const double ClaritySigma = 1 / 50.0;
     /// <summary>Sharpness' blur radius (sigma) in panel heights: under 2 px on a 1080-high panel, a fine edge.</summary>
     const double SharpSigma = 1 / 600.0;
+    /// <summary>Glow's blur radius (sigma) in panel heights: about 36 px on a 1080-high panel, a halo, not a haze.</summary>
+    const double GlowSigma = 1 / 30.0;
     /// <summary>Clarity at 100: the local difference added again at full weight in the mid-tones.</summary>
     const double ClarityMax = 1.0;
     /// <summary>Sharpness at 100: <c>unsharp</c>'s luma amount.</summary>
     const double SharpMax = 1.5;
-    /// <summary>Box blur passes for clarity: three make it close to a Gaussian.</summary>
+    /// <summary>Glow at 100: the screen blend's opacity.</summary>
+    const double GlowMax = 1.0;
+    /// <summary>What glows: the part of each channel over this (0..255), stretched back to 0..255.</summary>
+    const int GlowThreshold = 128;
+    /// <summary>Box blur passes for clarity and glow: three make it close to a Gaussian.</summary>
     const int BoxPasses = 3;
     /// <summary>FFmpeg's <c>unsharp</c> refuses more than 25 scale bits, (steps x + steps y)·2: 6 steps each way (13×13).</summary>
     const int MaxSteps = 6;
 
-    public static bool HasDetail(ExportVideoFxSpec? fx)
+    /// <summary>How much of each filter a frame gets, as the filters take it (unsharp's amount, clarity's weight, glow's opacity).</summary>
+    public readonly record struct Amounts(double Sharp, double Clarity, double Glow)
     {
-        var n = VideoColorProcessor.NormalizeVideoFx(fx);
-        return n.On && (n.Sharpness > 0 || n.Clarity > 0);
+        public bool Any => Sharp > 0 || Clarity > 0 || Glow > 0;
     }
 
-    static double ClarityAmount(ExportVideoFxSpec n) => n.On ? n.Clarity / 100 * ClarityMax : 0;
-    static double SharpAmount(ExportVideoFxSpec n) => n.On ? n.Sharpness / 100 * SharpMax : 0;
-
-    /// <summary>Box radius whose 3 passes spread like the clarity sigma for a panel <paramref name="visibleH"/> pixels high (variance r(r+1)).</summary>
-    public static int ClarityRadius(double visibleH, int w, int h)
+    /// <summary>What a look adds at full intensity, on the sliders' 0..100: HDR is local contrast, Soñado a soft glow.</summary>
+    static (double Sharp, double Clarity, double Glow) LookDetail(string? look) => look switch
     {
-        double s = Math.Max(0, visibleH) * ClaritySigma;
+        "hdr" => (25, 70, 0),
+        "dreamy" => (0, 0, 55),
+        _ => (0, 0, 0),
+    };
+
+    /// <summary>
+    /// The effects' sliders (when the effects are on) plus the look's share (when the filter is on), each capped at 100.
+    /// Allocates nothing: the preview asks for it on every tick.
+    /// </summary>
+    public static Amounts For(ExportColorSpec? color, ExportVideoFxSpec? fx)
+    {
+        static double N(double v) => double.IsFinite(v) ? Math.Clamp(v, 0, 100) : 0;
+        double sharp = 0, clarity = 0, glow = 0;
+        if (fx is { On: true }) (sharp, clarity, glow) = (N(fx.Sharpness), N(fx.Clarity), N(fx.Glow));
+        if (color is { On: true })
+        {
+            var (ls, lc, lg) = LookDetail(color.Look);
+            double k = double.IsFinite(color.Amount) ? Math.Clamp(color.Amount, 0, 100) / 100 : 1;
+            (sharp, clarity, glow) = (sharp + ls * k, clarity + lc * k, glow + lg * k);
+        }
+        return new(Math.Min(sharp, 100) / 100 * SharpMax, Math.Min(clarity, 100) / 100 * ClarityMax, Math.Min(glow, 100) / 100 * GlowMax);
+    }
+
+    /// <summary>Box radius whose 3 passes spread like the clarity sigma for a panel <paramref name="visibleH"/> pixels high.</summary>
+    public static int ClarityRadius(double visibleH, int w, int h) => BoxRadius(visibleH * ClaritySigma, w, h);
+
+    /// <summary>The same for glow's wider sigma.</summary>
+    public static int GlowRadius(double visibleH, int w, int h) => BoxRadius(visibleH * GlowSigma, w, h);
+
+    /// <summary>Box radius whose 3 passes spread like a Gaussian of sigma <paramref name="s"/> pixels (variance r(r+1)).</summary>
+    static int BoxRadius(double s, int w, int h)
+    {
+        s = Math.Max(0, s);
         int r = (int)Math.Round((-1 + Math.Sqrt(1 + 4 * s * s)) / 2, MidpointRounding.AwayFromZero);
         // under boxblur's limit (half the smaller side), so the mirrored edges stay inside the line
         return Math.Clamp(r, 1, Math.Max(1, (Math.Min(w, h) - 1) / 2));
@@ -63,15 +102,14 @@ public static class VideoDetail
     /// <summary>
     /// The export's filters for a panel already cropped to <paramref name="w"/>×<paramref name="h"/>, as graph
     /// pieces: <paramref name="picture"/> is the chain so far (<c>[0:v]trim…,crop…</c>); the result is the chain to keep
-    /// appending to, and <paramref name="chain"/> gets the labeled pieces clarity needs (a split, the blur and <c>lut2</c>).
+    /// appending to, and <paramref name="chain"/> gets the labeled pieces clarity and glow need (splits, blurs, <c>lut2</c>, <c>blend</c>).
     /// </summary>
-    public static string ExportFilters(ExportVideoFxSpec? fx, int w, int h, string picture, List<string> chain, string tag)
+    public static string ExportFilters(Amounts a, int w, int h, string picture, List<string> chain, string tag)
     {
-        var n = VideoColorProcessor.NormalizeVideoFx(fx);
-        double clarity = ClarityAmount(n), sharp = SharpAmount(n);
-        if ((clarity <= 0 && sharp <= 0) || w < 3 || h < 3) return picture;
+        double clarity = a.Clarity, sharp = a.Sharp;
+        if (!a.Any || w < 3 || h < 3) return picture;
         // full-resolution chroma: lut2 needs both inputs alike, and the preview never subsamples it
-        picture += ",format=yuv444p";
+        if (clarity > 0 || sharp > 0) picture += ",format=yuv444p";
         if (clarity > 0)
         {
             int r = ClarityRadius(h, w, h);
@@ -88,14 +126,24 @@ public static class VideoDetail
             int m = 2 * SharpSteps(h) + 1;
             picture += $",unsharp=lx={m}:ly={m}:la={F(sharp)}:cx=3:cy=3:ca=0";
         }
+        if (a.Glow > 0)
+        {
+            // in RGB, so each channel glows on its own; same threshold and rounding as the preview's table
+            int r = GlowRadius(h, w, h);
+            string e = $"clip(floor((val-{GlowThreshold})*255/{255 - GlowThreshold}+0.5),0,255)";
+            chain.Add($"{picture},format=gbrp,split[ga{tag}][gb{tag}]");
+            chain.Add($"[gb{tag}]lutrgb=r='{e}':g='{e}':b='{e}',boxblur=lr={r}:lp={BoxPasses}:cr={r}:cp={BoxPasses}[gc{tag}]");
+            chain.Add($"[ga{tag}][gc{tag}]blend=all_mode=screen:all_opacity={F(a.Glow)}[gd{tag}]");
+            picture = $"[gd{tag}]null";
+        }
         return picture;
     }
 
     /// <summary>
-    /// The preview's side: applies clarity and sharpness to a BGRA frame in place. Owns its work buffers and keeps
+    /// The preview's side: applies clarity, sharpness and glow to a BGRA frame in place. Owns its work buffers and keeps
     /// them between frames (one per clip), so a frame allocates nothing once the size settles. Each step runs in bands
-    /// on <see cref="BandPool"/> (rows; columns for clarity's vertical blur, walked a row at a time to stay in cache),
-    /// with the same integer math as FFmpeg's <c>boxblur</c> and <c>unsharp</c>, so the bands change nothing.
+    /// on <see cref="BandPool"/> (rows; columns for the vertical blurs, walked a row at a time to stay in cache),
+    /// with the same integer math as FFmpeg's <c>boxblur</c>, <c>unsharp</c> and <c>blend</c>, so the bands change nothing.
     /// </summary>
     public sealed class Processor
     {
@@ -103,14 +151,18 @@ public static class VideoDetail
         const int Band = 32;
 
         byte[] frame = [], luma = [], work = [], blur = [];
+        // glow's three planes (B, G, R one after the other) and their blur's other half
+        byte[] glowA = [], glowB = [];
         uint[] hsum = [], pad = [], acc = [];
         int[] colSums = [];
         readonly byte[] table = new byte[256 * 256];
+        readonly byte[] glowTable = BuildGlowTable();
         double tableAmount = -1;
         // this frame's parameters, read by the bands
-        int w, h, radius, steps, amount;
+        int w, h, radius, steps, amount, glowRadius;
+        double glowOpacity;
         bool doClarity, doSharp;
-        readonly Action<int> lumaRows, clarityCols, mixRows, sharpRows;
+        readonly Action<int> lumaRows, clarityCols, mixRows, sharpRows, glowRows, glowCols, blendRows;
 
         public Processor()
         {
@@ -118,22 +170,43 @@ public static class VideoDetail
             clarityCols = ClarityCols;
             mixRows = MixRows;
             sharpRows = SharpRows;
+            glowRows = GlowRows;
+            glowCols = GlowCols;
+            blendRows = BlendRows;
         }
 
         /// <summary>The parameters a frame would use, to tell whether it needs filtering again.</summary>
-        public static (int Radius, int Steps, double Clarity, double Sharp) Key(ExportVideoFxSpec n, int w, int h, double visibleH) =>
-            (ClarityRadius(visibleH, w, h), SharpSteps(visibleH), ClarityAmount(n), SharpAmount(n));
+        public static (int Radius, int Steps, int GlowRadius, Amounts Amounts) Key(Amounts a, int w, int h, double visibleH) =>
+            (ClarityRadius(visibleH, w, h), SharpSteps(visibleH), GlowRadius(visibleH, w, h), a);
 
         /// <summary>
         /// Filters <paramref name="bgra"/> (<paramref name="width"/>×<paramref name="height"/>), whose panel shows
         /// <paramref name="visibleH"/> of its rows (what the export's crop keeps).
         /// </summary>
-        public void Apply(byte[] bgra, int width, int height, double visibleH, ExportVideoFxSpec n)
+        public void Apply(byte[] bgra, int width, int height, double visibleH, Amounts a)
         {
-            double clarity = ClarityAmount(n), sharp = SharpAmount(n);
-            if ((clarity <= 0 && sharp <= 0) || width < 3 || height < 3) return;
+            if (!a.Any || width < 3 || height < 3) return;
             int count = width * height;
             int rowBands = (height + Band - 1) / Band, colBands = (width + Band - 1) / Band;
+            if (colSums.Length < width) colSums = new int[width];
+            (frame, w, h) = (bgra, width, height);
+            if (a.Clarity > 0 || a.Sharp > 0) Detail(count, rowBands, colBands, visibleH, a.Clarity, a.Sharp);
+            if (a.Glow > 0)
+            {
+                if (glowA.Length != 3 * count) (glowA, glowB) = (new byte[3 * count], new byte[3 * count]);
+                glowRadius = GlowRadius(visibleH, width, height);
+                glowOpacity = a.Glow;
+                // threshold and horizontal blur → vertical blur → screen blend into the frame
+                BandPool.Run(rowBands, glowRows);
+                BandPool.Run(colBands, glowCols);
+                BandPool.Run(rowBands, blendRows);
+            }
+            frame = [];
+        }
+
+        /// <summary>Clarity and sharpness, on the luma.</summary>
+        void Detail(int count, int rowBands, int colBands, double visibleH, double clarity, double sharp)
+        {
             if (luma.Length != count)
             {
                 luma = new byte[count];
@@ -141,14 +214,12 @@ public static class VideoDetail
                 blur = new byte[count];
                 hsum = new uint[count];
             }
-            if (colSums.Length < width) colSums = new int[width];
             // a padded row and a row of sums for each band, so bands never share them
-            if (pad.Length < rowBands * (width + 2 * MaxSteps)) pad = new uint[rowBands * (width + 2 * MaxSteps)];
-            if (acc.Length < rowBands * width) acc = new uint[rowBands * width];
+            if (pad.Length < rowBands * (w + 2 * MaxSteps)) pad = new uint[rowBands * (w + 2 * MaxSteps)];
+            if (acc.Length < rowBands * w) acc = new uint[rowBands * w];
             if (clarity > 0 && tableAmount != clarity) BuildTable(clarity);
-            (frame, w, h) = (bgra, width, height);
             (doClarity, doSharp) = (clarity > 0, sharp > 0);
-            radius = ClarityRadius(visibleH, width, height);
+            radius = ClarityRadius(visibleH, w, h);
             steps = SharpSteps(visibleH);
             amount = (int)(sharp * 65536);
 
@@ -158,7 +229,6 @@ public static class VideoDetail
             if (doClarity) BandPool.Run(colBands, clarityCols);
             BandPool.Run(rowBands, mixRows);
             BandPool.Run(rowBands, sharpRows);
-            frame = [];
         }
 
         void LumaRows(int band)
@@ -183,9 +253,9 @@ public static class VideoDetail
         void ClarityCols(int band)
         {
             int x0 = band * Band, x1 = Math.Min(w, x0 + Band);
-            BoxV(work, blur, x0, x1);
-            BoxV(blur, work, x0, x1);
-            BoxV(work, blur, x0, x1);
+            BoxV(work, blur, x0, x1, radius, 0);
+            BoxV(blur, work, x0, x1, radius, 0);
+            BoxV(work, blur, x0, x1, radius, 0);
         }
 
         /// <summary>Clarity's table (into work), then sharpness' horizontal binomial sum of the result.</summary>
@@ -254,6 +324,58 @@ public static class VideoDetail
             }
         }
 
+        /// <summary>Glow's threshold into its planes (glowA), then its horizontal passes: glowA → glowB → glowA → glowB.</summary>
+        void GlowRows(int band)
+        {
+            int y0 = band * Band, y1 = Math.Min(h, y0 + Band), count = w * h;
+            var (px, ga, gb, t) = (frame, glowA, glowB, glowTable);
+            for (int i = y0 * w, p = i * 4, end = y1 * w; i < end; i++, p += 4)
+            {
+                ga[i] = t[px[p]];
+                ga[count + i] = t[px[p + 1]];
+                ga[2 * count + i] = t[px[p + 2]];
+            }
+            for (int c = 0; c < 3; c++)
+                for (int o = c * count + y0 * w, end = c * count + y1 * w; o < end; o += w)
+                {
+                    Box(ga, gb, o, w, glowRadius);
+                    Box(gb, ga, o, w, glowRadius);
+                    Box(ga, gb, o, w, glowRadius);
+                }
+        }
+
+        /// <summary>Glow's vertical passes for a band of columns, each plane: glowB → glowA → glowB → glowA.</summary>
+        void GlowCols(int band)
+        {
+            int x0 = band * Band, x1 = Math.Min(w, x0 + Band), count = w * h;
+            for (int c = 0; c < 3; c++)
+            {
+                BoxV(glowB, glowA, x0, x1, glowRadius, c * count);
+                BoxV(glowA, glowB, x0, x1, glowRadius, c * count);
+                BoxV(glowB, glowA, x0, x1, glowRadius, c * count);
+            }
+        }
+
+        /// <summary>
+        /// FFmpeg's <c>blend</c> in <c>screen</c> mode: <c>s = 255 − (255 − a)(255 − b)/255</c> in integers, then
+        /// <c>a + (s − a)·opacity</c> truncated, as <c>vf_blend</c> stores it.
+        /// </summary>
+        void BlendRows(int band)
+        {
+            int y0 = band * Band, y1 = Math.Min(h, y0 + Band), count = w * h;
+            var (px, ga) = (frame, glowA);
+            double op = glowOpacity;
+            for (int i = y0 * w, p = i * 4, end = y1 * w; i < end; i++, p += 4)
+                for (int c = 0; c < 3; c++)
+                {
+                    int b = ga[c * count + i];
+                    if (b == 0) continue;
+                    int a = px[p + c];
+                    int s = 255 - (255 - a) * (255 - b) / 255;
+                    px[p + c] = (byte)(a + (s - a) * op);
+                }
+        }
+
         static void Binomial(Span<uint> wts, int taps)
         {
             wts[0] = 1;
@@ -272,6 +394,15 @@ public static class VideoDetail
                     table[(x << 8) | y] = Clip((int)Math.Floor(x + wgt * (x - y) + 0.5));
             }
             tableAmount = k;
+        }
+
+        /// <summary>The part over the threshold stretched to 0..255, like the export's <c>lutrgb</c> expression.</summary>
+        static byte[] BuildGlowTable()
+        {
+            var t = new byte[256];
+            for (int v = 0; v < 256; v++)
+                t[v] = Clip((int)Math.Floor((v - GlowThreshold) * 255.0 / (255 - GlowThreshold) + 0.5));
+            return t;
         }
 
         /// <summary>One box pass over a row, the way <c>vf_boxblur</c>'s <c>blur8</c> does it (16-bit fixed point, mirrored edges).</summary>
@@ -300,25 +431,28 @@ public static class VideoDetail
             }
         }
 
-        /// <summary><see cref="Box"/> down the columns <paramref name="x0"/>..<paramref name="x1"/>, all of them a row at a time.</summary>
-        void BoxV(byte[] src, byte[] dst, int x0, int x1)
+        /// <summary>
+        /// <see cref="Box"/> down the columns <paramref name="x0"/>..<paramref name="x1"/>, all of them a row at a time,
+        /// on the plane that starts at <paramref name="o"/>.
+        /// </summary>
+        void BoxV(byte[] src, byte[] dst, int x0, int x1, int r, int o)
         {
-            int r = radius, length = r * 2 + 1, n = x1 - x0;
+            int length = r * 2 + 1, n = x1 - x0;
             int inv = ((1 << 16) + length / 2) / length;
             var s0 = colSums.AsSpan(x0, n);
             for (int x = 0; x < n; x++)
             {
-                int s = src[r * w + x0 + x];
-                for (int k = 0; k < r; k++) s += src[k * w + x0 + x] << 1;
+                int s = src[o + r * w + x0 + x];
+                for (int k = 0; k < r; k++) s += src[o + k * w + x0 + x] << 1;
                 s0[x] = s * inv + (1 << 15);
             }
             for (int i = 0; i < h; i++)
             {
                 int add = i < h - r ? r + i : 2 * h - r - i - 1;
                 int sub = i <= r ? r - i : i - r - 1;
-                var a = src.AsSpan(add * w + x0, n);
-                var b = src.AsSpan(sub * w + x0, n);
-                var d = dst.AsSpan(i * w + x0, n);
+                var a = src.AsSpan(o + add * w + x0, n);
+                var b = src.AsSpan(o + sub * w + x0, n);
+                var d = dst.AsSpan(o + i * w + x0, n);
                 for (int x = 0; x < n; x++)
                 {
                     int s = s0[x] + (a[x] - b[x]) * inv;

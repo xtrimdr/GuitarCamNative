@@ -428,11 +428,12 @@ static class DspCommands
         allOk &= resOk;
         Console.WriteLine($"{"AudioLoader 44.1→48 kHz (2.0 s, A4)",-36} {Db(resDiffDb),12} {Db(resRelDb),10}  {(resOk ? "igual" : "DISTINTO")}");
 
-        // Nitidez y Claridad (VideoDetail): a flat frame stays as it is, an edge gets its overshoot on both sides, and
-        // the export's chain carries the filters only when they're on ("gclab nitidez" compares them with FFmpeg)
+        // Nitidez, Claridad y Resplandor (VideoDetail): a flat frame stays as it is, an edge gets its overshoot on both
+        // sides, a light in the dark spreads a halo while the dark stays, the looks add their share only with the filter on,
+        // and the export's chain carries the filters only when they're on ("gclab nitidez" compares them with FFmpeg)
         {
             const int dw = 64, dh = 48;
-            var on = new ExportVideoFxSpec(Sharpness: 100, Clarity: 100);
+            var on = VideoDetail.For(null, new ExportVideoFxSpec(Sharpness: 100, Clarity: 100));
             var flat = new byte[dw * dh * 4];
             for (int i = 0; i < flat.Length; i++) flat[i] = (byte)((i & 3) == 3 ? 255 : 128);
             var flatOut = (byte[])flat.Clone();
@@ -449,12 +450,33 @@ static class DspCommands
             int row = dh / 2 * dw;
             bool overshoot = edge[(row + dw / 2 - 1) * 4] < 60 && edge[(row + dw / 2) * 4] > 180;
             var parts = new List<string>();
-            bool offPlain = VideoDetail.ExportFilters(ExportVideoFxSpec.Defaults, 1080, 1080, "[0:v]null", parts, "0") == "[0:v]null" && parts.Count == 0;
+            bool offPlain = VideoDetail.ExportFilters(VideoDetail.For(null, ExportVideoFxSpec.Defaults), 1080, 1080, "[0:v]null", parts, "0") == "[0:v]null" && parts.Count == 0;
             string onChain = VideoDetail.ExportFilters(on, 1080, 1080, "[0:v]null", parts, "0");
             bool onChained = onChain.Contains("unsharp") && parts.Any(p => p.Contains("lut2")) && parts.Any(p => p.Contains("boxblur"));
-            bool detailOk = flatOut.AsSpan().SequenceEqual(flat) && overshoot && offPlain && onChained;
+
+            var glow = VideoDetail.For(null, new ExportVideoFxSpec(Glow: 100));
+            var dark = new byte[dw * dh * 4];
+            for (int i = 0; i < dark.Length; i++) dark[i] = (byte)((i & 3) == 3 ? 255 : 40);
+            var light = (byte[])dark.Clone();
+            for (int y = dh / 2 - 2; y < dh / 2 + 2; y++)
+            for (int x = dw / 2 - 2; x < dw / 2 + 2; x++)
+                light[(y * dw + x) * 4 + 2] = 255;
+            var darkOut = (byte[])dark.Clone();
+            proc.Apply(darkOut, dw, dh, dh, glow);
+            proc.Apply(light, dw, dh, dh, glow);
+            int near = ((dh / 2) * dw + dw / 2 + 4) * 4, far = 0;
+            // the red light glows red next to it; far away and in the other channels the dark stays
+            bool halo = light[near + 2] > 40 && light[near] == 40 && light[near + 1] == 40 && light[far + 2] == 40;
+            parts.Clear();
+            VideoDetail.ExportFilters(glow, 1080, 1080, "[0:v]null", parts, "0");
+            bool glowChained = parts.Any(p => p.Contains("blend=all_mode=screen")) && parts.Any(p => p.Contains("lutrgb"));
+            var hdr = VideoDetail.For(new ExportColorSpec(Look: "hdr"), null);
+            bool looks = hdr.Clarity > 0 && !VideoDetail.For(new ExportColorSpec(On: false, Look: "hdr"), null).Any
+                && VideoDetail.For(new ExportColorSpec(Look: "dreamy", Amount: 50), null).Glow is > 0 and < 0.5;
+            bool detailOk = flatOut.AsSpan().SequenceEqual(flat) && overshoot && offPlain && onChained
+                && darkOut.AsSpan().SequenceEqual(dark) && halo && glowChained && looks;
             allOk &= detailOk;
-            Console.WriteLine($"{"Nitidez y Claridad (plano, borde)",-36} {"",12} {"",10}  {(detailOk ? "igual" : "DISTINTO")}");
+            Console.WriteLine($"{"Nitidez, Claridad, Resplandor",-36} {"",12} {"",10}  {(detailOk ? "igual" : "DISTINTO")}");
         }
 
         // Verify B4-R1 & B4-R2: TakeRecorder.Dispose keeps takes > 0.3 s, Finish(discard: true) removes them
@@ -928,7 +950,7 @@ static class DspCommands
                 AspectRatio = ExportTargets.AspectFor(target.Id, p.Settings.Aspect),
                 BorderSize = 4,
                 Color = new ExportColorSpec(col.On, col.Look, col.Amount, col.Exposure, col.Contrast, col.Highlights, col.Shadows, col.Saturation, col.Vibrance, col.Temperature, col.Tint, col.Fade, col.Whites, col.Blacks, col.Light),
-                VideoFx = new ExportVideoFxSpec(vfx.On, vfx.Vignette, vfx.VignetteSize, vfx.Grain, vfx.Letterbox, vfx.LetterboxHeight, vfx.Sharpness, vfx.Clarity),
+                VideoFx = new ExportVideoFxSpec(vfx.On, vfx.Vignette, vfx.VignetteSize, vfx.Grain, vfx.Letterbox, vfx.LetterboxHeight, vfx.Sharpness, vfx.Clarity, vfx.Glow),
                 Takes = takes,
                 MixTracks = mixTracks,
                 MixBus = ChannelDsp.Bus(p),

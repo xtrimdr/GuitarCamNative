@@ -841,7 +841,7 @@ static class LibraryCommands
                 return 0;
             case "plantillas-video":
                 foreach (var t in VideoTemplates.List())
-                    Console.WriteLine($"  {t.Id,-20} {t.Name,-30} filtro {t.Color.Look} {t.Color.Amount:0}% · nitidez {t.Fx.Sharpness:0} · claridad {t.Fx.Clarity:0} · viñeta {t.Fx.Vignette:0} · grano {t.Fx.Grain:0} · barras {t.Fx.Letterbox}{(t.Fx.Letterbox == "custom" ? $" {t.Fx.LetterboxHeight:0}%" : "")}");
+                    Console.WriteLine($"  {t.Id,-20} {t.Name,-30} filtro {t.Color.Look} {t.Color.Amount:0}% · nitidez {t.Fx.Sharpness:0} · claridad {t.Fx.Clarity:0} · resplandor {t.Fx.Glow:0} · viñeta {t.Fx.Vignette:0} · grano {t.Fx.Grain:0} · barras {t.Fx.Letterbox}{(t.Fx.Letterbox == "custom" ? $" {t.Fx.LetterboxHeight:0}%" : "")}");
                 return 0;
             case "guardar-plantilla-video":
                 using (var store = ProjectStore.Open(Path.GetFullPath(Need(arg1))))

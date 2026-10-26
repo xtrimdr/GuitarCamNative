@@ -1065,7 +1065,9 @@ public sealed partial class TimelineView : Control
 
     public override void Render(DrawingContext ctx)
     {
-        if (fitMode && Bounds.Width > HeaderW)
+        // only with room past the 24 px margin: a timeline barely wider than its headers (mid-layout, at startup) would
+        // give a zero or negative zoom, and the ruler's loops would never reach the right edge
+        if (fitMode && Bounds.Width - HeaderW - 24 > 0)
         {
             double fit = (Bounds.Width - HeaderW - 24) / Math.Max(8, LengthSec);
             // the slider follows after this frame: setting it from inside Render would re-enter layout
@@ -1578,6 +1580,8 @@ public sealed partial class TimelineView : Control
     void BuildGrid(double W)
     {
         grid.Clear();
+        // a zoom that isn't a positive number would make the loops below run forever
+        if (!(pps > 0) || !double.IsFinite(pps)) return;
         if (!bars)
         {
             double[] steps = TimeSteps;

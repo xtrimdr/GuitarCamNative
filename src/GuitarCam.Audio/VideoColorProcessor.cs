@@ -11,7 +11,7 @@ public sealed record LetterboxSpec(string Id, string Label, double Ratio);
 /// Port of <c>GuitarCam/src/shared/colorGrade.js</c>, <c>src/shared/videoFx.js</c> and <c>src/video/colorGL.ts</c>.
 /// Shared by the live preview and the FFmpeg MP4 export so that what you see in the preview matches the exported video:
 /// <list type="bullet">
-/// <item><description>27 looks (the fitted ones live in <see cref="FittedLooks"/>) + 9 color adjustments baked into a <c>33³</c> 3D LUT (<see cref="BuildLut"/> / <see cref="LutToCube"/>).</description></item>
+/// <item><description>29 looks (the fitted ones live in <see cref="FittedLooks"/>) + 9 color adjustments baked into a <c>33³</c> 3D LUT (<see cref="BuildLut"/> / <see cref="LutToCube"/>).</description></item>
 /// <item><description>Trilinear 3D LUT interpolation + monochrome film grain (<see cref="Lut3DTable"/> / <see cref="GradeAndGrainBgra"/>), matching WebGL <c>sampler3D</c> (<c>colorGL.ts</c>) and FFmpeg <c>lut3d=interp=trilinear</c>.</description></item>
 /// <item><description>Elliptical panel vignette mask (<see cref="VignetteMask"/> / <see cref="VignettePremulBgra"/>) and cinema letterbox bars (<see cref="LetterboxBar"/>).</description></item>
 /// </list>
@@ -49,6 +49,8 @@ public static class VideoColorProcessor
         new("clean", "Limpio"),
         new("moody", "Moody"),
         new("cream", "Crema"),
+        new("dreamy", "Soñado"),
+        new("hdr", "HDR"),
     ];
 
     public static readonly IReadOnlyList<LetterboxSpec> LetterboxOptions =
@@ -99,7 +101,8 @@ public static class VideoColorProcessor
     public static bool IsKnownLook(string? look) => look is
         "none" or "brujo" or "sepia" or "bw" or "noir" or "warm" or "cool" or "cine" or "vintage" or
         "film" or "blockbuster" or "bleach" or "golden" or "night" or "nordic" or "neon" or "scifi" or "desert" or
-        "redonly" or "silver" or "bluenight" or "vivid" or "ice" or "fresh" or "clean" or "moody" or "cream";
+        "redonly" or "silver" or "bluenight" or "vivid" or "ice" or "fresh" or "clean" or "moody" or "cream" or
+        "dreamy" or "hdr";
 
     public static (double R, double G, double B) ApplyLook(string look, double r, double g, double b)
     {
@@ -148,6 +151,27 @@ public static class VideoColorProcessor
                 var c = SatK(r, g, b, 0.82);
                 c = SplitTone(c.R, c.G, c.B, (0.012, 0.006, 0.0), (0.045, 0.025, -0.03));
                 static double Tone(double v) => 0.07 + (ContrastK(Clamp01(v), 0.9) - 0.05) * 0.97;
+                return (Tone(c.R), Tone(c.G), Tone(c.B));
+            }
+            case "dreamy":
+            {
+                // Soft and bright: lifted blacks, opened mids, a warm pink haze in the highlights; the glow that makes it
+                // dreamy is VideoDetail's, scaled by the same intensity
+                var c = SatK(r, g, b, 0.88);
+                c = SplitTone(c.R, c.G, c.B, (0.01, 0.0, 0.02), (0.035, 0.012, 0.01));
+                static double Tone(double v) { v = Clamp01(v); return 0.06 + (v + 0.18 * v * (1.0 - v)) * 0.94; }
+                return (Tone(c.R), Tone(c.G), Tone(c.B));
+            }
+            case "hdr":
+            {
+                // Open shadows and held-back highlights with richer color; the local contrast that makes it read as HDR
+                // is VideoDetail's clarity, scaled by the same intensity
+                var c = SatK(r, g, b, 1.15);
+                static double Tone(double v)
+                {
+                    v = Clamp01(v);
+                    return v + 0.36 * v * (1.0 - v) * (1.0 - v) - 0.24 * v * v * (1.0 - v);
+                }
                 return (Tone(c.R), Tone(c.G), Tone(c.B));
             }
             case "sepia":
@@ -705,7 +729,8 @@ public static class VideoColorProcessor
             Letterbox: lb,
             LetterboxHeight: double.IsFinite(fx.LetterboxHeight) ? Math.Clamp(fx.LetterboxHeight, LetterboxHeightMin, LetterboxHeightMax) : LetterboxHeightDefault,
             Sharpness: Clamp100(fx.Sharpness, 0),
-            Clarity: Clamp100(fx.Clarity, 0));
+            Clarity: Clamp100(fx.Clarity, 0),
+            Glow: Clamp100(fx.Glow, 0));
     }
 
     public static bool HasVignette(ExportVideoFxSpec? fx)
