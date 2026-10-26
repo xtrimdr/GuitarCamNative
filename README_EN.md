@@ -16,8 +16,8 @@ It is designed to be used with the guitar strapped on: one-key shortcuts, big bu
 
 | | |
 |---|---|
-| ![The mixer while playing: folders as VCAs, reverb and delay returns and the master](docs/screenshots/mixer-en.png) | ![The Mastering view: the master chain from left to right and the output loudness](docs/screenshots/master-en.png) |
-| **The mixer**: one strip per track, folders as VCAs, the reverb and delay returns and the master. | **Mastering**: look, cleanup, multiband, color, tape, width, soft clip and limiter, with a loudness target and "Suggest". |
+| ![The mixer while playing: folders, reverb and delay buses and the master](docs/screenshots/mixer-en.png) | ![The Mastering view: the master chain from left to right and the output loudness](docs/screenshots/master-en.png) |
+| **The mixer**: one strip per track, the folders, the reverb and delay buses and the master. | **Mastering**: look, cleanup, multiband, color, tape, width, soft clip and limiter, with a loudness target and "Suggest". |
 | ![Vertical 9:16 with the Vertical layout: the video full height, the timeline and mixer beside it](docs/screenshots/vertical-en.png) | ![Audio only mode: tracks with their effect knobs and the EQ with its live spectrum](docs/screenshots/audio-en.png) |
 | **Vertical 9:16** with the Vertical layout: the video full height, the timeline and mixer beside it. | **Audio only**: tracks with their effect knobs and the EQ with its live spectrum. |
 
@@ -50,7 +50,10 @@ It is designed to be used with the guitar strapped on: one-key shortcuts, big bu
 - A per-track effects chain: saturation (**Vida**, tube or tape), a **compressor** with presets (Strumming /
   Arpeggio / Lead), a **6-band EQ** with live spectrum, and sends to **reverb** and **delay**, plus a master limiter
   and pan templates.
-- A full **mixer**; each folder gets its own channel, and its fader, M and S rule all its tracks, like a VCA.
+- A full **mixer** with **buses**: every track or folder picks its output (the master or a bus) and sends to the
+  buses (before or after the fader); the buses go to the master. A bus has volume, pan and effects, so it works for a reverb, a delay or to process
+  a group. Folders only group. Strips are reordered by dragging them in the mixer (the timeline follows), sit on the
+  left or the right, and named separators keep big projects tidy.
 - Professional-grade audio: starting, stopping, jumping and dragging the playhead all fade, with no clicks or dropouts.
 
 ### Build the video

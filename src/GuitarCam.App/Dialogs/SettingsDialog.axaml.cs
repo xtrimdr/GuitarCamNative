@@ -690,7 +690,7 @@ public sealed partial class SettingsDialog : UserControl
         var list = new StackPanel { Spacing = 6 };
         foreach (string key in TrackKnobs.All)
         {
-            var icon = FxIcon.Create(key, 13);
+            var icon = FxIcon.Create(key == TimelineView.SendsKey ? FxIcon.Reverb : key, 13);
             FxIcon.SetColor(icon, Palette.Accent);
             icon.VerticalAlignment = VerticalAlignment.Center;
             var name = new TextBlock { Text = KnobName(key), VerticalAlignment = VerticalAlignment.Center };
@@ -707,8 +707,7 @@ public sealed partial class SettingsDialog : UserControl
     {
         FxIcon.Sat => Loc.T("fx.life"),
         FxIcon.Comp => Loc.T("insp.section.comp"),
-        FxIcon.Reverb => Loc.T("insp.section.reverb"),
-        FxIcon.Delay => Loc.T("insp.section.delay"),
+        TimelineView.SendsKey => Loc.T("set.view.knobs.sends"),
         _ => Loc.T("insp.section.transpose"),
     };
 

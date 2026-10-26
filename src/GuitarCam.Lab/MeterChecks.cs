@@ -27,6 +27,9 @@ static class MeterChecks
         }
         double db = RmsTap.Db(ms);
         bool sineOk = Math.Abs(db + 9.03) < 0.1;
+        // each side on its own: the left reads the sine, the silent right reads nothing
+        double dbL = RmsTap.Db(tap.MeanSqL), dbR = RmsTap.Db(tap.MeanSqR);
+        bool sidesOk = Math.Abs(dbL + 9.03) < 0.1 && dbR < -100;
         // then silence: after 1 s the meter has fallen well under -40 dB
         Array.Clear(l);
         for (int b = 0; b < sr / block; b++)
@@ -37,7 +40,8 @@ static class MeterChecks
         double fallen = RmsTap.Db(ms);
         bool fallOk = fallen < -40;
         Console.WriteLine($"{"Medidor: RMS de un seno a -6 dBFS",-36} {$"{db:0.0} dB",12} {"-9.0 dB",10}  {(sineOk ? "igual" : "DISTINTO")}");
+        Console.WriteLine($"{"Medidor: RMS L / R (derecha muda)",-36} {$"{dbL:0.0} / {(double.IsNegativeInfinity(dbR) ? "-∞" : dbR.ToString("0"))}",12} {"-9.0 / -∞",10}  {(sidesOk ? "igual" : "DISTINTO")}");
         Console.WriteLine($"{"Medidor: RMS 1 s después del silencio",-36} {$"{fallen:0.0} dB",12} {"< -40 dB",10}  {(fallOk ? "igual" : "DISTINTO")}");
-        return sineOk && fallOk;
+        return sineOk && sidesOk && fallOk;
     }
 }

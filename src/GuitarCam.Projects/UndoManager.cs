@@ -20,9 +20,8 @@ public sealed class UndoManager(TimeProvider? timeProvider = null)
     long lastAt;
 
     /// <summary>Only the editable state; serialized before every edit, never the immutable recordings.</summary>
-    sealed record Editable(List<Track> Tracks, string Layout, string Aspect, ReverbSettings Reverb,
-        DelaySettings Delay, ColorGrade Color, VideoFx VideoFx, string? Mode = null, List<Folder>? Folders = null,
-        List<Marker>? Markers = null, List<ReturnBus>? Returns = null);
+    sealed record Editable(List<Track> Tracks, string Layout, string Aspect, ColorGrade Color, VideoFx VideoFx,
+        string? Mode = null, List<Folder>? Folders = null, List<Marker>? Markers = null, List<Bus>? Buses = null);
 
     public bool CanUndo => undo.Count > 0;
     public bool CanRedo => redo.Count > 0;
@@ -55,19 +54,17 @@ public sealed class UndoManager(TimeProvider? timeProvider = null)
         var s = project.Settings;
         s.Layout = state.Layout;
         s.Aspect = state.Aspect;
-        s.Reverb = state.Reverb;
-        s.Delay = state.Delay;
         s.Color = state.Color;
         s.VideoFx = state.VideoFx;
         s.Mode = state.Mode ?? s.Mode;
-        s.Returns = state.Returns ?? [];
+        s.Buses = state.Buses ?? [];
         project.Normalize();
         lastKey = "";
         return true;
     }
 
     static string Capture(Project p) => JsonSerializer.Serialize(new Editable(p.Tracks, p.Settings.Layout,
-        p.Settings.Aspect, p.Settings.Reverb, p.Settings.Delay, p.Settings.Color, p.Settings.VideoFx, p.Settings.Mode, p.Folders, p.Markers, p.Settings.Returns), ProjectStore.Json);
+        p.Settings.Aspect, p.Settings.Color, p.Settings.VideoFx, p.Settings.Mode, p.Folders, p.Markers, p.Settings.Buses), ProjectStore.Json);
 
     public void Clear()
     {

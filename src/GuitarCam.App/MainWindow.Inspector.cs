@@ -111,6 +111,7 @@ public partial class MainWindow
             shortcutTips.Add((b, tip, "leftPanel"));
             b.Foreground = Palette.Faint; inspectorCollapsed.Children.Add(b);
         }
+        InitInspectorRail();
         inspectorWidth = SavedSidebarWidth("sidebarWidth");
         inspectorGrip = SidebarGrip(true, () => inspectorWidth, () => ProjectBar.Width, SetInspectorWidth, "sidebarWidth");
         InspectorBar.Child = new Panel { Children = { inspectorExpanded, inspectorCollapsed, inspectorGrip } };
@@ -180,6 +181,7 @@ public partial class MainWindow
         var header = new SectionHeader(SectionTitle(title), icon);
         var sectionIcon = header.Icon;
         inspectorSections[title] = (content, action, header);
+        sectionLooks[title] = (icon, on);
         header.Toggled += () => { SetSectionCollapsed(title, !collapsedSections.Contains(title)); SaveCollapsedSections(); };
         ToggleButton? powerButton = null;
         if (on != null && power != null)
@@ -328,16 +330,8 @@ public partial class MainWindow
         videoOnly.Add(inVideo);
         // the insert slots, in their order (RebuildInspectorChain)
         takeSections.Children.Add(inspectorChain);
-        // every send can be taken before the fader: its PRE chip, in the section's header
-        var reverbPre = PreChip(() => sel!.Channel.ReverbPre, () => Edit(t => t.Channel.ReverbPre = !t.Channel.ReverbPre, "reverb.pre"), inspectorRefresh);
-        var reverb = Section("Reverb", FxIcon.Reverb, () => sel!.Channel.ReverbOn, on => Edit(t => t.Channel.ReverbOn = on, "reverb.on"), reverbPre);
-        EffectKnob(reverb, Loc.T("insp.reverb.send"), 0, () => sel!.Channel.ReverbSend, v => Edit(t => t.Channel.ReverbSend = v, "reverb.send"), v => $"{v * 100:0}%", SendDb,
-            Loc.T("insp.reverb.hint"));
-        var delayPre = PreChip(() => sel!.Channel.DelayPre, () => Edit(t => t.Channel.DelayPre = !t.Channel.DelayPre, "delay.pre"), inspectorRefresh);
-        var delay = Section("Delay", FxIcon.Delay, () => sel!.Channel.DelayOn, on => Edit(t => t.Channel.DelayOn = on, "delay.on"), delayPre);
-        EffectKnob(delay, Loc.T("insp.delay.send"), 0, () => sel!.Channel.DelaySend, v => Edit(t => { t.Channel.DelaySend = v; t.Channel.DelayOn = true; }, "delay.send"), v => $"{v * 100:0}%", SendDb,
-            Loc.T("insp.delay.hint"));
-        // the sends to the extra returns, one section each (RebuildInspectorSends)
+        // where the track goes and its sends, one section per bus (RebuildInspectorSends); every send can be taken
+        // before the fader: its PRE chip, in the section's header
         takeSections.Children.Add(inspectorSends);
         // native only: the track's pitch, same length (MainWindow.Transpose.cs). A card of its own beside the other
         // effects (asked by the user); it reads as off (dimmed) while the track plays at its original pitch.
@@ -631,6 +625,7 @@ public partial class MainWindow
             }
         }
         finally { syncing = false; }
+        RefreshInspectorRail();
         RefreshMixer();
     }
 }

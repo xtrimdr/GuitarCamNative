@@ -158,7 +158,10 @@ static class Program
               proyecto transiciones carpeta   lista dónde se tocan los clips de cada pista y qué transición tiene cada unión
               proyecto editar carpeta nueva-carpeta [nombre] [--pistas id,id] | quitar-carpeta carpeta   agrupa pistas (quitarla las deja sueltas)
               proyecto editar carpeta a-carpeta pista carpeta|raiz [--en n] | sacar-de-carpeta pista | mover-carpeta carpeta n
-              proyecto editar carpeta carpeta id [--nombre X] [--volumen 0.8] [--mute] [--solo] [--plegar]   fader, mute y solo de la carpeta (como un VCA)
+              proyecto editar carpeta carpeta id [--nombre X] [--plegar] [--ocultar]   renombra y pliega una carpeta (--ocultar: un
+                                           separador se oculta o se muestra en el timeline)
+              proyecto editar carpeta nuevo-separador [nombre] [--en n] [--visible]   un separador con nombre en ese lugar de la secuencia (oculto en el timeline salvo --visible)
+              proyecto editar carpeta lado id izquierda|derecha   de qué lado del mixer va la tira (pista, carpeta, separador o bus)
               proyecto editar carpeta transponer pista semitonos   cambia el tono de la pista sin cambiar el largo (-12..+12, 0 = original)
                                            y deja sus tomas transpuestas en cache/ (como el Transponer del inspector)
               proyecto editar carpeta guardar-plantilla pista [nombre] | usar-plantilla id|nombre   plantillas de pista (pistas.json)
@@ -172,23 +175,22 @@ static class Program
               proyecto verificar-tomas     verifica a qué pista va una toma nueva, su nombre y su canal
               proyecto importar-audio carpeta archivo [--en segundos] [--pista id]   copia un audio de afuera a media/ y lo pone en una pista
               proyecto verificar-importar  verifica la importación de audio (formato, nombres, archivos rotos)
-              proyecto insertos carpeta pista [agregar vida|comp|eq [--en n] | quitar n | mover n m | duplicar n | prender n | apagar n]
+              proyecto insertos carpeta pista [agregar vida|comp|eq [--en n] | quitar n | mover n m | duplicar n | prender n | apagar n | plegar n]
                                            los slots de efectos de la pista (número o id), en el orden en que suenan; sin
-                                           operación, los lista. Como el menú de cada efecto en la tira ancha del mixer
-              proyecto insertos carpeta --carpeta id|n [agregar … | quitar n | …]
-                                           lo mismo para el bus de una carpeta: sus pistas suman ahí y pasan por esos
-                                           efectos antes del master (sin efectos, la carpeta no cambia el sonido)
-              proyecto insertos carpeta --retorno id|n [agregar reverb|delay|vida|comp|eq … | quitar n | …]
-                                           lo mismo para un retorno agregado (la reverb y el delay solo van en retornos)
-              proyecto retornos carpeta [agregar [nombre] [--tipo reverb|delay] | quitar n | renombrar n nombre |
-                        volumen n 0.8 | mute n]
-                                           los retornos agregados, además de la Reverb y el Delay fijos, con sus slots;
-                                           uno nuevo trae una reverb (o un delay) con sus valores por defecto; quitar
-                                           uno se lleva los envíos que le mandaban las pistas
-              proyecto envios carpeta pista [reverb|delay|n [nivel] [--pre|--post] [--apagar|--prender]]
-                                           los envíos de la pista (Reverb, Delay y cada retorno agregado, por número
-                                           o id); --pre lo saca antes del fader (no lo cambian el fader ni el de su
-                                           carpeta). Las opciones van después del nivel
+                                           operación, los lista. Como el menú de cada efecto en la tira ancha del mixer;
+                                           plegar n lo pliega o despliega en el mixer (no cambia el sonido)
+              proyecto insertos carpeta --bus id|n [agregar reverb|delay|vida|comp|eq … | quitar n | …]
+                                           lo mismo para un bus (la reverb y el delay solo van en buses)
+              proyecto buses carpeta [agregar [nombre] [--tipo reverb|delay|vacio] | quitar n | renombrar n nombre |
+                        volumen n 0.8 | paneo n -0.3 | mute n]
+                                           los buses, en el orden en que suenan, con sus slots, su salida y sus envíos;
+                                           uno nuevo trae una reverb, un delay o nada; quitar uno se lleva los envíos que
+                                           le llegaban y lo que salía a él va al master
+              proyecto envios carpeta quien [bus [nivel] [--pre|--post] [--apagar|--prender] [--quitar|--sumar]] [--salida bus|master]
+                                           la salida y los envíos de una pista (número o id), carpeta:n o bus:n; --pre lo
+                                           saca antes del fader (una carpeta no tiene). Un bus sale solo al master: con
+                                           bus:n lo rechaza. --quitar saca el bus de su lista (apagado, con su nivel) y
+                                           --sumar lo vuelve a poner. Las opciones van después del nivel
               proyecto historial carpeta   tomas (en uso / no usadas), exportaciones y actividad, como la pestaña Historial
               proyecto historial carpeta quitar|usar medio | borrar-no-usadas | borrar-exportacion n
               proyecto verificar-historial verifica el registro de tomas, la Papelera y las frases de la actividad

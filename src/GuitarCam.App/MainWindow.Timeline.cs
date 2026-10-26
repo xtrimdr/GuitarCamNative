@@ -204,37 +204,24 @@ public partial class MainWindow
         // the header's knobs are the user's pick (Configuración → Vista)
         Timeline.SetKnobs(TrackKnobs.Visible);
         TrackKnobs.Changed += () => Timeline.SetKnobs(TrackKnobs.Visible);
+        // a knob per send the track shows (the buses it has, ProjectBuses.Shown)
+        Timeline.SendKnobs = SendKnobsOf;
+        Timeline.SendState = (t, busId) =>
+        {
+            var sends = t.Channel.Sends;
+            for (int k = 0; k < sends.Count; k++)
+                if (sends[k].BusId == busId) return (sends[k].On, sends[k].Level);
+            return (false, 0);
+        };
+        // a send knob: its label turns it on or off, the knob sets its level (and turning it up turns it on)
         Timeline.EffectRequested += (track, fx, toggle, amount) =>
         {
-            // Transponer has no on/off (its label does nothing); the knob's 0…1 is −12…+12 semitones
-            if (fx == FxIcon.Transpose)
-            {
-                if (amount is { } a) SetTranspose(track, a * 24 - 12);
-                return;
-            }
-            if (fx == FxIcon.Comp)
-            {
-                StripComp(track, c => { if (toggle) c.On = !c.On; if (amount is { } a) { c.Amount = a; c.On = true; } }, toggle ? "on" : "amount");
-                return;
-            }
+            if (!fx.StartsWith(TimelineView.SendPrefix, StringComparison.Ordinal)) return;
+            string busId = fx[TimelineView.SendPrefix.Length..];
             EditTrack(track, t =>
             {
-                var ch = t.Channel;
-                switch (fx)
-                {
-                    case FxIcon.Sat:
-                        if (toggle) ch.Sat.On = !ch.Sat.On;
-                        if (amount is { } s) { ch.Sat.Amount = s; ch.Sat.On = true; }
-                        break;
-                    case FxIcon.Reverb:
-                        if (toggle) ch.ReverbOn = !ch.ReverbOn;
-                        if (amount is { } r) { ch.ReverbSend = r; ch.ReverbOn = true; }
-                        break;
-                    default:
-                        if (toggle) ch.DelayOn = !ch.DelayOn;
-                        if (amount is { } d) { ch.DelaySend = d; ch.DelayOn = true; }
-                        break;
-                }
+                var (_, on, _) = ProjectBuses.SendOf(t.Channel, busId);
+                ProjectBuses.SetSend(store!.Project, t.Channel, busId, amount, toggle ? !on : amount > 0 ? true : null);
             }, fx + (toggle ? ".on" : ".amount"));
         };
         Timeline.HeaderWidthChanged += w =>
@@ -308,6 +295,8 @@ public partial class MainWindow
         {
             restoring = false;
             Inspector.IsEnabled = sel != null || SelectedFolder != null;
+            // the mixer refreshed while restoring (disabled): bring it back, or it stays dead until the next refresh
+            if (mixerView) RefreshMixer();
             MarkDirty();
             UpdateUndoButtons();
             RefreshHistory();
@@ -373,7 +362,7 @@ public partial class MainWindow
         engine.UpdateTracks(list);
         RefreshTranspose();
         Timeline.LengthSec = engine.LengthSec;
-        ApplyFolderMix(p, list);
+        ApplyRouting(p, list);
         Timeline.UpdateTracks(list, p.Folders);
         UpdateResetHeights();
         Preview.SetProject(list, p.Settings);
@@ -735,6 +724,10 @@ public partial class MainWindow
                     enabled: enabled, icon: ""));
             list.Add(MenuAction(Loc.T("menu.renameTrack") + "…", () => { RenameInPlace(track.Track.Id, () => takeName.Focus()); return Task.CompletedTask; }, enabled: enabled, icon: ""));
             list.Add(FolderSubmenu(track, enabled));
+            var sendsIcon = FxIcon.Create(FxIcon.Reverb, 12);
+            sendsIcon.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
+            list.Add(new MenuItem { Header = MenuHeader(Loc.T("send.menu"), sendsIcon), ItemsSource = SendChoices(RouterOf(track)), IsEnabled = enabled });
+            list.Add(MenuAction(Loc.T("separator.addAbove"), () => NewSeparatorAbove(track), enabled: enabled, icon: "", tip: Loc.T("separator.add.tip")));
             list.Add(MenuAction(Loc.T("preset.save") + "…", () => { SavePreset(track, point); return Task.CompletedTask; }, enabled: true, icon: "", tip: Loc.T("preset.save.tip")));
             list.Add(MenuAction(Loc.T("menu.paste"), PasteClips, Shortcuts.Label("paste"), enabled && clipboard != null, icon: "", tip: Loc.T("menu.paste.tip")));
             list.Add(new Separator());

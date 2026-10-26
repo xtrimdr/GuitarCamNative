@@ -43,56 +43,46 @@ public sealed class MixTrackSpec
     public EqBandSpec[] EqBands { get; init; } = TrackEq.DefaultBands;
     /// <summary>The track's insert slots in order; null = the fixed chain from <see cref="Sat"/>, <see cref="Comp"/> and the EQ.</summary>
     public IReadOnlyList<InsertSpec>? Inserts { get; init; }
-    /// <summary>Its folder's bus (an index into <see cref="MixBusSpec.Folders"/>), -1 = none: its post-fader output goes
-    /// through that folder's slots on its way to the master. Its sends don't.</summary>
-    public int Folder { get; init; } = -1;
-    public bool ReverbOn { get; init; } = true;
-    public double ReverbSend { get; init; }
-    public bool DelayOn { get; init; } = true;
-    public double DelaySend { get; init; }
-    /// <summary>The reverb and delay sends taken before the fader (after the slots and the pan); false = after it.</summary>
-    public bool ReverbPre { get; init; }
-    public bool DelayPre { get; init; }
-    /// <summary>Its sends to the extra returns (<see cref="MixBusSpec.Returns"/>).</summary>
+    /// <summary>Where its output goes: an index into <see cref="MixBusSpec.Nodes"/> (its folder or a bus), -1 = the master.</summary>
+    public int Output { get; init; } = -1;
+    /// <summary>Its sends to buses (<see cref="MixBusSpec.Nodes"/>).</summary>
     public IReadOnlyList<MixSendSpec> Sends { get; init; } = [];
 }
 
-/// <summary>A track's send to an extra return: <see cref="Return"/> is an index into <see cref="MixBusSpec.Returns"/>.</summary>
+/// <summary>A send to a bus: <see cref="To"/> is an index into <see cref="MixBusSpec.Nodes"/>.</summary>
 public sealed class MixSendSpec
 {
-    public int Return { get; init; }
+    public int To { get; init; }
     public double Level { get; init; }
     public bool On { get; init; } = true;
     /// <summary>Taken before the fader (after the slots and the pan, still silenced by mute and solo).</summary>
     public bool Pre { get; init; }
 }
 
-/// <summary>An extra return (native only): what the tracks send to it goes through its slots and its fader into the master.</summary>
-public sealed class MixReturnSpec
+/// <summary>
+/// A node of the mix (native only): a folder (a plain sum: no slots, pan or fader) or a bus. What is routed and sent to
+/// it adds up, goes through its slots, pan, fader and mute (<see cref="BusDspChain"/>), and on to its
+/// <see cref="Output"/> and its sends. Its <see cref="Output"/> and sends always point at nodes after it in
+/// <see cref="MixBusSpec.Nodes"/> (the run order), or at the master.
+/// </summary>
+public sealed class MixNodeSpec
 {
     public string Name { get; init; } = "";
     public double Volume { get; init; } = 1;
+    public double Pan { get; init; }
     public bool Muted { get; init; }
     public IReadOnlyList<InsertSpec> Inserts { get; init; } = [];
+    /// <summary>An index into <see cref="MixBusSpec.Nodes"/> after this one, -1 = the master.</summary>
+    public int Output { get; init; } = -1;
+    public IReadOnlyList<MixSendSpec> Sends { get; init; } = [];
 }
 
 public sealed class MixBusSpec
 {
-    public ReverbParams Reverb { get; init; } = ReverbParams.Defaults;
-    public DelayParams Delay { get; init; } = DelayParams.Defaults;
     public double Bpm { get; init; } = 120;
     public MasterParams Master { get; init; } = MasterParams.Off;
-    /// <summary>The folders' buses (<see cref="MixTrackSpec.Folder"/> points here). One without slots is no bus at all.</summary>
-    public IReadOnlyList<MixFolderSpec> Folders { get; init; } = [];
-    /// <summary>The extra returns, besides the fixed reverb and delay (<see cref="MixTrackSpec.Sends"/> point here).</summary>
-    public IReadOnlyList<MixReturnSpec> Returns { get; init; } = [];
-}
-
-/// <summary>A folder's bus: the slots its tracks' summed output goes through before the master (native only).</summary>
-public sealed class MixFolderSpec
-{
-    public string Name { get; init; } = "";
-    public IReadOnlyList<InsertSpec> Inserts { get; init; } = [];
+    /// <summary>The folders and the buses, in the order they run: each after every node that feeds it.</summary>
+    public IReadOnlyList<MixNodeSpec> Nodes { get; init; } = [];
 }
 
 /// <summary>Receives a rendered stretch of the mix that starts at <paramref name="frame"/> (<see cref="MixRenderer.RenderTo"/>).</summary>
@@ -101,13 +91,14 @@ public delegate void MixSink(int frame, ReadOnlySpan<float> left, ReadOnlySpan<f
 /// <summary>
 /// Per-track DSP chain shared by live ASIO playback (<c>PlaybackEngine</c>) and offline export render
 /// (<see cref="MixRenderer"/>): clips with fade envelopes → the track's insert slots (<see cref="ITrackInsert"/>, by
-/// default Vida → compressor with its preset EQ → 6-band EQ) → Web Audio <c>StereoPannerNode</c> → fader + the
-/// reverb/delay sends, each post-fader (by default) or pre-fader (after the slots and the pan, before the fader; mute
-/// and solo still silence it). Preallocates its buffers (8192 frames) so <see cref="ProcessFilledBuffer"/> never allocates.
-/// The slots are an array the UI replaces whole (<see cref="SetInserts"/>); when the list itself changes (a slot added,
-/// removed or moved) the audio thread dips the track for <see cref="SwapFade"/> samples on each side of the swap, so
-/// the new chain comes in without a click. The sends to the extra returns (<see cref="Sends"/>) are an immutable array
-/// swapped whole too: while there are any, the block's pre- and post-fader signals are kept for <see cref="AddSend"/>.
+/// default Vida → compressor with its preset EQ → 6-band EQ) → Web Audio <c>StereoPannerNode</c> → fader, into its
+/// output (a folder, a bus or the master: the caller's buffer), and its sends to buses, each post-fader (by default) or
+/// pre-fader (after the slots and the pan, before the fader; mute and solo still silence it). Preallocates its buffers
+/// (8192 frames) so <see cref="ProcessFilledBuffer"/> never allocates. The slots are an array the UI replaces whole
+/// (<see cref="SetInserts"/>); when the list itself changes (a slot added, removed or moved) the audio thread dips the
+/// track for <see cref="SwapFade"/> samples on each side of the swap, so the new chain comes in without a click. The sends
+/// (<see cref="Sends"/>) are an immutable array swapped whole too: while there are any, the block's pre- and post-fader
+/// signals are kept for <see cref="AddSend"/>.
 /// </summary>
 public sealed class TrackDspChain
 {
@@ -117,7 +108,7 @@ public sealed class TrackDspChain
 
     readonly float[] bufL = new float[MaxBlockSize];
     readonly float[] bufR = new float[MaxBlockSize];
-    // the last block's pre-fader and post-fader signals, kept only while there are sends to extra returns
+    // the last block's pre-fader and post-fader signals, kept only while there are sends
     readonly float[] preL = new float[MaxBlockSize];
     readonly float[] preR = new float[MaxBlockSize];
     readonly float[] postL = new float[MaxBlockSize];
@@ -125,24 +116,18 @@ public sealed class TrackDspChain
     readonly InsertRack rack;
     volatile TrackSend[] sends = [];
 
-    /// <summary>Its sends to the extra returns, swapped whole by the UI (never changed in place).</summary>
+    /// <summary>Its sends to buses, swapped whole by the UI (never changed in place).</summary>
     public TrackSend[] Sends { get => sends; set => sends = value; }
     /// <summary>
     /// Audio thread: the sends the last <see cref="ProcessFilledBuffer"/> kept its signals for. The caller adds these
     /// (<see cref="AddSend"/>), not <see cref="Sends"/>, which the UI may have swapped in the meantime.
     /// </summary>
     public TrackSend[] BlockSends { get; private set; } = [];
-    public bool ReverbPre { get; set; }
-    public bool DelayPre { get; set; }
 
     public double Volume { get; set; } = 1;
     public double Pan { get; set; }
     public bool Muted { get; set; }
     public bool Solo { get; set; }
-    public bool ReverbOn { get; set; } = true;
-    public double ReverbSend { get; set; }
-    public bool DelayOn { get; set; } = true;
-    public double DelaySend { get; set; }
     volatile SpectrumTap? spectrum;
     /// <summary>Post-inserts, pre-fader tap for the EQ editor's live spectrum (the web's per-track analyser); null when nobody reads it.</summary>
     public SpectrumTap? Spectrum { get => spectrum; set => spectrum = value; }
@@ -165,12 +150,6 @@ public sealed class TrackDspChain
         Pan = spec.Pan;
         Muted = spec.Muted;
         Solo = spec.Solo;
-        ReverbOn = spec.ReverbOn;
-        ReverbSend = spec.ReverbSend;
-        DelayOn = spec.DelayOn;
-        DelaySend = spec.DelaySend;
-        ReverbPre = spec.ReverbPre;
-        DelayPre = spec.DelayPre;
         SetInserts(spec.Inserts ?? TrackInserts.Legacy(spec.Sat, spec.Comp, spec.EqOn, spec.EqBands), fade: false);
     }
 
@@ -267,19 +246,15 @@ public sealed class TrackDspChain
     public Span<float> BufferR(int n) => bufR.AsSpan(0, n);
 
     /// <summary>
-    /// Runs the track's full insert chain on <paramref name="bl"/> / <paramref name="br"/> (already filled
-    /// with the track's source clips for the block) and accumulates the post-fader output into
-    /// <paramref name="masterL"/>/<paramref name="masterR"/> and the reverb/delay send buffers.
+    /// Runs the track's full insert chain on its buffer (already filled with the track's source clips for the block)
+    /// and accumulates the post-fader output into <paramref name="outL"/> / <paramref name="outR"/> (its folder's, its
+    /// bus's or the master's). Its sends are the caller's: <see cref="BlockSends"/> with <see cref="AddSend"/>.
     /// </summary>
     public void ProcessFilledBuffer(
         int n,
         bool anySolo,
-        Span<float> masterL,
-        Span<float> masterR,
-        Span<float> reverbInL,
-        Span<float> reverbInR,
-        Span<float> delayInL,
-        Span<float> delayInR,
+        Span<float> outL,
+        Span<float> outR,
         out float peakL,
         out float peakR,
         out double grDb)
@@ -296,11 +271,8 @@ public sealed class TrackDspChain
         double x = pan <= 0 ? pan + 1 : pan;
         float gl = (float)Math.Cos(x * Math.PI / 2.0);
         float gr = (float)Math.Sin(x * Math.PI / 2.0);
-        float revSend = ReverbOn ? (float)Math.Clamp(ReverbSend, 0, 1) : 0f;
-        float dlySend = DelayOn ? (float)Math.Clamp(DelaySend, 0, 1) : 0f;
-        // pre-fader: after the slots and the pan, before the fader (and the folder's VCA), still silenced by mute / solo
+        // pre-fader: after the slots and the pan, before the fader, still silenced by mute / solo
         float preGain = mute ? 0f : 1f;
-        bool revPre = ReverbPre, dlyPre = DelayPre;
         var blockSends = sends;
         BlockSends = blockSends;
         bool keep = blockSends.Length > 0;
@@ -313,16 +285,11 @@ public sealed class TrackDspChain
             float xr = pan <= 0 ? r * gr : r + l * gr;
             float ol = xl * vol;
             float or = xr * vol;
-            float pl = xl * preGain, pr = xr * preGain;
-            masterL[i] += ol;
-            masterR[i] += or;
-            reverbInL[i] += (revPre ? pl : ol) * revSend;
-            reverbInR[i] += (revPre ? pr : or) * revSend;
-            delayInL[i] += (dlyPre ? pl : ol) * dlySend;
-            delayInR[i] += (dlyPre ? pr : or) * dlySend;
+            outL[i] += ol;
+            outR[i] += or;
             if (keep)
             {
-                preL[i] = pl; preR[i] = pr;
+                preL[i] = xl * preGain; preR[i] = xr * preGain;
                 postL[i] = ol; postR[i] = or;
             }
             if (Math.Abs(ol) > pkL) pkL = Math.Abs(ol);
@@ -336,52 +303,61 @@ public sealed class TrackDspChain
     }
 
     /// <summary>
-    /// Adds the last block (<see cref="ProcessFilledBuffer"/>) into an extra return's input, pre- or post-fader, at
+    /// Adds the last block (<see cref="ProcessFilledBuffer"/>) into a bus's input, pre- or post-fader, at
     /// <paramref name="level"/>. Only for the sends in <see cref="BlockSends"/> (the block is kept only while there are any).
     /// </summary>
-    public void AddSend(int n, float level, bool pre, Span<float> dstL, Span<float> dstR)
-    {
-        var srcL = pre ? preL : postL;
-        var srcR = pre ? preR : postR;
-        for (int i = 0; i < n; i++)
-        {
-            dstL[i] += srcL[i] * level;
-            dstR[i] += srcR[i] * level;
-        }
-    }
+    public void AddSend(int n, float level, bool pre, Span<float> dstL, Span<float> dstR) =>
+        BusDspChain.Add(pre ? preL.AsSpan(0, n) : postL.AsSpan(0, n), pre ? preR.AsSpan(0, n) : postR.AsSpan(0, n), level, dstL, dstR);
+
+    /// <summary>The last block's pre-fader (or post-fader) signal, for the export, which adds the sends itself.</summary>
+    public ReadOnlySpan<float> KeptL(int n, bool pre) => (pre ? preL : postL).AsSpan(0, n);
+    public ReadOnlySpan<float> KeptR(int n, bool pre) => (pre ? preR : postR).AsSpan(0, n);
 }
 
 /// <summary>
-/// One send of a track to an extra return, as the audio thread reads it: where (<see cref="To"/> live, or
-/// <see cref="Index"/> into the export's returns), how much and whether it is taken before the fader. Immutable: the
-/// UI builds a new array of them on every edit (<see cref="TrackDspChain.Sends"/>).
+/// One send to a bus, as the audio thread reads it: where (<see cref="To"/> live, or <see cref="Index"/> into the
+/// export's nodes), how much and whether it is taken before the fader. Immutable: the UI builds a new array of them on
+/// every edit (<see cref="TrackDspChain.Sends"/>, <see cref="BusDspChain.Sends"/>).
 /// </summary>
-public sealed class TrackSend(ReturnDspChain? to, int index, float level, bool pre)
+public sealed class TrackSend(BusDspChain? to, int index, float level, bool pre)
 {
-    public readonly ReturnDspChain? To = to;
+    public readonly BusDspChain? To = to;
     public readonly int Index = index;
     public readonly float Level = level;
     public readonly bool Pre = pre;
 }
 
 /// <summary>
-/// An extra return (native only), live and in the export: the tracks' sends add up in its buffer (8192 frames,
-/// preallocated), go through its insert slots (<see cref="InsertRack"/>, where a reverb or a delay is just one more
-/// slot) and its fader, and into the master next to the fixed reverb and delay. Live, the engine hands the audio thread
-/// the whole list of returns as one array; each block it clears every buffer (<see cref="Begin"/>) before the tracks
-/// add into them, so a send never lands in a return that won't be processed.
+/// A node of the mix (native only), live and in the export: a folder (a plain sum, no slots, pan or fader) or a bus. What
+/// is routed or sent to it adds up in its buffer (8192 frames, preallocated), goes through its insert slots
+/// (<see cref="InsertRack"/>, where a reverb or a delay is just one more slot), its pan (the tracks' law), its fader and
+/// its mute, and on to its output (<see cref="Out"/>: another node, or the master when null) and its sends
+/// (<see cref="Sends"/>; pre-fader ones are taken after the slots and the pan). The nodes run in an order where each comes
+/// after everything that feeds it (<c>ProjectBuses.Order</c>): live, the engine hands the audio thread that order as one
+/// array and clears every buffer each block (<see cref="Begin"/>) before the tracks add into them; the export does the
+/// same per stretch with <see cref="Process"/> on its own buffers. Nothing here allocates.
 /// </summary>
-public sealed class ReturnDspChain
+public sealed class BusDspChain
 {
     readonly float[] bufL = new float[TrackDspChain.MaxBlockSize];
     readonly float[] bufR = new float[TrackDspChain.MaxBlockSize];
+    // the last block after the slots and the pan, before the fader: kept only while there are pre-fader sends
+    readonly float[] preL = new float[TrackDspChain.MaxBlockSize];
+    readonly float[] preR = new float[TrackDspChain.MaxBlockSize];
     readonly InsertRack rack;
+    volatile BusDspChain? output;
+    volatile TrackSend[] sends = [];
 
-    public ReturnDspChain(int sampleRate) => rack = new InsertRack(sampleRate);
+    public BusDspChain(int sampleRate) => rack = new InsertRack(sampleRate);
 
-    /// <summary>Its fader (0..1.5) and mute, set by the UI, read once per block.</summary>
+    /// <summary>Its fader (0..1.5), pan (-1..1) and mute, set by the UI, read once per block.</summary>
     public double Volume { get; set; } = 1;
+    public double Pan { get; set; }
     public bool Muted { get; set; }
+    /// <summary>Live: the node its output goes to (null = the master), set by the UI.</summary>
+    public BusDspChain? Out { get => output; set => output = value; }
+    /// <summary>Live: its sends, swapped whole by the UI (never changed in place).</summary>
+    public TrackSend[] Sends { get => sends; set => sends = value; }
 
     /// <summary>The slots the UI last set.</summary>
     public IReadOnlyList<ITrackInsert> Inserts => rack.Inserts;
@@ -391,15 +367,18 @@ public sealed class ReturnDspChain
     public double GrDb;
     /// <summary>Its output's RMS, for its strip's meter.</summary>
     public RmsTap Rms { get; } = new();
-    /// <summary>UI side: the shown peak, with fall-off.</summary>
-    public float Show;
+    /// <summary>UI side: the shown peaks (with fall-off) and reduction (instant attack, slow release), like a track's.</summary>
+    public float ShowL, ShowR;
+    public double GrShow;
 
     /// <inheritdoc cref="InsertRack.Set"/>
     public void SetInserts(IReadOnlyList<InsertSpec> specs, bool fade = true) => rack.Set(specs, fade);
 
-    public void Configure(MixReturnSpec spec)
+    /// <summary>The export's setup: fader, pan, mute and slots (its output and sends are indexes the export follows).</summary>
+    public void Configure(MixNodeSpec spec)
     {
         Volume = spec.Volume;
+        Pan = spec.Pan;
         Muted = spec.Muted;
         SetInserts(spec.Inserts, fade: false);
     }
@@ -417,18 +396,41 @@ public sealed class ReturnDspChain
     public Span<float> BufferR(int n) => bufR.AsSpan(0, n);
 
     /// <summary>
-    /// Runs the slots and the fader over <paramref name="bl"/> / <paramref name="br"/> in place (its input becomes its
-    /// output) and meters it. The export calls it on its own buffers; live, <see cref="End"/> does it on this one.
+    /// Runs the slots, the pan, the fader and the mute over <paramref name="bl"/> / <paramref name="br"/> in place (its
+    /// input becomes its output) and meters it. With <paramref name="keepPre"/> the signal before the fader is kept in
+    /// <paramref name="preOutL"/> / <paramref name="preOutR"/> (silenced by the mute, like a track's) for pre-fader sends.
     /// </summary>
-    public void Process(Span<float> bl, Span<float> br)
+    public void Process(Span<float> bl, Span<float> br, bool keepPre, Span<float> preOutL, Span<float> preOutR)
     {
         double gr = rack.Process(bl, br);
         if (gr < GrDb) GrDb = gr;
-        float g = Muted ? 0f : (float)Volume;
+        bool mute = Muted;
+        float g = mute ? 0f : (float)Volume;
+        float pg = mute ? 0f : 1f;
+        double pan = Math.Clamp(Pan, -1, 1);
+        // at the center the pan is no pan at all: a folder (and a centered bus) passes its sum untouched
+        bool panned = pan != 0;
+        double x = pan <= 0 ? pan + 1 : pan;
+        float gl = (float)Math.Cos(x * Math.PI / 2.0);
+        float gr2 = (float)Math.Sin(x * Math.PI / 2.0);
         float pkL = MeterL, pkR = MeterR, sqL = 0, sqR = 0;
         for (int i = 0; i < bl.Length; i++)
         {
-            float l = bl[i] * g, r = br[i] * g;
+            float l = bl[i], r = br[i];
+            if (panned)
+            {
+                float xl = pan <= 0 ? l + r * gl : l * gl;
+                float xr = pan <= 0 ? r * gr2 : r + l * gr2;
+                l = xl;
+                r = xr;
+            }
+            if (keepPre)
+            {
+                preOutL[i] = l * pg;
+                preOutR[i] = r * pg;
+            }
+            l *= g;
+            r *= g;
             bl[i] = l;
             br[i] = r;
             if (Math.Abs(l) > pkL) pkL = Math.Abs(l);
@@ -441,22 +443,49 @@ public sealed class ReturnDspChain
         MeterR = pkR;
     }
 
-    /// <summary>Audio thread, after the tracks: processes its buffer and adds it into the master.</summary>
+    /// <summary>Whether any of <paramref name="list"/> is taken before the fader.</summary>
+    public static bool AnyPre(TrackSend[] list)
+    {
+        for (int k = 0; k < list.Length; k++) if (list[k].Pre) return true;
+        return false;
+    }
+
+    /// <summary>Adds <paramref name="srcL"/> / <paramref name="srcR"/> times <paramref name="level"/> into a destination.</summary>
+    public static void Add(ReadOnlySpan<float> srcL, ReadOnlySpan<float> srcR, float level, Span<float> dstL, Span<float> dstR)
+    {
+        for (int i = 0; i < srcL.Length; i++)
+        {
+            dstL[i] += srcL[i] * level;
+            dstR[i] += srcR[i] * level;
+        }
+    }
+
+    /// <summary>
+    /// Audio thread, after the tracks and every node before it: processes its buffer and adds it into its output (the
+    /// next node's buffer, or <paramref name="masterL"/> / <paramref name="masterR"/>) and into its sends' buses.
+    /// </summary>
     public void End(int n, Span<float> masterL, Span<float> masterR)
     {
         var bl = bufL.AsSpan(0, n);
         var br = bufR.AsSpan(0, n);
-        Process(bl, br);
-        for (int i = 0; i < n; i++)
+        var list = sends;
+        bool pre = AnyPre(list);
+        Process(bl, br, pre, preL.AsSpan(0, n), preR.AsSpan(0, n));
+        var to = output;
+        if (to != null) Add(bl, br, 1f, to.BufferL(n), to.BufferR(n));
+        else Add(bl, br, 1f, masterL, masterR);
+        for (int k = 0; k < list.Length; k++)
         {
-            masterL[i] += bl[i];
-            masterR[i] += br[i];
+            var s = list[k];
+            if (s.To == null) continue;
+            if (s.Pre) Add(preL.AsSpan(0, n), preR.AsSpan(0, n), s.Level, s.To.BufferL(n), s.To.BufferR(n));
+            else Add(bl, br, s.Level, s.To.BufferL(n), s.To.BufferR(n));
         }
     }
 }
 
 /// <summary>
-/// A list of insert slots as the audio thread runs them, for a track (<see cref="TrackDspChain"/>) or a folder's bus
+/// A list of insert slots as the audio thread runs them, for a track (<see cref="TrackDspChain"/>) or a bus
 /// (<see cref="BusDspChain"/>). The UI hands it a whole new array (<see cref="Set"/>, built by
 /// <see cref="TrackInserts.Build"/>, which reuses the inserts by slot id so they keep their state); when the list itself
 /// changed, the audio thread fades the signal out for <see cref="TrackDspChain.SwapFade"/> samples, swaps, and fades it
@@ -553,96 +582,14 @@ public sealed class InsertRack(int sampleRate)
 }
 
 /// <summary>
-/// A folder's bus in live playback (native only): the post-fader outputs of the folder's tracks add up in its buffer
-/// (8192 frames, preallocated), go through the folder's insert slots (<see cref="InsertRack"/>) and into the master.
-/// The tracks' sends don't pass through it, and the folder's fader, mute and solo stay a VCA on the tracks. While it
-/// has no slots (and no swap fade going on) it isn't used at all: its tracks go straight to the master, exactly as
-/// without folders. The audio thread decides that once per block (<see cref="Begin"/>), so a track never lands in a
-/// bus that won't be processed. <see cref="MixRenderer"/> does the same per stretch for the export.
-/// </summary>
-public sealed class BusDspChain
-{
-    readonly float[] bufL = new float[TrackDspChain.MaxBlockSize];
-    readonly float[] bufR = new float[TrackDspChain.MaxBlockSize];
-    readonly InsertRack rack;
-
-    public BusDspChain(int sampleRate) => rack = new InsertRack(sampleRate);
-
-    /// <summary>The slots the UI last set.</summary>
-    public IReadOnlyList<ITrackInsert> Inserts => rack.Inserts;
-
-    /// <summary>Audio thread: whether the tracks go through it this block (set by <see cref="Begin"/>, cleared by <see cref="End"/>).</summary>
-    public bool Routed { get; private set; }
-
-    /// <summary>Peaks of its output and its slots' reduction (dB): written by the audio thread, read and reset by the UI.</summary>
-    public float MeterL, MeterR;
-    public double GrDb;
-    /// <summary>Its output's RMS, for the folder strip's meter.</summary>
-    public RmsTap Rms { get; } = new();
-    /// <summary>UI side: the shown peak (with fall-off) and reduction (instant attack, slow release), like a track's.</summary>
-    public float Show;
-    public double GrShow;
-
-    /// <inheritdoc cref="InsertRack.Set"/>
-    public void SetInserts(IReadOnlyList<InsertSpec> specs, bool fade = true) => rack.Set(specs, fade);
-
-    public void Reset() => rack.Reset();
-
-    /// <summary>Audio thread, before the tracks: decides whether it is used this block and, if so, clears its buffer.</summary>
-    public void Begin(int n)
-    {
-        Routed = rack.Busy;
-        if (!Routed) return;
-        bufL.AsSpan(0, n).Clear();
-        bufR.AsSpan(0, n).Clear();
-    }
-
-    public Span<float> BufferL(int n) => bufL.AsSpan(0, n);
-    public Span<float> BufferR(int n) => bufR.AsSpan(0, n);
-
-    /// <summary>Audio thread, after the tracks: runs the slots over the sum and adds it into the master.</summary>
-    public void End(int n, Span<float> masterL, Span<float> masterR)
-    {
-        if (!Routed) return;
-        Routed = false;
-        var bl = bufL.AsSpan(0, n);
-        var br = bufR.AsSpan(0, n);
-        double gr = rack.Process(bl, br);
-        if (gr < GrDb) GrDb = gr;
-        float pkL = MeterL, pkR = MeterR, sqL = 0, sqR = 0;
-        for (int i = 0; i < n; i++)
-        {
-            float l = bl[i], r = br[i];
-            masterL[i] += l;
-            masterR[i] += r;
-            if (Math.Abs(l) > pkL) pkL = Math.Abs(l);
-            if (Math.Abs(r) > pkR) pkR = Math.Abs(r);
-            sqL += l * l;
-            sqR += r * r;
-        }
-        Rms.Add(sqL, sqR, n);
-        MeterL = pkL;
-        MeterR = pkR;
-    }
-}
-
-/// <summary>
-/// Master and return buses shared by live playback and offline export render:
-/// <see cref="ReverbBus"/> + <see cref="DelayBus"/> + <see cref="MasterChain"/> + Empuje (or the Destino's gain,
-/// <see cref="MasterLoudness"/>) + <see cref="SoftClipper"/> + <see cref="MasterLimiter"/>, with preallocated
-/// send accumulation buffers (8192 frames) so the audio callback never allocates.
+/// The master, shared by live playback and offline export render: <see cref="MasterChain"/> + Empuje (or the Destino's
+/// gain, <see cref="MasterLoudness"/>) + <see cref="SoftClipper"/> + <see cref="MasterLimiter"/>. The buses are
+/// <see cref="BusDspChain"/> nodes that add into the master before it gets here. Nothing here allocates.
 /// </summary>
 public sealed class MixGraphBus
 {
-    readonly float[] revInL = new float[TrackDspChain.MaxBlockSize];
-    readonly float[] revInR = new float[TrackDspChain.MaxBlockSize];
-    readonly float[] dlyInL = new float[TrackDspChain.MaxBlockSize];
-    readonly float[] dlyInR = new float[TrackDspChain.MaxBlockSize];
-
-    public ReverbBus Reverb { get; }
-    public DelayBus Delay { get; }
     public MasterLimiter Limiter { get; }
-    /// <summary>The master's EQ and multiband, between the returns and the limiter.</summary>
+    /// <summary>The master's EQ and multiband, before the limiter.</summary>
     public MasterChain Master { get; }
     /// <summary>The master's soft clip, between Empuje and the limiter.</summary>
     public SoftClipper Clip { get; }
@@ -653,18 +600,8 @@ public sealed class MixGraphBus
     const double DriveGlideSec = 0.05;
     readonly float driveGlide;
 
-    public float ReverbMeterL { get; private set; }
-    public float ReverbMeterR { get; private set; }
-    public float DelayMeterL { get; private set; }
-    public float DelayMeterR { get; private set; }
-    /// <summary>The returns' RMS, for their mixer meters.</summary>
-    public RmsTap ReverbRms { get; } = new();
-    public RmsTap DelayRms { get; } = new();
-
     public MixGraphBus(int sampleRate)
     {
-        Reverb = new ReverbBus(sampleRate);
-        Delay = new DelayBus(sampleRate);
         Master = new MasterChain(sampleRate);
         Clip = new SoftClipper(sampleRate);
         driveGlide = (float)(1 - Math.Exp(-1 / (DriveGlideSec * sampleRate)));
@@ -672,15 +609,8 @@ public sealed class MixGraphBus
         Limiter = new MasterLimiter(sampleRate, lookahead, MasterLimiter.CeilingDb);
     }
 
-    public Span<float> PrepareReverbL(int n) { var s = revInL.AsSpan(0, n); s.Clear(); return s; }
-    public Span<float> PrepareReverbR(int n) { var s = revInR.AsSpan(0, n); s.Clear(); return s; }
-    public Span<float> PrepareDelayL(int n) { var s = dlyInL.AsSpan(0, n); s.Clear(); return s; }
-    public Span<float> PrepareDelayR(int n) { var s = dlyInR.AsSpan(0, n); s.Clear(); return s; }
-
-    public void Configure(MixBusSpec spec, bool glideDelay = false)
+    public void Configure(MixBusSpec spec)
     {
-        Reverb.Set(spec.Reverb);
-        Delay.Set(spec.Delay, spec.Bpm, glide: glideDelay);
         SetMaster(spec.Master);
         Master.Reset();
         drive = driveTarget;
@@ -698,106 +628,44 @@ public sealed class MixGraphBus
         driveTarget = (float)Math.Pow(10, MasterLoudness.GainDb(p) / 20);
     }
 
-    public void ConfigureLive(MixBusSpec spec, bool glideDelay = true)
-    {
-        Reverb.SetLive(spec.Reverb);
-        Delay.Set(spec.Delay, spec.Bpm, glide: glideDelay);
-    }
-
     public void Reset()
     {
-        Reverb.Reset();
-        Delay.Reset();
         Master.Reset();
         Clip.Reset();
         Limiter.Reset();
     }
 
-    public (float RevL, float RevR, float DlyL, float DlyR) TakeReturnMeters()
-    {
-        var m = (ReverbMeterL, ReverbMeterR, DelayMeterL, DelayMeterR);
-        ReverbMeterL = ReverbMeterR = DelayMeterL = DelayMeterR = 0;
-        return m;
-    }
-
-    public void ProcessReturnsAndLimiter(
-        Span<float> masterL,
-        Span<float> masterR,
-        Span<float> rl,
-        Span<float> rr,
-        Span<float> dl,
-        Span<float> dr,
-        bool limit = true,
-        bool master = true)
-    {
-        Reverb.Process(rl, rr);
-        Delay.Process(dl, dr);
-        MixReturnsAndLimit(masterL, masterR, rl, rr, dl, dr, limit, master);
-    }
-
     /// <summary>
-    /// The second half of <see cref="ProcessReturnsAndLimiter"/>: adds the returns <see cref="Reverb"/> and
-    /// <see cref="Delay"/> already processed into the master, then the master chain, Empuje, clip and limiter. Apart
-    /// so the export can run the returns of a stretch while the master works on the one before.
+    /// The master's chain over the mix in place: <see cref="MasterChain"/> (unless <paramref name="master"/> is false),
+    /// then, with <paramref name="limit"/>, Empuje, clip and limiter.
     /// </summary>
-    public void MixReturnsAndLimit(
-        Span<float> masterL,
-        Span<float> masterR,
-        ReadOnlySpan<float> rl,
-        ReadOnlySpan<float> rr,
-        ReadOnlySpan<float> dl,
-        ReadOnlySpan<float> dr,
-        bool limit = true,
-        bool master = true)
+    public void Process(Span<float> masterL, Span<float> masterR, bool limit = true, bool master = true)
     {
-        float rPkL = ReverbMeterL, rPkR = ReverbMeterR;
-        float dPkL = DelayMeterL, dPkR = DelayMeterR;
-        float rSqL = 0, rSqR = 0, dSqL = 0, dSqR = 0;
-        for (int i = 0; i < masterL.Length; i++)
-        {
-            float rvL = rl[i], rvR = rr[i];
-            float dyL = dl[i], dyR = dr[i];
-            if (Math.Abs(rvL) > rPkL) rPkL = Math.Abs(rvL);
-            if (Math.Abs(rvR) > rPkR) rPkR = Math.Abs(rvR);
-            if (Math.Abs(dyL) > dPkL) dPkL = Math.Abs(dyL);
-            if (Math.Abs(dyR) > dPkR) dPkR = Math.Abs(dyR);
-            rSqL += rvL * rvL; rSqR += rvR * rvR;
-            dSqL += dyL * dyL; dSqR += dyR * dyR;
-            masterL[i] += rvL + dyL;
-            masterR[i] += rvR + dyR;
-        }
-        ReverbMeterL = rPkL;
-        ReverbMeterR = rPkR;
-        DelayMeterL = dPkL;
-        DelayMeterR = dPkR;
-        ReverbRms.Add(rSqL, rSqR, masterL.Length);
-        DelayRms.Add(dSqL, dSqR, masterL.Length);
         if (master) Master.Process(masterL, masterR);
-        if (limit)
+        if (!limit) return;
+        float d = drive, t = driveTarget;
+        if (d != 1 || t != 1)
         {
-            float d = drive, t = driveTarget;
-            if (d != 1 || t != 1)
+            float a = driveGlide;
+            for (int i = 0; i < masterL.Length; i++)
             {
-                float a = driveGlide;
-                for (int i = 0; i < masterL.Length; i++)
-                {
-                    d += (t - d) * a;
-                    masterL[i] *= d;
-                    masterR[i] *= d;
-                }
-                if (Math.Abs(t - d) < 1e-5f) d = t;
+                d += (t - d) * a;
+                masterL[i] *= d;
+                masterR[i] *= d;
             }
-            drive = d;
-            Clip.Process(masterL, masterR);
-            Limiter.Process(masterL, masterR);
+            if (Math.Abs(t - d) < 1e-5f) d = t;
         }
+        drive = d;
+        Clip.Process(masterL, masterR);
+        Limiter.Process(masterL, masterR);
     }
 }
 
 /// <summary>
 /// Port of <c>renderMix</c> in <c>GuitarCam/src/audio/mixGraph.ts</c>: renders the whole mix offline
-/// through <see cref="TrackDspChain"/> and <see cref="MixGraphBus"/> (the exact same DSP graph as live
-/// playback) and strips the master limiter's look-ahead latency so the rendered audio aligns with sample 0.
+/// through <see cref="TrackDspChain"/>, the nodes (<see cref="BusDspChain"/>) and <see cref="MixGraphBus"/> (the exact
+/// same DSP graph as live playback) and strips the master limiter's look-ahead latency so the rendered audio aligns
+/// with sample 0.
 /// <para>
 /// Known difference vs. the web app: <see cref="TrackDspChain.SampleClips"/> rounds clip <c>Origin</c>,
 /// <c>Start</c> and <c>End</c> to the nearest sample index (up to 0.5 sample offset when <c>SyncMs</c> is
@@ -814,81 +682,22 @@ public static class MixRenderer
     /// <summary>Stretches in flight: one per stage, so none waits for buffers.</summary>
     const int Sets = 3;
 
-    /// <summary>A stretch of a track's output after its fader and its sends (what its blocks added into the master),
-    /// or the sum of all of them. <see cref="XL"/> / <see cref="XR"/>: one pair per extra return.</summary>
-    sealed class ChunkBuffers(int returns)
+    /// <summary>A track's stretch: its post-fader output and, while it has pre-fader sends, its signal before the fader.</summary>
+    sealed class TrackBuffers(bool pre)
     {
         public readonly float[] L = new float[ChunkFrames], R = new float[ChunkFrames];
-        public readonly float[] RevL = new float[ChunkFrames], RevR = new float[ChunkFrames];
-        public readonly float[] DlyL = new float[ChunkFrames], DlyR = new float[ChunkFrames];
-        public readonly float[][] XL = Enumerable.Range(0, returns).Select(_ => new float[ChunkFrames]).ToArray();
-        public readonly float[][] XR = Enumerable.Range(0, returns).Select(_ => new float[ChunkFrames]).ToArray();
-
-        public void Clear(int n)
-        {
-            Array.Clear(L, 0, n);
-            Array.Clear(R, 0, n);
-            Array.Clear(RevL, 0, n);
-            Array.Clear(RevR, 0, n);
-            Array.Clear(DlyL, 0, n);
-            Array.Clear(DlyR, 0, n);
-            for (int j = 0; j < XL.Length; j++)
-            {
-                Array.Clear(XL[j], 0, n);
-                Array.Clear(XR[j], 0, n);
-            }
-        }
-
-        void AddSends(ChunkBuffers b, int n)
-        {
-            for (int j = 0; j < XL.Length; j++)
-            {
-                float[] dl = XL[j], dr = XR[j], sl = b.XL[j], sr = b.XR[j];
-                for (int i = 0; i < n; i++)
-                {
-                    dl[i] += sl[i];
-                    dr[i] += sr[i];
-                }
-            }
-        }
-
-        /// <summary>A folder's track: its sends into these, its output into its folder's bus (<paramref name="busL"/>, <paramref name="busR"/>).</summary>
-        public void AddToBus(ChunkBuffers b, float[] busL, float[] busR, int n)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                busL[i] += b.L[i];
-                busR[i] += b.R[i];
-                RevL[i] += b.RevL[i];
-                RevR[i] += b.RevR[i];
-                DlyL[i] += b.DlyL[i];
-                DlyR[i] += b.DlyR[i];
-            }
-            AddSends(b, n);
-        }
-
-        public void Add(ChunkBuffers b, int n)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                L[i] += b.L[i];
-                R[i] += b.R[i];
-                RevL[i] += b.RevL[i];
-                RevR[i] += b.RevR[i];
-                DlyL[i] += b.DlyL[i];
-                DlyR[i] += b.DlyR[i];
-            }
-            AddSends(b, n);
-        }
+        public readonly float[] PreL = pre ? new float[ChunkFrames] : [], PreR = pre ? new float[ChunkFrames] : [];
     }
 
-    /// <summary>One stretch in flight: each track's buffers, each folder bus's sum, and the sum of all (the master and the sends).</summary>
-    sealed class ChunkSet(int tracks, int buses, int returns)
+    /// <summary>One stretch in flight: each track's buffers, each node's input (its output once processed) and pre-fader signal, and the master.</summary>
+    sealed class ChunkSet(IReadOnlyList<bool> trackPre, int nodes)
     {
-        public readonly ChunkBuffers[] Tracks = Enumerable.Range(0, tracks).Select(_ => new ChunkBuffers(returns)).ToArray();
-        public readonly float[][] BusL = Enumerable.Range(0, buses).Select(_ => new float[ChunkFrames]).ToArray();
-        public readonly float[][] BusR = Enumerable.Range(0, buses).Select(_ => new float[ChunkFrames]).ToArray();
-        public readonly ChunkBuffers Sum = new(returns);
+        public readonly TrackBuffers[] Tracks = trackPre.Select(p => new TrackBuffers(p)).ToArray();
+        public readonly float[][] NodeL = Enumerable.Range(0, nodes).Select(_ => new float[ChunkFrames]).ToArray();
+        public readonly float[][] NodeR = Enumerable.Range(0, nodes).Select(_ => new float[ChunkFrames]).ToArray();
+        public readonly float[][] PreL = Enumerable.Range(0, nodes).Select(_ => new float[ChunkFrames]).ToArray();
+        public readonly float[][] PreR = Enumerable.Range(0, nodes).Select(_ => new float[ChunkFrames]).ToArray();
+        public readonly float[] L = new float[ChunkFrames], R = new float[ChunkFrames];
     }
 
     /// <summary>Port of <c>mixDurationSec</c> in <c>mixGraph.ts</c>: end of the last clip (at least 1 s).</summary>
@@ -915,11 +724,11 @@ public static class MixRenderer
     }
 
     /// <summary>
-    /// Renders the mix. With <paramref name="only"/> it renders that track alone (a stem, native only): its chain and
-    /// its sends through the reverb and delay returns and every extra return, without the master limiter, so the stems add up to the mix
-    /// before the limiter and none is squashed by it. A stem doesn't go through its folder's slots either (they work on
-    /// the sum of the folder's tracks, which a single track isn't). <paramref name="limit"/> = false leaves the limiter
-    /// out of the full mix too: <see cref="MixMaster"/> runs it afterwards with the loudness gain in front.
+    /// Renders the mix. With <paramref name="only"/> it renders that track alone (a stem, native only): its chain, its
+    /// output and sends through the folders and buses they reach (the other tracks are silent), without the master
+    /// chain and the limiter, so the stems add up to the mix before the limiter and none is squashed by it. A bus that
+    /// compresses works on that track alone there, not on the sum. <paramref name="limit"/> = false leaves the limiter out
+    /// of the full mix too: <see cref="MixMaster"/> runs it afterwards with the loudness gain in front.
     /// </summary>
     public static (float[] Left, float[] Right) Render(
         IReadOnlyList<MixTrackSpec> tracks,
@@ -939,6 +748,9 @@ public static class MixRenderer
         return (outL, outR);
     }
 
+    /// <summary>A destination of a track or a node: a later node (<paramref name="to"/> &gt; <paramref name="from"/>) or the master (-1).</summary>
+    static int Valid(int to, int from, int nodes) => to > from && to < nodes ? to : -1;
+
     /// <summary>
     /// <see cref="Render"/> without keeping the result: every rendered stretch goes to <paramref name="sink"/> in order,
     /// aligned to sample 0. <paramref name="master"/> = false leaves <see cref="MasterChain"/> out; stems never go
@@ -957,14 +769,31 @@ public static class MixRenderer
         bool master = true)
     {
         var bus = new MixGraphBus(sampleRate);
-        bus.Configure(busSpec, glideDelay: false);
-        // the extra returns, each with its slots and its fader (the fixed reverb and delay stay in MixGraphBus)
-        var returns = new ReturnDspChain[busSpec.Returns.Count];
-        for (int j = 0; j < returns.Length; j++)
+        bus.Configure(busSpec);
+        // the folders and buses, in their run order; each one's output and sends only go to later ones (or the master)
+        var nodeSpecs = busSpec.Nodes;
+        int nodeCount = nodeSpecs.Count;
+        var nodes = new BusDspChain[nodeCount];
+        var nodeOut = new int[nodeCount];
+        var nodeSends = new MixSendSpec[nodeCount][];
+        var nodePre = new bool[nodeCount];
+        // a node's level: one more than the deepest node that feeds it; the nodes of one level run in parallel
+        var level = new int[nodeCount];
+        for (int j = 0; j < nodeCount; j++)
         {
-            returns[j] = new ReturnDspChain(sampleRate);
-            returns[j].Configure(busSpec.Returns[j]);
+            nodes[j] = new BusDspChain(sampleRate);
+            nodes[j].Configure(nodeSpecs[j]);
+            nodeOut[j] = Valid(nodeSpecs[j].Output, j, nodeCount);
+            nodeSends[j] = [.. nodeSpecs[j].Sends.Where(s => s.On && s.Level > 0 && Valid(s.To, j, nodeCount) >= 0)];
+            nodePre[j] = nodeSends[j].Any(s => s.Pre);
         }
+        for (int j = 0; j < nodeCount; j++)
+        {
+            if (nodeOut[j] >= 0) level[nodeOut[j]] = Math.Max(level[nodeOut[j]], level[j] + 1);
+            foreach (var s in nodeSends[j]) level[s.To] = Math.Max(level[s.To], level[j] + 1);
+        }
+        var levels = Enumerable.Range(0, nodeCount).GroupBy(j => level[j]).OrderBy(g => g.Key).Select(g => g.ToArray()).ToArray();
+
         limit &= only < 0;
         master &= only < 0;
         int latency = limit ? bus.Limiter.Latency : 0;
@@ -975,12 +804,7 @@ public static class MixRenderer
         foreach (var t in tracks)
             if (t.Solo) { anySolo = true; break; }
 
-        // a folder with slots is a bus: its tracks' post-fader outputs add up there and go through its slots (the
-        // sends don't). One without slots is no bus at all, so its tracks add into the master exactly as before.
-        var folders = busSpec.Folders;
-        var buses = new List<InsertRack>();
-        var busOfFolder = new Dictionary<int, int>();
-        var active = new List<(MixClipSpec[] Clips, ClipAudioJoins?[] Joins, TrackDspChain Chain, int Bus)>();
+        var active = new List<(MixClipSpec[] Clips, ClipAudioJoins?[] Joins, TrackDspChain Chain, int Out, MixSendSpec[] Sends, bool Pre)>();
         for (int k = 0; k < tracks.Count; k++)
         {
             var t = tracks[k];
@@ -989,37 +813,29 @@ public static class MixRenderer
             var chain = new TrackDspChain(sampleRate);
             chain.Configure(t);
             if (only >= 0) chain.Muted = chain.Solo = false;
-            chain.Sends = [.. t.Sends.Where(s => s.On && s.Level > 0 && s.Return >= 0 && s.Return < returns.Length)
-                .Select(s => new TrackSend(null, s.Return, (float)Math.Clamp(s.Level, 0, 1), s.Pre))];
+            MixSendSpec[] sends = [.. t.Sends.Where(s => s.On && s.Level > 0 && s.To >= 0 && s.To < nodeCount)];
+            chain.Sends = [.. sends.Select(s => new TrackSend(null, s.To, (float)Math.Clamp(s.Level, 0, 1), s.Pre))];
             var clips = t.Clips.ToArray();
-            int into = -1;
-            if (only < 0 && t.Folder >= 0 && t.Folder < folders.Count && folders[t.Folder].Inserts.Count > 0
-                && !busOfFolder.TryGetValue(t.Folder, out into))
-            {
-                var rack = new InsertRack(sampleRate);
-                rack.Set(folders[t.Folder].Inserts, fade: false);
-                into = busOfFolder[t.Folder] = buses.Count;
-                buses.Add(rack);
-            }
-            active.Add((clips, TrackDspChain.AudioJoins(clips, sampleRate), chain, into));
+            int to = t.Output >= 0 && t.Output < nodeCount ? t.Output : -1;
+            active.Add((clips, TrackDspChain.AudioJoins(clips, sampleRate), chain, to, sends, sends.Any(s => s.Pre)));
         }
         if (only >= 0) anySolo = false;
 
         int chunks = (totalFrames + ChunkFrames - 1) / ChunkFrames;
         var sets = new ChunkSet[Math.Min(Sets, chunks)];
-        for (int k = 0; k < sets.Length; k++) sets[k] = new ChunkSet(active.Count, buses.Count, returns.Length);
+        var trackPre = active.Select(a => a.Pre).ToArray();
+        for (int k = 0; k < sets.Length; k++) sets[k] = new ChunkSet(trackPre, nodeCount);
         int reportStep = Math.Max(sampleRate / 2, totalFrames / 40);
         int nextReport = reportStep;
 
         // three stages, each on its own thread and each over the stretches in order (the effects keep their state from
-        // one to the next): the tracks (in parallel among them) -> the returns (fixed and extra, in parallel) -> the
-        // master and the sink.
-        // A stretch's buffers are free again once the master is done with it.
+        // one to the next): the tracks (in parallel among them) -> the nodes (level by level, in parallel within one) ->
+        // the master and the sink. A stretch's buffers are free again once the master is done with it.
         using var failed = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var token = failed.Token;
         using var free = new SemaphoreSlim(sets.Length);
         using var tracksDone = new SemaphoreSlim(0);
-        using var returnsDone = new SemaphoreSlim(0);
+        using var nodesDone = new SemaphoreSlim(0);
         Exception? error = null;
         void Stage(Action<int> run, SemaphoreSlim wait, SemaphoreSlim done)
         {
@@ -1046,100 +862,84 @@ public static class MixRenderer
             int at = c * ChunkFrames, len = Math.Min(ChunkFrames, totalFrames - at);
             void Track(int k)
             {
-                var (clips, joins, chain, _) = active[k];
+                var (clips, joins, chain, _, _, pre) = active[k];
                 var b = set.Tracks[k];
-                b.Clear(len);
+                Array.Clear(b.L, 0, len);
+                Array.Clear(b.R, 0, len);
                 for (int off = 0; off < len; off += Quantum)
                 {
                     int n = Math.Min(Quantum, len - off);
                     TrackDspChain.SampleClips(clips, at + off, n, sampleRate, chain.BufferL(n), chain.BufferR(n), joins);
-                    chain.ProcessFilledBuffer(n, anySolo, b.L.AsSpan(off, n), b.R.AsSpan(off, n), b.RevL.AsSpan(off, n),
-                        b.RevR.AsSpan(off, n), b.DlyL.AsSpan(off, n), b.DlyR.AsSpan(off, n), out _, out _, out _);
-                    foreach (var s in chain.BlockSends)
-                        chain.AddSend(n, s.Level, s.Pre, b.XL[s.Index].AsSpan(off, n), b.XR[s.Index].AsSpan(off, n));
+                    chain.ProcessFilledBuffer(n, anySolo, b.L.AsSpan(off, n), b.R.AsSpan(off, n), out _, out _, out _);
+                    if (pre && chain.BlockSends.Length > 0)
+                    {
+                        chain.KeptL(n, true).CopyTo(b.PreL.AsSpan(off, n));
+                        chain.KeptR(n, true).CopyTo(b.PreR.AsSpan(off, n));
+                    }
                 }
             }
             if (active.Count > 1) Parallel.For(0, active.Count, new ParallelOptions { CancellationToken = token }, Track);
             else if (active.Count == 1) Track(0);
-            // summed in the tracks' order, so every sample is the same float the one-block-at-a-time loop gave
-            set.Sum.Clear(len);
-            if (buses.Count == 0)
+            // summed in the tracks' order into the master and the nodes, so every sample is the same float every time
+            Array.Clear(set.L, 0, len);
+            Array.Clear(set.R, 0, len);
+            for (int j = 0; j < nodeCount; j++)
             {
-                foreach (var b in set.Tracks) set.Sum.Add(b, len);
-                return;
-            }
-            for (int j = 0; j < buses.Count; j++)
-            {
-                Array.Clear(set.BusL[j], 0, len);
-                Array.Clear(set.BusR[j], 0, len);
+                Array.Clear(set.NodeL[j], 0, len);
+                Array.Clear(set.NodeR[j], 0, len);
             }
             for (int k = 0; k < active.Count; k++)
             {
-                int into = active[k].Bus;
-                if (into < 0) set.Sum.Add(set.Tracks[k], len);
-                else set.Sum.AddToBus(set.Tracks[k], set.BusL[into], set.BusR[into], len);
-            }
-            // each folder's slots over its sum, in blocks like the tracks (they keep their state from one stretch to the next)
-            void Bus(int j)
-            {
-                for (int off = 0; off < len; off += Quantum)
-                {
-                    int n = Math.Min(Quantum, len - off);
-                    buses[j].Process(set.BusL[j].AsSpan(off, n), set.BusR[j].AsSpan(off, n));
-                }
-            }
-            if (buses.Count > 1) Parallel.For(0, buses.Count, new ParallelOptions { CancellationToken = token }, Bus);
-            else Bus(0);
-            for (int j = 0; j < buses.Count; j++)
-            {
-                float[] l = set.BusL[j], r = set.BusR[j];
-                for (int i = 0; i < len; i++)
-                {
-                    set.Sum.L[i] += l[i];
-                    set.Sum.R[i] += r[i];
-                }
+                var b = set.Tracks[k];
+                var (_, _, _, to, sends, _) = active[k];
+                ReadOnlySpan<float> l = b.L.AsSpan(0, len), r = b.R.AsSpan(0, len);
+                BusDspChain.Add(l, r, 1f, to >= 0 ? set.NodeL[to].AsSpan(0, len) : set.L.AsSpan(0, len), to >= 0 ? set.NodeR[to].AsSpan(0, len) : set.R.AsSpan(0, len));
+                foreach (var s in sends)
+                    BusDspChain.Add(s.Pre ? b.PreL.AsSpan(0, len) : l, s.Pre ? b.PreR.AsSpan(0, len) : r, (float)Math.Clamp(s.Level, 0, 1),
+                        set.NodeL[s.To].AsSpan(0, len), set.NodeR[s.To].AsSpan(0, len));
             }
         }
 
-        void RunReturns(int c)
+        void RunNodes(int c)
         {
-            var sum = sets[c % sets.Length].Sum;
+            var set = sets[c % sets.Length];
             int len = Math.Min(ChunkFrames, totalFrames - c * ChunkFrames);
-            // the fixed reverb (0), the fixed delay (1) and each extra return, in parallel: each keeps its own state
-            void Return(int j)
+            // each node's slots over its input, in blocks like the tracks (they keep their state from one stretch to the next)
+            void Node(int j)
             {
                 for (int off = 0; off < len; off += Quantum)
                 {
                     int n = Math.Min(Quantum, len - off);
-                    if (j == 0) bus.Reverb.Process(sum.RevL.AsSpan(off, n), sum.RevR.AsSpan(off, n));
-                    else if (j == 1) bus.Delay.Process(sum.DlyL.AsSpan(off, n), sum.DlyR.AsSpan(off, n));
-                    else returns[j - 2].Process(sum.XL[j - 2].AsSpan(off, n), sum.XR[j - 2].AsSpan(off, n));
+                    nodes[j].Process(set.NodeL[j].AsSpan(off, n), set.NodeR[j].AsSpan(off, n), nodePre[j], set.PreL[j].AsSpan(off, n), set.PreR[j].AsSpan(off, n));
                 }
             }
-            Parallel.For(0, 2 + returns.Length, new ParallelOptions { CancellationToken = token }, Return);
+            foreach (var group in levels)
+            {
+                if (group.Length > 1) Parallel.For(0, group.Length, new ParallelOptions { CancellationToken = token }, i => Node(group[i]));
+                else Node(group[0]);
+                // then, in the nodes' order, their outputs and sends into the later nodes or the master
+                foreach (int j in group)
+                {
+                    ReadOnlySpan<float> l = set.NodeL[j].AsSpan(0, len), r = set.NodeR[j].AsSpan(0, len);
+                    int to = nodeOut[j];
+                    BusDspChain.Add(l, r, 1f, to >= 0 ? set.NodeL[to].AsSpan(0, len) : set.L.AsSpan(0, len), to >= 0 ? set.NodeR[to].AsSpan(0, len) : set.R.AsSpan(0, len));
+                    foreach (var s in nodeSends[j])
+                        BusDspChain.Add(s.Pre ? set.PreL[j].AsSpan(0, len) : l, s.Pre ? set.PreR[j].AsSpan(0, len) : r, (float)Math.Clamp(s.Level, 0, 1),
+                            set.NodeL[s.To].AsSpan(0, len), set.NodeR[s.To].AsSpan(0, len));
+                }
+            }
         }
 
         void RunMaster(int c)
         {
-            var sum = sets[c % sets.Length].Sum;
+            var set = sets[c % sets.Length];
             int at = c * ChunkFrames, len = Math.Min(ChunkFrames, totalFrames - at);
             for (int off = 0; off < len; off += Quantum)
             {
                 int n = Math.Min(Quantum, len - off), pos = at + off;
-                var ml = sum.L.AsSpan(off, n);
-                var mr = sum.R.AsSpan(off, n);
-                // the extra returns first, then the fixed ones, as the live engine adds them
-                for (int j = 0; j < returns.Length; j++)
-                {
-                    var xl = sum.XL[j].AsSpan(off, n);
-                    var xr = sum.XR[j].AsSpan(off, n);
-                    for (int i = 0; i < n; i++)
-                    {
-                        ml[i] += xl[i];
-                        mr[i] += xr[i];
-                    }
-                }
-                bus.MixReturnsAndLimit(ml, mr, sum.RevL.AsSpan(off, n), sum.RevR.AsSpan(off, n), sum.DlyL.AsSpan(off, n), sum.DlyR.AsSpan(off, n), limit, master);
+                var ml = set.L.AsSpan(off, n);
+                var mr = set.R.AsSpan(off, n);
+                bus.Process(ml, mr, limit, master);
 
                 int skip = Math.Max(0, latency - pos);
                 int dst = pos + skip - latency;
@@ -1155,10 +955,10 @@ public static class MixRenderer
         }
 
         var tracksTask = Task.Factory.StartNew(() => Stage(RunTracks, free, tracksDone), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-        var returnsTask = Task.Factory.StartNew(() => Stage(RunReturns, tracksDone, returnsDone), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        var nodesTask = Task.Factory.StartNew(() => Stage(RunNodes, tracksDone, nodesDone), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         // the master runs here, so the sink and the progress are called on the caller's thread like before
-        Stage(RunMaster, returnsDone, free);
-        Task.WaitAll(tracksTask, returnsTask);
+        Stage(RunMaster, nodesDone, free);
+        Task.WaitAll(tracksTask, nodesTask);
         if (error != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
         ct.ThrowIfCancellationRequested();
 

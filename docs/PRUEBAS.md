@@ -23,7 +23,10 @@ Antes de empezar: trabajá sobre una **copia** de un proyecto ("Duplicar" en el 
 
 - [ ] **Medidores del mixer**: suben con la toma (verde → amarillo → rojo), el pico queda 1,5 s, la luz
   LIM del master se prende si se empuja el fader.
-- [ ] **Presets de reverb y delay** en los retornos del mixer: que cada uno suene distinto y razonable
+- [ ] **Presets de reverb y delay** en los buses del mixer: que cada uno suene distinto y razonable
+- [ ] **Buses y ruteo**: pista → carpeta → bus → master suena; un envío PRE no sigue al fader; mute de un bus calla lo
+  que le llega; al parar, las colas de reverb y delay se apagan solas; la exportación suena como se escucha; con varios
+  buses, cuánto sube "DSP x %"
   (Sala, Placa…; delay con nota y "Libre (ms)", estéreo / ping-pong).
 - [ ] **Menú del click**: al elegir cada sonido (Bip, Madera, Clave, Aguja, Cencerro, Batería) se escucha;
   al mover el volumen (−24 a +9 dB) también; se recuerda al reabrir.

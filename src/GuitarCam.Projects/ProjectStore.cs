@@ -117,7 +117,9 @@ public sealed class ProjectStore : IDisposable
     static void Migrate(Project p)
     {
         // 1 -> 2: the channels' sat/comp/eq became insert slots; Channel.Normalize already turned them (so a project
-        // opened read-only sounds right too), here it only gets the new number
+        // opened read-only sounds right too), here it only gets the new number.
+        // 2 -> 3: the fixed reverb and delay and the extra returns became buses, and the folders lost their fader, mute,
+        // solo and slots; the normalization already did that too (ProjectSettings, Channel, Folder).
         p.Version = Project.CurrentVersion;
     }
 

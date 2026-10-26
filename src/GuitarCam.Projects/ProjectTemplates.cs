@@ -28,14 +28,17 @@ public sealed class ProjectTemplate
         if (s.Layout != null) p.Settings.Layout = s.Layout;
         if (s.Aspect != null) p.Settings.Aspect = s.Aspect;
         if (s.Bpm is { } bpm) p.Settings.Bpm = bpm;
-        if (s.Reverb != null) p.Settings.Reverb = ProjectLibrary.Clone(s.Reverb);
-        if (s.Delay != null) p.Settings.Delay = ProjectLibrary.Clone(s.Delay);
         if (s.Color != null) p.Settings.Color = ProjectLibrary.Clone(s.Color);
         if (s.VideoFx != null) p.Settings.VideoFx = ProjectLibrary.Clone(s.VideoFx);
-        if (s.Returns != null) p.Settings.Returns = ProjectLibrary.Clone(s.Returns);
+        // a version 2 template's fixed reverb and delay and extra returns become buses, like a project's
+        if (s.OldReverb != null || s.OldDelay != null || s.OldReturns != null)
+            p.Settings.Buses = ProjectBuses.FromVersion2(Copy(s.OldReverb), Copy(s.OldDelay), Copy(s.OldReturns));
+        else if (s.Buses != null) p.Settings.Buses = ProjectLibrary.Clone(s.Buses);
         foreach (var t in Tracks) p.Tracks.Add(new Track { Name = t.Name, Color = t.Color, Icon = t.Icon, Channel = ProjectLibrary.Clone(t.Channel) });
         p.Normalize();
     }
+
+    static T? Copy<T>(T? v) where T : class => v == null ? null : ProjectLibrary.Clone(v);
 
     static readonly Dictionary<string, string> AspectLabel = new() { ["16:9"] = "16:9", ["9:16"] = Texts.T("tpl.aspect.vertical", "9:16 vertical"), ["1:1"] = "1:1" };
 
@@ -69,12 +72,14 @@ public sealed class TemplateSettings
     public string? Layout { get; set; }
     public string? Aspect { get; set; }
     public double? Bpm { get; set; }
-    public ReverbSettings? Reverb { get; set; }
-    public DelaySettings? Delay { get; set; }
     public ColorGrade? Color { get; set; }
     public VideoFx? VideoFx { get; set; }
-    /// <summary>The extra returns (native only), so the template's tracks keep their sends to them.</summary>
-    public List<ReturnBus>? Returns { get; set; }
+    /// <summary>The buses (native only), so the template's tracks keep their outputs and sends to them.</summary>
+    public List<Bus>? Buses { get; set; }
+    // a version 2 template's fixed reverb and delay and its extra returns, read only (never written)
+    [JsonPropertyName("reverb")] public ReverbSettings? OldReverb { get; set; }
+    [JsonPropertyName("delay")] public DelaySettings? OldDelay { get; set; }
+    [JsonPropertyName("returns")] public List<Bus>? OldReturns { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 
@@ -112,10 +117,10 @@ public static class ProjectTemplates
             Builtin = true,
             Tracks =
             [
-                Track("Rítmica", "rhythm", c => c.ReverbSend = 0.12),
-                Track("Punteo", "lead", c => { c.ReverbSend = 0.25; c.DelaySend = 0.2; }),
+                Track("Rítmica", "rhythm", c => ProjectBuses.SendToDefaults(c, 0.12)),
+                Track("Punteo", "lead", c => { ProjectBuses.SendToDefaults(c, 0.25, 0.2); }),
             ],
-            Settings = new() { Layout = "side-by-side", Aspect = "16:9", Reverb = Sala(), Delay = Punteada() },
+            Settings = new() { Layout = "side-by-side", Aspect = "16:9", Buses = ProjectBuses.Defaults(Sala(), Punteada()) },
         },
         new()
         {
@@ -125,11 +130,11 @@ public static class ProjectTemplates
             Builtin = true,
             Tracks =
             [
-                Track("Rítmica L", "rhythm", c => { c.Pan = -0.8; c.Volume = 0.85; c.ReverbSend = 0.1; }),
-                Track("Rítmica R", "rhythm", c => { c.Pan = 0.8; c.Volume = 0.85; c.ReverbSend = 0.1; }),
-                Track("Punteo", "lead", c => { c.ReverbSend = 0.25; c.DelaySend = 0.2; }),
+                Track("Rítmica L", "rhythm", c => { c.Pan = -0.8; c.Volume = 0.85; ProjectBuses.SendToDefaults(c, 0.1); }),
+                Track("Rítmica R", "rhythm", c => { c.Pan = 0.8; c.Volume = 0.85; ProjectBuses.SendToDefaults(c, 0.1); }),
+                Track("Punteo", "lead", c => { ProjectBuses.SendToDefaults(c, 0.25, 0.2); }),
             ],
-            Settings = new() { Layout = "side-by-side", Aspect = "16:9", Reverb = Sala(), Delay = Punteada() },
+            Settings = new() { Layout = "side-by-side", Aspect = "16:9", Buses = ProjectBuses.Defaults(Sala(), Punteada()) },
         },
         new()
         {
@@ -139,12 +144,12 @@ public static class ProjectTemplates
             Builtin = true,
             Tracks =
             [
-                Track("Rítmica L", "rhythm", c => { c.Pan = -0.8; c.Volume = 0.8; c.ReverbSend = 0.1; }),
-                Track("Rítmica R", "rhythm", c => { c.Pan = 0.8; c.Volume = 0.8; c.ReverbSend = 0.1; }),
-                Track("Arpegio", "arpeggio", c => { c.Pan = -0.3; c.Volume = 0.8; c.ReverbSend = 0.2; c.DelaySend = 0.1; }),
-                Track("Punteo", "lead", c => { c.Pan = 0.15; c.ReverbSend = 0.25; c.DelaySend = 0.2; }),
+                Track("Rítmica L", "rhythm", c => { c.Pan = -0.8; c.Volume = 0.8; ProjectBuses.SendToDefaults(c, 0.1); }),
+                Track("Rítmica R", "rhythm", c => { c.Pan = 0.8; c.Volume = 0.8; ProjectBuses.SendToDefaults(c, 0.1); }),
+                Track("Arpegio", "arpeggio", c => { c.Pan = -0.3; c.Volume = 0.8; ProjectBuses.SendToDefaults(c, 0.2, 0.1); }),
+                Track("Punteo", "lead", c => { c.Pan = 0.15; ProjectBuses.SendToDefaults(c, 0.25, 0.2); }),
             ],
-            Settings = new() { Layout = "side-by-side", Aspect = "16:9", Reverb = Sala(), Delay = Punteada() },
+            Settings = new() { Layout = "side-by-side", Aspect = "16:9", Buses = ProjectBuses.Defaults(Sala(), Punteada()) },
         },
         new()
         {
@@ -154,10 +159,10 @@ public static class ProjectTemplates
             Builtin = true,
             Tracks =
             [
-                Track("Rítmica", "rhythm", c => c.ReverbSend = 0.12),
-                Track("Punteo", "lead", c => { c.ReverbSend = 0.25; c.DelaySend = 0.2; }),
+                Track("Rítmica", "rhythm", c => ProjectBuses.SendToDefaults(c, 0.12)),
+                Track("Punteo", "lead", c => { ProjectBuses.SendToDefaults(c, 0.25, 0.2); }),
             ],
-            Settings = new() { Layout = "top-to-bottom", Aspect = "9:16", Reverb = Sala(), Delay = Punteada() },
+            Settings = new() { Layout = "top-to-bottom", Aspect = "9:16", Buses = ProjectBuses.Defaults(Sala(), Punteada()) },
         },
         new()
         {
@@ -165,8 +170,8 @@ public static class ProjectTemplates
             Name = Texts.T("tpl.single.name", "Canal único"),
             Hint = Texts.T("tpl.single.hint", "Una guitarra sola con un poco de placa"),
             Builtin = true,
-            Tracks = [Track("Guitarra", "lead", c => c.ReverbSend = 0.2, amount: 0.4)],
-            Settings = new() { Layout = "side-by-side", Aspect = "16:9", Reverb = Placa() },
+            Tracks = [Track("Guitarra", "lead", c => ProjectBuses.SendToDefaults(c, 0.2), amount: 0.4)],
+            Settings = new() { Layout = "side-by-side", Aspect = "16:9", Buses = ProjectBuses.Defaults(Placa()) },
         },
     ];
 

@@ -1,8 +1,8 @@
 namespace GuitarCam.Projects;
 
 /// <summary>
-/// The edits of a list of insert slots (a channel's <see cref="Channel.Inserts"/> or a folder bus's
-/// <see cref="Folder.Inserts"/>): add, remove, repeat and move. One place for the mixer strip, the inspector and gclab.
+/// The edits of a list of insert slots (a channel's <see cref="Channel.Inserts"/> or a bus's
+/// <see cref="Bus.Inserts"/>): add, remove, repeat and move. One place for the mixer strip, the inspector and gclab.
 /// Each returns false (or null) when there was nothing to do, so the caller doesn't mark the project dirty for nothing.
 /// </summary>
 public static class ChannelInserts

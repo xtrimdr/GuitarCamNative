@@ -5,65 +5,98 @@ namespace GuitarCam.Projects;
 /// <summary>
 /// Turns a <see cref="Channel"/>'s insert slots into what the engine takes (<see cref="InsertSpec"/>). One place for
 /// the live engine, the export and gclab, so the three hear the same chain. Slots of a kind this version doesn't know
-/// are left out. Also a folder's bus (<see cref="FolderSpecs"/>, <see cref="Folders"/>), the extra returns
-/// (<see cref="Returns"/>) with a track's sends to them (<see cref="Sends"/>), and the whole bus side of the export
-/// (<see cref="Bus"/>).
+/// are left out. Also the mix's nodes (<see cref="Nodes"/>: the folders, then the buses in <see cref="ProjectBuses.Order"/>),
+/// where each track goes (<see cref="TrackOutput"/>) and what it sends (<see cref="Sends"/>), and the whole bus side of
+/// the export (<see cref="Bus"/>).
 /// </summary>
 public static class ChannelDsp
 {
     /// <summary>
-    /// The level a folder bus's Vida is measured against: a bus has no take of its own, so it is the same as a track
-    /// with no audio. Fixed, so the live engine, the export and gclab drive it the same.
+    /// The level a bus's Vida is measured against: a bus has no take of its own, so it is the same as a track with no
+    /// audio. Fixed, so the live engine, the export and gclab drive it the same.
     /// </summary>
     public const double BusRmsDb = -24;
 
     /// <param name="rmsDb">The take's level, which the Vida drive is measured against (-24 without audio).</param>
     public static InsertSpec[] Specs(Channel ch, double rmsDb) => Specs(ch.Slots, rmsDb);
 
-    /// <summary>A folder bus's slots (empty: no bus).</summary>
-    public static InsertSpec[] FolderSpecs(Folder f) => Specs(f.Inserts, BusRmsDb);
+    /// <summary>A bus's slots; its delays follow <paramref name="bpm"/>.</summary>
+    public static InsertSpec[] BusSpecs(Bus b, double bpm) => Specs(b.Inserts, BusRmsDb, bpm);
 
-    /// <summary>Every folder as the export's bus, in <see cref="Project.Folders"/>' order (what <see cref="FolderIndex"/> points at).</summary>
-    public static MixFolderSpec[] Folders(Project p) =>
-        [.. p.Folders.Select(f => new MixFolderSpec { Name = f.Name, Inserts = FolderSpecs(f) })];
+    /// <summary>
+    /// The ids of the mix's nodes in the order they run: every folder (nothing feeds a folder but its tracks), then the
+    /// buses, each after everything that feeds it. What <see cref="MixBusSpec.Nodes"/> and the live engine follow.
+    /// </summary>
+    public static List<string> Nodes(Project p) => [.. p.Folders.Where(f => !f.Separator).Select(f => f.Id), .. ProjectBuses.Order(p).Select(b => b.Id)];
 
-    /// <summary>The track's folder as an index into <see cref="Folders"/>, -1 = none (<see cref="MixTrackSpec.Folder"/>).</summary>
-    public static int FolderIndex(Project p, Track t) => t.FolderId == null ? -1 : p.Folders.FindIndex(f => f.Id == t.FolderId);
+    /// <summary>Where a track's output goes, by node id: its folder, or else its channel's bus; null = the master.</summary>
+    public static string? TrackOutput(Track t) => t.FolderId ?? t.Channel.Output;
 
-    /// <summary>An extra return's slots; its delays follow <paramref name="bpm"/>.</summary>
-    public static InsertSpec[] ReturnSpecs(ReturnBus r, double bpm) => Specs(r.Inserts, BusRmsDb, bpm);
-
-    /// <summary>Every extra return as the export takes it, in <see cref="ProjectSettings.Returns"/>' order (what <see cref="Sends"/> point at).</summary>
-    public static MixReturnSpec[] Returns(Project p) =>
-        [.. p.Settings.Returns.Select(r => new MixReturnSpec { Name = r.Name, Volume = r.Volume, Muted = r.Muted, Inserts = ReturnSpecs(r, p.Settings.Bpm) })];
-
-    /// <summary>A track's sends to the extra returns, as indexes into <see cref="Returns"/> (sends to a missing return are left out).</summary>
-    public static MixSendSpec[] Sends(Project p, Channel ch)
+    /// <summary>What <paramref name="r"/> sends, as indexes into <paramref name="nodes"/> (sends to a missing bus are left out).</summary>
+    public static MixSendSpec[] Sends(IReadOnlyList<string> nodes, IRouted r)
     {
-        var list = new List<MixSendSpec>(ch.Sends.Count);
-        foreach (var s in ch.Sends)
+        var list = new List<MixSendSpec>(r.Sends.Count);
+        foreach (var s in r.Sends)
         {
-            int i = p.Settings.Returns.FindIndex(r => r.Id == s.ReturnId);
-            if (i >= 0) list.Add(new MixSendSpec { Return = i, Level = s.Level, On = s.On, Pre = s.Pre });
+            int i = IndexOf(nodes, s.BusId);
+            if (i >= 0) list.Add(new MixSendSpec { To = i, Level = s.Level, On = s.On, Pre = s.Pre });
         }
         return [.. list];
+    }
+
+    static int IndexOf(IReadOnlyList<string> nodes, string? id)
+    {
+        if (id == null) return -1;
+        for (int i = 0; i < nodes.Count; i++) if (nodes[i] == id) return i;
+        return -1;
+    }
+
+    /// <summary>A track as the export renders it, with its clips and the level its Vida is measured against.</summary>
+    public static MixTrackSpec Track(Project p, IReadOnlyList<string> nodes, Track t, IReadOnlyList<MixClipSpec> clips, double rmsDb)
+    {
+        var ch = t.Channel;
+        return new MixTrackSpec
+        {
+            Name = t.Name,
+            Clips = clips,
+            Volume = ch.Volume,
+            Pan = ch.Pan,
+            Muted = ch.Muted,
+            Solo = ch.Solo,
+            Inserts = Specs(ch, rmsDb),
+            Output = IndexOf(nodes, TrackOutput(t)),
+            Sends = Sends(nodes, ch),
+        };
+    }
+
+    /// <summary>The bus side of the mix (the folders and buses as nodes, and the master), for the export and gclab.</summary>
+    public static MixBusSpec Bus(Project p)
+    {
+        var nodes = Nodes(p);
+        var list = new List<MixNodeSpec>(nodes.Count);
+        foreach (var id in nodes)
+        {
+            if (p.Folders.Find(f => f.Id == id) is { } f)
+                list.Add(new MixNodeSpec { Name = f.Name, Output = IndexOf(nodes, f.Output), Sends = Sends(nodes, f) });
+            else if (p.Settings.Buses.Find(b => b.Id == id) is { } b)
+                list.Add(new MixNodeSpec
+                {
+                    Name = b.Name,
+                    Volume = b.Volume,
+                    Pan = b.Pan,
+                    Muted = b.Muted,
+                    Inserts = BusSpecs(b, p.Settings.Bpm),
+                    Output = IndexOf(nodes, b.Output),
+                    Sends = Sends(nodes, b),
+                });
+        }
+        return new MixBusSpec { Bpm = p.Settings.Bpm, Master = p.Settings.Master.ToParams(), Nodes = list };
     }
 
     public static ReverbParams Reverb(ReverbSettings r) => new(r.Decay, r.PreDelayMs, r.Tone, r.LowCut, r.Width, r.ReturnGain, r.Muted);
 
     public static DelayParams Delay(DelaySettings d) =>
         new(DelayParams.ParseMode(d.Mode), d.Sync, d.Division, d.TimeMs, d.Feedback, d.Tone, d.LowCut, d.Width, d.Duck, d.ReturnGain, d.Muted);
-
-    /// <summary>The bus side of the mix (the fixed returns, the extra ones, the folders and the master), for the export and gclab.</summary>
-    public static MixBusSpec Bus(Project p) => new()
-    {
-        Bpm = p.Settings.Bpm,
-        Reverb = Reverb(p.Settings.Reverb),
-        Delay = Delay(p.Settings.Delay),
-        Master = p.Settings.Master.ToParams(),
-        Folders = Folders(p),
-        Returns = Returns(p),
-    };
 
     public static InsertSpec[] Specs(IReadOnlyList<InsertSlot> slots, double rmsDb, double bpm = 120)
     {

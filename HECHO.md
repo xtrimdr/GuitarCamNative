@@ -3,6 +3,43 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-26: Arreglado el mixer que quedaba sin responder después de arrastrar una tira hasta un clic en el timeline:
+  se refrescaba durante la edición (deshabilitado) y nadie lo volvía a habilitar (`EditTimeline` lo refresca al terminar).
+- 2026-10-26: El timeline muestra solo las perillas de los envíos de cada pista, sin fijas (`TimelineView.SendKnobs`);
+  en el mixer, efectos y envíos son secciones de alto parejo en todas las tiras, estirables con una manija y con su
+  botón en la cabecera (`ListBox`, `ApplyMixerHeights`, `SectionSwitch`).
+- 2026-10-26: Mixer al estilo consola (pedido del usuario): cada pista elige a qué buses manda (`Send.Hidden`,
+  `ProjectBuses.Shown`/`ShowSend`, "+ Envío", clic derecho en la pista, `gclab proyecto envios … --quitar|--sumar`) y
+  el timeline muestra una perilla por envío en lugar de Reverb/Delay fijas; la tira compacta lleva la lista de efectos,
+  la de envíos y el paneo en barras (`CompactChain`, `HBar`); "Envíos" en la cabecera del mixer los muestra u oculta,
+  con un título nuevo; el fader tiene tapa de consola (`Fader`).
+- 2026-10-26: Por ahora los buses salen solo al Master, sin salida ni envíos a otros buses (decisión del usuario:
+  el circuito no se entendía; `ProjectBuses.CanFeed`, `Normalize`; el motor sigue pudiendo encadenarlos).
+- 2026-10-26: Buses como rack (pedido del usuario): la cadena de efectos a la izquierda y fader y medidor fijos a la
+  derecha (`BusRack`); cada slot se pliega a una fila con su resumen y se abre solo en una ventanita
+  (`FxPanel`, `ShowSlotWindow`, `InsertSlot.Collapsed`, `gclab proyecto insertos … plegar n`).
+- 2026-10-26: Mixer más prolijo (pedido del usuario): las tiras se arrastran deslizándose como los slots y las pistas
+  del timeline, las demás haciéndole lugar (`MixerDraggable`, `MakeMixerRoom`); el clic derecho y un clic que
+  deselecciona andan en el fondo vacío (`InitMixerMenu`); los separadores nacen ocultos en el timeline, el ojo de su
+  tira volvió a verse (íconos perdidos en el mixer y en menús de carpeta/bus/separador) y su selector de color se
+  cierra al elegir (`ShowFolderLook`).
+- 2026-10-26: El inspector plegado muestra la cadena del canal seleccionado: un ícono por sección (Mezcla, slots,
+  Reverb, Delay, envíos, Transponer), prendido en acento o apagado tenue, y un clic lleva a esa sección
+  (`MainWindow.InspectorRail.cs`).
+- 2026-10-26: Mixer ordenable (pedido del usuario): cada tira va a la izquierda o a la derecha (`MixerSide`) y se
+  arrastra a otro lugar, carpeta o lado; el orden de pistas y carpetas es el del timeline, en los dos sentidos.
+  Separadores con nombre (`Folder.Separator`), en el mixer y, si se quiere, en el timeline (`MainWindow.MixerOrder.cs`,
+  `TrackFolders.AddSeparator`, `gclab proyecto editar … nuevo-separador | lado`).
+- 2026-10-26: Buses unificados (pedido del usuario): bus y FX son lo mismo (`Bus`, `ProjectSettings.Buses`): volumen,
+  paneo, mute, slots, salida y envíos; un proyecto nuevo trae "Reverb" y "Delay". Pistas, carpetas y buses eligen su
+  salida y mandan a buses (`IRouted`, `ProjectBuses`, sin bucles); las carpetas solo agrupan (sin fader, M/S ni
+  efectos). Motor: un solo nodo `BusDspChain` en orden para vivo y exportación (`ChannelDsp.Nodes`), sin Reverb/Delay
+  fijos. Formato versión 3: los proyectos y plantillas viejos se convierten solos. Mixer (`MainWindow.Buses.cs`),
+  inspector, timeline y `gclab proyecto buses|envios` al día; filas nuevas en `comprobar-dsp`.
+- 2026-10-26: Medidores del mixer en estéreo: dos barras L/R con su RMS, su pico y su luz de clip en pistas, carpetas,
+  retornos y master; una pista mono (tomas con L y R iguales, `MediaAudio.Mono`, o sin tomas con entrada mono) muestra
+  una sola barra del mismo ancho (`MixerMeter.Set` / `Mono`, `RmsTap.MeanSqL` / `MeanSqR`, `TrackMono` en
+  `MainWindow.Mixer.cs`; fila nueva en `gclab comprobar-dsp`).
 - 2026-10-25: Mixer más completo. **Carpetas como bus**: con efectos, la carpeta suma sus pistas y las pasa por su
   cadena de slots (`Folder.Inserts`, `InsertRack`, `BusDspChain`, `MixFolderSpec`); sin efectos suena idéntica y el VCA
   sigue igual. **Medidores**: RMS con el pico, pico máximo en dBFS, luz de clip que queda prendida y LUFS de corto plazo

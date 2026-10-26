@@ -13,14 +13,14 @@ namespace GuitarCam.App.Controls;
 /// settled does <see cref="Moved"/> get the slot id and its new index, so the chain rebuilt in the new order looks
 /// exactly like what was on screen. The cards move by their own <see cref="TranslateTransform"/> (made once per drag,
 /// changed in place every frame: no garbage while it animates). A press that never moves past <see cref="Threshold"/>
-/// is left alone.
+/// is a click (<see cref="Clicked"/>: the mixer folds or unfolds the slot with it).
 /// </summary>
 public sealed class SlotDrag(double gap)
 {
     /// <summary>How far (px) the pointer moves before a press on a handle becomes a drag.</summary>
     const double Threshold = 4;
     /// <summary>Share of the remaining distance a card covers per 16 ms frame (the timeline's: about 150 ms to settle).</summary>
-    const double SlideEase = 0.3;
+    public const double SlideEase = 0.3;
 
     readonly List<(Control Card, string Id)> items = [];
     TranslateTransform[] shift = [];
@@ -32,6 +32,8 @@ public sealed class SlotDrag(double gap)
 
     /// <summary>Once the drop has settled: the slot id, the slot it lands next to, and whether it goes after that one.</summary>
     public event Action<string, string, bool>? Moved;
+    /// <summary>A press and release on a handle that never became a drag: the slot id.</summary>
+    public event Action<string>? Clicked;
 
     /// <summary>Makes <paramref name="handle"/> drag <paramref name="card"/> (add the card to the chain's panel, in order). Returns the card.</summary>
     public Control Add(Control card, string id, Control handle)
@@ -74,7 +76,11 @@ public sealed class SlotDrag(double gap)
                 target[from] = LandingOffset();
                 timer!.Start();
             }
-            else from = -1;
+            else
+            {
+                from = -1;
+                Clicked?.Invoke(id);
+            }
             e.Pointer.Capture(null);
         };
         handle.PointerCaptureLost += (_, _) =>

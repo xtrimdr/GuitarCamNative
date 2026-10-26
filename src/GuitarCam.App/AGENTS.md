@@ -101,7 +101,8 @@ Respetan la cultura del sistema (en es-AR, con coma):
   botón de guardar, mientras hay algo para guardar, lleva clase `pending` (brilla y late suave con la opacidad;
   `failed` en rojo si no se pudo guardar). En las filas el hover lo marca la fila
   (fondo `Raised` y borde `Line`); en el `CheckBox` brilla solo la cajita. Va como `Effect`
-  del botón: un `BoxShadow` en el presentador queda cortado. Los botones de color (acento, primario, peligro, grabar,
+  del botón: un `BoxShadow` en el presentador queda cortado. Otra excepción pedida por el usuario: la tapa del fader
+  (`Fader`) imita la de una consola, con sombreado, ranuras y una sombra abajo, para que se vea y se agarre fácil. Los botones de color (acento, primario, peligro, grabar,
   `lit`) no cambian de color en hover: el glow es la respuesta. Su fondo y su texto van en el presentador
   (`/template/ ContentPresenter#PART_ContentPresenter`, sin estado en el selector), como los chips ON: puesto solo en
   el `Button`, el texto quieto sale blanco del Fluent.

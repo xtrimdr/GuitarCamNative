@@ -162,7 +162,10 @@ public partial class MainWindow
         RefreshMixer();
     }
 
-    /// <summary>A folder's color picker (folders have no icon): opened from its icon in the timeline, its menu or the inspector.</summary>
+    /// <summary>
+    /// A folder's color picker (folders have no icon): opened from its icon in the timeline, its menu or the inspector.
+    /// A separator's closes as soon as a color is picked (asked by the user): it has no tracks to offer the color to.
+    /// </summary>
     void ShowFolderLook(GuitarCam.Projects.Folder f, Control anchor, Point? at = null)
     {
         if (store == null || store.ReadOnly || restoring) return;
@@ -170,9 +173,14 @@ public partial class MainWindow
         GuitarCam.Projects.Folder F() => FolderById(id) ?? f;
         var refresh = new List<Action>();
         var body = new StackPanel { Spacing = 8 };
-        body.Children.Add(new TextBlock { Classes = { "label" }, Text = Loc.T("folder.color").ToUpperInvariant() });
+        body.Children.Add(new TextBlock { Classes = { "label" }, Text = Loc.T(f.Separator ? "separator.color" : "folder.color").ToUpperInvariant() });
         var ask = FolderTracksAsk(F, refresh);
-        body.Children.Add(ColorChips(() => F().Color, hex => { FolderEdit(F(), x => x.Color = hex, "color"); ask.Ask(F()); }, refresh));
+        body.Children.Add(ColorChips(() => F().Color, hex =>
+        {
+            FolderEdit(F(), x => x.Color = hex, "color");
+            if (F().Separator) lookFlyout?.Hide();
+            else ask.Ask(F());
+        }, refresh));
         body.Children.Add(ask.View);
         foreach (var r in refresh) r();
         var card = new Border

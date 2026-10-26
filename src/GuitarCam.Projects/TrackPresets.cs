@@ -33,8 +33,8 @@ public sealed class TrackPreset
             if (c.Sat.On) parts.Add(Texts.T("tps.life", "Vida") + $" {c.Sat.Amount * 100:0}%");
             if (c.Comp.On) parts.Add(Texts.T("tps.comp", "Comp"));
             if (c.Eq.On) parts.Add("EQ");
-            if (c.ReverbOn && c.ReverbSend > 0) parts.Add($"Reverb {c.ReverbSend * 100:0}");
-            if (c.DelayOn && c.DelaySend > 0) parts.Add($"Delay {c.DelaySend * 100:0}");
+            int sends = c.Sends.Count(s => s.On && s.Level > 0);
+            if (sends > 0) parts.Add(Texts.T("tps.sends", "Envíos: {0}", sends));
             return parts.Count > 0 ? string.Join(" · ", parts) : Texts.T("tps.flat", "Sin efectos");
         }
     }

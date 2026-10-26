@@ -16,8 +16,8 @@ de **grabar → mezclar → exportar**.
 
 | | |
 |---|---|
-| ![El mixer sonando: carpetas como VCA, retornos de reverb y delay y el master](docs/screenshots/mixer-es.png) | ![La vista Mastering: la cadena del master de izquierda a derecha y el volumen de salida](docs/screenshots/master-es.png) |
-| **El mixer**: una tira por pista, las carpetas como VCA, los retornos de reverb y delay y el master. | **Mastering**: Look, limpieza, multibanda, color, Cinta, Ancho, soft clip y limitador, con el Destino de volumen y "Sugerime". |
+| ![El mixer sonando: carpetas, buses de reverb y delay y el master](docs/screenshots/mixer-es.png) | ![La vista Mastering: la cadena del master de izquierda a derecha y el volumen de salida](docs/screenshots/master-es.png) |
+| **El mixer**: una tira por pista, las carpetas, los buses de reverb y delay y el master. | **Mastering**: Look, limpieza, multibanda, color, Cinta, Ancho, soft clip y limitador, con el Destino de volumen y "Sugerime". |
 | ![Formato vertical 9:16 con el diseño Vertical: el video a lo alto y el timeline y el mixer al lado](docs/screenshots/vertical-es.png) | ![El modo Solo audio: pistas con sus knobs de efecto y el EQ con el espectro en vivo](docs/screenshots/audio-es.png) |
 | **Vertical 9:16** con el diseño Vertical: el video a lo alto y el timeline y el mixer al lado. | **Solo audio**: pistas con sus knobs de efecto y el EQ con el espectro en vivo. |
 
@@ -55,8 +55,11 @@ de **grabar → mezclar → exportar**.
 - **Transponer** por pista (−12 a +12 semitonos) sin cambiar el largo, así la toma sigue en sincronía con el video:
   se calcula en segundo plano (unos 4 s por 3 min) con un vocoder de fase de alta calidad, se ve el progreso sobre los
   clips y queda guardada en `cache/`.
-- **Mixer** completo; cada carpeta tiene su propio canal y su fader, M y S mandan sobre todas sus pistas, como un VCA, y
-  puede llevar sus propios efectos, que procesan la suma de sus pistas (un compresor para todas las guitarras).
+- **Mixer** completo con **buses**: cada pista o carpeta elige su salida (el master o un bus) y manda a los buses
+  con sus envíos (antes o después del fader); los buses salen al master. Un bus tiene volumen, paneo y efectos, así que sirve para una reverb, un
+  delay o para procesar un grupo (un compresor para todas las guitarras). Las carpetas solo agrupan. Las tiras se
+  ordenan arrastrándolas en el mixer (el timeline las sigue), van a la izquierda o a la derecha, y hay separadores con
+  nombre para ordenar proyectos grandes.
 - Audio de nivel profesional: arrancar, parar, saltar y arrastrar el cabezal llevan su fundido, sin clics ni cortes.
 
 ### Armar el video
@@ -242,17 +245,17 @@ la consola, sin abrir la ventana.
 | `proyecto toma\|cortar carpeta [--camara]` | graba un tono como la ventana / lo corta sin cerrar, para probar la recuperación |
 | `proyecto editar carpeta mover\|recortar-inicio\|recortar-final\|fade-in\|fade-out clip delta` | edita un clip como en el timeline (más: `a-pista`, `dividir`, `duplicar` (varios ids con comas), `pegar`, `ganancia`, `curva`, `quitar-clip`, `nueva-pista`…) |
 | `proyecto editar carpeta transicion clip corte\|fundido\|negro [--segundos 0.5]`, `proyecto transiciones carpeta` | la transición que entra a ese clip (imagen y sonido) y la lista de uniones de cada pista |
-| `proyecto editar carpeta nueva-carpeta\|a-carpeta\|sacar-de-carpeta\|mover-carpeta\|quitar-carpeta\|carpeta …` | carpetas de pistas: agrupar, mover adentro y afuera, fader, mute y solo |
+| `proyecto editar carpeta nueva-carpeta\|a-carpeta\|sacar-de-carpeta\|mover-carpeta\|quitar-carpeta\|carpeta …` | carpetas de pistas: agrupar, mover adentro y afuera, renombrar y plegar |
+| `proyecto editar carpeta nuevo-separador [nombre] [--en n] [--visible] \| lado id izquierda\|derecha` | separadores con nombre (nacen ocultos en el timeline salvo `--visible`; `carpeta id --ocultar` lo alterna) y de qué lado del mixer va cada tira |
 | `proyecto editar carpeta guardar-plantilla pista [nombre] \| usar-plantilla nombre`, `proyecto plantillas-de-pista x` | plantillas de pista (`pistas.json`) |
 | `proyecto encuadre\|sincronia\|formato\|modo carpeta …` | encuadre del clip, ajuste de sincronía, formato del video y modo Video / Solo audio |
 | `proyecto importar-audio carpeta archivo` | copia un audio de afuera a `media/` y lo pone en una pista |
 | `proyecto marcadores carpeta [agregar\|mover\|renombrar\|quitar …]`, `proyecto repetir carpeta [desde hasta \| --quitar]` | marcadores del tema y rango A–B del loop |
 | `proyecto historial carpeta` | tomas en uso y no usadas, exportaciones y actividad |
-| `proyecto insertos carpeta pista [agregar vida\|comp\|eq [--en n] \| quitar n \| mover n m \| duplicar n \| prender n \| apagar n]` | los slots de efectos de la pista en su orden; sin operación, los lista |
-| `proyecto insertos carpeta --carpeta id\|n [agregar … \| quitar n \| …]` | lo mismo para el bus de una carpeta: sus pistas suman ahí y pasan por esos efectos antes del master |
-| `proyecto insertos carpeta --retorno id\|n [agregar reverb\|delay\|vida\|comp\|eq … \| quitar n \| …]` | lo mismo para un retorno agregado (la reverb y el delay solo van en retornos) |
-| `proyecto retornos carpeta [agregar [nombre] [--tipo reverb\|delay] \| quitar n \| renombrar n nombre \| volumen n x \| mute n]` | los retornos agregados (además de la Reverb y el Delay fijos) con sus slots; quitar uno se lleva los envíos que le mandaban |
-| `proyecto envios carpeta pista [reverb\|delay\|n [nivel] [--pre\|--post] [--apagar\|--prender]]` | los envíos de la pista (a la Reverb, al Delay y a cada retorno agregado), con su PRE; las opciones van después del nivel |
+| `proyecto insertos carpeta pista [agregar vida\|comp\|eq [--en n] \| quitar n \| mover n m \| duplicar n \| prender n \| apagar n \| plegar n]` | los slots de efectos de la pista en su orden; sin operación, los lista (`plegar` lo pliega en el mixer) |
+| `proyecto insertos carpeta --bus id\|n [agregar reverb\|delay\|vida\|comp\|eq … \| quitar n \| …]` | lo mismo para un bus (la reverb y el delay solo van en buses) |
+| `proyecto buses carpeta [agregar [nombre] [--tipo reverb\|delay\|vacio] \| quitar n \| renombrar n nombre \| volumen n x \| paneo n x \| mute n]` | los buses, en el orden en que suenan, con sus slots, su salida y sus envíos; quitar uno se lleva los envíos que le llegaban |
+| `proyecto envios carpeta quien [bus [nivel] [--pre\|--post] [--apagar\|--prender] [--quitar\|--sumar]] [--salida bus\|master]` | la salida y los envíos de una pista (número o id) o `carpeta:n`; un bus (`bus:n`) sale solo al master, así que lo rechaza; `--quitar`/`--sumar` saca o vuelve a poner un bus en su lista |
 | `proyecto verificar-deshacer\|verificar-clips\|verificar-tomas\|verificar-importar\|verificar-historial\|verificar-carpetas\|verificar-marcadores` | pruebas automáticas sobre una carpeta temporal |
 | `proyectos lista\|plantillas\|nuevo\|renombrar\|duplicar\|borrar\|olvidar\|carpeta\|buscar` | lo que hace el gestor de proyectos (`buscar`: qué abre "Abrir carpeta") |
 | `proyectos guardar-plantilla\|borrar-plantilla` | plantillas de proyecto del usuario |

@@ -1214,6 +1214,7 @@ public sealed partial class ExportDialog : UserControl
     {
         var p = store.Project;
         var mixTracks = new List<MixTrackSpec>();
+        var nodes = ChannelDsp.Nodes(p);
         var audioCache = new Dictionary<string, (float[] L, float[] R, double RmsDb)>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var trk in p.Tracks)
@@ -1267,26 +1268,7 @@ public sealed partial class ExportDialog : UserControl
                 });
             }
 
-            var ch = trk.Channel;
-            var folder = TrackFolders.Mix(p, trk);
-            mixTracks.Add(new MixTrackSpec
-            {
-                Name = trk.Name,
-                Clips = mixClips,
-                Volume = ch.Volume * folder.Gain,
-                Pan = ch.Pan,
-                Muted = ch.Muted || folder.Muted,
-                Solo = ch.Solo || folder.Solo,
-                Inserts = ChannelDsp.Specs(ch, firstRmsDb ?? -24.0),
-                Folder = ChannelDsp.FolderIndex(p, trk),
-                ReverbOn = ch.ReverbOn,
-                ReverbSend = ch.ReverbSend,
-                DelayOn = ch.DelayOn,
-                DelaySend = ch.DelaySend,
-                ReverbPre = ch.ReverbPre,
-                DelayPre = ch.DelayPre,
-                Sends = ChannelDsp.Sends(p, ch),
-            });
+            mixTracks.Add(ChannelDsp.Track(p, nodes, trk, mixClips, firstRmsDb ?? -24.0));
         }
 
         var mixBus = ChannelDsp.Bus(p);

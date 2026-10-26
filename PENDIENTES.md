@@ -26,8 +26,17 @@ _Ideas y mejoras para la nativa._
   de un acorde grave) mantienen su batido original
 - [x] Efectos en slots por canal, etapa 1 con los efectos internos (hecho, ver [HECHO.md](HECHO.md)). Queda para la
   etapa 2: compensar la latencia de los slots (hoy todos dan 0) y el estado guardable de un plugin
-- [x] Mejorar el mixer: carpetas como bus, medidores completos, retornos propios y envíos pre/post (hecho, ver
-  [HECHO.md](HECHO.md)). Queda: la cadena de la carpeta en la pestaña Canal (hoy solo en la tira ancha)
+- [x] Mejorar el mixer: medidores completos, envíos pre/post y buses unificados (bus = FX: salida y envíos de pistas,
+  carpetas y buses; las carpetas solo agrupan) (hecho, ver [HECHO.md](HECHO.md))
+- [ ] **Perillas configurables** (pedido del usuario 2026-10-26, cambio grande: decidirlo antes de hacerlo). Los envíos
+  ya son una perilla por bus de la lista de cada pista (hecho, ver HECHO). Falta lo demás: que cada perilla sea un
+  atajo que elige el usuario: un parámetro de un efecto de la pista (Vida, umbral o cantidad del compresor…) y, con VST3, uno o
+  varios parámetros de un plugin (ej. Mix y Decay de una Valhalla). Abierto: ¿un juego para todas las pistas, por
+  proyecto o por pista? ¿se elige con clic derecho en la perilla, en Configuración o en los dos? ¿qué hace sin destino
+  (apagada con aviso, o agrega el efecto)? Lo mismo serviría para MIDI learn.
+- [ ] **Buses que mandan a otros buses** (sacado el 2026-10-26 a pedido del usuario: el circuito no quedaba claro).
+  El motor y `gclab` ya lo soportan; falta una forma de verlo y editarlo que se entienda (un diagrama del ruteo, o
+  solo una salida por bus sin envíos) antes de volver a abrirlo.
 - …y más: ir sumando acá
 
 #### 2. Soporte de plugins VST
@@ -40,6 +49,11 @@ _Ideas y mejoras para la nativa._
   el render corre por tramos en paralelo, con plugins con estado eso se complica).
   Compensar la latencia de los plugins (PDC) en todas las pistas y en el click, como ya se hace con el limitador.
   La ventana propia de cada plugin es una ventana Win32 nativa, por fuera de Avalonia.
+  Idea charlada con el usuario (2026-10-26): un VST es una tarjeta de slot más (la misma que pliega, abre en
+  ventanita y se arrastra), con "Abrir" para su ventana y 2 a 4 perillas que elige el usuario de sus parámetros.
+  Para eso, que todo efecto (nativo o VST) exponga una misma lista de parámetros (id, nombre, valor 0..1, texto):
+  sirve también para las perillas configurables y el MIDI learn. Un plugin sin parámetros útiles queda con
+  encendido y "Abrir".
 
 #### 3. MIDI
 - [ ] Pedalera o controlador MIDI: grabar/parar, play, marcar tomas, con los pies y sin soltar la guitarra

@@ -5,8 +5,9 @@ namespace GuitarCam.Projects;
 /// <summary>
 /// Track folders (native only, asked by the user). The project keeps the tracks in one list and each folder right
 /// before its children (<see cref="Folder.Index"/>); edits work on the "sequence" the timeline shows, folders and
-/// tracks in order, and write it back (<see cref="Rebuild"/>), so every move lands in a consistent order. A folder's
-/// fader, mute and solo act on its children like a VCA (<see cref="Mix"/>), in playback and in the export alike.
+/// tracks in order, and write it back (<see cref="Rebuild"/>), so every move lands in a consistent order. Where a
+/// folder's sound goes is <see cref="ProjectBuses"/>' business. A separator (<see cref="Folder.Separator"/>) lives in the
+/// same order as an empty folder that never takes tracks, so the timeline and the mixer move it like one.
 /// </summary>
 public static class TrackFolders
 {
@@ -56,12 +57,12 @@ public static class TrackFolders
             ids.Add(f.Id);
             f.Name ??= "";
             f.Color = Track.NormalizeColor(f.Color);
-            f.Volume = double.IsFinite(f.Volume) ? Math.Clamp(f.Volume, 0, 1.5) : 1;
             f.Height = Track.NormalizeHeight(f.Height, Folder.MinHeight, Folder.MaxHeight);
             f.HeightScale = Track.NormalizeHeight(f.HeightScale, 0.1, 8);
             f.Normalize();
         }
-        foreach (var t in p.Tracks) if (t.FolderId != null && !ids.Contains(t.FolderId)) t.FolderId = null;
+        var separators = p.Folders.Where(f => f.Separator).Select(f => f.Id).ToHashSet();
+        foreach (var t in p.Tracks) if (t.FolderId != null && (!ids.Contains(t.FolderId) || separators.Contains(t.FolderId))) t.FolderId = null;
 
         var byId = p.Folders.ToDictionary(f => f.Id);
         var order = new List<Track>(p.Tracks.Count);
@@ -93,19 +94,34 @@ public static class TrackFolders
 
     public static IEnumerable<Track> Children(Project p, Folder f) => p.Tracks.Where(t => t.FolderId == f.Id);
 
-    /// <summary>What the folder does to a track's channel: its fader multiplies, its mute mutes, its solo solos.</summary>
-    public static (double Gain, bool Muted, bool Solo) Mix(Folder? f) => f == null ? (1, false, false) : (f.Volume, f.Muted, f.Solo);
-
-    public static (double Gain, bool Muted, bool Solo) Mix(Project p, Track t) => Mix(Of(p, t));
-
     /// <summary>A free "Carpeta n" name, in Spanish like "Pista n" (names the user creates are data).</summary>
     static string FreeName(Project p)
     {
         var used = p.Folders.Select(f => f.Name).ToHashSet();
-        int n = p.Folders.Count + 1;
+        int n = p.Folders.Count(f => !f.Separator) + 1;
         while (used.Contains($"Carpeta {n}")) n++;
         return $"Carpeta {n}";
     }
+
+    /// <summary>
+    /// A new separator at <paramref name="at"/> in the sequence (the end when null; inside a folder's tracks it moves past
+    /// them, like an empty folder), named <paramref name="name"/> or "Separador". It starts hidden in the timeline (asked by
+    /// the user: separators are mostly for the mixer) unless <paramref name="hidden"/> is false. Returns its id.
+    /// </summary>
+    public static string AddSeparator(Project p, string? name = null, int? at = null, bool hidden = true)
+    {
+        var f = new Folder { Name = string.IsNullOrWhiteSpace(name) ? "Separador" : name.Trim(), Separator = true, HiddenInTimeline = hidden };
+        var seq = Sequence(p);
+        int pos = Math.Clamp(at ?? seq.Count, 0, seq.Count);
+        // never inside a folder: past its last child
+        while (pos > 0 && pos < seq.Count && seq[pos] is Track next && next.FolderId != null) pos++;
+        seq.Insert(pos, f);
+        Rebuild(p, seq);
+        return f.Id;
+    }
+
+    /// <summary>Whether <paramref name="folderId"/> is a folder that takes tracks (not a separator).</summary>
+    static bool Holds(Project p, string folderId) => p.Folders.Any(f => f.Id == folderId && !f.Separator);
 
     /// <summary>
     /// A new folder. With tracks it takes them (in their order) at the place of the first one; without, it goes at the
@@ -147,7 +163,7 @@ public static class TrackFolders
     {
         var block = p.Tracks.Where(t => trackIds.Contains(t.Id)).ToList();
         if (block.Count == 0) throw new ArgumentException(Texts.T("err.folder.noTrack", "No encontré esa pista."));
-        if (folderId != null && !p.Folders.Any(f => f.Id == folderId)) throw new ArgumentException(Texts.T("err.folder.none", "No encontré esa carpeta."));
+        if (folderId != null && !Holds(p, folderId)) throw new ArgumentException(Texts.T("err.folder.none", "No encontré esa carpeta."));
         var seq = Sequence(p);
         seq.RemoveAll(x => x is Track t && block.Contains(t));
         foreach (var t in block) t.FolderId = folderId;

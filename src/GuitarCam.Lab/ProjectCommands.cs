@@ -31,8 +31,8 @@ static class ProjectCommands
             "editar" => EditClips(dir, a),
             "historial" => HistoryCommands.Run(dir, a),
             "insertos" => InsertCommands.Run(dir, a),
-            "retornos" => ReturnCommands.Returns(dir, a),
-            "envios" => ReturnCommands.Sends(dir, a),
+            "buses" => BusCommands.Buses(dir, a),
+            "envios" => BusCommands.Sends(dir, a),
             "encuadre" => Frame(dir, a),
             "sincronia" => Sync(dir, a),
             "formato" => Format(dir, a),
@@ -167,10 +167,19 @@ static class ProjectCommands
             case "carpeta":
                 var fd = p.Folders.Find(f => f.Id == id) ?? throw new ArgumentException("No encontré esa carpeta.");
                 if (a.Get("nombre") is { } name) fd.Name = name;
-                if (a.Get("volumen") is { } vol) fd.Volume = Math.Clamp(double.Parse(vol, System.Globalization.CultureInfo.InvariantCulture), 0, 1.5);
-                if (a.Flag("mute")) fd.Muted = !fd.Muted;
-                if (a.Flag("solo")) fd.Solo = !fd.Solo;
-                if (a.Flag("plegar")) fd.Collapsed = !fd.Collapsed;
+                if (a.Flag("plegar") && !fd.Separator) fd.Collapsed = !fd.Collapsed;
+                if (a.Flag("ocultar") && fd.Separator) fd.HiddenInTimeline = !fd.HiddenInTimeline;
+                break;
+            case "nuevo-separador":
+                Console.WriteLine(TrackFolders.AddSeparator(p, id.Length > 0 ? id : null, a.Get("en") is { } sepAt ? int.Parse(sepAt) : null, !a.Flag("visible")));
+                break;
+            case "lado":
+                // which side of the mixer a strip sits on: a track, a folder or separator, or a bus
+                bool right = value switch { "derecha" => true, "izquierda" => false, _ => throw new ArgumentException("lado: izquierda o derecha.") };
+                if (p.Tracks.Find(t => t.Id == id) is { } lt) lt.MixerSide = right ? MixerSides.Right : null;
+                else if (p.Folders.Find(f => f.Id == id) is { } lf) lf.MixerSide = right ? MixerSides.Right : null;
+                else if (ProjectBuses.Find(p, id) is { } lb) lb.MixerSide = right ? null : MixerSides.Left;
+                else throw new ArgumentException("lado: no encontré esa pista, carpeta o bus.");
                 break;
             case "guardar-plantilla":
                 var src = p.Tracks.Find(t => t.Id == id) ?? throw new ArgumentException("No encontré esa pista.");
@@ -206,7 +215,7 @@ static class ProjectCommands
                 {
                     "mover" => ClipEditMode.Move, "recortar-inicio" => ClipEditMode.TrimStart,
                     "recortar-final" => ClipEditMode.TrimEnd, "fade-in" => ClipEditMode.FadeIn, "fade-out" => ClipEditMode.FadeOut,
-                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar clip[,clip…]; pegar clip[,clip…] segundos [--pista id]; a-pista|inicio|alinear|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar; nueva-carpeta [nombre] --pistas id,id; a-carpeta pista[,pista…] carpeta|raiz [--en n]; sacar-de-carpeta pista; mover-carpeta carpeta n; quitar-carpeta carpeta [--con-pistas]; carpeta id [--nombre --volumen --mute --solo --plegar]; transponer pista semitonos; guardar-plantilla pista [nombre]; usar-plantilla id|nombre; borrar-rango pista[,pista…] desde --hasta fin [--cerrar]; al-frente clip; transicion clip corte|fundido|negro [--segundos 0.5]"),
+                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar clip[,clip…]; pegar clip[,clip…] segundos [--pista id]; a-pista|inicio|alinear|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar; nueva-carpeta [nombre] --pistas id,id; a-carpeta pista[,pista…] carpeta|raiz [--en n]; sacar-de-carpeta pista; mover-carpeta carpeta n; quitar-carpeta carpeta [--con-pistas]; carpeta id [--nombre --plegar --ocultar]; nuevo-separador [nombre] [--en n --visible]; lado id izquierda|derecha; transponer pista semitonos; guardar-plantilla pista [nombre]; usar-plantilla id|nombre; borrar-rango pista[,pista…] desde --hasta fin [--cerrar]; al-frente clip; transicion clip corte|fundido|negro [--segundos 0.5]"),
                 };
                 var (_, clip) = ClipEditing.Find(p, id);
                 double dx = double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
@@ -335,8 +344,6 @@ static class ProjectCommands
         Check("quitar F deja sus pistas: " + Order(p), Order(p) == "B C A [G] ·D");
         undo.Undo(p);
         Check("deshacer la vuelve: " + Order(p), Order(p) == "B [F] ·C ·A [G] ·D");
-        p.Folders.Find(f => f.Id == f1)!.Volume = 0.5;
-        Check("el fader de la carpeta multiplica", TrackFolders.Mix(p, p.Tracks.Find(t => t.Name == "C")!).Gain == 0.5);
         ClipEditing.RemoveTrack(p, p.Tracks.Find(t => t.Name == "B")!.Id);
         TrackFolders.Add(p, "H");
         TrackFolders.MoveFolder(p, p.Folders.Find(f => f.Name == "H")!.Id, 0);
@@ -349,6 +356,37 @@ static class ProjectCommands
         Check("C y A juntas dentro de G: " + Order(p), Order(p) == "[H] [F] [G] ·C ·A");
         TrackFolders.Remove(p, p.Folders.Find(f => f.Name == "G")!.Id, withTracks: true);
         Check("quitar G con sus pistas: " + Order(p), Order(p) == "[H] [F]" && p.Tracks.Count == 0);
+
+        // separators: an empty folder that never takes tracks, never lands inside a folder, and makes no sound
+        var s = new Project();
+        foreach (var n in new[] { "A", "B", "C" }) s.Tracks.Add(new Track { Name = n });
+        string g = TrackFolders.Add(s, "G", [s.Tracks[1].Id, s.Tracks[2].Id]);
+        string sep = TrackFolders.AddSeparator(s, "Guitarras", 2);
+        string shown = TrackFolders.AddSeparator(s, "Visible", hidden: false);
+        Check("un separador nuevo empieza oculto en el timeline", s.Folders.Find(f => f.Id == sep)!.HiddenInTimeline
+            && !s.Folders.Find(f => f.Id == shown)!.HiddenInTimeline);
+        TrackFolders.Remove(s, shown);
+        Check("un separador dentro de una carpeta va después de ella: " + Order(s), Order(s) == "A [G] ·B ·C [Guitarras]");
+        TrackFolders.MoveFolder(s, sep, 0);
+        Check("el separador se mueve como una carpeta: " + Order(s), Order(s) == "[Guitarras] A [G] ·B ·C");
+        bool refused = false;
+        try { TrackFolders.Move(s, [s.Tracks[0].Id], 1, sep); } catch (ArgumentException) { refused = true; }
+        Check("una pista no entra en un separador", refused && s.Tracks[0].FolderId == null);
+        s.Tracks[0].FolderId = sep;
+        TrackFolders.Normalize(s);
+        Check("normalizar saca a una pista de un separador", s.Tracks[0].FolderId == null);
+        Check("un separador no es un nodo de la mezcla ni rutea", !ChannelDsp.Nodes(s).Contains(sep) && ChannelDsp.Nodes(s).Contains(g)
+            && !ProjectBuses.All(s).Contains(s.Folders.Find(f => f.Id == sep)!));
+        // the mixer's sides: the default is saved as null; a bus goes right by default
+        s.Tracks[0].MixerSide = MixerSides.Right;
+        s.Settings.Buses[0].MixerSide = MixerSides.Left;
+        s.Settings.Buses[1].MixerSide = MixerSides.Right;
+        s.Folders.Find(f => f.Id == sep)!.HiddenInTimeline = true;
+        var back = ProjectStore.Parse(System.Text.Json.JsonSerializer.Serialize(s, ProjectStore.Json));
+        Check("lados y separadores se guardan", MixerSides.IsRight(back.Tracks[0]) && !MixerSides.IsRight(back.Settings.Buses[0])
+            && MixerSides.IsRight(back.Settings.Buses[1]) && back.Settings.Buses[1].MixerSide == null
+            && back.Folders.Find(f => f.Id == sep) is { Separator: true, HiddenInTimeline: true, Name: "Guitarras" }
+            && back.Folders.Find(f => f.Id == g) is { Separator: false, HiddenInTimeline: false });
         Console.WriteLine(failed == 0 ? "Todo bien." : $"{failed} comprobación(es) fallaron.");
         return failed == 0 ? 0 : 1;
     }
@@ -490,9 +528,14 @@ static class ProjectCommands
         Console.WriteLine($"\"{p.Name}\" v{p.Version} · {p.Settings.Bpm:0.##} BPM · {p.Settings.Aspect} · {p.Media.Count} medios · {p.Tracks.Count} pistas");
         foreach (var item in TrackFolders.Sequence(p))
         {
+            if (item is Folder { Separator: true } sep)
+            {
+                Console.WriteLine($"  ── {sep.Name} ──{(sep.HiddenInTimeline ? " (oculto en el timeline)" : "")}{(MixerSides.IsRight(sep) ? " · a la derecha" : "")} · {sep.Id}");
+                continue;
+            }
             if (item is Folder f)
             {
-                Console.WriteLine($"  [{f.Name}] vol {f.Volume:0.00}{(f.Muted ? " mute" : "")}{(f.Solo ? " solo" : "")}{(f.Collapsed ? " plegada" : "")} · {f.Id}");
+                Console.WriteLine($"  [{f.Name}]{(f.Output != null ? $" sale a {ProjectBuses.Find(p, f.Output)?.Name}" : "")}{(f.Sends.Count > 0 ? $" · {f.Sends.Count} envío(s)" : "")}{(f.Collapsed ? " plegada" : "")} · {f.Id}");
                 continue;
             }
             var t = (Track)item;
@@ -684,15 +727,15 @@ static class UndoChecks
         p.Tracks[0].Channel.Comp.Eq.AirDb = 4;
         p.Tracks.Reverse();
         p.Settings.Aspect = "9:16";
-        p.Settings.Reverb.Decay = 7;
-        p.Settings.Delay.Feedback = 0.9;
+        p.Settings.Buses[0].Inserts[0].Reverb!.Decay = 7;
+        p.Settings.Buses[1].Volume = 0.25;
         p.Settings.Color.Exposure = 50;
         p.Settings.VideoFx.Grain = 50;
         Check(history.Undo(p) && p.Tracks[0].Name == "Guitarra" && p.Tracks[0].Clips[0].GainDb == 3 && p.Tracks[0].Channel.Comp.Eq.AirDb == 0
-            && p.Settings.Aspect == "16:9" && p.Settings.Reverb.Decay != 7
-            && p.Settings.Delay.Feedback != 0.9 && p.Settings.Color.Exposure == 0 && p.Settings.VideoFx.Grain == 0,
+            && p.Settings.Aspect == "16:9" && p.Settings.Buses[0].Inserts[0].Reverb!.Decay != 7
+            && p.Settings.Buses[1].Volume != 0.25 && p.Settings.Color.Exposure == 0 && p.Settings.VideoFx.Grain == 0,
             "fotos profundas de clips, canales y ajustes");
-        Check(history.Redo(p) && p.Tracks[0].Name == "Otra" && p.Settings.Reverb.Decay == 7 && p.Tracks[1].Clips[0].GainDb == -12,
+        Check(history.Redo(p) && p.Tracks[0].Name == "Otra" && p.Settings.Buses[0].Inserts[0].Reverb!.Decay == 7 && p.Tracks[1].Clips[0].GainDb == -12,
             "las fotos no comparten referencias mutables");
         history.Clear();
         history.Checkpoint(p);

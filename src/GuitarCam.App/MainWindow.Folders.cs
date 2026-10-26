@@ -14,9 +14,10 @@ namespace GuitarCam.App;
 
 /// <summary>
 /// Track folders and track presets (native only, asked by the user). Folders group tracks in the timeline and the
-/// mixer; their fader, mute and solo act on the children like a VCA (<see cref="ApplyFolderMix"/>). Moving tracks in
-/// and out and removing a folder are timeline edits (<see cref="EditTimeline"/>); renaming, color, M / S and fader
-/// are folder edits with their own undo step (<see cref="FolderEdit"/>); folding is only a view, saved without undo.
+/// mixer and only hold them: no fader, mute, solo or effects (the user's call); their tracks' sum goes to the folder's
+/// output and sends (<see cref="ApplyRouting"/>). Moving tracks in and out and removing a folder are timeline edits
+/// (<see cref="EditTimeline"/>); renaming, color, output and sends are folder edits with their own undo step
+/// (<see cref="FolderEdit"/>); folding is only a view, saved without undo.
 /// Presets keep a track's whole strip to add it again from the "nueva pista" menu (<see cref="TrackPresets"/>).
 /// </summary>
 public partial class MainWindow
@@ -29,9 +30,7 @@ public partial class MainWindow
             return Timeline.SelectedFolderId ?? sel?.Track.Id;
         }, "tracks-reordered");
         Timeline.FolderFoldRequested += f => FolderEdit(f, x => x.Collapsed = !x.Collapsed, "fold", undoable: false);
-        Timeline.FolderToggleRequested += (f, solo) => FolderEdit(f, x => { if (solo) x.Solo = !x.Solo; else x.Muted = !x.Muted; }, solo ? "solo" : "mute");
         Timeline.FolderRemoveRequested += (f, at) => _ = RemoveFolder(f, at);
-        Timeline.FolderVolumeRequested += (f, v) => FolderEdit(f, x => x.Volume = v, "volume");
         Timeline.FolderContextRequested += ShowFolderMenu;
         Timeline.FolderLookRequested += (f, at) => ShowFolderLook(f, Timeline, at);
         InitFolderInspector();
@@ -77,31 +76,13 @@ public partial class MainWindow
     /// <summary>The folder selected in the timeline (or the mixer), or null; then no track is selected.</summary>
     Folder? SelectedFolder => Timeline.SelectedFolderId is { } id ? FolderById(id) : null;
 
-    /// <summary>
-    /// Tells every live track what its folder does to it (read by the audio thread on the next block): the VCA, and
-    /// the folder's bus with its slots (<see cref="PlaybackEngine.SetFolders"/>). Also hands the engine the extra
-    /// returns and every track its sends to them (<see cref="PlaybackEngine.SetReturns"/>).
-    /// </summary>
-    void ApplyFolderMix(Project p, IReadOnlyList<LiveTrack> list)
-    {
-        engine.SetFolders(p, list);
-        engine.SetReturns(p, list);
-        foreach (var t in list)
-        {
-            var (gain, muted, solo) = TrackFolders.Mix(p, t.Track);
-            t.FolderGain = (float)gain;
-            t.FolderMuted = muted;
-            t.FolderSolo = solo;
-        }
-    }
-
     /// <summary>A folder edit: one undo step per control (folding is not one), heard at once, saved, on screen.</summary>
     void FolderEdit(Folder f, Action<Folder> change, string key, bool undoable = true)
     {
         if (syncing || restoring || store == null || store.ReadOnly) return;
         if (undoable) undo.Checkpoint(store.Project, $"folder:{f.Id}:{key}");
         change(f);
-        ApplyFolderMix(store.Project, tracks);
+        ApplyRouting(store.Project, tracks);
         MarkDirty();
         UpdateUndoButtons();
         Timeline.UpdateTracks(tracks, store.Project.Folders);
@@ -190,6 +171,11 @@ public partial class MainWindow
     void ShowFolderMenu(Folder f, Point point)
     {
         if (store == null || restoring) return;
+        if (f.Separator)
+        {
+            OpenTimelineMenu(Popup(SeparatorMenu(f, Timeline, point), 240), point, 200);
+            return;
+        }
         bool enabled = !store.ReadOnly;
         var list = new List<object> { new MenuItem { Header = f.Name, IsEnabled = false, FontSize = 11 } };
         list.Add(MenuAction(Loc.T("folder.rename") + "…", () => { RenameInPlace(f.Id, () => RenameFolder(f, Timeline, point)); return Task.CompletedTask; }, enabled: enabled, icon: ""));
@@ -209,6 +195,43 @@ public partial class MainWindow
         list.Add(MenuAction(Loc.T("folder.remove"), () => RemoveFolder(f, point), enabled: enabled, danger: true, tip: Loc.T("folder.remove.tip")));
         OpenTimelineMenu(Popup(list, 240), point, 200);
     }
+
+    /// <summary>
+    /// A separator's menu, from the timeline or its mixer strip: rename, color, show or hide it in the timeline (it
+    /// always shows in the mixer) and remove it.
+    /// </summary>
+    List<object> SeparatorMenu(Folder f, Control anchor, Point? point)
+    {
+        bool enabled = store is { ReadOnly: false } && !restoring;
+        string id = f.Id;
+        var list = new List<object> { new MenuItem { Header = f.Name, IsEnabled = false, FontSize = 11 } };
+        list.Add(MenuAction(Loc.T("separator.rename") + "…", () =>
+        {
+            if (FolderById(id) is { } x)
+            {
+                if (point is { } at) RenameInPlace(id, () => RenameFolder(x, anchor, at));
+                else AskName(anchor, null, Loc.T("separator.rename"), x.Name, Loc.T("folder.rename.ok"), n => FolderEdit(x, y => y.Name = n.Trim(), "name"));
+            }
+            return Task.CompletedTask;
+        }, enabled: enabled, icon: ""));
+        var color = new MenuItem { Header = MenuHeader(Loc.T("look.color") + "…", Swatch(f.Color)), IsEnabled = enabled };
+        color.Click += (_, _) => { if (FolderById(id) is { } x) ShowFolderLook(x, anchor, point); };
+        list.Add(color);
+        list.Add(MenuAction(Loc.T(f.HiddenInTimeline ? "separator.show" : "separator.hide"),
+            () => { if (FolderById(id) is { } x) FolderEdit(x, y => y.HiddenInTimeline = !y.HiddenInTimeline, "hidden"); return Task.CompletedTask; },
+            enabled: enabled, icon: f.HiddenInTimeline ? "" : "", tip: Loc.T("separator.hide.tip")));
+        list.Add(new Separator());
+        list.Add(MenuAction(Loc.T("separator.remove"), () => FolderById(id) is { } x ? RemoveFolderNow(x, false) : Task.CompletedTask, enabled: enabled, danger: true));
+        return list;
+    }
+
+    /// <summary>A new separator right above <paramref name="track"/> (above its folder, if it is in one): asked for from the timeline, it shows there.</summary>
+    Task NewSeparatorAbove(LiveTrack track) => EditTimeline(p =>
+    {
+        object item = TrackFolders.Of(p, track.Track) is { } folder ? folder : track.Track;
+        TrackFolders.AddSeparator(p, null, TrackFolders.Sequence(p).IndexOf(item), hidden: false);
+        return track.Track.Id;
+    }, "separator-added");
 
     /// <summary>A menu header with a leading control (a swatch) and its text.</summary>
     static Control MenuHeader(string text, Control lead)
@@ -236,7 +259,7 @@ public partial class MainWindow
             // each one goes right after the folder's end, so the last one first keeps their order
             items.Add(MenuAction(Loc.T("folder.takeOut", current.Name), () => MoveGroup(x => { foreach (var id in group.Reverse()) TrackFolders.TakeOut(x, id); }),
                 enabled: enabled, icon: ""));
-        foreach (var f in p.Folders.Where(f => f != current))
+        foreach (var f in p.Folders.Where(f => f != current && !f.Separator))
         {
             string id = f.Id;
             var item = new MenuItem { Header = MenuHeader(Loc.T("folder.moveTo", f.Name), Swatch(f.Color)), IsEnabled = enabled };
@@ -255,34 +278,8 @@ public partial class MainWindow
     Folder? FolderOfTrack(LiveTrack t) => t.Track.FolderId is { } id ? FolderById(id) : null;
     /// <summary>The band above the strips where folder names sit (every column gets it while the project has folders).</summary>
     const double FolderBandH = 26;
-    /// <summary>A wide folder strip is as wide as the narrowest track strip: its slots' panels need the same room.</summary>
+    /// <summary>A wide folder strip is as wide as the narrowest track strip: its send panels need the same room.</summary>
     static double FolderStripW(bool wide) => wide ? WideMin : CompactW;
-
-    /// <summary>A folder bus's slots, for the panels (<see cref="SlotPanels"/>): edited as folder edits, with their undo.</summary>
-    SlotOwner SlotsOf(Folder folder)
-    {
-        string id = folder.Id;
-        Folder F() => FolderById(id) ?? folder;
-        return new()
-        {
-            Slots = () => F().Inserts,
-            Edit = (change, key) => FolderEdit(F(), x => change(x.Inserts), key),
-            Recalculate = c => RecalculateFolderComp(F(), c),
-            AddTip = Loc.T("mix.slot.add.folder.tip"),
-        };
-    }
-
-    /// <summary>
-    /// A folder compressor's preset, measured against its first track with audio (a bus has no take of its own; with
-    /// none, its values stay as they are, like an empty track's).
-    /// </summary>
-    void RecalculateFolderComp(Folder f, CompSettings c)
-    {
-        if (tracks.FirstOrDefault(t => t.Track.FolderId == f.Id && t.Envelope != null)?.Envelope is not { } env) return;
-        double gr = ChannelDsp.RecalculateComp(c, env);
-        c.Extra ??= [];
-        c.Extra["estGrDb"] = System.Text.Json.JsonSerializer.SerializeToElement(gr);
-    }
 
     /// <summary>A mixer column with the folder band on top (empty for strips at the root and the returns).</summary>
     static Grid Banded(Control? band, Control body)
@@ -300,10 +297,21 @@ public partial class MainWindow
         string id = folder.Id;
         Folder F() => FolderById(id) ?? folder;
         var strips = new StackPanel { Orientation = Orientation.Horizontal };
-        strips.Children.Add(FolderStrip(folder, wide));
+        // the folder's strip drags the whole folder; its open tracks drag on their own (MainWindow.MixerOrder.cs)
+        var own = FolderStrip(folder, wide);
+        MixerDraggable(own, folder);
+        strips.Children.Add(own);
         if (!folder.MixerCollapsed)
+        {
+            mx.Order.FolderStrips[id] = own;
             foreach (var t in tracks.Where(t => t.Track.FolderId == id).ToList())
-                strips.Children.Add(Strip(t, tracks.IndexOf(t), wide, stripW));
+            {
+                var card = Strip(t, tracks.IndexOf(t), wide, stripW);
+                MixerDraggable(card, t.Track);
+                mx.Order.Inner.Add((card, t.Track, id));
+                strips.Children.Add(card);
+            }
+        }
 
         var fold = new Button { Classes = { "ghost" }, Width = 20, Height = 20, MinHeight = 20, Padding = new Thickness(0), CornerRadius = new CornerRadius(4),
             HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
@@ -343,8 +351,8 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// The folder's own strip: its fader multiplies its tracks' faders, M and S act on all of them. Wide, it shows the
-    /// bus's insert slots like a track strip; the meter shows the bus's output while it has slots, else the loudest track.
+    /// The folder's own strip: it only holds its tracks, so no fader, M, S or effects. Its meter shows the sum of its
+    /// tracks (what goes to its output); wide, it shows its output and its send panels, compact its sends as bars and its output.
     /// </summary>
     Control FolderStrip(Folder folder, bool wide)
     {
@@ -355,19 +363,13 @@ public partial class MainWindow
         // a click on the folder's strip selects the folder, like a track's strip selects its track
         box.Cursor = new Cursor(StandardCursorType.Hand);
         box.PointerPressed += (_, e) => { if (e.GetCurrentPoint(box).Properties.IsLeftButtonPressed) Timeline.SelectFolder(id); };
-        double btn = wide ? 28 : 24;
-        var mute = StripToggle("M", Loc.T("tl.tip.folderMute"), btn, () => F().Muted, false, () => FolderEdit(F(), x => x.Muted = !x.Muted, "mute"));
-        var solo = StripToggle("S", Loc.T("tl.tip.folderSolo"), btn, () => F().Solo, true, () => FolderEdit(F(), x => x.Solo = !x.Solo, "solo"));
-        var fader = new Fader();
-        fader.Changed += v => FolderEdit(F(), x => x.Volume = v, "volume");
-        ToolTip.SetTip(fader, Loc.T("mixer.folder.fader.tip"));
-        var db = new TextBlock { Classes = { "mono" }, FontSize = wide ? 11 : 10, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center };
         var meter = new MixerMeter();
-        mx.FolderMeters.Add((id, meter));
-        var faders = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Children = { fader, meter } };
+        mx.NodeMeters.Add((id, meter));
         var tag = new TextBlock { Text = Loc.T("mixer.folderTag"), FontSize = 9, LetterSpacing = 0.8, Foreground = Palette.Faint, HorizontalAlignment = HorizontalAlignment.Center };
         ToolTip.SetTip(tag, Loc.T("mixer.folderTag.tip"));
         var glyph = new TextBlock { Classes = { "icon" }, Text = "", FontSize = wide ? 16 : 13, HorizontalAlignment = HorizontalAlignment.Center };
+        var sum = new TextBlock { Text = Loc.T("mixer.folder.sum"), FontSize = wide ? 11 : 10, Foreground = Palette.Faint };
+        ToolTip.SetTip(sum, Loc.T("mixer.folder.sum.tip"));
         mx.Refresh.Add(() =>
         {
             var f = F();
@@ -377,36 +379,31 @@ public partial class MainWindow
             box.Background = selected ? Palette.Raised : Palette.Panel;
             box.BorderBrush = selected ? Palette.Alpha(Palette.AccentColor, 0.4) : Palette.Line;
             glyph.Foreground = Palette.Alpha(c, 1);
-            fader.Value = f.Volume;
-            db.Text = $"{Fader.Db(f.Volume)} dB";
         });
+        var router = RouterOf(folder);
         Control head, controls;
-        var toggles = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center, Children = { mute, solo } };
         if (wide)
         {
-            var h = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), Height = 28 };
+            var h = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Height = 28 };
             tag.VerticalAlignment = glyph.VerticalAlignment = VerticalAlignment.Center;
             tag.HorizontalAlignment = HorizontalAlignment.Left;
             tag.Margin = new Thickness(8, 0);
             h.Children.Add(glyph);
             Grid.SetColumn(tag, 1); h.Children.Add(tag);
-            Grid.SetColumn(toggles, 2); h.Children.Add(toggles);
             head = h;
-            // the bus's slots, scrolling like a track strip's effects
+            // its output and sends, scrolling like a track strip's effects
             var fx = new StackPanel { Spacing = 8, Margin = new Thickness(0, 0, 4, 6) };
-            wideGr = null;
-            SlotPanels(fx, SlotsOf(folder));
-            mx.FolderGr[id] = wideGr ?? (_ => { });
-            wideGr = null;
+            fx.Children.Add(OutputRow(router));
+            SendPanels(fx, router);
             controls = new ScrollViewer { Content = fx, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         }
         else
         {
             head = new StackPanel { Spacing = 4, Children = { glyph, tag } };
-            controls = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0), Children = { toggles } };
+            controls = CompactFolderControls(router);
         }
         var content = new Grid();
-        content.Children.Add(StripLayout(wide, head, controls, faders, db));
+        content.Children.Add(StripLayout(wide, head, controls, meter, sum));
         content.Children.Add(top);
         box.Child = content;
         return box;
@@ -477,7 +474,7 @@ public partial class MainWindow
     readonly List<Action> folderRefresh = [];
     readonly TextBox folderName = new() { Classes = { "title" } };
 
-    /// <summary>What the inspector shows while a folder is selected: its name, color, fader, M / S and its actions.</summary>
+    /// <summary>What the inspector shows while a folder is selected: its name, color, output, sends and its actions.</summary>
     void InitFolderInspector()
     {
         var glyph = new TextBlock { Classes = { "icon" }, Text = "", FontSize = 18 };
@@ -510,19 +507,9 @@ public partial class MainWindow
             paintAsk.Ask(f);
         }, folderRefresh, 16));
         card.Children.Add(paintAsk.View);
-        card.Children.Add(new TextBlock { Classes = { "label" }, Text = Loc.T("folder.mix").ToUpperInvariant(), Margin = new Thickness(0, 4, 0, 0) });
-        var volume = new InspectorSlider(Loc.T("insp.volume"), 0, 1.5, 0.01, 1, v => $"{v * 100:0}%",
-            v => { if (!syncing && SelectedFolder is { } f) FolderEdit(f, x => x.Volume = v, "volume"); });
-        card.Children.Add(volume);
-        var mute = new ToggleButton { Classes = { "chip" }, Content = "Mute", MinHeight = 30, Padding = new Thickness(14, 0) };
-        var solo = new ToggleButton { Classes = { "chip" }, Content = "Solo", MinHeight = 30, Padding = new Thickness(14, 0) };
-        ToolTip.SetTip(mute, Loc.T("tl.tip.folderMute"));
-        ToolTip.SetTip(solo, Loc.T("tl.tip.folderSolo"));
-        mute.IsCheckedChanged += (_, _) => { if (!syncing && SelectedFolder is { } f && f.Muted != (mute.IsChecked == true)) FolderEdit(f, x => x.Muted = mute.IsChecked == true, "mute"); };
-        solo.IsCheckedChanged += (_, _) => { if (!syncing && SelectedFolder is { } f && f.Solo != (solo.IsChecked == true)) FolderEdit(f, x => x.Solo = solo.IsChecked == true, "solo"); };
-        card.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { mute, solo } });
-        card.Children.Add(Help(Loc.T("folder.mix.hint")));
-        card.Children.Add(Help(Loc.T("folder.fx.hint")));
+        card.Children.Add(new TextBlock { Classes = { "label" }, Text = Loc.T("folder.route").ToUpperInvariant(), Margin = new Thickness(0, 4, 0, 0) });
+        card.Children.Add(folderRouting);
+        card.Children.Add(Help(Loc.T("folder.route.hint")));
         folderPanel.Children.Add(new Border { Classes = { "section" }, Background = Palette.Panel, BorderThickness = new Thickness(0, 1), CornerRadius = new CornerRadius(0),
             Margin = new Thickness(-14, 4, -14, 0), Padding = new Thickness(16, 14, 16, 16), Child = card });
 
@@ -551,10 +538,42 @@ public partial class MainWindow
             if (!folderName.IsFocused || folderName.Text?.Trim() != f.Name) folderName.Text = f.Name;
             int n = tracks.Count(t => t.Track.FolderId == f.Id);
             count.Text = n == 0 ? Loc.T("folder.empty") : n == 1 ? Loc.T("folder.count.one") : Loc.T("folder.count", n);
-            volume.Set(f.Volume, null);
-            mute.IsChecked = f.Muted;
-            solo.IsChecked = f.Solo;
+            RebuildFolderRouting(f);
+            foreach (var r in folderRouteRefresh) r();
         });
         Inspector.Children.Add(folderPanel);
+    }
+
+    readonly StackPanel folderRouting = new() { Spacing = 10 };
+    readonly List<Action> folderRouteRefresh = [];
+    string folderRoutingKey = "";
+
+    /// <summary>
+    /// The selected folder's output and its sends (a level per bus it can send to; 0 = no send), rebuilt only when the
+    /// folder or the buses change; every other edit just refreshes them.
+    /// </summary>
+    void RebuildFolderRouting(Folder f)
+    {
+        var router = RouterOf(f);
+        var targets = SendTargets(router);
+        string key = f.Id + "|" + string.Join("/", targets.Select(b => b.Id + ":" + b.Name)) + "|" + Targets(router).Count;
+        if (key == folderRoutingKey) return;
+        folderRoutingKey = key;
+        folderRouting.Children.Clear();
+        folderRouteRefresh.Clear();
+        var output = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+        output.Children.Add(new TextBlock { Text = Loc.T("route.output"), FontSize = 12, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
+        var select = OutputSelect(router, folderRouteRefresh);
+        Grid.SetColumn(select, 1); output.Children.Add(select);
+        folderRouting.Children.Add(output);
+        foreach (var bus in targets)
+        {
+            string id = bus.Id;
+            var slider = new InspectorSlider(Loc.T("route.sendTo", bus.Name), 0, 1, 0.01, 0, v => $"{v * 100:0}%",
+                v => { if (!syncing) router.Edit((p, x) => ProjectBuses.SetSend(p, x, id, v, v > 0 ? true : null) != null, $"send.{id}.level"); });
+            folderRouteRefresh.Add(() => slider.Set(router.Get() is { } x ? ProjectBuses.SendOf(x, id).Level : 0, null));
+            folderRouting.Children.Add(slider);
+        }
+        if (Targets(router).Count > 0) folderRouting.Children.Add(AddSendButton(router));
     }
 }

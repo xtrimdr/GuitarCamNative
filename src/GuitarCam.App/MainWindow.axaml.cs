@@ -267,6 +267,7 @@ public partial class MainWindow : Window
 
     void MarkDirty()
     {
+        editStamp++;
         if (store == null || store.ReadOnly) return;
         dirty = true;
         ArmSave(restart: true);
@@ -487,7 +488,7 @@ public partial class MainWindow : Window
         Tempo.Set(p.Settings.Bpm);
         Timeline.Bpm = p.Settings.Bpm;
         Timeline.LengthSec = engine.LengthSec;
-        ApplyFolderMix(p, list);
+        ApplyRouting(p, list);
         Timeline.SetTracks(list, p.Folders, preserveView);
         RefreshMarkers();
         UpdateResetHeights();
@@ -676,12 +677,6 @@ public partial class MainWindow : Window
             case "tuner":
                 TunerToggle.IsChecked = TunerToggle.IsChecked != true;
                 break;
-            case "mute" when sel == null && SelectedFolder is { } folder:
-                FolderEdit(folder, x => x.Muted = !x.Muted, "mute");
-                break;
-            case "solo" when sel == null && SelectedFolder is { } folder:
-                FolderEdit(folder, x => x.Solo = !x.Solo, "solo");
-                break;
             case "mute" when sel != null:
                 Edit(t => t.Channel.Muted = !t.Channel.Muted, "mute");
                 break;
@@ -817,22 +812,19 @@ public partial class MainWindow : Window
     {
         if (syncing || restoring || store == null || store.ReadOnly) return;
         var lit = tracks.Where(t => solo ? t.Channel.Solo : t.Channel.Muted).ToList();
-        var litFolders = store.Project.Folders.Where(f => solo ? f.Solo : f.Muted).ToList();
-        if (lit.Count == 0 && litFolders.Count == 0) return;
+        if (lit.Count == 0) return;
         undo.Checkpoint(store.Project);
         foreach (var t in lit)
         {
             if (solo) t.Channel.Solo = false; else t.Channel.Muted = false;
             t.ApplyChannel();
         }
-        foreach (var f in litFolders) { if (solo) f.Solo = false; else f.Muted = false; }
-        ApplyFolderMix(store.Project, tracks);
         RefreshMixer();
         MarkDirty();
         UpdateUndoButtons();
         RefreshInspectorText();
         Timeline.InvalidateVisual();
-        int count = lit.Count + litFolders.Count;
+        int count = lit.Count;
         string what = count == 1 ? Loc.T("tracks.one") : Loc.T("tracks.many", count);
         Status(Loc.T(solo ? "mute.clearedSolo" : "mute.clearedMute", what));
     }
@@ -843,7 +835,7 @@ public partial class MainWindow : Window
         bool editable = store != null && !store.ReadOnly && !restoring;
         foreach (var (b, solo) in new[] { (ClearMutesButton, false), (ClearSolosButton, true) })
         {
-            bool lit = tracks.Any(t => solo ? t.Channel.Solo : t.Channel.Muted) || Folders.Any(f => solo ? f.Solo : f.Muted);
+            bool lit = tracks.Any(t => solo ? t.Channel.Solo : t.Channel.Muted);
             if (b.Classes.Contains("lit") == lit && b.IsEnabled == editable) continue;
             b.IsEnabled = editable;
             b.Classes.Set("lit", lit);
@@ -896,7 +888,7 @@ public partial class MainWindow : Window
                     tracks[i].Track.Extra = restored.Extra;
                 }
                 st.Project.Tracks = tracks.Select(t => t.Track).ToList();
-                ApplyFolderMix(st.Project, tracks);
+                ApplyRouting(st.Project, tracks);
                 Timeline.UpdateTracks(tracks, st.Project.Folders);
                 UpdateResetHeights();
                 engine.SetSettings(st.Project.Settings, glideDelay: true);

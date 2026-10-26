@@ -211,7 +211,7 @@ static class DspCommands
         {
             l.AsSpan(pos, Block).CopyTo(chain.BufferL(Block));
             r.AsSpan(pos, Block).CopyTo(chain.BufferR(Block));
-            chain.ProcessFilledBuffer(Block, false, sink, sink, sink, sink, sink, sink, out _, out _, out _);
+            chain.ProcessFilledBuffer(Block, false, sink, sink, out _, out _, out _);
             if ((sinceRead += Block) >= tickFrames) { sinceRead = 0; tap.Read(bins); reads++; }
         }
 
@@ -282,6 +282,7 @@ static class DspCommands
                 }
             }
 
+            var nodes = ChannelDsp.Nodes(p);
             foreach (var t in p.Tracks)
             {
                 var clips = new List<MixClipSpec>();
@@ -312,34 +313,13 @@ static class DspCommands
                     });
                 }
 
-                var ch = t.Channel;
-                // its folder as in the app: a VCA on its fader, mute and solo, and a bus with the folder's slots
-                var folder = TrackFolders.Mix(p, t);
-
-                trackSpecs.Add(new MixTrackSpec
-                {
-                    Name = t.Name,
-                    Clips = clips,
-                    Volume = ch.Volume * folder.Gain,
-                    Pan = ch.Pan,
-                    Muted = ch.Muted || folder.Muted,
-                    Solo = ch.Solo || folder.Solo,
-                    Inserts = ChannelDsp.Specs(ch, trackRms),
-                    Folder = ChannelDsp.FolderIndex(p, t),
-                    ReverbOn = ch.ReverbOn,
-                    ReverbSend = ch.ReverbSend,
-                    DelayOn = ch.DelayOn,
-                    DelaySend = ch.DelaySend,
-                    ReverbPre = ch.ReverbPre,
-                    DelayPre = ch.DelayPre,
-                    Sends = ChannelDsp.Sends(p, ch),
-                });
+                // its output (its folder or a bus) and its sends, as in the app
+                trackSpecs.Add(ChannelDsp.Track(p, nodes, t, clips, trackRms));
             }
 
             busSpec = ChannelDsp.Bus(p);
             Console.WriteLine($"Proyecto: {p.Name} ({trackSpecs.Count} pistas, {p.Settings.Bpm:0.#} BPM)");
-            int buses = busSpec.Folders.Count(f => f.Inserts.Count > 0);
-            if (buses > 0) Console.WriteLine($"Carpetas con efectos: {buses} (sus pistas suman en su bus)");
+            Console.WriteLine($"Carpetas y buses, en el orden en que suenan: {(busSpec.Nodes.Count == 0 ? "ninguno" : string.Join(" → ", busSpec.Nodes.Select(n => n.Name)))}");
         }
         else
         {
@@ -376,11 +356,10 @@ static class DspCommands
                 EqOn = eqOn,
                 EqBands = eqBands,
                 Inserts = a.Get("cadena") is { } chainList ? InsertCommands.Chain(chainList, satParams, compState, eqOn, eqBands) : null,
-                ReverbOn = true,
-                ReverbSend = a.Double("reverb-envio", 0),
-                DelayOn = true,
-                DelaySend = a.Double("delay-envio", 0),
+                // the sends to a new project's Reverb and Delay buses (BusCommands.DefaultBus)
+                Sends = [new MixSendSpec { To = 0, Level = a.Double("reverb-envio", 0) }, new MixSendSpec { To = 1, Level = a.Double("delay-envio", 0) }],
             });
+            busSpec = BusCommands.DefaultBus(110);
         }
 
         double durationSec = a.Double("segundos", MixRenderer.MixDurationSec(trackSpecs, sr));
@@ -488,11 +467,9 @@ static class DspCommands
         chainA.Configure(testTrackSpec);
         chainB.Configure(testTrackSpec);
         var dummyM = new float[128];
-        var dummyR = new float[128];
-        var dummyD = new float[128];
         ch[0].AsSpan(0, 128).CopyTo(chainA.BufferL(128));
         ch[1].AsSpan(0, 128).CopyTo(chainA.BufferR(128));
-        chainA.ProcessFilledBuffer(128, false, dummyM, dummyM, dummyR, dummyR, dummyD, dummyD, out _, out _, out _);
+        chainA.ProcessFilledBuffer(128, false, dummyM, dummyM, out _, out _, out _);
         chainA.Reset();
         var outAL = new float[128];
         var outAR = new float[128];
@@ -500,10 +477,10 @@ static class DspCommands
         var outBR = new float[128];
         ch[0].AsSpan(128, 128).CopyTo(chainA.BufferL(128));
         ch[1].AsSpan(128, 128).CopyTo(chainA.BufferR(128));
-        chainA.ProcessFilledBuffer(128, false, outAL, outAR, dummyR, dummyR, dummyD, dummyD, out _, out _, out _);
+        chainA.ProcessFilledBuffer(128, false, outAL, outAR, out _, out _, out _);
         ch[0].AsSpan(128, 128).CopyTo(chainB.BufferL(128));
         ch[1].AsSpan(128, 128).CopyTo(chainB.BufferR(128));
-        chainB.ProcessFilledBuffer(128, false, outBL, outBR, dummyR, dummyR, dummyD, dummyD, out _, out _, out _);
+        chainB.ProcessFilledBuffer(128, false, outBL, outBR, out _, out _, out _);
         double maxResetDiff = 0;
         for (int i = 0; i < 128; i++)
             maxResetDiff = Math.Max(maxResetDiff, Math.Max(Math.Abs(outAL[i] - outBL[i]), Math.Abs(outAR[i] - outBR[i])));
@@ -584,8 +561,8 @@ static class DspCommands
         // −14 LUFS target lands there under the limiter's ceiling; with no tail and no target it is the plain render
         var tone220 = new float[sr48 * 2];
         for (int i = 0; i < tone220.Length; i++) tone220[i] = (float)(0.25 * Math.Sin(2 * Math.PI * 220 * i / sr48));
-        MixTrackSpec[] noteMix = [new MixTrackSpec { Clips = [new MixClipSpec { Left = tone220, Right = tone220, DurationSec = 2 }], ReverbSend = 0.6 }];
-        var noteBus = new MixBusSpec();
+        MixTrackSpec[] noteMix = [new MixTrackSpec { Clips = [new MixClipSpec { Left = tone220, Right = tone220, DurationSec = 2 }], Sends = [new MixSendSpec { To = 0, Level = 0.6 }] }];
+        var noteBus = BusCommands.DefaultBus(110);
         var mastered = MixMaster.Render(noteMix, noteBus, 2, sr48, MixMaster.MaxTailSec, -14);
         float ceiling = (float)Math.Pow(10, MasterLimiter.CeilingDb / 20);
         float masteredPeak = 0;
@@ -606,7 +583,7 @@ static class DspCommands
         allOk &= MasterChecks(sr48);
         allOk &= TransposeCommands.Check();
         allOk &= InsertCommands.Check();
-        allOk &= ReturnCommands.Check();
+        allOk &= BusCommands.Check();
         allOk &= MeterChecks.Check();
 
         Console.WriteLine();
@@ -727,8 +704,7 @@ static class DspCommands
         for (int i = 0; i < l.Length; i += Block)
         {
             int n = Math.Min(Block, l.Length - i);
-            bus.ProcessReturnsAndLimiter(l.AsSpan(i, n), r.AsSpan(i, n), bus.PrepareReverbL(n), bus.PrepareReverbR(n),
-                bus.PrepareDelayL(n), bus.PrepareDelayR(n));
+            bus.Process(l.AsSpan(i, n), r.AsSpan(i, n));
             for (int b = 0; b < MasterBands.Count; b++)
             {
                 double gr = -bus.Master.TakeReductionDb(b);
@@ -906,27 +882,7 @@ static class DspCommands
                     }
                 }
 
-                var ch = trk.Channel;
-
-                var folder = TrackFolders.Mix(p, trk);
-                mixTracks.Add(new MixTrackSpec
-                {
-                    Name = trk.Name,
-                    Clips = clips,
-                    Volume = ch.Volume * folder.Gain,
-                    Pan = ch.Pan,
-                    Muted = ch.Muted || folder.Muted,
-                    Solo = ch.Solo || folder.Solo,
-                    Inserts = ChannelDsp.Specs(ch, trackRms),
-                    Folder = ChannelDsp.FolderIndex(p, trk),
-                    ReverbOn = ch.ReverbOn,
-                    ReverbSend = ch.ReverbSend,
-                    DelayOn = ch.DelayOn,
-                    DelaySend = ch.DelaySend,
-                    ReverbPre = ch.ReverbPre,
-                    DelayPre = ch.DelayPre,
-                    Sends = ChannelDsp.Sends(p, ch),
-                });
+                mixTracks.Add(ChannelDsp.Track(p, ChannelDsp.Nodes(p), trk, clips, trackRms));
             }
 
             var col = p.Settings.Color;
@@ -1106,7 +1062,7 @@ static class DspCommands
             Id = "trk-2",
             Name = "Punteo",
             Video = true,
-            Channel = new Channel { Volume = 0.85, Pan = 0.35, ReverbOn = true, ReverbSend = 0.25 },
+            Channel = new Channel { Volume = 0.85, Pan = 0.35, Sends = [new Send { BusId = ProjectBuses.ReverbId, Level = 0.25 }] },
             Clips = [new Clip { Id = "clp-2", MediaId = "med-2", AtSec = 0.1, FadeInSec = 0.1, FadeOutSec = 0.2, Framing = new Framing { Zoom = 1.0, Mirror = true } }],
         });
         store.Save();
@@ -1188,8 +1144,7 @@ static class DspCommands
             for (int i = 0; i < l.Length; i += 256)
             {
                 int n = Math.Min(256, l.Length - i);
-                bus.ProcessReturnsAndLimiter(l.AsSpan(i, n), r.AsSpan(i, n), bus.PrepareReverbL(n), bus.PrepareReverbR(n),
-                    bus.PrepareDelayL(n), bus.PrepareDelayR(n), limit: false);
+                bus.Process(l.AsSpan(i, n), r.AsSpan(i, n), limit: false);
             }
             double gain = Rms(l, sr / 2) - Rms(x, sr / 2);
             bool liveOk = gain is > 3.5 and < 6;

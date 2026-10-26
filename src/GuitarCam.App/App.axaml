@@ -399,6 +399,16 @@
       <Setter Property="Background" Value="{StaticResource Hover}" />
       <Setter Property="Foreground" Value="{StaticResource Fg}" />
     </Style>
+    <!-- the small buttons of an effect's title row (open in a window, fold): they light up like an active chip -->
+    <Style Selector="Button.ghost.slothead:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentSoft}" />
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+    </Style>
+    <!-- an effect's power button while off: under the pointer it lights up like an active chip (on, it keeps its accent) -->
+    <Style Selector="Button.chip.slotpower:not(.lit):pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentSoft}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Accent40}" />
+    </Style>
     <Style Selector="Button.ghost:disabled /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="Foreground" Value="{StaticResource Faint}" />

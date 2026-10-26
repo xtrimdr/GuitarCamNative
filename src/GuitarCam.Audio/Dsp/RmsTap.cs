@@ -3,7 +3,8 @@ namespace GuitarCam.Audio.Dsp;
 /// <summary>
 /// The RMS of one mixer meter (a channel, a return, the master). The audio thread adds each block's sum of squares
 /// with <see cref="Add"/> into running totals that only grow; the UI reads them on its tick with <see cref="Take"/>,
-/// keeps what it saw last and smooths the new stretch's mean square over <see cref="IntegrationSec"/>. Nobody resets
+/// keeps what it saw last and smooths each side's mean square over <see cref="IntegrationSec"/> (a stereo meter shows
+/// both, a mono one the louder). Nobody resets
 /// the totals, so the UI never races the audio thread into losing or counting a block twice; a torn read between the
 /// sums and the count is at most one block off and the smoothing hides it. Nothing here allocates or locks.
 /// </summary>
@@ -21,7 +22,7 @@ public sealed class RmsTap
     // the UI's side
     double seenL, seenR;
     long seenCount;
-    double meanSq;
+    double meanSqL, meanSqR;
 
     /// <summary>Audio thread: a block's sums of squares (left and right) over <paramref name="n"/> frames.</summary>
     public void Add(double sqL, double sqR, int n)
@@ -35,10 +36,13 @@ public sealed class RmsTap
     public void Add(float[] l, float[] r, int n) => Add(SumSquares(l, n), SumSquares(r, n), n);
 
     /// <summary>UI: what the last <see cref="Take"/> returned (a folder's meter reads its tracks' without taking again).</summary>
-    public double MeanSq => meanSq;
+    public double MeanSq => Math.Max(meanSqL, meanSqR);
+    /// <summary>UI: each side's smoothed mean square as of the last <see cref="Take"/>.</summary>
+    public double MeanSqL => meanSqL;
+    public double MeanSqR => meanSqR;
 
     /// <summary>
-    /// UI: the mean square (linear power, the louder channel's) smoothed over <see cref="IntegrationSec"/>, after
+    /// UI: the mean square (linear power, the louder side's; each side's in <see cref="MeanSqL"/> / <see cref="MeanSqR"/>) smoothed over <see cref="IntegrationSec"/>, after
     /// <paramref name="dtSec"/> since the last call. With no new audio in between it decays as silence would.
     /// </summary>
     public double Take(double dtSec)
@@ -46,11 +50,11 @@ public sealed class RmsTap
         long c = Volatile.Read(ref count);
         double l = sumL, r = sumR;
         long n = c - seenCount;
-        double ms = n > 0 ? Math.Max(l - seenL, r - seenR) / n : 0;
+        double msL = n > 0 ? Math.Max(l - seenL, 0) / n : 0, msR = n > 0 ? Math.Max(r - seenR, 0) / n : 0;
         seenL = l; seenR = r; seenCount = c;
-        if (ms < 0) ms = 0;
-        meanSq = Smooth(meanSq, ms, dtSec);
-        return meanSq;
+        meanSqL = Smooth(meanSqL, msL, dtSec);
+        meanSqR = Smooth(meanSqR, msR, dtSec);
+        return MeanSq;
     }
 
     /// <summary>One step of the one-pole smoothing of a mean square toward <paramref name="target"/>.</summary>

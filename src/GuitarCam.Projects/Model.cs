@@ -16,11 +16,13 @@ public sealed class Project
 {
     public const string FormatId = "guitarcam-project";
     /// <summary>
-    /// 2: the channel's effects are insert slots (<see cref="Channel.Inserts"/>) instead of fixed sat/comp/eq. Later
-    /// additions (folder buses, extra returns and sends, pre-fader sends) only add fields with defaults that sound like
-    /// before, and an older version keeps them untouched in <c>Extra</c>, so they didn't need a new version.
+    /// 2: the channel's effects are insert slots (<see cref="Channel.Inserts"/>) instead of fixed sat/comp/eq.
+    /// 3: the fixed reverb and delay and the extra returns became buses (<see cref="ProjectSettings.Buses"/>), every
+    /// channel, folder and bus picks its output and sends to buses, and folders only hold tracks. The older fields are
+    /// read once and turned into the new ones when the project is normalized (<see cref="ProjectSettings"/>,
+    /// <see cref="Channel"/>), so even a project opened read-only sounds as it did.
     /// </summary>
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     public string Format { get; set; } = FormatId;
     public int Version { get; set; } = CurrentVersion;
@@ -58,8 +60,8 @@ public sealed class Project
         Media.RemoveAll(m => m == null);
         Tracks.RemoveAll(t => t == null);
         foreach (var t in Tracks) t.Normalize();
-        ProjectReturns.Normalize(this);
         TrackFolders.Normalize(this);
+        ProjectBuses.Normalize(this);
         ProjectMarkers.Normalize(this);
     }
 }
@@ -78,8 +80,6 @@ public sealed class ProjectSettings
     public string Layout { get; set; } = "side-by-side";
     /// <summary>"16:9", "9:16", "1:1", "4:5"…</summary>
     public string Aspect { get; set; } = "16:9";
-    public ReverbSettings Reverb { get; set; } = new();
-    public DelaySettings Delay { get; set; } = new();
     /// <summary>Native only: the master's EQ and multiband (<see cref="Dsp.MasterChain"/>), off by default.</summary>
     public MasterSettings Master { get; set; } = new();
     public ColorGrade Color { get; set; } = new();
@@ -92,10 +92,15 @@ public sealed class ProjectSettings
     public double? LoopStartSec { get; set; }
     public double? LoopEndSec { get; set; }
     /// <summary>
-    /// Native only: the returns the user added besides the fixed <see cref="Reverb"/> and <see cref="Delay"/>
-    /// (<see cref="ReturnBus"/>, <see cref="ProjectReturns"/>), in the mixer's order. Empty by default.
+    /// Native only: the buses (<see cref="Bus"/>, edited through <see cref="ProjectBuses"/>), in the mixer's order. A new
+    /// project brings "Reverb" and "Delay" (<see cref="ProjectBuses.Defaults"/>).
     /// </summary>
-    public List<ReturnBus> Returns { get; set; } = [];
+    public List<Bus> Buses { get; set; } = ProjectBuses.Defaults();
+
+    // version 2's fixed reverb and delay and its extra returns, read only to turn them into buses (never written)
+    [JsonPropertyName("reverb")] public ReverbSettings? OldReverb { get; set; }
+    [JsonPropertyName("delay")] public DelaySettings? OldDelay { get; set; }
+    [JsonPropertyName("returns")] public List<Bus>? OldReturns { get; set; }
 
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
@@ -136,15 +141,20 @@ public sealed class ProjectSettings
         Mode = Mode == "audio" ? Mode : "video";
         Layout = Layout == "top-to-bottom" ? Layout : "side-by-side";
         Aspect ??= "16:9";
-        Reverb ??= new();
-        Delay ??= new();
+        if (OldReverb != null || OldDelay != null || OldReturns != null)
+        {
+            Buses = ProjectBuses.FromVersion2(OldReverb, OldDelay, OldReturns);
+            OldReverb = null;
+            OldDelay = null;
+            OldReturns = null;
+        }
         (Master ??= new()).Normalize();
         (Color ??= new()).Normalize();
         (VideoFx ??= new()).Normalize();
         (Export ??= new()).Normalize();
-        Returns ??= [];
-        Returns.RemoveAll(r => r == null);
-        foreach (var r in Returns) r.Normalize();
+        Buses ??= [];
+        Buses.RemoveAll(x => x == null);
+        foreach (var x in Buses) x.Normalize();
         if (LoopStartSec is not { } a || LoopEndSec is not { } b || !double.IsFinite(a) || !double.IsFinite(b)
             || a < 0 || b - a < ProjectMarkers.MinLoopSec)
             LoopStartSec = LoopEndSec = null;
@@ -152,8 +162,8 @@ public sealed class ProjectSettings
 }
 
 /// <summary>
-/// The fixed Reverb return's settings, and a reverb slot's (<see cref="InsertSlot.Reverb"/>, in an extra return's chain):
-/// there <see cref="Muted"/> means the slot is off (bypassed) and <see cref="ReturnGain"/> is its own level.
+/// A reverb slot's settings (<see cref="InsertSlot.Reverb"/>, in a bus's chain): <see cref="Muted"/> means the slot is
+/// off (bypassed) and <see cref="ReturnGain"/> is its own level. Version 2 also used it for the fixed Reverb return.
 /// </summary>
 public sealed class ReverbSettings
 {
@@ -295,7 +305,7 @@ public sealed class MasterBand
     }
 }
 
-/// <summary>The fixed Delay return's settings, and a delay slot's (<see cref="InsertSlot.Delay"/>), like <see cref="ReverbSettings"/>.</summary>
+/// <summary>A delay slot's settings (<see cref="InsertSlot.Delay"/>), like <see cref="ReverbSettings"/>.</summary>
 public sealed class DelaySettings
 {
     /// <summary>stereo | pingpong</summary>
@@ -438,6 +448,8 @@ public sealed class Track
     public string? Icon { get; set; }
     /// <summary>The <see cref="Folder"/> the track is in; null = at the root. Native only.</summary>
     public string? FolderId { get; set; }
+    /// <summary>The mixer side its strip sits on (<see cref="MixerSides"/>); null = the left. A track in a folder goes with it. Native only.</summary>
+    public string? MixerSide { get; set; }
     /// <summary>Its own lane height as a multiple of the height every track shares (the timeline's slider), so the slider
     /// still scales a track made taller or shorter; null = 1. The lane stays within <see cref="MinHeight"/>..<see cref="MaxHeight"/> px. Native only.</summary>
     public double? HeightScale { get; set; }
@@ -458,6 +470,7 @@ public sealed class Track
         Icon = string.IsNullOrWhiteSpace(Icon) || Icon.Length > 64 ? null : Icon.Trim();
         Color = NormalizeColor(Color);
         HeightScale = NormalizeHeight(HeightScale, 0.1, 8);
+        MixerSide = MixerSides.Normalize(MixerSide, MixerSides.Left);
         Transpose = double.IsFinite(Transpose)
             ? Math.Round(Math.Clamp(Transpose, -GuitarCam.Audio.Dsp.PitchShifter.MaxSemitones, GuitarCam.Audio.Dsp.PitchShifter.MaxSemitones), 2)
             : 0;
@@ -479,11 +492,11 @@ public sealed class Track
 /// <summary>
 /// A folder of tracks (native only, asked by the user): its children are the tracks with its <see cref="Track.FolderId"/>,
 /// always together in <see cref="Project.Tracks"/>, and the folder sits right before them. It folds in the timeline and
-/// in the mixer, and its fader, mute and solo act on all of them like a VCA (<see cref="TrackFolders.Mix"/>): the
-/// children keep their own channel strips. It is also a bus: with insert slots (<see cref="Inserts"/>), the children's
-/// post-fader output adds up and goes through them on its way to the master (their sends don't).
+/// in the mixer. It only holds them (the user's call): no fader, pan, mute, solo or effects. Its children's outputs add
+/// up there and go to its <see cref="Output"/> (the master or a bus), and from that sum it sends to buses
+/// (<see cref="Sends"/>, never pre-fader: there is no fader). Version 2's fader, mute, solo and slots are dropped.
 /// </summary>
-public sealed class Folder
+public sealed class Folder : IRouted
 {
     public string Id { get; set; } = Ids.New("fld");
     public string Name { get; set; } = "";
@@ -493,10 +506,6 @@ public sealed class Folder
     public bool Collapsed { get; set; }
     /// <summary>Folded in the mixer: only its own strip shows.</summary>
     public bool MixerCollapsed { get; set; }
-    /// <summary>Multiplies the children's faders (0..1.5, like a track's).</summary>
-    public double Volume { get; set; } = 1;
-    public bool Muted { get; set; }
-    public bool Solo { get; set; }
     /// <summary>Its own row height in the timeline (px, <see cref="MinHeight"/>..<see cref="MaxHeight"/>); null = the usual one.</summary>
     public double? Height { get; set; }
     public const double MinHeight = 34, MaxHeight = 160;
@@ -508,18 +517,47 @@ public sealed class Folder
     /// (<see cref="TrackFolders.Normalize"/> keeps it so); an empty folder needs it to keep its place.
     /// </summary>
     public int Index { get; set; }
+    /// <inheritdoc/>
+    public string? Output { get; set; }
+    /// <inheritdoc/>
+    public List<Send> Sends { get; set; } = [];
     /// <summary>
-    /// The bus's insert slots, in the order the sound goes through them (<see cref="ChannelInserts"/>). Empty by default:
-    /// a folder without slots is no bus, its tracks go to the master exactly as before.
+    /// A separator (asked by the user): a named divider between the strips of the mixer and the rows of the timeline,
+    /// for keeping order in big projects. It goes where a folder goes but holds no tracks and makes no sound.
     /// </summary>
-    public List<InsertSlot> Inserts { get; set; } = [];
+    public bool Separator { get; set; }
+    /// <summary>A separator left out of the timeline (it still shows in the mixer, where it is switched).</summary>
+    public bool HiddenInTimeline { get; set; }
+    /// <summary>The mixer side its strip (with its tracks) sits on (<see cref="MixerSides"/>); null = the left.</summary>
+    public string? MixerSide { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+
+    /// <summary>What version 2 saved on a folder and version 3 dropped.</summary>
+    static readonly string[] OldFields = ["volume", "muted", "solo", "inserts"];
 
     internal void Normalize()
     {
-        Inserts ??= [];
-        InsertSlot.NormalizeList(Inserts);
+        Sends ??= [];
+        foreach (var s in Sends) if (s != null) s.Pre = false;
+        if (Extra != null) foreach (var k in OldFields) Extra.Remove(k);
+        MixerSide = MixerSides.Normalize(MixerSide, MixerSides.Left);
+        // a separator routes nothing; HiddenInTimeline is a separator's alone
+        if (Separator) { Output = null; Sends.Clear(); Collapsed = false; }
+        else HiddenInTimeline = false;
     }
+}
+
+/// <summary>
+/// What sends its sound somewhere (native only): a track's <see cref="Channel"/>, a <see cref="Folder"/> or a
+/// <see cref="Bus"/>. Its whole output goes to <see cref="Output"/> and, at each send's level, to the buses in
+/// <see cref="Sends"/>. Edited through <see cref="ProjectBuses"/>, which never lets a bus feed itself.
+/// </summary>
+public interface IRouted
+{
+    /// <summary>The bus its output goes to (an id from <see cref="ProjectSettings.Buses"/>); null = the master.</summary>
+    string? Output { get; set; }
+    /// <summary>Its sends to buses, one per bus at most.</summary>
+    List<Send> Sends { get; set; }
 }
 
 /// <summary>The channel strip of a track: stays with the track when its clips change.</summary>
@@ -532,7 +570,7 @@ public sealed class Folder
 /// Projects of version 1 saved <c>sat</c>, <c>comp</c> and <c>eq</c> as fields: they come in through the
 /// <c>Old*</c> properties and become the three slots in that order, so they sound the same.
 /// </summary>
-public sealed class Channel
+public sealed class Channel : IRouted
 {
     public double Volume { get; set; } = 1;
     public double Pan { get; set; }
@@ -540,19 +578,22 @@ public sealed class Channel
     public bool Solo { get; set; }
     /// <summary>The insert slots, in the order the sound goes through them.</summary>
     public List<InsertSlot>? Inserts { get; set; } = DefaultInserts();
-    public bool ReverbOn { get; set; } = true;
-    public double ReverbSend { get; set; }
-    public bool DelayOn { get; set; } = true;
-    public double DelaySend { get; set; }
-    /// <summary>Native only: the reverb and delay sends taken before the fader (after the slots and the pan); false = after it.</summary>
-    public bool ReverbPre { get; set; }
-    public bool DelayPre { get; set; }
-    /// <summary>Native only: its sends to the extra returns (<see cref="ProjectSettings.Returns"/>), one per return at most.</summary>
+    /// <summary>Native only: the bus its output goes to; null = the master. A track in a folder goes through the folder instead.</summary>
+    public string? Output { get; set; }
+    /// <summary>Native only: its sends to buses (<see cref="ProjectSettings.Buses"/>), one per bus at most.</summary>
     public List<Send> Sends { get; set; } = [];
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
-    /// <summary>Its send to the return <paramref name="returnId"/>, or null (no send: nothing goes there).</summary>
-    public Send? SendTo(string returnId) => Sends.Find(s => s.ReturnId == returnId);
+    /// <summary>Its send to the bus <paramref name="busId"/>, or null (no send: nothing goes there).</summary>
+    public Send? SendTo(string busId) => Sends.Find(s => s.BusId == busId);
+
+    // version 2's sends to the fixed reverb and delay, read only to turn them into sends to their buses (never written)
+    [JsonPropertyName("reverbOn")] public bool? OldReverbOn { get; set; }
+    [JsonPropertyName("reverbSend")] public double? OldReverbSend { get; set; }
+    [JsonPropertyName("reverbPre")] public bool? OldReverbPre { get; set; }
+    [JsonPropertyName("delayOn")] public bool? OldDelayOn { get; set; }
+    [JsonPropertyName("delaySend")] public double? OldDelaySend { get; set; }
+    [JsonPropertyName("delayPre")] public bool? OldDelayPre { get; set; }
 
     // version 1's fixed effects, read only to turn them into slots (never written: null after Upgrade)
     [JsonPropertyName("sat")] public SatSettings? OldSat { get; set; }
@@ -670,53 +711,79 @@ public sealed class Channel
         Upgrade();
         InsertSlot.NormalizeList(Inserts!);
         AdoptSpares();
-        if (!double.IsFinite(ReverbSend)) ReverbSend = 0;
-        if (!double.IsFinite(DelaySend)) DelaySend = 0;
         Sends ??= [];
-        Sends.RemoveAll(s => s == null || string.IsNullOrEmpty(s.ReturnId));
-        // one send per return: the first one wins
-        var seen = new HashSet<string>();
-        Sends.RemoveAll(s => !seen.Add(s.ReturnId));
-        foreach (var s in Sends) s.Level = double.IsFinite(s.Level) ? Math.Clamp(s.Level, 0, 1) : 0;
+        OldSend(ProjectBuses.ReverbId, OldReverbSend, OldReverbOn, OldReverbPre);
+        OldSend(ProjectBuses.DelayId, OldDelaySend, OldDelayOn, OldDelayPre);
+        OldReverbOn = OldReverbPre = OldDelayOn = OldDelayPre = null;
+        OldReverbSend = OldDelaySend = null;
+    }
+
+    /// <summary>A version 2 send to the fixed reverb or delay, as a send to the bus that took its place.</summary>
+    void OldSend(string busId, double? level, bool? on, bool? pre)
+    {
+        if (level is not { } v || !(v > 0) || !double.IsFinite(v) || SendTo(busId) != null) return;
+        Sends.Add(new Send { BusId = busId, Level = Math.Min(v, 1), On = on ?? true, Pre = pre ?? false });
     }
 }
 
 /// <summary>
-/// A track's send to an extra return (native only): how much of it goes there (0..1, like the reverb and delay sends),
-/// its ON, and whether it is taken before the fader (<see cref="Pre"/>). A send to a return that no longer exists is
-/// dropped when the project is normalized.
+/// A send to a bus (native only), from a track, a folder or another bus: how much of it goes there (0..1), its ON, and
+/// whether it is taken before the fader (<see cref="Pre"/>; a folder has no fader, so never). A send to a bus that no
+/// longer exists is dropped when the project is normalized (<see cref="ProjectBuses.Normalize"/>).
 /// </summary>
 public sealed class Send
 {
-    public string ReturnId { get; set; } = "";
+    public string BusId { get; set; } = "";
+    /// <summary>Version 2 called it the return's id: read only (never written), it becomes <see cref="BusId"/>.</summary>
+    [JsonPropertyName("returnId")]
+    public string? OldReturnId { get => null; set { if (!string.IsNullOrEmpty(value) && BusId.Length == 0) BusId = value; } }
     public double Level { get; set; }
     public bool On { get; set; } = true;
     public bool Pre { get; set; }
+    /// <summary>
+    /// Taken out of the track's (or folder's) list of buses (asked by the user: not every track wants every bus): off and
+    /// not shown, its level kept for when it is added back. A bus without a send is shown, so a new track or bus starts
+    /// with all of them (<see cref="ProjectBuses.Shown"/>).
+    /// </summary>
+    public bool Hidden { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 
 /// <summary>
-/// A return the user added (native only), next to the fixed Reverb and Delay: the tracks send to it
-/// (<see cref="Channel.Sends"/>), and what they send goes through its insert slots (a reverb or a delay is one more slot:
-/// <see cref="InsertSlot.Reverb"/>, <see cref="InsertSlot.Delay"/>), its fader and its mute into the master.
+/// A bus (native only): it gathers what is routed to it (the <see cref="IRouted.Output"/> of tracks, folders and other
+/// buses) and what is sent to it (<see cref="IRouted.Sends"/>), runs the sum through its insert slots (a reverb or a delay
+/// is one more slot: <see cref="InsertSlot.Reverb"/>, <see cref="InsertSlot.Delay"/>), its pan, fader and mute, and passes
+/// it on to its own <see cref="Output"/> and sends. One idea for what other mixers split into buses and FX returns (the
+/// user's call); version 2's fixed Reverb and Delay and its extra returns became buses.
 /// </summary>
-public sealed class ReturnBus
+public sealed class Bus : IRouted
 {
-    public string Id { get; set; } = Ids.New("ret");
+    public string Id { get; set; } = Ids.New("bus");
     public string Name { get; set; } = "";
     /// <summary>Its fader, 0..1.5 like a track's.</summary>
     public double Volume { get; set; } = 1;
+    /// <summary>-1 (left) .. 1 (right), like a track's.</summary>
+    public double Pan { get; set; }
     public bool Muted { get; set; }
     public List<InsertSlot> Inserts { get; set; } = [];
+    /// <inheritdoc/>
+    public string? Output { get; set; }
+    /// <inheritdoc/>
+    public List<Send> Sends { get; set; } = [];
+    /// <summary>The mixer side its strip sits on (<see cref="MixerSides"/>); null = the right, where buses go by default.</summary>
+    public string? MixerSide { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
     internal void Normalize()
     {
-        if (string.IsNullOrEmpty(Id)) Id = Ids.New("ret");
+        MixerSide = MixerSides.Normalize(MixerSide, MixerSides.Right);
+        if (string.IsNullOrEmpty(Id)) Id = Ids.New("bus");
         Name ??= "";
         Volume = double.IsFinite(Volume) ? Math.Clamp(Volume, 0, 1.5) : 1;
+        Pan = double.IsFinite(Pan) ? Math.Clamp(Pan, -1, 1) : 0;
         Inserts ??= [];
         InsertSlot.NormalizeList(Inserts);
+        Sends ??= [];
     }
 }
 
@@ -738,6 +805,11 @@ public sealed class InsertSlot
     /// <summary>A reverb or delay slot's settings; their <c>Muted</c> is the slot's OFF.</summary>
     public ReverbSettings? Reverb { get; set; }
     public DelaySettings? Delay { get; set; }
+    /// <summary>
+    /// Folded in the mixer (asked by the user): only its title row, with a summary, so a long chain fits. A view choice
+    /// kept with the project, like a folder's fold; it changes nothing in the sound.
+    /// </summary>
+    public bool Collapsed { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
     [JsonIgnore] public bool Known => Dsp.TrackInserts.IsKind(Type);
@@ -993,4 +1065,21 @@ public sealed class LogEntry
 public static class Ids
 {
     public static string New(string prefix) => $"{prefix}-{Guid.NewGuid():N}"[..(prefix.Length + 13)];
+}
+
+/// <summary>
+/// The two sides of the mixer (asked by the user): every strip sits on the left or on the right of the free space, and
+/// the user moves it from one to the other. Tracks and folders go left and buses right unless they say otherwise; the
+/// default side is saved as null, so a project only writes the strips that moved.
+/// </summary>
+public static class MixerSides
+{
+    public const string Left = "left", Right = "right";
+
+    /// <summary>"left" or "right", with the default (and anything else) as null.</summary>
+    public static string? Normalize(string? side, string defaultSide) => side is Left or Right && side != defaultSide ? side : null;
+
+    public static bool IsRight(Track t) => t.MixerSide == Right;
+    public static bool IsRight(Folder f) => f.MixerSide == Right;
+    public static bool IsRight(Bus b) => b.MixerSide != Left;
 }

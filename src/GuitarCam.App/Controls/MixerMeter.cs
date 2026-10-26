@@ -6,14 +6,16 @@ using Avalonia.Media;
 namespace GuitarCam.App.Controls;
 
 /// <summary>
-/// A mixer strip's meter (from the web's Meter in Mixer.tsx, completed in the native app): a bar from -48 to +3 dBFS
-/// over the green → yellow → red gradient, solid up to the RMS and dimmed from there up to the peak (with a thin line
-/// on the peak), and a dB scale beside it that only shows the marks that fit. Over the bar: the peak-hold readout
-/// (the highest peak since the last reset, in dBFS) and the clip light, which latches red once the peak passes
+/// A mixer strip's meter (from the web's Meter in Mixer.tsx, completed in the native app): two bars, left and right,
+/// from -48 to +3 dBFS over the green → yellow → red gradient, each solid up to its RMS and dimmed from there up to its
+/// peak (with a thin line on the peak), and a dB scale beside them that only shows the marks that fit. A
+/// <see cref="Mono"/> source (a track whose takes are mono) shows one bar as wide as the pair, with the louder side,
+/// so every strip keeps its width and the faders stay level. Over the bars: the peak-hold readout (the highest peak
+/// of either side since the last reset, in dBFS) and a clip light per bar, which latches red once its peak passes
 /// <see cref="ClipDb"/> (the same threshold as <see cref="StereoMeter"/>'s light). A click anywhere on the meter
-/// resets both. The window feeds <see cref="Level"/> (amplitude, already with its fall-off) and <see cref="Rms"/>
-/// (amplitude, already integrated) from its tick, so any strip (track, folder, return, master) can drive one; it
-/// redraws only when what it shows changes, and the readout's text is rebuilt only when its tenth of a dB changes.
+/// resets them. The window feeds <see cref="Set"/> (peaks as amplitude with their fall-off, RMS as amplitude already
+/// integrated) from its tick, so any strip (track, folder, return, master) can drive one; it redraws only when what
+/// it shows changes, and the readout's text is rebuilt only when its tenth of a dB changes.
 /// </summary>
 public sealed class MixerMeter : Control
 {
@@ -46,58 +48,65 @@ public sealed class MixerMeter : Control
         },
     }.ToImmutable();
 
-    readonly double barW;
+    /// <summary>Each bar's width and the gap between the two (px); a mono bar takes the pair's width.</summary>
+    readonly double barW, pairW;
+    const double Gap = 1;
     readonly string barTip, holdTip;
-    double level, rms, hold;
-    bool hasRms, clip, overHead;
+    double levelL, levelR, rmsL, rmsR, hold;
+    bool mono, clipL, clipR, overHead;
     /// <summary>The readout as shown, in tenths of a dB (int.MinValue = −∞), and its text.</summary>
     int holdTenths = int.MinValue;
     string holdText = "-∞";
 
     public MixerMeter(bool wide = false)
     {
-        barW = wide ? 12 : 8;
-        Width = barW + 2 + ScaleW;
+        barW = wide ? 7 : 5;
+        pairW = 2 * barW + Gap;
+        Width = pairW + 2 + ScaleW;
         Cursor = Hand;
         barTip = Loc.T("meter.mixer.tip");
         holdTip = Loc.T("meter.mixer.hold.tip");
         ToolTip.SetTip(this, barTip);
     }
 
-    /// <summary>The peak to show (amplitude, with its fall-off); it also feeds the peak hold and the clip light.</summary>
-    public double Level
+    /// <summary>One bar with the louder side instead of two (a mono source); the light is lit if either side clipped.</summary>
+    public bool Mono
     {
         set
         {
-            bool dirty = Math.Abs(Pct(value) - Pct(level)) >= 0.002;
-            level = value;
-            if (value > hold)
-            {
-                hold = value;
-                int tenths = Tenths(value);
-                if (tenths != holdTenths)
-                {
-                    holdTenths = tenths;
-                    holdText = tenths == int.MinValue ? "-∞" : $"{tenths / 10.0:+0.0;-0.0;0.0}";
-                    dirty = true;
-                }
-            }
-            if (value >= ClipAmp && !clip) { clip = true; dirty = true; }
-            if (dirty) InvalidateVisual();
-        }
-    }
-
-    /// <summary>The RMS to show (amplitude, already integrated). Without it the bar shows the peak in full.</summary>
-    public double Rms
-    {
-        set
-        {
-            hasRms = true;
-            if (Math.Abs(Pct(value) - Pct(rms)) < 0.002) { rms = value; return; }
-            rms = value;
+            if (value == mono) return;
+            mono = value;
             InvalidateVisual();
         }
     }
+
+    /// <summary>
+    /// What to show: each side's peak (amplitude, with its fall-off; it also feeds the peak hold and the clip lights) and
+    /// RMS (amplitude, already integrated).
+    /// </summary>
+    public void Set(double peakL, double peakR, double rmsL, double rmsR)
+    {
+        bool dirty = Moved(peakL, levelL) || Moved(peakR, levelR) || Moved(rmsL, this.rmsL) || Moved(rmsR, this.rmsR);
+        levelL = peakL; levelR = peakR;
+        this.rmsL = rmsL; this.rmsR = rmsR;
+        double peak = Math.Max(peakL, peakR);
+        if (peak > hold)
+        {
+            hold = peak;
+            int tenths = Tenths(peak);
+            if (tenths != holdTenths)
+            {
+                holdTenths = tenths;
+                holdText = tenths == int.MinValue ? "-∞" : $"{tenths / 10.0:+0.0;-0.0;0.0}";
+                dirty = true;
+            }
+        }
+        if (peakL >= ClipAmp && !clipL) { clipL = true; dirty = true; }
+        if (peakR >= ClipAmp && !clipR) { clipR = true; dirty = true; }
+        if (dirty) InvalidateVisual();
+    }
+
+    static bool Moved(double now, double was) => Math.Abs(Pct(now) - Pct(was)) >= 0.002;
 
     /// <summary>Clears the peak hold and the clip light (a click on the meter).</summary>
     public void ResetHold()
@@ -105,7 +114,7 @@ public sealed class MixerMeter : Control
         hold = 0;
         holdTenths = int.MinValue;
         holdText = "-∞";
-        clip = false;
+        clipL = clipR = false;
         InvalidateVisual();
     }
 
@@ -133,9 +142,8 @@ public sealed class MixerMeter : Control
     {
         // a transparent backdrop so the whole meter (readout included) takes the click
         ctx.FillRectangle(Brushes.Transparent, new Rect(Bounds.Size));
-        var t = Palette.Text(holdText, 8, clip ? Palette.Rec : Palette.Dim, Palette.Mono);
+        var t = Palette.Text(holdText, 8, clipL || clipR ? Palette.Rec : Palette.Dim, Palette.Mono);
         ctx.DrawText(t, new Point((Bounds.Width - t.Width) / 2, 0));
-        ctx.DrawRectangle(clip ? Palette.Rec : Palette.Raised, null, new Rect(0, ReadoutH + 1, barW, LightH), 2, 2);
 
         double h = Bounds.Height - BarTop;
         if (h <= 0) return;
@@ -150,8 +158,27 @@ public sealed class MixerMeter : Control
             if (fits) marks[nMarks++] = i;
         }
 
-        var bar = new Rect(0, BarTop, barW, h);
-        double peakPct = Pct(level), rmsPct = hasRms ? Math.Min(Pct(rms), peakPct) : peakPct;
+        if (mono)
+            Bar(ctx, 0, pairW, h, Math.Max(levelL, levelR), Math.Max(rmsL, rmsR), clipL || clipR, marks[..nMarks]);
+        else
+        {
+            Bar(ctx, 0, barW, h, levelL, rmsL, clipL, marks[..nMarks]);
+            Bar(ctx, barW + Gap, barW, h, levelR, rmsR, clipR, marks[..nMarks]);
+        }
+        for (int k = 0; k < nMarks; k++)
+        {
+            int db = ScaleMarks[marks[k]];
+            var m = Palette.Text(MarkTexts[marks[k]], 8, db == 0 ? Palette.Dim : Palette.Faint, Palette.Mono);
+            ctx.DrawText(m, new Point(pairW + 2, Y(db) - m.Height / 2));
+        }
+    }
+
+    /// <summary>One bar at <paramref name="x"/>: its clip light, the RMS solid, the stretch up to the peak dimmed, the marks.</summary>
+    void Bar(DrawingContext ctx, double x, double w, double h, double peak, double rms, bool clip, ReadOnlySpan<int> marks)
+    {
+        ctx.DrawRectangle(clip ? Palette.Rec : Palette.Raised, null, new Rect(x, ReadoutH + 1, w, LightH), 2, 2);
+        var bar = new Rect(x, BarTop, w, h);
+        double peakPct = Pct(peak), rmsPct = Math.Min(Pct(rms), peakPct);
         using (ctx.PushClip(new RoundedRect(bar, 2)))
         {
             ctx.FillRectangle(Palette.Raised, bar);
@@ -159,27 +186,21 @@ public sealed class MixerMeter : Control
             double yPeak = BarTop + h * (1 - peakPct), yRms = BarTop + h * (1 - rmsPct);
             if (peakPct > rmsPct)
             {
-                using (ctx.PushClip(new Rect(0, yPeak, barW, yRms - yPeak)))
+                using (ctx.PushClip(new Rect(x, yPeak, w, yRms - yPeak)))
                 using (ctx.PushOpacity(PeakOpacity))
                     ctx.FillRectangle(Gradient, bar);
-                using (ctx.PushClip(new Rect(0, yPeak, barW, 1.5)))
+                using (ctx.PushClip(new Rect(x, yPeak, w, 1.5)))
                     ctx.FillRectangle(Gradient, bar);
             }
             if (rmsPct > 0)
-                using (ctx.PushClip(new Rect(0, yRms, barW, BarTop + h - yRms)))
+                using (ctx.PushClip(new Rect(x, yRms, w, BarTop + h - yRms)))
                     ctx.FillRectangle(Gradient, bar);
-            for (int k = 0; k < nMarks; k++)
+            foreach (int i in marks)
             {
-                int db = ScaleMarks[marks[k]];
-                double y = Math.Round(Y(db)) + 0.5;
-                ctx.DrawLine(Palette.Pen(Palette.Alpha(db == 0 ? Palette.FgColor : Palette.AppColor, db == 0 ? 0.4 : 0.6)), new Point(0, y), new Point(barW, y));
+                int db = ScaleMarks[i];
+                double y = Math.Round(BarTop + h - DbToPct(db) * h) + 0.5;
+                ctx.DrawLine(Palette.Pen(Palette.Alpha(db == 0 ? Palette.FgColor : Palette.AppColor, db == 0 ? 0.4 : 0.6)), new Point(x, y), new Point(x + w, y));
             }
-        }
-        for (int k = 0; k < nMarks; k++)
-        {
-            int db = ScaleMarks[marks[k]];
-            var m = Palette.Text(MarkTexts[marks[k]], 8, db == 0 ? Palette.Dim : Palette.Faint, Palette.Mono);
-            ctx.DrawText(m, new Point(barW + 2, Y(db) - m.Height / 2));
         }
     }
 }

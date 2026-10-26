@@ -6,17 +6,17 @@ namespace GuitarCam.Lab;
 
 /// <summary>
 /// gclab's side of the channels' insert slots: <c>proyecto insertos</c> lists and edits a track's slots (or, with
-/// <c>--carpeta</c>, a folder bus's, or with <c>--retorno</c>, an extra return's) like the mixer strip, and <see cref="Check"/> (part of <c>comprobar-dsp</c>)
-/// verifies that a version 1 channel, turned into slots, sounds exactly like the fixed chain did, that repeating,
-/// reordering and swapping slots behave, and that a folder bus sounds like its slots on the sum of its tracks.
+/// <c>--bus</c>, a bus's) like the mixer strip, and <see cref="Check"/> (part of <c>comprobar-dsp</c>) verifies that a
+/// version 1 channel, turned into slots, sounds exactly like the fixed chain did, that repeating, reordering and swapping
+/// slots behave, and that a bus sounds like its slots on the sum of what is routed to it.
 /// </summary>
 static class InsertCommands
 {
     const int Block = 128;
 
     /// <summary>
-    /// gclab proyecto insertos carpeta (pista | --carpeta id|n | --retorno id|n) [agregar tipo [--en n] | quitar n | mover n m | duplicar n | prender n | apagar n]
-    /// Reverb and delay slots only go in a return's chain, like the mixer's "+ Efecto" offers them.
+    /// gclab proyecto insertos carpeta (pista | --bus id|n) [agregar tipo [--en n] | quitar n | mover n m | duplicar n | prender n | apagar n | plegar n]
+    /// Reverb and delay slots only go in a bus's chain, like the mixer's "+ Efecto" offers them.
     /// </summary>
     public static int Run(string dir, Args a)
     {
@@ -26,26 +26,17 @@ static class InsertCommands
         string name;
         int first;
         bool isReturn = false;
-        if (a.Get("retorno") is { } returnId)
+        if (a.Get("bus") is { } busId)
         {
-            var ret = ProjectReturns.Find(p, returnId) ?? throw new ArgumentException($"No encontré ese retorno (hay {p.Settings.Returns.Count}).");
-            slots = ret.Inserts;
-            name = $"Retorno «{ret.Name}»";
+            var bus = ProjectBuses.Find(p, busId) ?? throw new ArgumentException($"No encontré ese bus (hay {p.Settings.Buses.Count}).");
+            slots = bus.Inserts;
+            name = $"Bus «{bus.Name}»";
             first = 2;
             isReturn = true;
         }
-        else if (a.Get("carpeta") is { } folderId)
-        {
-            var folder = p.Folders.Find(f => f.Id == folderId)
-                ?? (int.TryParse(folderId, out int k) && k >= 1 && k <= p.Folders.Count ? p.Folders[k - 1] : null)
-                ?? throw new ArgumentException($"No encontré esa carpeta (hay {p.Folders.Count}).");
-            slots = folder.Inserts;
-            name = $"Carpeta «{folder.Name}» ({p.Tracks.Count(t => t.FolderId == folder.Id)} pistas suman en su bus)";
-            first = 2;
-        }
         else
         {
-            string trackId = a.Positional.ElementAtOrDefault(2) ?? throw new ArgumentException("insertos: falta la pista o --carpeta (gclab proyecto clips carpeta).");
+            string trackId = a.Positional.ElementAtOrDefault(2) ?? throw new ArgumentException("insertos: falta la pista o --bus (gclab proyecto clips carpeta).");
             var track = p.Tracks.Find(t => t.Id == trackId)
                 ?? (int.TryParse(trackId, out int n) && n >= 1 && n <= p.Tracks.Count ? p.Tracks[n - 1] : null)
                 ?? throw new ArgumentException("No encontré esa pista.");
@@ -66,7 +57,8 @@ static class InsertCommands
             "mover" => ChannelInserts.Move(slots, Id(v1), int.Parse(v2) - int.Parse(v1)),
             "duplicar" => ChannelInserts.Duplicate(slots, Id(v1)) != null,
             "prender" or "apagar" => Toggle(slots.Find(s => s.Id == Id(v1))!, op == "prender"),
-            _ => throw new ArgumentException("insertos: agregar vida|comp|eq (y reverb|delay en un retorno) | quitar n | mover n m | duplicar n | prender n | apagar n"),
+            "plegar" => Fold(slots.Find(s => s.Id == Id(v1))!),
+            _ => throw new ArgumentException("insertos: agregar vida|comp|eq (y reverb|delay en un bus) | quitar n | mover n m | duplicar n | prender n | apagar n | plegar n"),
         };
         if (changed)
         {
@@ -105,7 +97,16 @@ static class InsertCommands
 
     static string ReverbPreset(ReverbSettings r) => ReverbBus.PresetOf(ChannelDsp.Reverb(r)) is { Length: > 0 } p ? p + " · " : "";
 
-    public static string Describe(InsertSlot s)
+    /// <summary>Folds or unfolds a slot in the mixer (only how it is shown).</summary>
+    static bool Fold(InsertSlot s)
+    {
+        s.Collapsed = !s.Collapsed;
+        return true;
+    }
+
+    public static string Describe(InsertSlot s) => DescribeKind(s) + (s.Collapsed ? " (plegado)" : "");
+
+    static string DescribeKind(InsertSlot s)
     {
         string on = s.On ? "ON " : "off";
         return s.Type switch
@@ -145,6 +146,13 @@ static class InsertCommands
             string g = got == 0 ? "exacto" : $"{got:0.0e0}";
             Console.WriteLine($"{name,-36} {g,12} {want,10}  {(ok ? "igual" : "DISTINTO")}");
         }
+
+        // 0. folding a slot in the mixer is kept with the project (and a slot from before reads unfolded)
+        var folded = InsertSlot.New(InsertSlot.EqKind);
+        folded.Collapsed = true;
+        var back = JsonSerializer.Deserialize<InsertSlot>(JsonSerializer.Serialize(folded, ProjectStore.Json), ProjectStore.Json)!;
+        var old = JsonSerializer.Deserialize<InsertSlot>("""{"type":"eq"}""", ProjectStore.Json)!;
+        Line("slot plegado se guarda", back.Collapsed && !old.Collapsed ? 0 : 1, 0, "plegado");
 
         // a guitar-ish signal: harmonics with a slow swell, so the compressor and the saturator both work
         var x = new float[sr * 3];
@@ -227,7 +235,7 @@ static class InsertCommands
             dc.CopyTo(live.BufferL(Block));
             dc.CopyTo(live.BufferR(Block));
             Array.Clear(outL);
-            live.ProcessFilledBuffer(Block, false, sink, outL, sink, sink, sink, sink, out _, out _, out _);
+            live.ProcessFilledBuffer(Block, false, sink, outL, out _, out _, out _);
             foreach (float v in outL) { jump = Math.Max(jump, Math.Abs(v - last)); last = v; }
             end = outL[^1];
         }
@@ -253,24 +261,19 @@ static class InsertCommands
             && !ChannelInserts.MoveNextTo(m, firstId, firstId, true);
         Line("Slots: repuesto, desconocidos, editar", spare && adopted && future && edits ? 0 : 1, 0, "bien");
 
-        // 5. folders as buses: without slots the folder changes nothing (bit for bit); with an EQ, the mix is that EQ
-        // on the sum of its tracks; a stem stays its track alone; the live bus swaps its slots without jumps
+        // 5. buses: with an EQ, the mix is that EQ on the sum of the tracks routed there; a stem goes through it alone;
+        // the live bus swaps its slots without jumps
         var y = new float[x.Length];
         for (int i = 0; i < y.Length; i++) y[i] = 0.6f * x[(i * 7 + 1000) % x.Length];
         var eqSpec = new InsertSpec("fe", TrackInserts.Eq) { EqOn = true, EqBands = bands };
-        MixTrackSpec[] Pair(int folder) =>
+        MixTrackSpec[] Dry(int output) =>
         [
-            new() { Clips = [clip], Inserts = specs, Volume = 0.8, Pan = -0.3, ReverbSend = 0.3, Folder = folder },
-            new() { Clips = [new MixClipSpec { Left = y, Right = y, DurationSec = 3 }], Inserts = [], Pan = 0.4, DelaySend = 0.2, Folder = folder },
+            new() { Clips = [clip], Inserts = specs, Volume = 0.8, Pan = -0.3, Output = output },
+            new() { Clips = [new MixClipSpec { Left = y, Right = y, DurationSec = 3 }], Inserts = [], Pan = 0.4, Output = output },
         ];
-        var noFolder = MixRenderer.Render(Pair(-1), new MixBusSpec(), 3, sr);
-        var emptyBus = MixRenderer.Render(Pair(0), new MixBusSpec { Folders = [new MixFolderSpec { Name = "Guitarras" }] }, 3, sr);
-        Line("Carpetas: bus sin efectos = sin carpeta", Math.Max(MaxDiff(noFolder.Left, emptyBus.Left), MaxDiff(noFolder.Right, emptyBus.Right)), 0, "exacto");
-        // dry (no sends, no limiter): the folder's EQ over the sum of its tracks, block by block like the tracks
-        MixTrackSpec[] Dry(int folder) => [.. Pair(folder).Select(t => new MixTrackSpec
-            { Clips = t.Clips, Inserts = t.Inserts, Volume = t.Volume, Pan = t.Pan, Folder = folder })];
+        // dry (no sends, no limiter): the bus's EQ over the sum of its tracks, block by block like the tracks
         var sum = MixRenderer.Render(Dry(-1), new MixBusSpec(), 3, sr, limit: false);
-        var eqFolder = MixRenderer.Render(Dry(0), new MixBusSpec { Folders = [new MixFolderSpec { Inserts = [eqSpec] }] }, 3, sr, limit: false);
+        var eqBus = MixRenderer.Render(Dry(0), new MixBusSpec { Nodes = [new MixNodeSpec { Inserts = [eqSpec] }] }, 3, sr, limit: false);
         var eqRef = new EqInsert(sr);
         eqRef.Set(true, bands);
         var sumL = (float[])sum.Left.Clone();
@@ -280,19 +283,12 @@ static class InsertCommands
             int n = Math.Min(Block, sumL.Length - pos);
             eqRef.Process(sumL.AsSpan(pos, n), sumR.AsSpan(pos, n));
         }
-        bool eqHeard = MaxDiff(sum.Left, eqFolder.Left) > 1e-3;
-        Line("Carpetas: EQ de carpeta = EQ de la suma", eqHeard ? Math.Max(MaxDiff(sumL, eqFolder.Left), MaxDiff(sumR, eqFolder.Right)) : 1, 1e-6, "~0");
-        var stem = MixRenderer.Render(Pair(0), new MixBusSpec { Folders = [new MixFolderSpec { Inserts = [eqSpec] }] }, 3, sr, only: 1);
-        var stemAlone = MixRenderer.Render(Pair(-1), new MixBusSpec(), 3, sr, only: 1);
-        Line("Carpetas: stem = su pista sola", Math.Max(MaxDiff(stem.Left, stemAlone.Left), MaxDiff(stem.Right, stemAlone.Right)), 0, "exacto");
+        bool eqHeard = MaxDiff(sum.Left, eqBus.Left) > 1e-3;
+        Line("Buses: EQ del bus = EQ de la suma", eqHeard ? Math.Max(MaxDiff(sumL, eqBus.Left), MaxDiff(sumR, eqBus.Right)) : 1, 1e-6, "~0");
 
-        // live: an empty bus isn't used; adding a slot routes through it and fades over, no jumps; taking it out comes back
+        // live: adding a slot to a bus and taking it out fades over, no jumps
         var bus = new BusDspChain(sr);
-        bus.Begin(Block);
-        bool idle = !bus.Routed;
-        bus.End(Block, sink, sink);
         float busLast = 0.5f, busJump = 0, busEnd = 0;
-        bool routedWithSlot = false, idleAgain = false;
         var mixL = new float[Block];
         for (int b = 0; b < 16; b++)
         {
@@ -300,31 +296,21 @@ static class InsertCommands
             if (b == 9) bus.SetInserts([]);
             bus.Begin(Block);
             Array.Clear(mixL);
-            if (b == 3) routedWithSlot = bus.Routed;
-            if (bus.Routed)
-            {
-                dc.CopyTo(bus.BufferL(Block));
-                dc.CopyTo(bus.BufferR(Block));
-            }
-            else dc.CopyTo(mixL, 0);
+            dc.CopyTo(bus.BufferL(Block));
+            dc.CopyTo(bus.BufferR(Block));
             bus.End(Block, sink, mixL);
             foreach (float v in mixL) { busJump = Math.Max(busJump, Math.Abs(v - busLast)); busLast = v; }
             busEnd = mixL[^1];
         }
-        bus.Begin(Block);
-        idleAgain = !bus.Routed;
-        bus.End(Block, sink, sink);
-        bool liveOk = idle && routedWithSlot && idleAgain && Math.Abs(busEnd - 0.5f) < 1e-6;
-        Line("Carpetas: bus en vivo sin saltos", liveOk ? busJump : 1, 0.5 / TrackDspChain.SwapFade + 1e-6, "rampa");
+        Line("Buses: slots en vivo sin saltos", Math.Abs(busEnd - 0.5f) < 1e-6 ? busJump : 1, 0.5 / TrackDspChain.SwapFade + 1e-6, "rampa");
 
-        // the model: a folder starts with no slots, keeps unknown ones, and the slot edits work on it
-        var folderModel = JsonSerializer.Deserialize<Folder>("""{"id":"fld-1","inserts":[{"id":"fx-1","type":"vst3"},{"id":"fx-1","type":"eq"}]}""", ProjectStore.Json)!;
-        var pr = new Project { Folders = [folderModel, new Folder()] };
-        TrackFolders.Normalize(pr);
-        bool model = pr.Folders[1].Inserts.Count == 0 && folderModel.Inserts.Count == 2 && folderModel.Inserts[0].Id != folderModel.Inserts[1].Id
-            && ChannelDsp.FolderSpecs(folderModel).Length == 1 && ChannelInserts.Add(folderModel.Inserts, TrackInserts.Comp) is { On: true }
-            && ChannelDsp.Folders(pr).Length == 2 && ChannelDsp.Folders(pr)[1].Inserts.Count == 0;
-        Line("Carpetas: modelo y slots", model ? 0 : 1, 0, "bien");
+        // the model: a bus keeps unknown slots, its repeated ids are fixed, and the slot edits work on it
+        var pr = ProjectStore.Parse("""{"settings":{"buses":[{"id":"bus-1","inserts":[{"id":"fx-1","type":"vst3"},{"id":"fx-1","type":"eq"}]}]}}""");
+        var busModel = pr.Settings.Buses[0];
+        bool model = busModel.Inserts.Count == 2 && busModel.Inserts[0].Id != busModel.Inserts[1].Id
+            && ChannelDsp.BusSpecs(busModel, 120).Length == 1 && ChannelInserts.Add(busModel.Inserts, TrackInserts.Comp) is { On: true }
+            && ChannelDsp.Bus(pr).Nodes.Count == 1;
+        Line("Buses: modelo y slots", model ? 0 : 1, 0, "bien");
         return allOk;
     }
 
@@ -364,8 +350,7 @@ static class InsertCommands
             int n = Math.Min(Block, x.Length - pos);
             x.AsSpan(pos, n).CopyTo(chain.BufferL(n));
             x.AsSpan(pos, n).CopyTo(chain.BufferR(n));
-            chain.ProcessFilledBuffer(n, false, sink.AsSpan(0, n), y.AsSpan(pos, n), sink.AsSpan(0, n), sink.AsSpan(0, n), sink.AsSpan(0, n), sink.AsSpan(0, n),
-                out _, out _, out _);
+            chain.ProcessFilledBuffer(n, false, sink.AsSpan(0, n), y.AsSpan(pos, n), out _, out _, out _);
         }
         return y;
     }

@@ -69,15 +69,22 @@ tools/                 probar.ps1 (compila, comprueba y abre una copia de prueba
   (null = sin color / con su número), `FolderId` = su carpeta.
 - **Folder** (`Project.Folders`): agrupa pistas. Sus hijas van juntas en `Project.Tracks` y la carpeta va justo antes
   (`Folder.Index`). Toda edición de orden pasa por `TrackFolders` y `TrackFolders.Normalize` repara lo que quede raro.
-  Su fader, M y S actúan como un VCA (`TrackFolders.Mix`), en vivo y en la exportación. Además es un **bus**: con
-  slots de efectos (`Folder.Inserts`, vacía por defecto) la salida post-fader de sus pistas se suma ahí y pasa por
-  esos efectos antes del master; sin slots no existe y el sonido es idéntico al de antes.
-- **Retornos y envíos**: además de la Reverb y el Delay fijos (`ProjectSettings.Reverb` / `Delay`), el usuario agrega
-  retornos (`ProjectSettings.Returns`, `ReturnBus`: nombre, fader, mute y su cadena de slots, donde una reverb o un
-  delay son un slot más, `InsertSlot.Reverb` / `Delay`). Cada pista les manda con `Channel.Sends` (`Send`: retorno,
-  nivel 0..1, ON y PRE); todo envío, también los de reverb y delay (`ReverbPre`, `DelayPre`), puede salir antes del
-  fader. Las ediciones pasan por `ProjectReturns`; `Normalize` saca los envíos a retornos que ya no existen. Son campos
-  nuevos con valores por defecto que suenan como antes, así que no subieron `Project.CurrentVersion`.
+  **Solo contiene** (decisión del usuario): sin fader, paneo, M/S ni efectos. Sus pistas suman ahí y van a su `Output`;
+  desde esa suma tiene sus `Sends` (nunca PRE: no tiene fader). Un **separador** es una `Folder` con `Separator`: va en
+  el mismo orden, nunca toma pistas ni rutea, y se puede ocultar del timeline (`HiddenInTimeline`). Pistas de la raíz,
+  carpetas y buses tienen su lado del mixer (`MixerSide`, `MixerSides`: null = el de siempre).
+- **Buses y ruteo**: un solo concepto para "bus" y "FX" (`ProjectSettings.Buses`, `Bus`: nombre, fader, paneo, mute,
+  slots, salida y envíos; una reverb o un delay son un slot más, `InsertSlot.Reverb` / `Delay`). Un proyecto nuevo trae
+  "Reverb" y "Delay" (`ProjectBuses.Defaults`). Pista (`Channel`), carpeta y bus son `IRouted`: `Output` (null = Master,
+  o un bus; una pista en carpeta sale por la carpeta) y `Sends` (`Send`: bus, nivel 0..1, ON y PRE). Las ediciones
+  pasan por `ProjectBuses`. **Por ahora un bus sale solo al Master** (decisión del usuario, 2026-10-26: las cadenas
+  entre buses no se entendían): `CanFeed` rechaza un bus como origen y `Normalize` le borra salida y envíos, además de
+  sacar lo que apunta a buses que no existen. El motor sigue sabiendo correr buses que alimentan buses (`Order`), por
+  si vuelven. Cada pista (y carpeta) elige a qué buses manda (pedido del usuario): un envío con `Hidden` está sacado
+  de su lista (apagado, con su nivel guardado) y un bus sin envío se muestra, así una pista o un bus nuevos traen todos
+  (`ProjectBuses.Shown`, `ShowSend`); el timeline, el mixer y el inspector muestran solo esos. La versión 3 trajo esto: los campos de la 2
+  (Reverb/Delay fijos, retornos, `reverbSend`…, el fader/M/S/slots de carpeta) se leen como `Old*` y se convierten al
+  normalizar.
 - **Clip**: un pedazo de un media en una pista (`AtSec`, `TrimStartSec`, `TrimEndSec`, `GainDb`, `GainCurve`, encuadre).
 
 Convenciones: tiempos del timeline en **segundos**, correcciones de latencia/sincronía en **ms**. JSON en camelCase
@@ -129,15 +136,14 @@ El callback de ASIO (`AsioDuplex.ProcessBlock`, `PlaybackEngine.Process`) corre 
 
 Cadena por pista: clips (fades, ganancia; el audio ya transpuesto si la pista tiene Transponer) → los **slots de
 efectos** del canal en su orden (`Channel.Inserts`; por defecto saturación → compresor con su EQ de preset antes y
-después → EQ de pista, que se pueden sacar, repetir y reordenar) → paneo → fader → suma (o el bus de su carpeta, si
-tiene slots: suma de sus pistas → sus slots → suma); los envíos salen del fader (post, por defecto) o de antes del
-fader (PRE: después de los slots y el paneo, sin el fader ni el VCA de la carpeta; mute y solo igual los callan) hacia
-la reverb y el delay fijos y hacia los retornos agregados (cada uno: suma de lo que le mandan → sus slots → su fader),
-que vuelven al master (primero los agregados, después los fijos) → limitador. El click va por fuera del limitador,
-atrasado la misma latencia. `TrackDspChain` (con `TrackSend`), `InsertRack` (los slots, de pista, carpeta o retorno),
-`BusDspChain` (el bus de carpeta en vivo), `ReturnDspChain` (un retorno agregado) y `MixGraphBus`
-(`GuitarCam.Audio/Dsp/MixRenderer.cs`) los usan igual la reproducción y la exportación: no los dupliques. Sin
-retornos agregados y con todos los envíos post, la mezcla es idéntica bit a bit a la de antes.
+después → EQ de pista, que se pueden sacar, repetir y reordenar) → paneo → fader → su salida (su carpeta, un bus o el
+master); los envíos salen del fader (post, por defecto) o de antes (PRE: después de los slots y el paneo; mute y solo
+igual los callan) hacia los buses. Carpetas y buses son nodos (`BusDspChain`: suma de lo que le llega → slots → paneo →
+fader/mute → su salida y sus envíos) que corren en orden, cada uno después de todo lo que lo alimenta
+(`ChannelDsp.Nodes`: primero las carpetas, después `ProjectBuses.Order`) → master → limitador. El click va por fuera
+del limitador, atrasado la misma latencia. `TrackDspChain` (con `TrackSend`), `InsertRack` (los slots, de pista o
+bus), `BusDspChain` y `MixGraphBus` (`GuitarCam.Audio/Dsp/MixRenderer.cs`) los usan igual la reproducción y la
+exportación: no los dupliques. La conversión proyecto → motor es una sola, `ChannelDsp` (`Track`, `Bus`, `Nodes`).
 `gclab comprobar-dsp` corre las comprobaciones del DSP.
 
 Slots: cada efecto es un `ITrackInsert` (`GuitarCam.Audio/Dsp/TrackInserts.cs`); un VST3 tiene que ser un tipo de slot

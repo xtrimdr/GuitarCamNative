@@ -10,8 +10,8 @@ namespace GuitarCam.App;
 /// </summary>
 public static class TrackKnobs
 {
-    /// <summary>Every knob, in the order the header shows them (<see cref="FxIcon"/> keys).</summary>
-    public static readonly string[] All = [FxIcon.Sat, FxIcon.Comp, FxIcon.Reverb, FxIcon.Delay, FxIcon.Transpose];
+    /// <summary>Every row of knobs the header can show: the sends to the buses (the knobs themselves are each track's list).</summary>
+    public static readonly string[] All = [TimelineView.SendsKey];
 
     static readonly HashSet<string> hidden = [];
 

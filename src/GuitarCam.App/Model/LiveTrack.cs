@@ -37,6 +37,8 @@ public sealed class MediaAudio
     public float[] PeakMax { get; }
     public double RmsDb { get; }
     public CompPresets.TakeEnvelope Envelope { get; }
+    /// <summary>Both sides are the same samples: a one-channel file or a take from a mono input (the mixer shows one bar).</summary>
+    public bool Mono { get; }
     public double LengthSec => L.Length / (double)SampleRate;
 
     public MediaAudio(string path, int targetSampleRate = PlaybackEngine.SampleRate)
@@ -63,6 +65,7 @@ public sealed class MediaAudio
             PeakMin[b] = lo;
             PeakMax[b] = hi;
         }
+        Mono = L.AsSpan().SequenceEqual(R);
         RmsDb = LevelAnalysis.Analyze([L, R], SampleRate).RmsDb;
         Envelope = CompPresets.Analyze([L, R], SampleRate);
     }
@@ -288,7 +291,7 @@ public sealed class LiveClip
 
 /// <summary>
 /// A track loaded for playback: its clips, the full per-track DSP chain (<see cref="TrackDspChain"/>:
-/// clip fades → the channel's insert slots → panner → fader → post-fader sends)
+/// clip fades → the channel's insert slots → panner → fader → its output and its sends)
 /// and the live meters. Timeline edits re-point <see cref="Track"/> and swap <see cref="Clips"/> for a new list
 /// (never changed in place: the audio thread may be walking the old one), keeping the chain's state.
 /// </summary>
@@ -314,25 +317,19 @@ public sealed class LiveTrack
     /// <summary>Silences the track while a take that replaces its clips is being recorded (set by the UI).</summary>
     public volatile bool RecordMuted;
     /// <summary>
-    /// What the track's folder does to it (native only, <see cref="TrackFolders.Mix"/>): its fader multiplies the
-    /// track's, its mute and solo add to the track's. Set by the UI, read by the audio thread.
+    /// Where its output goes (<see cref="PlaybackEngine.SetBuses"/>): its folder's node, its bus's, or null for the
+    /// master. Set by the UI, read by the audio thread once per block.
     /// </summary>
-    public volatile float FolderGain = 1;
-    public volatile bool FolderMuted, FolderSolo;
+    public volatile BusDspChain? Out;
     /// <summary>
-    /// Its folder's bus (<see cref="PlaybackEngine.SetFolders"/>), or null: while the bus has slots, the engine sends
-    /// this track's post-fader output there instead of the master. Set by the UI, read by the audio thread once per block.
-    /// </summary>
-    public volatile BusDspChain? Bus;
-    /// <summary>
-    /// The engine's extra returns by id (<see cref="PlaybackEngine.SetReturns"/>), for <see cref="ApplySends"/>; null
+    /// The engine's folders and buses by id (<see cref="PlaybackEngine.SetBuses"/>), for <see cref="ApplySends"/>; null
     /// until the engine hands them over. UI thread only.
     /// </summary>
-    public IReadOnlyDictionary<string, ReturnDspChain>? Returns { get; set; }
+    public IReadOnlyDictionary<string, BusDspChain>? Nodes { get; set; }
     /// <summary>The Escuchar tool is playing this track alone (native only): a solo that is not saved and does not light S.</summary>
     public volatile bool ListenSolo;
-    public bool Soloed => Channel.Solo || FolderSolo || ListenSolo;
-    public bool Silenced => Channel.Muted || FolderMuted;
+    public bool Soloed => Channel.Solo || ListenSolo;
+    public bool Silenced => Channel.Muted;
 
     public LiveTrack(Track track, IReadOnlyList<LiveClip> clips, int sampleRate)
     {
@@ -441,7 +438,7 @@ public sealed class LiveTrack
     }
 
     /// <summary>
-    /// Updates the entire channel strip (its insert slots, fader, pan, mute/solo and reverb/delay sends) from the UI
+    /// Updates the entire channel strip (its insert slots, fader, pan, mute/solo and sends) from the UI
     /// thread without audio dropouts or torn coefficients: the slots keep their state by id, and a new list of slots
     /// fades over (<see cref="TrackDspChain.SetInserts"/>). If <paramref name="ch"/> is provided, replaces
     /// <c>Track.Channel</c> first.
@@ -450,42 +447,22 @@ public sealed class LiveTrack
     {
         if (ch != null) Track.Channel = ch;
         var cur = Track.Channel;
-        Chain.Volume = cur.Volume * FolderGain;
+        Chain.Volume = cur.Volume;
         Chain.Pan = cur.Pan;
-        Chain.Muted = cur.Muted || FolderMuted;
-        Chain.Solo = cur.Solo || FolderSolo || ListenSolo;
-        Chain.ReverbOn = cur.ReverbOn;
-        Chain.ReverbSend = cur.ReverbSend;
-        Chain.DelayOn = cur.DelayOn;
-        Chain.DelaySend = cur.DelaySend;
-        Chain.ReverbPre = cur.ReverbPre;
-        Chain.DelayPre = cur.DelayPre;
+        Chain.Muted = cur.Muted;
+        Chain.Solo = cur.Solo || ListenSolo;
         ApplyInserts();
         ApplySends();
     }
 
     /// <summary>
-    /// Hands the chain its sends to the extra returns as a new immutable array (<see cref="TrackDspChain.Sends"/>): the
-    /// ones that are on, above 0 and whose return the engine has. UI thread, after any edit of the sends or the returns.
+    /// Hands the chain its sends to buses as a new immutable array (<see cref="TrackDspChain.Sends"/>): the ones that are
+    /// on, above 0 and whose bus the engine has. UI thread, after any edit of the sends or the buses.
     /// </summary>
     public void ApplySends()
     {
-        var map = Returns;
-        var list = Channel.Sends;
-        int n = 0;
-        foreach (var s in list)
-            if (s.On && s.Level > 0 && map != null && map.ContainsKey(s.ReturnId)) n++;
-        if (n == 0)
-        {
-            if (Chain.Sends.Length > 0) Chain.Sends = [];
-            return;
-        }
-        var next = new TrackSend[n];
-        int k = 0;
-        foreach (var s in list)
-            if (s.On && s.Level > 0 && map!.TryGetValue(s.ReturnId, out var to))
-                next[k++] = new TrackSend(to, -1, (float)Math.Clamp(s.Level, 0, 1), s.Pre);
-        Chain.Sends = next;
+        var next = PlaybackEngine.SendsTo(Nodes, Channel);
+        if (next.Length > 0 || Chain.Sends.Length > 0) Chain.Sends = next;
     }
 
     public void ApplyAll() => ApplyChannel();
@@ -515,8 +492,9 @@ public sealed class LiveTrack
     /// <summary>
     /// Samples all clips on this track for frames <c>[posFrame .. posFrame + n)</c> with their trim window,
     /// <c>SyncMs</c> offset, linear fade-in/out envelope and clip gain, then runs the full insert chain and
-    /// accumulates into the master and reverb/delay send buffers, and into its extra returns' buffers from
-    /// <paramref name="sendOffset"/> on (the block's part where the tracks play). Zero allocations. During a seek crossfade
+    /// accumulates into its output (<see cref="Out"/>'s buffer, or <paramref name="masterL"/> / <paramref name="masterR"/>)
+    /// and its sends' buses, from <paramref name="sendOffset"/> on in theirs (the block's part where the tracks play).
+    /// Zero allocations. During a seek crossfade
     /// (<paramref name="fromFrame"/> &gt;= 0) the clips at the old position, weighted by <paramref name="wOut"/>, are
     /// summed with the new ones, weighted by <paramref name="wIn"/>, before the chain, so its state stays continuous.
     /// </summary>
@@ -526,10 +504,6 @@ public sealed class LiveTrack
         bool anySolo,
         Span<float> masterL,
         Span<float> masterR,
-        Span<float> reverbInL,
-        Span<float> reverbInR,
-        Span<float> delayInL,
-        Span<float> delayInR,
         int sendOffset,
         long fromFrame = -1,
         ReadOnlySpan<float> wIn = default,
@@ -545,14 +519,16 @@ public sealed class LiveTrack
             AddClips(fromFrame, n, bl, br, wOut);
             AddClips(posFrame, n, bl, br, wIn);
         }
-        RunChain(n, anySolo, masterL, masterR, reverbInL, reverbInR, delayInL, delayInR);
+        var to = Out;
+        if (to != null) RunChain(n, anySolo, to.BufferL(sendOffset + n).Slice(sendOffset), to.BufferR(sendOffset + n).Slice(sendOffset));
+        else RunChain(n, anySolo, masterL, masterR);
         var sends = Chain.BlockSends;
         for (int k = 0; k < sends.Length; k++)
         {
-            var to = sends[k].To;
-            if (to == null) continue;
-            Chain.AddSend(n, sends[k].Level, sends[k].Pre, to.BufferL(sendOffset + n).Slice(sendOffset),
-                to.BufferR(sendOffset + n).Slice(sendOffset));
+            var bus = sends[k].To;
+            if (bus == null) continue;
+            Chain.AddSend(n, sends[k].Level, sends[k].Pre, bus.BufferL(sendOffset + n).Slice(sendOffset),
+                bus.BufferR(sendOffset + n).Slice(sendOffset));
         }
     }
 
@@ -621,30 +597,19 @@ public sealed class LiveTrack
         }
     }
 
-    void RunChain(int n, bool anySolo, Span<float> masterL, Span<float> masterR, Span<float> reverbInL, Span<float> reverbInR,
-        Span<float> delayInL, Span<float> delayInR)
+    void RunChain(int n, bool anySolo, Span<float> outL, Span<float> outR)
     {
         var ch = Channel;
-        Chain.Volume = ch.Volume * FolderGain;
+        Chain.Volume = ch.Volume;
         Chain.Pan = ch.Pan;
-        Chain.Muted = ch.Muted || FolderMuted || RecordMuted;
-        Chain.Solo = ch.Solo || FolderSolo || ListenSolo;
-        Chain.ReverbOn = ch.ReverbOn;
-        Chain.ReverbSend = ch.ReverbSend;
-        Chain.DelayOn = ch.DelayOn;
-        Chain.DelaySend = ch.DelaySend;
-        Chain.ReverbPre = ch.ReverbPre;
-        Chain.DelayPre = ch.DelayPre;
+        Chain.Muted = ch.Muted || RecordMuted;
+        Chain.Solo = ch.Solo || ListenSolo;
 
         Chain.ProcessFilledBuffer(
             n,
             anySolo,
-            masterL,
-            masterR,
-            reverbInL,
-            reverbInR,
-            delayInL,
-            delayInR,
+            outL,
+            outR,
             out float pkL,
             out float pkR,
             out double gr);
