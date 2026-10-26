@@ -32,6 +32,7 @@ static class Program
                 "transponer" => TransposeCommands.Run(a),
                 "looks" => VideoCommands.Looks(a),
                 "leer-video" => VideoCommands.ReadVideo(a),
+                "nitidez" => DetailCommands.Run(a),
                 "camara" => CameraCommands.Run(a),
                 "sistema" => SystemCommands.Run(a),
                 "proyecto" => ProjectCommands.Run(a),
@@ -124,6 +125,11 @@ static class Program
                                            seguido, saltar y la memoria por cuadro; --cpu sin la placa de video;
                                            --cuadro guarda ese cuadro; --comparar mide ffmpeg.exe por salto y la
                                            diferencia de imagen con él
+              nitidez   [video|imagen] [--en 1] [--nitidez 60] [--claridad 60] [--alto 1080] [--ancho-preview 640] [--carpeta dir]
+                                           compara Nitidez y Claridad de la exportación (FFmpeg) con las de la preview
+                                           sobre el mismo cuadro (de un video o uno de prueba), a tamaño de exportación y
+                                           al ancho que muestra la preview (640, menos con zoom); mide cuánto cuesta
+                                           por cuadro y deja PNG
               camara    [listar]           lista las cámaras (DirectShow) y sus formatos; * = la que elige la app
               camara grabar [--dispositivo X | --ip 192.168.1.50:4747] [--resolucion native|1080p|720p|480p]
                         [--segundos 5] [--salida camara.mp4]

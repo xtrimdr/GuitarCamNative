@@ -67,7 +67,6 @@ _Ideas y mejoras para la nativa._
   Investigación de CapCut y orden propuesto en [docs/filtros-capcut.md](docs/filtros-capcut.md):
   - [ ] Importar LUT .cube
   - [ ] HSL de 8 colores; después Curvas y ruedas lift/gamma/gain
-  - [ ] Nitidez y Claridad (las que más usa el usuario en CapCut)
   - [ ] Look brumoso/pastel (como "Sueño de Mistwood"): en CapCut es un shader de 4 colores con ruido, no un LUT
   - [ ] Looks que dependen de filtros espaciales: Soñado (con glow) y HDR (con Claridad)
   - [ ] (Para después, lo pidió el usuario 2026-10-25) Efectos de movimiento: sacudida, zoom y destello al pulso del

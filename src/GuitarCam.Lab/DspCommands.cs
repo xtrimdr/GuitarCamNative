@@ -428,6 +428,35 @@ static class DspCommands
         allOk &= resOk;
         Console.WriteLine($"{"AudioLoader 44.1→48 kHz (2.0 s, A4)",-36} {Db(resDiffDb),12} {Db(resRelDb),10}  {(resOk ? "igual" : "DISTINTO")}");
 
+        // Nitidez y Claridad (VideoDetail): a flat frame stays as it is, an edge gets its overshoot on both sides, and
+        // the export's chain carries the filters only when they're on ("gclab nitidez" compares them with FFmpeg)
+        {
+            const int dw = 64, dh = 48;
+            var on = new ExportVideoFxSpec(Sharpness: 100, Clarity: 100);
+            var flat = new byte[dw * dh * 4];
+            for (int i = 0; i < flat.Length; i++) flat[i] = (byte)((i & 3) == 3 ? 255 : 128);
+            var flatOut = (byte[])flat.Clone();
+            var proc = new VideoDetail.Processor();
+            proc.Apply(flatOut, dw, dh, dh, on);
+            var edge = new byte[dw * dh * 4];
+            for (int i = 0; i < dw * dh; i++)
+            {
+                byte v = (byte)(i % dw < dw / 2 ? 60 : 180);
+                edge[i * 4] = edge[i * 4 + 1] = edge[i * 4 + 2] = v;
+                edge[i * 4 + 3] = 255;
+            }
+            proc.Apply(edge, dw, dh, dh, on);
+            int row = dh / 2 * dw;
+            bool overshoot = edge[(row + dw / 2 - 1) * 4] < 60 && edge[(row + dw / 2) * 4] > 180;
+            var parts = new List<string>();
+            bool offPlain = VideoDetail.ExportFilters(ExportVideoFxSpec.Defaults, 1080, 1080, "[0:v]null", parts, "0") == "[0:v]null" && parts.Count == 0;
+            string onChain = VideoDetail.ExportFilters(on, 1080, 1080, "[0:v]null", parts, "0");
+            bool onChained = onChain.Contains("unsharp") && parts.Any(p => p.Contains("lut2")) && parts.Any(p => p.Contains("boxblur"));
+            bool detailOk = flatOut.AsSpan().SequenceEqual(flat) && overshoot && offPlain && onChained;
+            allOk &= detailOk;
+            Console.WriteLine($"{"Nitidez y Claridad (plano, borde)",-36} {"",12} {"",10}  {(detailOk ? "igual" : "DISTINTO")}");
+        }
+
         // Verify B4-R1 & B4-R2: TakeRecorder.Dispose keeps takes > 0.3 s, Finish(discard: true) removes them
         string recKeepPath = Path.Combine(tmp, "rec_keep_on_dispose.wav");
         string recDiscardPath = Path.Combine(tmp, "rec_discard_explicit.wav");
@@ -899,7 +928,7 @@ static class DspCommands
                 AspectRatio = ExportTargets.AspectFor(target.Id, p.Settings.Aspect),
                 BorderSize = 4,
                 Color = new ExportColorSpec(col.On, col.Look, col.Amount, col.Exposure, col.Contrast, col.Highlights, col.Shadows, col.Saturation, col.Vibrance, col.Temperature, col.Tint, col.Fade, col.Whites, col.Blacks, col.Light),
-                VideoFx = new ExportVideoFxSpec(vfx.On, vfx.Vignette, vfx.VignetteSize, vfx.Grain, vfx.Letterbox, vfx.LetterboxHeight),
+                VideoFx = new ExportVideoFxSpec(vfx.On, vfx.Vignette, vfx.VignetteSize, vfx.Grain, vfx.Letterbox, vfx.LetterboxHeight, vfx.Sharpness, vfx.Clarity),
                 Takes = takes,
                 MixTracks = mixTracks,
                 MixBus = ChannelDsp.Bus(p),

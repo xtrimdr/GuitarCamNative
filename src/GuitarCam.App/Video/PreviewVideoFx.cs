@@ -57,7 +57,9 @@ public static class PreviewVideoFx
                 fx.VignetteSize,
                 fx.Grain,
                 fx.Letterbox,
-                fx.LetterboxHeight));
+                fx.LetterboxHeight,
+                fx.Sharpness,
+                fx.Clarity));
 
     /// <summary>Gets or builds the cached <see cref="VideoColorProcessor.Lut3DTable"/> for <paramref name="spec"/>.</summary>
     public static VideoColorProcessor.Lut3DTable GetLutTable(ExportColorSpec spec)

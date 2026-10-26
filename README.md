@@ -67,7 +67,7 @@ de **grabar → mezclar → exportar**.
 - Un panel por pista con cover-fit, zoom, paneo y espejo; relaciones **16:9 / 9:16 / 1:1**, disposición lado a lado
   o apilada.
 - Pestaña de **color** con 26 looks (Brujo, Cine, Moody, Fresco, Noche azul, Hielo…), ajustes (exposición, contraste,
-  Blancos, Negros, Sensación de luz…), efectos y plantillas. Lo que ves en la vista previa es lo que se exporta.
+  Blancos, Negros, Sensación de luz…), efectos (Nitidez, Claridad, viñeta, grano, barras de cine) y plantillas. Lo que ves en la vista previa es lo que se exporta.
 
 ### Exportar
 
@@ -225,12 +225,13 @@ la consola, sin abrir la ventana.
 | `click` | escribe todos los sonidos de click a un WAV |
 | `sistema [--segundos 5]` | CPU, GPU y RAM, si FFmpeg está en el PATH y con qué placa de video exporta |
 | `espectro [toma.wav]` | el espectro en vivo del EQ |
-| `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas, reinicio de la cadena, afinador, LUFS y mastering (bandas que suman plano, reducción por banda sin importar el nivel, Cinta, Ancho (graves mono y mismo volumen), soft clip, limitador prendido y apagado) y slots de efectos (un canal viejo migrado suena idéntico a la cadena fija, repetir, reordenar, cambio de lista sin saltos) |
+| `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas, reinicio de la cadena, afinador, LUFS y mastering (bandas que suman plano, reducción por banda sin importar el nivel, Cinta, Ancho (graves mono y mismo volumen), soft clip, limitador prendido y apagado) y slots de efectos (un canal viejo migrado suena idéntico a la cadena fija, repetir, reordenar, cambio de lista sin saltos); además Nitidez y Claridad (un cuadro plano queda igual, un borde se marca) |
 | `looks [--look id] [--salida look.cube] [--blancos n] [--negros n] [--luz n]` | los looks de color con colores de prueba, comprobación de rango y, con `--look`, el LUT `.cube` de ese look con Blancos, Negros y Sensación de luz |
 | `masterizar archivo.wav [--cuanto 0.35] [--banda-graves\|--banda-medios\|--banda-agudos 0..1] [--corte] [--barro] [--graves] [--presencia] [--aire] [--inclinacion] [--cinta] [--ancho] [--graves-mono] [--recorte] [--empuje] [--techo] [--release] [--sin-limitador] [--volumen youtube\|instagram\|tiktok\|spotify\|apple] [--pua 0..1] [--look natural\|glue\|bright\|warm\|front\|pick [--cuanto-look 1]] [--sugerime]` | el mastering de la ventana sobre un WAV: cuánto comprime cada banda (y la Púa), cuánto recortan el soft clip (Auto incluido) y el limitador y los LUFS de entrada y salida; `--volumen` es el Destino del master (mide el archivo y usa esa ganancia en vez del Empuje), `--look` pone un look, `--sugerime` muestra qué oye y qué propone, y masteriza con eso |
 | `transponer archivo.wav [--semitonos 2] [--salida x.wav]` | cambia el tono sin cambiar el largo, como el Transponer de la pista (de −12 a +12, admite cents) |
 | `proyecto editar carpeta transponer pista semitonos` | el Transponer de esa pista; deja sus tomas transpuestas en `cache/` |
 | `lufs archivo` / `afinar archivo [--en segundos] [--umbral -50]` | volumen integrado de un archivo / la nota que oye el afinador en ese momento, con la sensibilidad de la ventana (dB) |
+| `nitidez [video\|imagen] [--en 1] [--nitidez 60] [--claridad 60] [--alto 1080] [--ancho-preview 640] [--carpeta dir]` | compara Nitidez y Claridad de la exportación (FFmpeg) con las de la preview sobre el mismo cuadro, a tamaño de exportación y al ancho que muestra la preview; mide cuánto cuestan por cuadro y deja PNG para mirarlas |
 | `leer-video archivo [--cpu] [--saltos 20] [--cuadro 12.5 --salida x.bmp] [--comparar]` | mide el decodificador de la preview (FFmpeg dentro de la app): abrir, leer seguido, saltar y memoria por cuadro; `--comparar` lo mide contra ffmpeg.exe (tiempo por salto y diferencia de imagen) |
 | `camara [listar]` | las cámaras que ve FFmpeg y sus formatos |
 | `camara grabar [--dispositivo X \| --ip 192.168.1.50:4747] [--segundos 5]` | graba video como una toma y lo revisa con ffprobe |

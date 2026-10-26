@@ -166,7 +166,9 @@ public sealed record ExportVideoFxSpec(
     double VignetteSize = 50,
     double Grain = 0,
     string Letterbox = "off",
-    double LetterboxHeight = VideoColorProcessor.LetterboxHeightDefault)
+    double LetterboxHeight = VideoColorProcessor.LetterboxHeightDefault,
+    double Sharpness = 0,
+    double Clarity = 0)
 {
     public static readonly ExportVideoFxSpec Defaults = new();
 }
@@ -574,8 +576,9 @@ public static partial class Mp4Exporter
                 pre.Add($"scale={scaledW}:{scaledH}:force_original_aspect_ratio=increase");
                 pre.Add($"crop={innerW}:{innerH}:{cropXExpr}:{cropYExpr}");
 
-                string picture = $"[{vIn}]{string.Join(",", pre)}";
                 var chain = new List<string>();
+                // sharpness and clarity on the cropped panel, where their radius matches the preview's
+                string picture = VideoDetail.ExportFilters(job.VideoFx, innerW, innerH, $"[{vIn}]{string.Join(",", pre)}", chain, i.ToString(CultureInfo.InvariantCulture));
                 if (vignette)
                 {
                     string maskName = $"vignette_{id}_{i}.gray";

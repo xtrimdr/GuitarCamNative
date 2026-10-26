@@ -703,7 +703,9 @@ public static class VideoColorProcessor
             VignetteSize: Clamp100(fx.VignetteSize, 50),
             Grain: Clamp100(fx.Grain, 0),
             Letterbox: lb,
-            LetterboxHeight: double.IsFinite(fx.LetterboxHeight) ? Math.Clamp(fx.LetterboxHeight, LetterboxHeightMin, LetterboxHeightMax) : LetterboxHeightDefault);
+            LetterboxHeight: double.IsFinite(fx.LetterboxHeight) ? Math.Clamp(fx.LetterboxHeight, LetterboxHeightMin, LetterboxHeightMax) : LetterboxHeightDefault,
+            Sharpness: Clamp100(fx.Sharpness, 0),
+            Clarity: Clamp100(fx.Clarity, 0));
     }
 
     public static bool HasVignette(ExportVideoFxSpec? fx)

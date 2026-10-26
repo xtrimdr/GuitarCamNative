@@ -369,6 +369,10 @@ public sealed class VideoFx
     public string Letterbox { get; set; } = "off";
     /// <summary>Height of each bar with the "custom" letterbox, in % of the panel height.</summary>
     public double LetterboxHeight { get; set; } = GuitarCam.Audio.VideoColorProcessor.LetterboxHeightDefault;
+    /// <summary>Edge sharpening (0..100, 0 = off), like CapCut's "Nitidez" (<see cref="GuitarCam.Audio.VideoDetail"/>).</summary>
+    public double Sharpness { get; set; }
+    /// <summary>Mid-tone local contrast with a wide radius (0..100, 0 = off), like CapCut's "Claridad".</summary>
+    public double Clarity { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
     /// <summary>Same ranges as normalizeVideoFx (videoFx.js).</summary>
@@ -376,6 +380,7 @@ public sealed class VideoFx
     {
         static double N(double v, double d) => double.IsFinite(v) ? Math.Clamp(v, 0, 100) : d;
         Vignette = N(Vignette, 0); VignetteSize = N(VignetteSize, 50); Grain = N(Grain, 0);
+        Sharpness = N(Sharpness, 0); Clarity = N(Clarity, 0);
         if (!GuitarCam.Audio.VideoColorProcessor.LetterboxOptions.Any(l => l.Id == Letterbox)) Letterbox = "off";
         LetterboxHeight = double.IsFinite(LetterboxHeight)
             ? Math.Clamp(LetterboxHeight, GuitarCam.Audio.VideoColorProcessor.LetterboxHeightMin, GuitarCam.Audio.VideoColorProcessor.LetterboxHeightMax)

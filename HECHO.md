@@ -3,6 +3,11 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-26: Nitidez y Claridad en Color → Efectos (`VideoFx.Sharpness` / `Clarity`, 0 = apagado). Se calculan sobre
+  la luma, con el radio relativo al alto que muestra el panel, así la preview (`VideoDetail.Processor`, en
+  `LiveClip.UpdateVideo`, sin asignar memoria y repartida en `BandPool`: menos de 1 ms por cuadro de 640×360, ~3 ms
+  vertical) y la exportación (`boxblur` + `lut2` y `unsharp` sobre el panel recortado, `VideoDetail.ExportFilters`) dan lo
+  mismo. `gclab nitidez` las compara y mide; `comprobar-dsp` revisa lo básico.
 - 2026-10-26: Release 0.9.6 en GitHub. La versión vive en `Directory.Build.props`: la leen el Acerca de (antes decía
   1.0.0), el exe y `tools\make-installer.ps1`.
 - 2026-10-26: Arreglado el mixer que quedaba sin responder después de arrastrar una tira hasta un clic en el timeline:

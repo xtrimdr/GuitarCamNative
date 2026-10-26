@@ -303,6 +303,10 @@ public partial class MainWindow
         // Efectos
         var fx = ColorSection("Efectos", "", () => ProjectFx.On, () => ColorEdit(s => s.VideoFx.On = !s.VideoFx.On, "videoFx:on"),
             lit => lit ? Loc.T("color.fx.off") : Loc.T("color.fx.on"));
+        ColorSlider(fx, Loc.T("color.fx.sharpness"), 0, 100, 0, () => ProjectFx.Sharpness, v => ColorEdit(s => s.VideoFx.Sharpness = v, "videoFx:sharpness"),
+            v => $"{v:0}", Loc.T("color.fx.sharpness.hint"));
+        ColorSlider(fx, Loc.T("color.fx.clarity"), 0, 100, 0, () => ProjectFx.Clarity, v => ColorEdit(s => s.VideoFx.Clarity = v, "videoFx:clarity"),
+            v => $"{v:0}", Loc.T("color.fx.clarity.hint"));
         ColorSlider(fx, Loc.T("color.fx.vignette"), 0, 100, 0, () => ProjectFx.Vignette, v => ColorEdit(s => s.VideoFx.Vignette = v, "videoFx:vignette"),
             v => $"{v:0}", Loc.T("color.fx.vignette.hint"));
         var size = ColorSlider(fx, Loc.T("color.fx.vignetteSize"), 0, 100, 50, () => ProjectFx.VignetteSize, v => ColorEdit(s => s.VideoFx.VignetteSize = v, "videoFx:vignetteSize"),

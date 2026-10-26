@@ -170,7 +170,9 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 - Las dos barras laterales (esta y el inspector) cambian de ancho arrastrando su borde interior (240–600, el escenario
   conserva 360; doble clic vuelve a 290) y lo recuerdan en `config.json` (`sidebarWidth`, `projectBarWidth`):
   `MainWindow.Sidebars.cs`.
-- Efectos de Color: viñeta, grano y barras de cine (No / 1.85 / 2.00 / 2.39 / Libre, con "Alto de las barras" en % del
+- Efectos de Color: Nitidez y Claridad (`Audio/VideoDetail.cs`: en la preview, sobre el cuadro decodificado en
+  `LiveClip.UpdateVideo`, después del color y el grano, con su radio según lo que muestra el panel, `LiveClip.VisibleHeight`;
+  en la exportación, `boxblur` + `lut2` y `unsharp` sobre el panel ya recortado), viñeta, grano y barras de cine (No / 1.85 / 2.00 / 2.39 / Libre, con "Alto de las barras" en % del
   panel solo en Libre). En la preview las barras se dibujan fuera del fundido del clip (`PreviewVideoFx.DrawLetterbox`):
   con la opacidad encima dejarían ver el video.
 - Pestañas Color / Biblioteca / Historial. Biblioteca (las tomas, usadas o no, importadas o grabadas; la papelera de
