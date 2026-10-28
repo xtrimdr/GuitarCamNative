@@ -16,6 +16,26 @@
 
   <!-- TransparencyLevelHint None: with transparency allowed, some dark video pixels let the window behind show through -->
   <Window.Styles>
+    <!-- the window's panels (inspector, project bar, timeline, mixer) are cards set apart from the window's background
+         (asked by the user, to see where each one starts and ends). A panel whose content paints to its edges
+         clips it with "card-clip" and draws its edge with "card-edge" on top: the edge of a clipping Border
+         is drawn under its child, which would hide it at the corners -->
+    <Style Selector="Border.card">
+      <Setter Property="Margin" Value="4" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+    </Style>
+    <Style Selector="Border.card-clip">
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Border.card-edge">
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
     <Style Selector="Border.section">
       <Setter Property="Background" Value="{StaticResource Raised}" />
       <Setter Property="BorderBrush" Value="{StaticResource Line}" />
@@ -85,7 +105,7 @@
 
   <!-- maximized, Windows pushes a window with our own title bar 8 px past each screen edge: OffScreenMargin
        says how much, so the content stays on screen -->
-  <Grid x:Name="Root" RowDefinitions="Auto,*,4,280,Auto" ColumnDefinitions="*,Auto" Margin="{Binding $parent[Window].OffScreenMargin}">
+  <Grid x:Name="Root" RowDefinitions="Auto,*,0,280,Auto" ColumnDefinitions="*,Auto" Margin="{Binding $parent[Window].OffScreenMargin}">
 
     <!-- top bar: two rows so everything fits in a window that is not maximized. The first is the window's title
          bar (the system buttons sit on its right); the second holds the project's tools, Exportar on the right -->
@@ -211,7 +231,7 @@
     <!-- inspector ("Canal"; folds to a column of icons in MainWindow.Inspector.cs) + preview; the window's layout
          (MainWindow.Layout.cs) rearranges its columns -->
     <Grid Grid.Row="1" x:Name="Workspace" ColumnDefinitions="Auto,*">
-      <Border x:Name="InspectorBar" Width="290" ZIndex="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+      <Border x:Name="InspectorBar" Classes="card" Width="290" ZIndex="1" Background="{StaticResource Panel}">
         <ScrollViewer>
           <StackPanel x:Name="Inspector" Margin="14,16" Spacing="12" />
         </ScrollViewer>
@@ -250,94 +270,105 @@
       </Grid>
       <!-- solo audio: the timeline (or the mixer) moves up here, in the stage's place (MainWindow.Mode.cs) -->
       <Grid Grid.Column="1" x:Name="AudioArea" IsVisible="False" RowDefinitions="*,0,0" Background="{StaticResource App}">
-        <GridSplitter x:Name="AudioSplitter" Grid.Row="1" IsVisible="False" ToolTip.Tip="{loc:T splitter.mixer}" Background="{StaticResource Line}" ResizeDirection="Rows" />
+        <!-- the splitters sit in a row of 0 and take the gap between the cards (their margins) -->
+        <GridSplitter x:Name="AudioSplitter" Grid.Row="1" IsVisible="False" ToolTip.Tip="{loc:T splitter.mixer}" Background="Transparent" Margin="0,-4" ResizeDirection="Rows" />
       </Grid>
     </Grid>
 
     <!-- project bar (Color / Historial): the web's right sidebar, beside the stage and the timeline; filled in MainWindow.Color.cs -->
-    <Border Grid.Row="1" Grid.RowSpan="3" Grid.Column="1" x:Name="ProjectBar" Width="290" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0" />
+    <Border Grid.Row="1" Grid.RowSpan="3" Grid.Column="1" x:Name="ProjectBar" Classes="card" Width="290" Background="{StaticResource Panel}" />
 
-    <GridSplitter x:Name="BottomSplitter" Grid.Row="2" ToolTip.Tip="{loc:T splitter.timeline}" Background="{StaticResource Line}" ResizeDirection="Rows" />
+    <GridSplitter x:Name="BottomSplitter" Grid.Row="2" ToolTip.Tip="{loc:T splitter.timeline}" Background="Transparent" Margin="0,-4" ResizeDirection="Rows" />
 
     <!-- timeline, or the mixer in its place (X) -->
-    <DockPanel Grid.Row="3" x:Name="MixerHost" IsVisible="False" Background="{StaticResource App}" />
-    <Grid Grid.Row="3" x:Name="TimelineHost">
-      <c:TimelineView x:Name="Timeline" />
-      <!-- the corner above the track headers: ruler mode, snap, fit and clearing mutes / solos -->
-      <Grid x:Name="TimelineToolbar" Width="324" Height="32" HorizontalAlignment="Left" VerticalAlignment="Top"
-            Background="{StaticResource Panel}" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" Margin="0">
-        <!-- ruler mode: notes = bars and beats, clock = minutes and seconds; the active one on AccentSoft -->
-        <Border Background="{StaticResource Raised}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="2" Margin="8,0,6,0" VerticalAlignment="Center">
-          <StackPanel Orientation="Horizontal" Spacing="2">
-            <Button x:Name="BarsRulerButton" Classes="ghost" Width="26" Height="22" Padding="0" MinWidth="0" CornerRadius="4"
+    <Panel Grid.Row="3" x:Name="MixerHost" IsVisible="False" Margin="4">
+      <Border Classes="card-clip" Background="{StaticResource App}">
+        <DockPanel x:Name="MixerDock" />
+      </Border>
+      <Border Classes="card-edge" />
+    </Panel>
+    <Grid Grid.Row="3" x:Name="TimelineHost" Margin="4">
+      <Border Classes="card-clip">
+        <Grid>
+          <c:TimelineView x:Name="Timeline" />
+          <!-- the corner above the track headers: ruler mode, snap, fit and clearing mutes / solos -->
+          <Grid x:Name="TimelineToolbar" Width="324" Height="32" HorizontalAlignment="Left" VerticalAlignment="Top"
+                Background="{StaticResource Panel}" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" Margin="0">
+            <!-- ruler mode: notes = bars and beats, clock = minutes and seconds; the active one on AccentSoft -->
+            <Border Background="{StaticResource Raised}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="2" Margin="8,0,6,0" VerticalAlignment="Center">
+              <StackPanel Orientation="Horizontal" Spacing="2">
+                <Button x:Name="BarsRulerButton" Classes="ghost" Width="26" Height="22" Padding="0" MinWidth="0" CornerRadius="4"
+                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        ToolTip.Tip="{loc:T ruler.bars.tip}">
+                  <TextBlock Classes="icon" Text="&#xEC4F;" FontSize="14" />
+                </Button>
+                <Button x:Name="TimeRulerButton" Classes="ghost" Width="26" Height="22" Padding="0" MinWidth="0" CornerRadius="4"
+                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        ToolTip.Tip="{loc:T ruler.time.tip}">
+                  <TextBlock Classes="icon" Text="&#xE823;" FontSize="14" />
+                </Button>
+              </StackPanel>
+            </Border>
+            <!-- snap: the magnet lights up with the accent while clips, the playhead, trims and fades stick to the grid -->
+            <Panel Grid.Column="1" x:Name="SnapPanel" Width="86" Height="28" VerticalAlignment="Center">
+              <c:SelectButton x:Name="SnapBox" Classes="snap" Width="86" Height="28" Padding="25,0,6,0" CornerRadius="6" AutomationProperties.Name="{loc:T snap.name}" />
+              <PathIcon x:Name="SnapIcon" Data="{StaticResource MagnetIcon}" Width="13" Height="13" Margin="8,0,0,0"
+                        HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False" />
+            </Panel>
+            <!-- snap to other clips (asked by the user): which edges of a moved clip stick to theirs, a selector like the
+                 snap's, lit the same way while it is on (MainWindow.Timeline.cs ShowSnap) -->
+            <Panel Grid.Column="2" x:Name="SnapClipsPanel" Width="72" Height="28" Margin="4,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center">
+              <c:SelectButton x:Name="SnapClipsBox" Classes="snap" Width="72" Height="28" Padding="25,0,6,0" CornerRadius="6" AutomationProperties.Name="{loc:T snap.clips.name}" />
+              <PathIcon x:Name="SnapClipsIcon" Data="{StaticResource SnapClipsIcon}" Width="13" Height="13" Margin="8,0,0,0"
+                        HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False" />
+            </Panel>
+            <Button Grid.Column="3" x:Name="TimelineFitButton" Classes="ghost" Width="28" Height="28" Padding="0" MinWidth="0"
                     HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                    ToolTip.Tip="{loc:T ruler.bars.tip}">
-              <TextBlock Classes="icon" Text="&#xEC4F;" FontSize="14" />
+                    ToolTip.Tip="{loc:T timeline.fit.tip}">
+              <TextBlock Classes="icon" Text="&#xE9A6;" FontSize="14" />
             </Button>
-            <Button x:Name="TimeRulerButton" Classes="ghost" Width="26" Height="22" Padding="0" MinWidth="0" CornerRadius="4"
-                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                    ToolTip.Tip="{loc:T ruler.time.tip}">
-              <TextBlock Classes="icon" Text="&#xE823;" FontSize="14" />
-            </Button>
-          </StackPanel>
-        </Border>
-        <!-- snap: the magnet lights up with the accent while clips, the playhead, trims and fades stick to the grid -->
-        <Panel Grid.Column="1" x:Name="SnapPanel" Width="86" Height="28" VerticalAlignment="Center">
-          <c:SelectButton x:Name="SnapBox" Classes="snap" Width="86" Height="28" Padding="25,0,6,0" CornerRadius="6" AutomationProperties.Name="{loc:T snap.name}" />
-          <PathIcon x:Name="SnapIcon" Data="{StaticResource MagnetIcon}" Width="13" Height="13" Margin="8,0,0,0"
-                    HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False" />
-        </Panel>
-        <!-- snap to other clips (asked by the user): which edges of a moved clip stick to theirs, a selector like the
-             snap's, lit the same way while it is on (MainWindow.Timeline.cs ShowSnap) -->
-        <Panel Grid.Column="2" x:Name="SnapClipsPanel" Width="72" Height="28" Margin="4,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center">
-          <c:SelectButton x:Name="SnapClipsBox" Classes="snap" Width="72" Height="28" Padding="25,0,6,0" CornerRadius="6" AutomationProperties.Name="{loc:T snap.clips.name}" />
-          <PathIcon x:Name="SnapClipsIcon" Data="{StaticResource SnapClipsIcon}" Width="13" Height="13" Margin="8,0,0,0"
-                    HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False" />
-        </Panel>
-        <Button Grid.Column="3" x:Name="TimelineFitButton" Classes="ghost" Width="28" Height="28" Padding="0" MinWidth="0"
-                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                ToolTip.Tip="{loc:T timeline.fit.tip}">
-          <TextBlock Classes="icon" Text="&#xE9A6;" FontSize="14" />
-        </Button>
-        <!-- Cubase's "deactivate all mute / solo states" (native only): lit while any track has one (MainWindow.Timeline.cs) -->
-        <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4" Margin="0,0,8,0" VerticalAlignment="Center">
-          <Button x:Name="ClearMutesButton" Classes="chip" Width="24" Height="24" MinHeight="24" Padding="0" CornerRadius="4"
-                  HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="{loc:T timeline.noMutes}">
-            <TextBlock Text="M" FontSize="10.5" FontWeight="SemiBold" />
-          </Button>
-          <Button x:Name="ClearSolosButton" Classes="chip" Width="24" Height="24" MinHeight="24" Padding="0" CornerRadius="4"
-                  HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="{loc:T timeline.noSolos}">
-            <TextBlock Text="S" FontSize="10.5" FontWeight="SemiBold" />
-          </Button>
-        </StackPanel>
-      </Grid>
-      <!-- the zoom bar at the foot of the track headers (asked by the user): horizontal zoom and track height, each
-           with its slider, made big and easy to grab (asked by the user): 6 px track and an 18 px light thumb; wired in MainWindow.Timeline.cs. Its height is TimelineView.FooterH. -->
-      <Border x:Name="TimelineFooter" Width="324" Height="40" HorizontalAlignment="Left" VerticalAlignment="Bottom"
-              Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,1,0">
-        <Border.Resources>
-          <x:Double x:Key="SliderHorizontalThumbWidth">18</x:Double>
-          <x:Double x:Key="SliderHorizontalThumbHeight">18</x:Double>
-          <x:Double x:Key="SliderTrackThemeHeight">6</x:Double>
-          <SolidColorBrush x:Key="SliderThumbBackground" Color="#f4f4f5" />
-          <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#ffffff" />
-          <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="#ffffff" />
-        </Border.Resources>
-        <Grid ColumnDefinitions="Auto,*,Auto,*,Auto" Margin="12,0,6,0">
-          <TextBlock x:Name="ZoomIcon" Classes="icon" Text="&#xE8A3;" FontSize="15" Foreground="{StaticResource Dim}" VerticalAlignment="Center" Margin="0,0,8,0" />
-          <Slider x:Name="ZoomSlider" Grid.Column="1" Minimum="0" Maximum="1" Value="0"
-                  VerticalAlignment="Center" Margin="0,0,16,0" AutomationProperties.Name="{loc:T timeline.zoom}" />
-          <TextBlock x:Name="HeightIcon" Grid.Column="2" Classes="icon" Text="&#xE8FD;" FontSize="15" Foreground="{StaticResource Dim}" VerticalAlignment="Center" Margin="0,0,8,0" />
-          <Slider x:Name="TrackHeightSlider" Grid.Column="3" Minimum="40" Maximum="320" Value="64" TickFrequency="2" IsSnapToTickEnabled="True"
-                  VerticalAlignment="Center" AutomationProperties.Name="{loc:T timeline.height}" />
-          <!-- native only: every track and folder back to the shared height (rows get their own by dragging their bottom edge) -->
-          <Button x:Name="ResetHeightsButton" Grid.Column="4" Classes="ghost" Width="30" Height="30" MinHeight="0" Padding="0" Margin="8,0,0,0"
-                  HorizontalContentAlignment="Center" VerticalContentAlignment="Center" IsEnabled="False"
-                  AutomationProperties.Name="{loc:T timeline.resetHeights}" ToolTip.Tip="{loc:T timeline.resetHeights.tip}">
-            <TextBlock Classes="icon" Text="&#xE72C;" FontSize="14" />
-          </Button>
+            <!-- Cubase's "deactivate all mute / solo states" (native only): lit while any track has one (MainWindow.Timeline.cs) -->
+            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4" Margin="0,0,8,0" VerticalAlignment="Center">
+              <Button x:Name="ClearMutesButton" Classes="chip" Width="24" Height="24" MinHeight="24" Padding="0" CornerRadius="4"
+                      HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="{loc:T timeline.noMutes}">
+                <TextBlock Text="M" FontSize="10.5" FontWeight="SemiBold" />
+              </Button>
+              <Button x:Name="ClearSolosButton" Classes="chip" Width="24" Height="24" MinHeight="24" Padding="0" CornerRadius="4"
+                      HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="{loc:T timeline.noSolos}">
+                <TextBlock Text="S" FontSize="10.5" FontWeight="SemiBold" />
+              </Button>
+            </StackPanel>
+          </Grid>
+          <!-- the zoom bar at the foot of the track headers (asked by the user): horizontal zoom and track height, each
+               with its slider, made big and easy to grab (asked by the user): 6 px track and an 18 px light thumb; wired in MainWindow.Timeline.cs. Its height is TimelineView.FooterH. -->
+          <Border x:Name="TimelineFooter" Width="324" Height="40" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                  Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,1,0">
+            <Border.Resources>
+              <x:Double x:Key="SliderHorizontalThumbWidth">18</x:Double>
+              <x:Double x:Key="SliderHorizontalThumbHeight">18</x:Double>
+              <x:Double x:Key="SliderTrackThemeHeight">6</x:Double>
+              <SolidColorBrush x:Key="SliderThumbBackground" Color="#f4f4f5" />
+              <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#ffffff" />
+              <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="#ffffff" />
+            </Border.Resources>
+            <Grid ColumnDefinitions="Auto,*,Auto,*,Auto" Margin="12,0,6,0">
+              <TextBlock x:Name="ZoomIcon" Classes="icon" Text="&#xE8A3;" FontSize="15" Foreground="{StaticResource Dim}" VerticalAlignment="Center" Margin="0,0,8,0" />
+              <Slider x:Name="ZoomSlider" Grid.Column="1" Minimum="0" Maximum="1" Value="0"
+                      VerticalAlignment="Center" Margin="0,0,16,0" AutomationProperties.Name="{loc:T timeline.zoom}" />
+              <TextBlock x:Name="HeightIcon" Grid.Column="2" Classes="icon" Text="&#xE8FD;" FontSize="15" Foreground="{StaticResource Dim}" VerticalAlignment="Center" Margin="0,0,8,0" />
+              <Slider x:Name="TrackHeightSlider" Grid.Column="3" Minimum="40" Maximum="320" Value="64" TickFrequency="2" IsSnapToTickEnabled="True"
+                      VerticalAlignment="Center" AutomationProperties.Name="{loc:T timeline.height}" />
+              <!-- native only: every track and folder back to the shared height (rows get their own by dragging their bottom edge) -->
+              <Button x:Name="ResetHeightsButton" Grid.Column="4" Classes="ghost" Width="30" Height="30" MinHeight="0" Padding="0" Margin="8,0,0,0"
+                      HorizontalContentAlignment="Center" VerticalContentAlignment="Center" IsEnabled="False"
+                      AutomationProperties.Name="{loc:T timeline.resetHeights}" ToolTip.Tip="{loc:T timeline.resetHeights.tip}">
+                <TextBlock Classes="icon" Text="&#xE72C;" FontSize="14" />
+              </Button>
+            </Grid>
+          </Border>
         </Grid>
       </Border>
+      <Border Classes="card-edge" />
     </Grid>
 
     <!-- transport bar, always at the bottom (Fender Studio Pro style, asked by the user). The clock, the

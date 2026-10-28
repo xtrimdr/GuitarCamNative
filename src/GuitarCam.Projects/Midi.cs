@@ -6,14 +6,43 @@ namespace GuitarCam.Projects;
 
 /// <summary>
 /// What a track holds (native only): takes (<see cref="Audio"/>, the clips of a media) or notes for an instrument
-/// (<see cref="Midi"/>, <see cref="Track.MidiClips"/>). A MIDI track never gets a video panel and never records from an
-/// input: it is for building the backing track the guitar is played over.
+/// (<see cref="Midi"/>, <see cref="Track.MidiClips"/>). A MIDI track never gets a video panel and never records audio:
+/// it is for building the backing track the guitar is played over, by hand or from a MIDI keyboard.
 /// </summary>
 public static class TrackKinds
 {
     public const string Audio = "audio", Midi = "midi";
 
     public static string Normalize(string? kind) => kind == Midi ? Midi : Audio;
+}
+
+/// <summary>
+/// A VST3 plugin a track uses (native only): the file and the class inside it, its name and maker to show, and its
+/// state as the plugin saved it (base64; what its window was left at), so the project sounds the same when it opens.
+/// The file stays where it was installed: a project opened on a computer without it says so and plays the test tone.
+/// </summary>
+public sealed class PluginRef
+{
+    public string Path { get; set; } = "";
+    public string ClassId { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Vendor { get; set; } = "";
+    public string? State { get; set; }
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+
+    /// <summary>False when it doesn't say which plugin it is.</summary>
+    internal bool Normalize()
+    {
+        Path = Path?.Trim() ?? "";
+        ClassId = ClassId?.Trim() ?? "";
+        Name = string.IsNullOrWhiteSpace(Name) ? System.IO.Path.GetFileNameWithoutExtension(Path) : Name.Trim();
+        Vendor = Vendor?.Trim() ?? "";
+        if (string.IsNullOrEmpty(State)) State = null;
+        return Path.Length > 0 && ClassId.Length > 0;
+    }
+
+    /// <summary>The same plugin (not the same state).</summary>
+    public bool SamePlugin(PluginRef? o) => o != null && string.Equals(o.Path, Path, StringComparison.OrdinalIgnoreCase) && o.ClassId == ClassId;
 }
 
 /// <summary>
@@ -37,6 +66,9 @@ public sealed class MidiClip
     public const double MinBeats = 0.25, MaxBeats = 4096;
 
     public double LengthSec(double bpm) => LengthBeats * 60 / Math.Max(1, bpm);
+
+    /// <summary>A copy with a new id and its own notes (duplicate, copy and paste).</summary>
+    public MidiClip Copy() => new() { AtSec = AtSec, LengthBeats = LengthBeats, Notes = [.. Notes.Select(n => n.Copy())], Extra = Extra };
     public double EndSec(double bpm) => AtSec + LengthSec(bpm);
 
     internal void Normalize()
@@ -206,7 +238,8 @@ public static class MidiEditing
         foreach (var id in midi)
         {
             var (t, c) = Find(p, id);
-            var copy = new MidiClip { AtSec = ClipEditing.ToSample(c.AtSec + shift), LengthBeats = c.LengthBeats, Notes = [.. c.Notes.Select(n => n.Copy())], Extra = c.Extra };
+            var copy = c.Copy();
+            copy.AtSec = ClipEditing.ToSample(c.AtSec + shift);
             t.MidiClips!.Insert(t.MidiClips.IndexOf(c) + 1, copy);
             copies[id] = copy.Id;
         }
@@ -217,13 +250,8 @@ public static class MidiEditing
     public static string Duplicate(Project p, string clipId)
     {
         var (t, c) = Find(p, clipId);
-        var copy = new MidiClip
-        {
-            AtSec = ClipEditing.ToSample(c.EndSec(p.Settings.Bpm)),
-            LengthBeats = c.LengthBeats,
-            Notes = [.. c.Notes.Select(n => n.Copy())],
-            Extra = c.Extra,
-        };
+        var copy = c.Copy();
+        copy.AtSec = ClipEditing.ToSample(c.EndSec(p.Settings.Bpm));
         (t.MidiClips ??= []).Add(copy);
         return copy.Id;
     }
@@ -243,6 +271,71 @@ public static class MidiEditing
         c.Notes.Add(n);
         c.Normalize();
         return n;
+    }
+
+    /// <summary>
+    /// Moves where each note starts to the nearest step of <paramref name="gridBeats"/> (the piano roll's magnet) on
+    /// the song's grid, not the clip's: a clip that doesn't start on a beat still lands its notes on the beats. The
+    /// length stays. <paramref name="which"/> = the notes to move (null = all). Returns how many moved; a grid of 0
+    /// (the magnet off) moves none.
+    /// </summary>
+    public static int Quantize(IList<MidiNote> notes, double clipAtSec, double bpm, double gridBeats, IReadOnlyCollection<MidiNote>? which = null)
+    {
+        if (gridBeats <= 0) return 0;
+        double clipBeat = clipAtSec * Math.Max(1, bpm) / 60;
+        int moved = 0;
+        foreach (var n in notes)
+        {
+            if (which != null && !which.Contains(n)) continue;
+            double song = clipBeat + n.Beat;
+            double snapped = Math.Round(song / gridBeats) * gridBeats;
+            // a note pulled before the clip's start stays at its start
+            double beat = Math.Max(0, snapped - clipBeat);
+            if (Math.Abs(beat - n.Beat) < 1e-9) continue;
+            n.Beat = beat;
+            moved++;
+        }
+        return moved;
+    }
+
+    /// <summary>Quantizes every note of a clip (<see cref="Quantize(IList{MidiNote}, double, double, double, IReadOnlyCollection{MidiNote}?)"/>).</summary>
+    public static int Quantize(Project p, string clipId, double gridBeats)
+    {
+        var (_, c) = Find(p, clipId);
+        int moved = Quantize(c.Notes, c.AtSec, p.Settings.Bpm, gridBeats);
+        c.Normalize();
+        return moved;
+    }
+
+    /// <summary>
+    /// A clip made from notes played on a keyboard (start and length in seconds on the timeline, pitch, velocity), on
+    /// a MIDI track: it starts on the bar where the take began (<paramref name="fromSec"/>, the count-in's notes come
+    /// in there) and ends on the bar after the take (<paramref name="toSec"/>), so it lines up with the song. With
+    /// <paramref name="gridBeats"/> &gt; 0 the notes are quantized to it. Null when nothing was played.
+    /// </summary>
+    public static MidiClip? AddRecorded(Project p, string trackId, double fromSec, double toSec,
+        IReadOnlyList<(double Sec, double LengthSec, int Pitch, int Velocity)> played, double gridBeats = 0)
+    {
+        if (played.Count == 0) return null;
+        var t = p.Tracks.Find(x => x.Id == trackId) ?? throw new ArgumentException(Texts.T("err.midi.trackNotFound", "No encontré esa pista."));
+        if (!t.IsMidi) throw new ArgumentException(Texts.T("err.midi.notMidi", "Esa pista no es MIDI: los clips MIDI van en una pista MIDI."));
+        double bpm = Math.Max(1, p.Settings.Bpm);
+        double barSec = 4 * 60 / bpm;
+        double start = Math.Floor(Math.Max(0, fromSec) / barSec + 1e-9) * barSec;
+        double end = Math.Max(start + barSec, Math.Ceiling(Math.Max(toSec, played.Max(x => x.Sec + x.LengthSec)) / barSec - 1e-9) * barSec);
+        var clip = new MidiClip { AtSec = ClipEditing.ToSample(start), LengthBeats = (end - start) / 60 * bpm };
+        foreach (var (sec, len, pitch, velocity) in played)
+            clip.Notes.Add(new MidiNote
+            {
+                Pitch = pitch,
+                Beat = Math.Max(0, sec - clip.AtSec) / 60 * bpm,
+                Beats = Math.Max(MidiNote.MinBeats, len / 60 * bpm),
+                Velocity = velocity,
+            });
+        if (gridBeats > 0) Quantize(clip.Notes, clip.AtSec, bpm, gridBeats);
+        clip.Normalize();
+        (t.MidiClips ??= []).Add(clip);
+        return clip;
     }
 
     /// <summary>The end of the last MIDI clip of the project, in seconds (0 without any).</summary>

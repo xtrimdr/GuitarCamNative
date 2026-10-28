@@ -92,7 +92,7 @@ Respetan la cultura del sistema (en es-AR, con coma):
 
 ## Formas y espaciado
 
-- Radios: **8** secciones, **6** botones/chips/cajas, **5** clips y badges, **4** toggles M/S y etiquetas, **2** barras de medidor.
+- Radios: **10** paneles de la ventana (tarjetas `Border.card`, 4 px de margen), **8** secciones, **6** botones/chips/cajas, **5** clips y badges, **4** toggles M/S y etiquetas, **2** barras de medidor.
 - Bordes de 1 px en `Line`. Sin sombras, sin gradientes, sin animaciones decorativas. Única sombra: el **glow del
   hover** de todo botón (`HoverGlow`, un `DropShadowEffect` del acento que recolorea `UiTheme`; `RecGlow` en los
   rojos), puesto al final de los estilos de botón en `App.axaml` para que ninguna clase lo pierda. **El texto nunca

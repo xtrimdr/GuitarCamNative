@@ -85,6 +85,9 @@
             <Button x:Name="AudioTab" Classes="nav">
               <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE8D6;" FontSize="15" /><TextBlock Text="{loc:T settings.tab.audio}" /></StackPanel>
             </Button>
+            <Button x:Name="MidiTab" Classes="nav">
+              <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE703;" FontSize="15" /><TextBlock Text="{loc:T settings.tab.midi}" /></StackPanel>
+            </Button>
             <Button x:Name="CameraTab" Classes="nav">
               <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE722;" FontSize="15" /><TextBlock Text="{loc:T settings.tab.camera}" /></StackPanel>
             </Button>
@@ -96,6 +99,9 @@
             </Button>
             <Button x:Name="ViewTab" Classes="nav">
               <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE890;" FontSize="15" /><TextBlock Text="{loc:T settings.tab.view}" /></StackPanel>
+            </Button>
+            <Button x:Name="PluginsTab" Classes="nav">
+              <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xEA86;" FontSize="15" /><TextBlock Text="{loc:T settings.tab.plugins}" /></StackPanel>
             </Button>
             <Button x:Name="ShortcutsTab" Classes="nav">
               <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Classes="icon" Text="&#xE765;" FontSize="15" /><TextBlock Text="{loc:T settings.tab.shortcuts}" /></StackPanel>

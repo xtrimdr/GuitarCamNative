@@ -19,7 +19,7 @@ public static class AudioWarmUp
 
     static void Run()
     {
-        // the engine assembly (DSP, recording) and the window's real-time half (PlaybackEngine, LiveTrack)
+        // the engine assembly (DSP, recording, the plugin bridge) and the window's real-time half (PlaybackEngine, LiveTrack)
         var types = typeof(GuitarCam.Audio.Dsp.Compressor).Assembly.GetTypes()
             .Concat(typeof(LiveTrack).Assembly.GetTypes().Where(t => t.Namespace is "GuitarCam.App.Audio" or "GuitarCam.App.Model"));
         const BindingFlags all = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;

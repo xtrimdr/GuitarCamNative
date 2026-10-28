@@ -173,12 +173,13 @@ public partial class MainWindow
         };
         DockPanel.SetDock(miniRow, Dock.Top);
         DockPanel.SetDock(header, Dock.Top);
-        MixerHost.Children.Add(miniRow);
-        MixerHost.Children.Add(header);
+        MixerDock.Children.Add(miniRow);
+        MixerDock.Children.Add(header);
         // the DockPanel fills only its last child: the mixer and the Mastering view share it, so both fill the place
-        MixerHost.Children.Add(new Panel { Children = { mixerScroll, masteringScroll, pianoHost } });
+        MixerDock.Children.Add(new Panel { Children = { mixerScroll, masteringScroll, pianoHost } });
         InitMastering();
         InitPiano();
+        InitInstruments();
 
         TimelineViewButton.Click += (_, _) => SetMixerView(false);
         MixerViewButton.Click += (_, _) => ShowBottomView(mastering: false);
@@ -1577,7 +1578,8 @@ public partial class MainWindow
             b.Background = lit ? Palette.Rec : Brushes.Transparent;
             b.BorderBrush = lit ? Palette.Rec : Palette.Line;
             dot.Fill = lit ? Palette.Fg : Palette.Alpha(Palette.RecColor, 0.7);
-            ToolTip.SetTip(b, lit ? Loc.T("tl.tip.armed", Shortcuts.Paren("record"))
+            ToolTip.SetTip(b, lit ? Loc.T(t.Track.IsMidi ? "midi.arm.armed" : "tl.tip.armed", Shortcuts.Paren("record"))
+                : t.Track.IsMidi ? Loc.T("midi.arm.tip") + Shortcuts.Note("arm", Loc.T("tl.note.arm"))
                 : t.Clips.Count == 0 ? Loc.T("tl.tip.arm.empty") + Shortcuts.Note("arm", Loc.T("tl.note.arm"))
                 : Loc.T("tl.tip.arm.replace") + Shortcuts.Note("arm", Loc.T("tl.note.arm")));
         });
@@ -1601,7 +1603,7 @@ public partial class MainWindow
             e.Handled = true;
             ShowInputMenu(t, chip);
         };
-        mx.Refresh.Add(() => text.Text = InputShort(t.Track));
+        mx.Refresh.Add(() => text.Text = t.Track.IsMidi ? MidiInputShort(t.Track) : InputShort(t.Track));
         return chip;
     }
 

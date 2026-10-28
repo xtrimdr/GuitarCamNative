@@ -2095,7 +2095,8 @@ public sealed partial class TimelineView : Control
     Rect SoloRect(int i) => new(HeaderRight - 66, LaneY(i) + 8, 24, 24);
     Rect RemoveRect(int i) => new(HeaderRight - 38, LaneY(i) + 8, 24, 24);
     /// <summary>Room for the name: an armed track shows its input left of the ●, so the name gets shorter.</summary>
-    double NameW(int i) => (armed.Contains(i) && !Recording && InputLabel != null ? InputRect(i).X - 62 : HeaderRight - 186) - Indent(i) - NameShift(i);
+    double NameW(int i) => (i >= 0 && i < tracks.Count && tracks[i].Track.IsMidi ? InstrumentRect(i).X - 62
+        : armed.Contains(i) && !Recording && InputLabel != null ? InputRect(i).X - 62 : HeaderRight - 186) - Indent(i) - NameShift(i);
     /// <summary>Where a track's name sits (and its in-place editor goes).</summary>
     Rect NameRect(int i) => new(54 + Indent(i) + NameShift(i), LaneY(i) + 7, NameW(i) + 8, 26);
     /// <summary>Just the drawn name of a track (a double click there renames it), not the empty space after it.</summary>
@@ -2183,7 +2184,8 @@ public sealed partial class TimelineView : Control
         if (!RecordingInto(i) && lastPointer.Y >= y && lastPointer.Y < y + lh)
             DrawTrash(ctx, RemoveRect(i), Hot(RemoveRect(i)));
         ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, y + lh - 0.5), new Point(HeaderW, y + lh - 0.5));
-        if (!tracks[i].Track.IsMidi) DrawArm(ctx, ArmRect(i), isArmed || RecordingInto(i), Hot(ArmRect(i)));
+        DrawArm(ctx, ArmRect(i), isArmed || RecordingInto(i), Hot(ArmRect(i)));
+        if (tracks[i].Track.IsMidi) DrawInstrumentChip(ctx, i);
 
         var ch = t.Channel;
         string pan = Math.Abs(ch.Pan) < 0.01 ? "C" : ch.Pan < 0 ? $"L{-ch.Pan * 100:0}" : $"R{ch.Pan * 100:0}";
@@ -2403,6 +2405,7 @@ public sealed partial class TimelineView : Control
             else if (i >= 0 && i < tracks.Count && p.Y >= RulerH)
             {
                 if (p.X > HeaderW && tracks[i].Track.IsMidi && MidiContext(i, p)) { e.Handled = true; return; }
+                if (p.X < HeaderW && tracks[i].Track.IsMidi && InstrumentRect(i).Contains(p)) { Select(i); InstrumentChipPressed(i, p, true); e.Handled = true; return; }
                 // The header asks for the track menu (no clip); the lane, for the clip under the pointer.
                 var clip = p.X > HeaderW ? ClipAt(i, p.X) : null;
                 SelectedClipId = clip?.Clip.Id ?? tracks[i].Clips.FirstOrDefault(c => c.Clip.Id == SelectedClipId)?.Clip.Id;
@@ -2484,7 +2487,13 @@ public sealed partial class TimelineView : Control
             e.Handled = true;
             return;
         }
-        if (p.X < HeaderW && ArmRect(i).Contains(p) && !tracks[i].Track.IsMidi)
+        if (p.X < HeaderW && tracks[i].Track.IsMidi && InstrumentRect(i).Contains(p))
+        {
+            InstrumentChipPressed(i, p, false);
+            e.Handled = true;
+            return;
+        }
+        if (p.X < HeaderW && ArmRect(i).Contains(p))
         {
             ArmRequested?.Invoke(tracks[i]);
             e.Handled = true;
@@ -3011,7 +3020,8 @@ public sealed partial class TimelineView : Control
         else if (MidiCursor(i, lastPointer) is { } midiCursor) cursor = midiCursor;
         else if (i >= 0 && i < tracks.Count)
         {
-            if (OnHandle(i, lastPointer) || BadgeRect(i).Contains(lastPointer) || JoinChipAt(i, lastPointer) != null) cursor = StandardCursorType.Hand;
+            if (OnHandle(i, lastPointer) || BadgeRect(i).Contains(lastPointer) || JoinChipAt(i, lastPointer) != null
+                || tracks[i].Track.IsMidi && lastPointer.X < HeaderW && InstrumentRect(i).Contains(lastPointer)) cursor = StandardCursorType.Hand;
             else if (lastPointer.X < HeaderW && FxHit(i, lastPointer) is { } fx)
                 cursor = fx.Dial ? StandardCursorType.SizeNorthSouth : StandardCursorType.Hand;
             else if (lastPointer.X >= HeaderW && ClipAt(i, lastPointer.X) is { } clip)

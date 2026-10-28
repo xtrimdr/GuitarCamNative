@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 
 namespace GuitarCam.App;
 
@@ -18,7 +19,16 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var (dir, note) = ParseArgs(desktop.Args ?? []);
-            desktop.MainWindow = new MainWindow(dir, note);
+            // the splash paints first; the main window (slow to build) comes once it is on screen
+            var splash = new SplashWindow();
+            splash.Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                var main = new MainWindow(dir, note);
+                desktop.MainWindow = main;
+                main.Opened += (_, _) => _ = splash.Dismiss();
+                main.Show();
+            }, DispatcherPriority.Background);
+            splash.Show();
         }
         base.OnFrameworkInitializationCompleted();
     }

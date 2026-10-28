@@ -45,7 +45,9 @@ de **grabar → mezclar → exportar**.
 - Un sonido que te gusta se guarda como **plantilla de pista** y vuelve desde Nueva pista → Plantilla.
 - **Pistas MIDI** para armar la base: doble clic en su carril crea un clip y lo abre en el **piano roll** (el botón
   "Piano roll" del transporte). Clic escribe una nota, arrastrar la mueve o la alarga, clic derecho borra, y abajo va la
-  velocidad de cada nota. Por ahora suenan con un tono de prueba; después vienen un sampler y los instrumentos VST3.
+  velocidad de cada nota. Cada pista MIDI toca con un **instrumento VST3** (Surge XT, MT-PowerDrumKit…: clic derecho
+  en la pista → Instrumento, o el botón del piano roll, que también abre la ventana del plugin) o, sin plugin, con un
+  tono de prueba. Cada plugin corre en su propio proceso: si se cuelga, se calla ese y el resto sigue sonando.
 - Arriba de la regla, un **rango A–B** para repetir un tramo (practicar el solo, mezclar un pedazo) y **marcadores**
   con nombre (Intro, Estribillo, Solo…) para saltar de una parte a otra. Zoom de un tiempo a toda la canción con
   atajos que se asignan en Configuración → Atajos de teclado.
@@ -98,8 +100,8 @@ GuitarCam Studio Native está **en desarrollo constante**. La idea es llevarla a
 para quien recién empieza y quiere hacer música rápido y sin complicaciones, como para profesionales que
 quieren hacer música en serio.
 
-Ya están las pistas MIDI con su piano roll; lo próximo es que suenen con un sampler y con **plugins VST3**, y más
-herramientas de estudio. Lo que está
+Ya están las pistas MIDI con su piano roll y los instrumentos VST3; lo próximo son los **efectos VST3** en los slots
+de las pistas y los buses, un sampler propio y más herramientas de estudio. Lo que está
 planeado y lo que falta está en [PENDIENTES.md](PENDIENTES.md).
 
 ## Requisitos
@@ -113,6 +115,10 @@ planeado y lo que falta está en [PENDIENTES.md](PENDIENTES.md).
   carpeta `bin`). El build los copia a `ffmpeg\` junto al exe. Sin ellos la preview usa ffmpeg.exe, que tarda más
   en cada salto.
 - [.NET 10 SDK](https://dotnet.microsoft.com/) para compilar.
+- Para los plugins VST3 (opcional): Visual Studio con **Desarrollo para el escritorio con C++** y el **Windows 11 SDK**,
+  y el SDK de VST3 de Steinberg (licencia MIT) en `lib\vst3sdk`, que baja `tools\get-vst3sdk.ps1` (unos 21 MB, fuera de
+  git). Con eso, `dotnet build` también compila `gcvsthost.exe` (`src\GuitarCam.VstHost`, C++) y lo copia junto al exe;
+  sin eso la app compila igual y las pistas MIDI suenan con el tono de prueba.
 
 ## Compilar y ejecutar
 
@@ -151,7 +157,8 @@ Todos se pueden cambiar en ⚙ Configuración → Atajos de teclado (menos Esc).
 | F | ver todo |
 | X | timeline / mixer |
 | Alt+X / D | dividir el clip en el cabezal / duplicarlo (o los marcados, en bloque) |
-| Ctrl+C / Ctrl+X / Ctrl+V | copiar / cortar los clips elegidos / pegarlos en el cabezal, desde la pista elegida |
+| Q | cuantizar al imán del piano roll: las notas elegidas (o todas) en el piano roll, o los clips MIDI elegidos |
+| Ctrl+C / Ctrl+X / Ctrl+V | copiar / cortar los clips elegidos (tomas y clips MIDI) / pegarlos en el cabezal, desde la pista elegida |
 | Supr | quitar el clip (o los marcados, o la pista vacía); con un rango, borrarlo |
 | Shift+Supr | borrar el rango y cerrar el hueco (lo de después se corre) |
 | 1 a 7 | herramientas: Seleccionar / Rango / Dividir / Borrar / Escuchar / Zoom / Mano |
@@ -191,6 +198,7 @@ src/
   GuitarCam.Projects   modelo del proyecto, guardado atómico, historial, gestor de proyectos
   GuitarCam.App        la ventana (Avalonia 11.3)
   GuitarCam.Lab        gclab.exe: consola para probar audio, DSP y proyectos sin la ventana
+  GuitarCam.VstHost    gcvsthost.exe (C++): abre un plugin VST3 en su propio proceso
 tools/                 ícono, acceso directo y utilidades de verificación
 ```
 
@@ -236,7 +244,14 @@ la consola, sin abrir la ventana.
 | `looks [--look id] [--salida look.cube] [--blancos n] [--negros n] [--luz n]` | los looks de color con colores de prueba, comprobación de rango y, con `--look`, el LUT `.cube` de ese look con Blancos, Negros y Sensación de luz |
 | `masterizar archivo.wav [--cuanto 0.35] [--banda-graves\|--banda-medios\|--banda-agudos 0..1] [--corte] [--barro] [--graves] [--presencia] [--aire] [--inclinacion] [--cinta] [--ancho] [--graves-mono] [--recorte] [--empuje] [--techo] [--release] [--sin-limitador] [--volumen youtube\|instagram\|tiktok\|spotify\|apple] [--pua 0..1] [--look natural\|glue\|bright\|warm\|front\|pick [--cuanto-look 1]] [--sugerime]` | el mastering de la ventana sobre un WAV: cuánto comprime cada banda (y la Púa), cuánto recortan el soft clip (Auto incluido) y el limitador y los LUFS de entrada y salida; `--volumen` es el Destino del master (mide el archivo y usa esa ganancia en vez del Empuje), `--look` pone un look, `--sugerime` muestra qué oye y qué propone, y masteriza con eso |
 | `midi ver\|pista\|clip\|nota\|acordes\|quitar carpeta` | pistas MIDI, sus clips y sus notas (`clip --pista n --en 0 --compases 4`, `nota --clip id --altura C4 --pulso 0 --largo 1 --vel 100`, `acordes --clip id` escribe Do, Sol, Lam, Fa); `mezclar carpeta` las renderiza |
-| `midi comprobar` | el sonido de las notas: igual en cualquier tamaño de bloque, termina con el release, la exportación suena como la reproducción y el clip pasa a notas con el tempo (también corre en `comprobar-dsp`) |
+| `midi cuantizar carpeta --clip id [--grilla 1/16]` | mueve el comienzo de las notas a la grilla de la canción (1/4, 1/8, 1/16, 1/32, 1/8T) |
+| `midi entradas` | los teclados y controladores MIDI que ve Windows, con sus ajustes de Configuración → MIDI |
+| `midi escuchar [--entrada nombre] [--segundos 10]` | abre las entradas como la ventana e imprime lo que llega y lo que toma el motor (canal y curva de velocidad aplicados) |
+| `midi instrumento carpeta [--pista n] --plugin "nombre" \| --quitar` | el instrumento VST3 que toca la pista; `mezclar carpeta` lo renderiza con el plugin, como la exportación |
+| `vst escanear [--todo] [--archivo X]` / `vst lista` | busca los plugins VST3 (cada archivo en su propio proceso; los recuerda en `plugins.json`; `--archivo` reintenta uno) / los lista |
+| `vst carpetas [--agregar X] [--sacar X]` / `vst ocultar\|mostrar "nombre"` | dónde se buscan los plugins y cuáles salen en los menús (lo mismo que Configuración → Plugins) |
+| `vst probar "nombre" [--segundos 4] [--ventana] [--espera s] [--tiempo-real]` | toca un acorde (o un ritmo, si es una batería) con el plugin a un WAV, por el mismo puente que la exportación; `--ventana` abre antes su ventana. Con la variable `GCVST_DEBUG=1`, el puente cuenta sus salidas y cada bloque |
+| `midi comprobar` | el sonido de las notas: igual en cualquier tamaño de bloque, termina con el release, la exportación suena como la reproducción y el clip pasa a notas con el tempo; y el teclado: una tecla suena como la nota escrita, el pedal, las tomas, cuantizar y el clip grabado (también corre en `comprobar-dsp`) |
 | `transponer archivo.wav [--semitonos 2] [--salida x.wav]` | cambia el tono sin cambiar el largo, como el Transponer de la pista (de −12 a +12, admite cents) |
 | `proyecto editar carpeta transponer pista semitonos` | el Transponer de esa pista; deja sus tomas transpuestas en `cache/` |
 | `lufs archivo` / `afinar archivo [--en segundos] [--umbral -50]` | volumen integrado de un archivo / la nota que oye el afinador en ese momento, con la sensibilidad de la ventana (dB) |

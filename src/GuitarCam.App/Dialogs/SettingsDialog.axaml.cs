@@ -25,7 +25,8 @@ namespace GuitarCam.App.Dialogs;
 /// calibration is stored per input + output pair. The "Atajos de teclado" tab is native only (the web's keys are
 /// fixed): it edits <see cref="Shortcuts"/>; a click on a key waits for the next press, Esc cancels. The timeline's
 /// wheel gestures wait for a wheel turn instead, and take the modifiers held during it.
-/// "Guardado" is native only too: it picks <see cref="SaveMode"/>.
+/// "Guardado" is native only too: it picks <see cref="SaveMode"/>; so are "Plugins" (SettingsDialog.Plugins.cs) and
+/// "MIDI" (SettingsDialog.Midi.cs).
 /// </summary>
 public sealed partial class SettingsDialog : UserControl
 {
@@ -87,13 +88,17 @@ public sealed partial class SettingsDialog : UserControl
         InitializeComponent();
         CloseButton.Click += (_, _) => HideDialog();
         AudioTab.Click += (_, _) => ShowTab("audio");
+        MidiTab.Click += (_, _) => ShowTab("midi");
         CameraTab.Click += (_, _) => ShowTab("camera");
         SyncTab.Click += (_, _) => ShowTab("sync");
         ShortcutsTab.Click += (_, _) => ShowTab("shortcuts");
         LanguageTab.Click += (_, _) => ShowTab("language");
         SaveTab.Click += (_, _) => ShowTab("save");
         ViewTab.Click += (_, _) => ShowTab("view");
+        PluginsTab.Click += (_, _) => ShowTab("plugins");
         BuildLanguage();
+        BuildPlugins();
+        BuildMidi();
         BuildView();
         saveMinutes = BuildSave();
         Shortcuts.Changed += BuildShortcuts;
@@ -290,6 +295,7 @@ public sealed partial class SettingsDialog : UserControl
     {
         calibration?.Cancel();
         StopCapture();
+        StopMidi();
         IsVisible = false;
         Dismissed?.Invoke();
     }
@@ -333,10 +339,15 @@ public sealed partial class SettingsDialog : UserControl
         LanguageTab.Classes.Set("active", id == "language");
         SaveTab.Classes.Set("active", id == "save");
         ViewTab.Classes.Set("active", id == "view");
+        PluginsTab.Classes.Set("active", id == "plugins");
+        MidiTab.Classes.Set("active", id == "midi");
         StopCapture();
+        StopMidi();
         if (id == "save") { RefreshSave(); RefreshEncoder(); }
         if (id == "shortcuts") { shortcutNote = null; BuildShortcuts(); }
-        Body.Content = id switch { "camera" => cameraPage, "sync" => syncPage, "shortcuts" => shortcutsPage, "language" => languagePage, "save" => savePage, "view" => viewPage, _ => audioPage };
+        if (id == "plugins") RefreshPlugins();
+        Body.Content = id switch { "midi" => midiPage, "plugins" => pluginsPage, "camera" => cameraPage, "sync" => syncPage, "shortcuts" => shortcutsPage, "language" => languagePage, "save" => savePage, "view" => viewPage, _ => audioPage };
+        if (id == "midi") RefreshMidi();
         Refresh();
     }
 

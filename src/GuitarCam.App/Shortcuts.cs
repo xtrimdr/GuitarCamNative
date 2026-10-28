@@ -40,6 +40,7 @@ static class Shortcuts
         new("delete", Loc.T("sc.group.editing"), Loc.T("sc.delete"), [G(Key.Delete)]),
         new("split", Loc.T("sc.group.editing"), Loc.T("sc.split"), [G(Key.X, KeyModifiers.Alt)]),
         new("duplicate", Loc.T("sc.group.editing"), Loc.T("sc.duplicate"), [G(Key.D)]),
+        new("quantize", Loc.T("sc.group.editing"), Loc.T("sc.quantize"), [G(Key.Q)]),
         new("copy", Loc.T("sc.group.editing"), Loc.T("sc.copy"), [G(Key.C, KeyModifiers.Control)]),
         new("cut", Loc.T("sc.group.editing"), Loc.T("sc.cut"), [G(Key.X, KeyModifiers.Control)]),
         new("paste", Loc.T("sc.group.editing"), Loc.T("sc.paste"), [G(Key.V, KeyModifiers.Control)]),

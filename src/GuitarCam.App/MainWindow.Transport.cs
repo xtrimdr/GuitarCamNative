@@ -181,7 +181,10 @@ public partial class MainWindow
         Tempo.Set(engine.Bpm);
         Tempo.IsEnabled = store != null && !store.ReadOnly && !restoring && !RecordingBusy;
         ShowArm();
+        ShowMidiListeners();
         var targets = RecordTargets();
+        // armed MIDI tracks record the keyboard's notes; a MIDI clip already there stays (the new one goes on top)
+        targets.AddRange(MidiRecordTargets());
         // nothing armed, nothing to record into: armed tracks are the only way to say where a take goes
         RecButton.IsEnabled = targets.Count > 0;
         string recordTip = Shortcuts.Tip(targets.Count == 0 ? Loc.T("transport.rec.none")

@@ -476,6 +476,15 @@ public sealed class Track
     public List<Clip> Clips { get; set; } = [];
     /// <summary>The notes of a MIDI track (<see cref="MidiClip"/>); null on an audio track, so its file doesn't change. Native only.</summary>
     public List<MidiClip>? MidiClips { get; set; }
+    /// <summary>The instrument plugin a MIDI track plays its notes with (<see cref="PluginRef"/>); null = the test tone. Native only.</summary>
+    public PluginRef? Instrument { get; set; }
+    /// <summary>
+    /// The MIDI input a MIDI track plays and records from: a device's key from Configuración → MIDI; null = all of
+    /// them. Native only.
+    /// </summary>
+    public string? MidiInput { get; set; }
+    /// <summary>The channel it takes from that input, 1..16; 0 = all (not written, so other tracks' files don't change). Native only.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int MidiChannel { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
     internal void Normalize()
@@ -488,8 +497,17 @@ public sealed class Track
             MidiClips ??= [];
             MidiClips.RemoveAll(c => c == null);
             foreach (var c in MidiClips) c.Normalize();
+            if (Instrument != null && !Instrument.Normalize()) Instrument = null;
+            MidiInput = string.IsNullOrWhiteSpace(MidiInput) ? null : MidiInput.Trim();
+            MidiChannel = Math.Clamp(MidiChannel, 0, 16);
         }
-        else MidiClips = null;
+        else
+        {
+            MidiClips = null;
+            Instrument = null;
+            MidiInput = null;
+            MidiChannel = 0;
+        }
         Input = GuitarCam.Audio.InputRoute.Parse(Input)?.Key;
         Icon = string.IsNullOrWhiteSpace(Icon) || Icon.Length > 64 ? null : Icon.Trim();
         Color = NormalizeColor(Color);

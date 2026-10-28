@@ -373,6 +373,7 @@ public partial class MainWindow
         var dropped = liveClips.Values.Where(c => !used.Contains(c)).ToList();
         tracks = list;
         engine.UpdateTracks(list);
+        SyncInstruments();
         RefreshTranspose();
         Timeline.LengthSec = engine.LengthSec;
         ApplyRouting(p, list);
@@ -494,12 +495,12 @@ public partial class MainWindow
     async Task CopySelection(bool cut)
     {
         if (store == null) return;
-        var picked = PickedClipIds();
-        // MIDI clips don't go to the clipboard yet: the takes among them do
-        var ids = picked.Where(id => MidiEditing.TryFind(store.Project, id) == null).ToList();
+        // takes and MIDI clips alike; a MIDI clip selected alone is not among the picked takes
+        var ids = PickedClipIds();
+        if (ids.Count == 0 && Timeline.SelectedMidiId is { } midi) ids = [midi];
         if (ids.Count == 0 || ClipClipboard.Take(store.Project, ids, LiveLengths()) is not { } taken)
         {
-            Status(Loc.T(ids.Count == 0 && (picked.Count > 0 || Timeline.SelectedMidiId != null) ? "midi.noCopy" : "clipboard.pick"));
+            Status(Loc.T("clipboard.pick"));
             return;
         }
         if (cut)
@@ -508,13 +509,12 @@ public partial class MainWindow
             string? trackId = sel?.Track.Id;
             await EditTimeline(p =>
             {
-                foreach (var id in ids) ClipEditing.RemoveClip(p, id);
+                foreach (var id in ids) MidiEditing.RemoveAny(p, id);
                 return trackId;
             }, ids.Count > 1 ? "clips-cut" : "clip-cut");
         }
         clipboard = taken;
         Status(Loc.T((cut ? "clipboard.cut" : "clipboard.copied") + (ids.Count > 1 ? ".many" : ""), ids.Count, Shortcuts.Label("paste")));
-        if (ids.Count < picked.Count) Status(Loc.T("midi.noCopy.some"));
     }
 
     /// <summary>
@@ -531,10 +531,11 @@ public partial class MainWindow
         await EditTimeline(p =>
         {
             pasted = board.Paste(p, target, at);
-            return ClipEditing.Find(p, pasted[0]).Track.Id;
-        }, board.Items.Count > 1 ? "clips-pasted" : "clip-pasted");
+            return MidiEditing.TryFind(p, pasted[0]) != null ? MidiEditing.Find(p, pasted[0]).Track.Id : ClipEditing.Find(p, pasted[0]).Track.Id;
+        }, board.Count > 1 ? "clips-pasted" : "clip-pasted");
         if (pasted.Count == 0) return;
-        Timeline.SelectClip(Timeline.Selected, pasted[0]);
+        if (MidiEditing.TryFind(store.Project, pasted[0]) != null) Timeline.SelectMidiClip(Timeline.Selected, pasted[0]);
+        else Timeline.SelectClip(Timeline.Selected, pasted[0]);
         Timeline.BoxClips(pasted);
         if (!engine.Playing) engine.Seek(at + board.LengthSec);
     }
@@ -778,6 +779,18 @@ public partial class MainWindow
                     enabled: enabled, icon: ""));
             list.Add(MenuAction(Loc.T("menu.renameTrack") + "…", () => { RenameInPlace(track.Track.Id, () => takeName.Focus()); return Task.CompletedTask; }, enabled: enabled, icon: ""));
             list.Add(FolderSubmenu(track, enabled));
+            if (track.Track.IsMidi)
+                list.Add(new MenuItem { Header = MenuHeader(Loc.T("vst.menu", track.Track.Instrument?.Name ?? Loc.T("vst.testTone")), new TextBlock { Classes = { "icon" }, Text = "", FontSize = 12 }),
+                    ItemsSource = InstrumentItems(track, enabled) });
+            if (track.Track.IsMidi)
+            {
+                // its own menu, opened where this one was (it stays open to try one input after the other)
+                list.Add(MenuAction(Loc.T("midi.in.menu", MidiInputLabel(track.Track)) + "…", () =>
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() => ShowMidiInputMenu(track, Timeline, point));
+                    return Task.CompletedTask;
+                }, enabled: enabled, icon: ""));
+            }
             var sendsIcon = FxIcon.Create(FxIcon.Reverb, 12);
             sendsIcon.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
             list.Add(new MenuItem { Header = MenuHeader(Loc.T("send.menu"), sendsIcon), ItemsSource = SendChoices(RouterOf(track)), IsEnabled = enabled });

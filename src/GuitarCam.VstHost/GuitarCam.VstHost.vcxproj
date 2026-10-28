@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- gcvsthost.exe: the VST3 plugin host process (main.cpp). Built by GuitarCam.App's build with Visual Studio's MSBuild
+     when the C++ tools, the Windows SDK and lib\vst3sdk are there (tools\get-vst3sdk.ps1); see the README. Static runtime,
+     so the exe needs no Visual C++ redistributable. -->
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <ProjectGuid>{6F1C2B8E-3D7A-4E5B-9C1A-7B2D4E8F9A01}</ProjectGuid>
+    <RootNamespace>GuitarCamVstHost</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+    <WholeProgramOptimization Condition="'$(Configuration)'=='Release'">true</WholeProgramOptimization>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <TargetName>gcvsthost</TargetName>
+    <OutDir>$(MSBuildProjectDirectory)\bin\$(Configuration)\</OutDir>
+    <IntDir>$(MSBuildProjectDirectory)\obj\$(Configuration)\</IntDir>
+    <Vst3Sdk>$(MSBuildProjectDirectory)\..\..\lib\vst3sdk</Vst3Sdk>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(Vst3Sdk);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NOMINMAX;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>/utf-8 /bigobj %(AdditionalOptions)</AdditionalOptions>
+      <WarningLevel>Level3</WarningLevel>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>ole32.lib;user32.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <PreprocessorDefinitions>DEVELOPMENT=1;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <Optimization>Disabled</Optimization>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <PreprocessorDefinitions>RELEASE=1;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <Optimization>MaxSpeed</Optimization>
+    </ClCompile>
+    <Link>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="shared.h" />
+    <ClCompile Include="main.cpp" />
+    <!-- the SDK's hosting pieces (what its sdk_hosting, sdk_common, base and pluginterfaces targets build) -->
+    <ClCompile Include="$(Vst3Sdk)\pluginterfaces\base\conststringtable.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\pluginterfaces\base\coreiids.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\pluginterfaces\base\funknown.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\pluginterfaces\base\ustring.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\base\source\baseiids.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\base\source\fbuffer.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\base\source\fdebug.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\base\source\fdynlib.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\base\source\fobject.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\base\source\fstreamer.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\base\source\fstring.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\base\source\timer.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\base\source\updatehandler.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\base\thread\source\fcondition.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\base\thread\source\flock.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\public.sdk\source\common\commoniids.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\public.sdk\source\common\commonstringconvert.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\public.sdk\source\common\memorystream.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\public.sdk\source\common\threadchecker_win32.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\public.sdk\source\vst\vstinitiids.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\public.sdk\source\vst\hosting\connectionproxy.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\public.sdk\source\vst\hosting\eventlist.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\public.sdk\source\vst\hosting\hostclasses.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\public.sdk\source\vst\hosting\module.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\public.sdk\source\vst\hosting\module_win32.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\public.sdk\source\vst\hosting\parameterchanges.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\public.sdk\source\vst\hosting\pluginterfacesupport.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\public.sdk\source\vst\hosting\plugprovider.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\public.sdk\source\vst\hosting\processdata.cpp" />
+    <ClCompile Include="$(Vst3Sdk)\public.sdk\source\vst\utility\stringconvert.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

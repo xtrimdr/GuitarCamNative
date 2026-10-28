@@ -114,7 +114,6 @@ public partial class MainWindow
             row.MinHeight = mixerView ? MixerMinH : TimelineMinH;
             row.Height = new GridLength(mixerView ? mixerH : timelineH);
         }
-        Root.RowDefinitions[2].Height = new GridLength(stacked ? 0 : 4);
         AudioArea.IsVisible = stacked;
         BottomSplitter.IsVisible = !stacked;
         TimelineHost.IsVisible = ToolBox.IsEnabled = !mixerView || stacked;
@@ -130,7 +129,6 @@ public partial class MainWindow
         bool open = stackedViews && mixerView;
         AudioSplitter.IsVisible = open;
         AudioArea.RowDefinitions[0].MinHeight = open ? TimelineMinH : 0;
-        AudioArea.RowDefinitions[1].Height = new GridLength(open ? 4 : 0);
         AudioArea.RowDefinitions[2].MinHeight = open ? MixerMinH : 0;
         AudioArea.RowDefinitions[2].Height = new GridLength(open ? Math.Max(MixerMinH, mixerH) : 0);
     }

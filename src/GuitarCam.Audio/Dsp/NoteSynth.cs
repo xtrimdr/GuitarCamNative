@@ -1,7 +1,10 @@
 namespace GuitarCam.Audio.Dsp;
 
-/// <summary>A note as the engine plays it: from frame <see cref="Start"/>, held <see cref="Length"/> frames, at <see cref="Hz"/>, with its velocity's gain.</summary>
-public readonly record struct NoteEvent(long Start, long Length, double Hz, float Gain);
+/// <summary>
+/// A note as the engine plays it: from frame <see cref="Start"/>, held <see cref="Length"/> frames, at <see cref="Hz"/>,
+/// with its velocity's gain (the test tone), and as MIDI (<see cref="Pitch"/>, <see cref="Velocity"/>) for an instrument plugin.
+/// </summary>
+public readonly record struct NoteEvent(long Start, long Length, double Hz, float Gain, int Pitch = 60, int Velocity = 100);
 
 /// <summary>
 /// A MIDI track's notes in frames, sorted by start (<c>ChannelDsp.Notes</c> builds it from the project). Never changed
@@ -98,6 +101,32 @@ public static class NoteSynth
                 r[i] += v;
             }
         }
+    }
+
+    /// <summary>
+    /// One note played live (a key held, then let go: <c>LiveNotes</c>), frames <c>[t .. t + n)</c> since it began, added
+    /// to <paramref name="l"/> / <paramref name="r"/>. <paramref name="heldFrames"/> is how long the key was held, or -1
+    /// while it still is. The same samples <see cref="Render"/> gives a note of that length. False once its release ended.
+    /// </summary>
+    public static bool RenderLive(double hz, float gain, long t, long heldFrames, int n, int sampleRate, Span<float> l, Span<float> r)
+    {
+        long release = ReleaseFrames(sampleRate);
+        double invSr = 1.0 / sampleRate;
+        double w = 2 * Math.PI * hz * invSr;
+        double held = heldFrames < 0 ? 0 : Envelope(heldFrames * invSr);
+        for (int i = 0; i < n; i++)
+        {
+            long tt = t + i;
+            double env;
+            if (heldFrames < 0 || tt < heldFrames) env = Envelope(tt * invSr);
+            else if (tt < heldFrames + release) env = held * (1 - (tt - heldFrames) / (double)release);
+            else return false;
+            double ph = w * tt;
+            float v = (float)((Math.Sin(ph) + H2 * Math.Sin(2 * ph) + H3 * Math.Sin(3 * ph)) * Norm * env * gain);
+            l[i] += v;
+            r[i] += v;
+        }
+        return heldFrames < 0 || t + n < heldFrames + release;
     }
 
     /// <summary>The level while the note is held: a linear attack, then an exponential fall to <see cref="Sustain"/>.</summary>

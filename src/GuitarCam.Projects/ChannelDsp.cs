@@ -1,4 +1,5 @@
 using GuitarCam.Audio.Dsp;
+using GuitarCam.Audio.Vst;
 
 namespace GuitarCam.Projects;
 
@@ -60,6 +61,8 @@ public static class ChannelDsp
             Name = t.Name,
             Clips = clips,
             Notes = Notes(t, p.Settings.Bpm, MidiSampleRate),
+            Instrument = t.Instrument is { } i ? new VstInstance(i.Path, i.ClassId, i.Name, i.State) : null,
+            Tempo = p.Settings.Bpm,
             Volume = ch.Volume,
             Pan = ch.Pan,
             Muted = ch.Muted,
@@ -91,7 +94,9 @@ public static class ChannelDsp
                 double end = c.AtSec + Math.Min(n.EndBeat, c.LengthBeats) * beatSec;
                 long from = (long)Math.Round(start * sampleRate);
                 long len = Math.Max(1, (long)Math.Round(end * sampleRate) - from);
-                list.Add(new NoteEvent(from, len, NoteSynth.Hz(n.Pitch + t.Transpose), NoteSynth.Gain(n.Velocity)));
+                // a plugin takes whole semitones: the Transponer's cents only reach the test tone
+                int pitch = Math.Clamp(n.Pitch + (int)Math.Round(t.Transpose), MidiNote.MinPitch, MidiNote.MaxPitch);
+                list.Add(new NoteEvent(from, len, NoteSynth.Hz(n.Pitch + t.Transpose), NoteSynth.Gain(n.Velocity), pitch, n.Velocity));
             }
         return list.Count == 0 ? null : new NoteSequence([.. list], sampleRate);
     }

@@ -341,6 +341,7 @@ public partial class MainWindow
         transpose.Children.Add(Help(Loc.T("insp.transpose.hint")));
         InitTranspose(transpose);
         InitClipInspector();
+        InitMidiInspector();
         UpdateCollapseButton();
     }
 
@@ -612,12 +613,23 @@ public partial class MainWindow
                 takeFormat.Text = $"WAV {c.Audio!.SampleRate / 1000.0:0} kHz";
                 takeChannels.Text = Loc.T("insp.stereo");
             }
-            emptySections.IsVisible = sel != null && c == null;
+            emptySections.IsVisible = sel != null && c == null && !sel.Track.IsMidi;
+            midiPanel.IsVisible = sel is { Track.IsMidi: true };
+            if (sel is { Track.IsMidi: true } midi)
+            {
+                EnsurePlugins();
+                RefreshMidiInspector();
+                // a MIDI track's sends sit under its instrument (it has no clips, so the Canal tab's sections don't show)
+                PlaceInspectorSends(midiSends);
+                RebuildInspectorSends(midi);
+                foreach (var refresh in sendRefresh) refresh();
+            }
             takeSections.IsVisible = c != null;
             if (collapseAll != null) collapseAll.IsVisible = c != null;
             if (sel != null && c != null)
             {
                 RebuildInspectorChain(sel);
+                PlaceInspectorSends(takeSections);
                 RebuildInspectorSends(sel);
                 foreach (var refresh in inspectorRefresh) refresh();
                 foreach (var refresh in chainRefresh) refresh();

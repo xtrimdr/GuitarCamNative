@@ -40,8 +40,15 @@ _Ideas y mejoras para la nativa._
 - …y más: ir sumando acá
 
 #### 2. Soporte de plugins VST
-- [ ] Cargar VST3 en las pistas y en los buses (amps, pedales, reverbs de terceros), y como instrumento de las
-  pistas MIDI (punto 3). Va después de los slots internos (punto 1), como un tipo de slot más, mezclado con los internos
+- [x] Instrumentos VST3 en las pistas MIDI (hecho, ver [HECHO.md](HECHO.md)). Falta:
+  - [ ] **Efectos VST3** en los slots de pistas y buses (amps, pedales, reverbs de terceros), como un tipo de slot más,
+    mezclado con los internos. El puente ya pasa audio de entrada (`Slot.in`); en vivo un efecto suma un bloque de
+    demora que hay que compensar en las otras pistas y en el click (PDC), como el limitador.
+  - [ ] EZdrummer 3 abre pero no suena por el puente (procesa y devuelve silencio, también en tiempo real y después de
+    esperar): probar si carga su kit al abrir su ventana o si le falta la autorización de Toontrack.
+  - [ ] Que un instrumento retome las notas largas cuando el cabezal cae en su medio (hoy no se redisparan), y que el
+    loop mande las notas de después de A a tiempo (hoy el primer bloque después del salto puede salir tarde).
+  - [ ] Elegir el preset del plugin desde la app y mostrar su carga de CPU.
 - Notas: decidido con el usuario (2026-10-28): **puente en C++ con el SDK oficial de Steinberg, en otro proceso**,
   comunicado por memoria compartida, así si un plugin se cuelga no tira abajo la grabación. El SDK de VST3 es MIT
   desde la 3.8 (octubre de 2025): ya no hay tema de GPL. Hace falta el compilador de C++ de Visual Studio y es un
@@ -67,14 +74,26 @@ Etapas (cada una sirve sola):
 - [x] **Etapa 1: pistas y clips MIDI con piano roll** (hecho, ver [HECHO.md](HECHO.md)). Lo que anotó el usuario al
   probarla (2026-10-28):
   - [x] Varios clips MIDI a la vez, el piano roll después de Timeline y su grilla (hechos, ver [HECHO.md](HECHO.md)).
-  - [ ] Le falta: que los clips MIDI entren en las herramientas (dividir, borrar, escuchar), en el rango y en copiar y
-    pegar; que la nota que suena al tocar el piano roll pase por la cadena de la pista; copiar y pegar notas.
+  - [ ] Le falta: que los clips MIDI entren en las herramientas (dividir, borrar, escuchar) y en el rango; que la nota
+    que suena al tocar el piano roll pase por la cadena de la pista; copiar y pegar notas dentro del piano roll.
+  - [ ] Más cosas en el piano roll (pedido del usuario, 2026-10-28, "bends y eso"): pitch bend y otras curvas por clip
+    (modulación, sustain, expresión), dibujadas en carriles como la franja de velocidad. Con el tono de prueba se
+    pueden oír los bends; lo demás tiene sentido con el sampler y los VST3, que las reciben como eventos MIDI.
 - [ ] **Etapa 2: sampler.** Un WAV por nota (kit de batería) o uno melódico que se transpone. Voces preasignadas en el
   hilo de audio, y el mismo camino en la reproducción y en la exportación.
 - [ ] **Etapa 3: instrumentos VST3** con el puente del punto 2.
-- [ ] Después: importar y exportar .mid, cuantizar, grabar notas desde un teclado MIDI.
+- [x] **Etapa 4: entradas MIDI** (hecho, ver [HECHO.md](HECHO.md)). Lo que quedó para después:
+  - [ ] Probarlo con un teclado de verdad: la latencia al tocar un VST3 (buffer + el bloque del puente) y si las notas
+    grabadas caen donde se tocaron (`midiLatencyFrames`); en esta máquina no había ninguna entrada MIDI.
+  - [ ] Que una toma MIDI sobreviva si el programa se muere a la mitad (hoy las notas viven en memoria hasta parar;
+    las tomas de audio tienen su diario).
+  - [ ] Pasarle al VST3 el pedal, el pitch bend y la modulación como eventos (el puente solo lleva notas: el pedal se
+    resuelve antes, en `LiveNotes`), junto con los carriles de curvas del piano roll.
+  - [ ] Salidas MIDI (synths de hardware, clock hacia afuera) y Windows MIDI Services (varias apps con el mismo
+    teclado a la vez).
+- [ ] Después: importar y exportar .mid.
 
-Otras de MIDI:
+Otras de MIDI (se apoyan en las entradas de la etapa 4):
 - [ ] Mapear perillas y faders de un controlador al mixer (MIDI learn)
 - [ ] MIDI clock / tempo sincronizado con otros equipos
 - [ ] (Baja prioridad: al usuario no le interesa mucho por ahora) Pedalera o controlador MIDI: grabar/parar, play,

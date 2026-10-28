@@ -94,6 +94,7 @@ public partial class MainWindow : Window
         // the web's md / lg / xl widths of the monitor
         SizeChanged += (_, e) => Live.Width = e.NewSize.Width >= 1280 ? 256 : 224;
         InitRecording();
+        InitMidiInput();
         PlayButton.Click += (_, _) => TogglePlay();
         ToStartButton.Click += (_, _) => engine.Seek(0);
         FitButton.Click += (_, _) => Timeline.FitAll();
@@ -208,6 +209,14 @@ public partial class MainWindow : Window
                 Status(Loc.T("main.exportBusy"));
                 return;
             }
+            // what was just changed in a plugin's window goes in the project before it closes
+            if (InstrumentStatesDue && store is { ReadOnly: false })
+            {
+                e.Cancel = true;
+                await SaveInstrumentStates();
+                Close();
+                return;
+            }
             if (!closeConfirmed && store is { ReadOnly: false } st)
             {
                 // after each edit a pending save is just written; in the other modes (or if it can't be written) ask
@@ -248,6 +257,7 @@ public partial class MainWindow : Window
             // stacked (solo audio, Vertical layout) the bottom row is closed: the heights remembered before stay
             try { if (!stackedViews && !(mixerView && masteringView)) AppConfig.Set(mixerView ? "mixerHeight" : "timelineHeight", Root.RowDefinitions[3].ActualHeight.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* View preference only. */ }
+            MidiSetup.Stop();
             engine.Dispose();
             camera.Dispose();
         };
@@ -390,6 +400,7 @@ public partial class MainWindow : Window
     {
         engine.Stop();
         takePreview.Stop();
+        DropAllInstruments();
         historyConfirmPurge = false;
         historyDeletingExport = null;
         FlushSave();
@@ -432,6 +443,7 @@ public partial class MainWindow : Window
     async Task OpenProject(string dir, bool preserveUndo = false)
     {
         await FlushProjectOperation();
+        if (InstrumentStatesDue && store is { ReadOnly: false }) await SaveInstrumentStates();
         Status(Loc.T("main.loading"));
         var next = await Task.Run(() => ProjectStore.Open(dir));
         CloseProject(clearUndo: !preserveUndo);
@@ -483,6 +495,7 @@ public partial class MainWindow : Window
         if (!preserveView) dirty = false;
         foreach (var t in list) t.SetMidi(p.Settings.Bpm);
         engine.SetTracks(list, p.Settings);
+        SyncInstruments();
         RefreshTranspose();
         SessionName.Text = p.Name;
         Title = WindowTitle(p.Name);
@@ -630,6 +643,9 @@ public partial class MainWindow : Window
                 break;
             case "arm" when sel != null:
                 ToggleArm(sel);
+                break;
+            case "quantize":
+                await Quantize();
                 break;
             case "toStart":
                 engine.Seek(0);

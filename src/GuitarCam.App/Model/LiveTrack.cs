@@ -6,6 +6,8 @@ using GuitarCam.App.Audio;
 using GuitarCam.App.Video;
 using GuitarCam.Audio;
 using GuitarCam.Audio.Dsp;
+using GuitarCam.Audio.Midi;
+using GuitarCam.Audio.Vst;
 using GuitarCam.Projects;
 
 namespace GuitarCam.App.Model;
@@ -355,6 +357,7 @@ public sealed class LiveTrack
         Track = track;
         Clips = clips;
         Chain = new TrackDspChain(sampleRate);
+        Keys = new LiveNotes(sampleRate) { Transpose = track.Transpose };
         ApplyAll();
         started = true;
     }
@@ -374,11 +377,45 @@ public sealed class LiveTrack
     /// <summary>Where its last MIDI clip ends (seconds), for the song's length.</summary>
     public double MidiEndSec { get; private set; }
 
-    /// <summary>Takes the track's notes again at <paramref name="bpm"/> (after an edit or a tempo change). UI thread.</summary>
-    public void SetMidi(double bpm)
+    double bpm = 120;
+
+    /// <summary>
+    /// The keys of a MIDI keyboard played on this track (the selected MIDI track, or an armed one): the engine hands
+    /// them over at the start of each block and they sound with its instrument (or the test tone) through its chain.
+    /// </summary>
+    public LiveNotes Keys { get; }
+
+    /// <summary>Takes the track's notes again at <paramref name="tempo"/> (after an edit or a tempo change). UI thread.</summary>
+    public void SetMidi(double tempo)
     {
-        notes = ChannelDsp.Notes(Track, bpm, sampleRate);
-        MidiEndSec = Track.MidiClips is { Count: > 0 } mc ? mc.Max(c => c.EndSec(bpm)) : 0;
+        bpm = tempo;
+        Keys.Transpose = Track.Transpose;
+        notes = ChannelDsp.Notes(Track, tempo, sampleRate);
+        MidiEndSec = Track.MidiClips is { Count: > 0 } mc ? mc.Max(c => c.EndSec(tempo)) : 0;
+        if (instrument is { } player)
+        {
+            player.Notes = notes;
+            player.Tempo = tempo;
+        }
+    }
+
+    volatile InstrumentPlayer? instrument;
+    /// <summary>
+    /// The instrument plugin that plays the notes instead of the test tone (<see cref="InstrumentPlayer"/>), set by the
+    /// UI once its process is up; null = the test tone. The audio thread reads it once per block.
+    /// </summary>
+    public InstrumentPlayer? Instrument
+    {
+        get => instrument;
+        set
+        {
+            if (value != null)
+            {
+                value.Notes = notes;
+                value.Tempo = bpm;
+            }
+            instrument = value;
+        }
     }
 
     /// <summary>The clip whose picture shows in the panel: the last one under the playhead, the one on top in the timeline and the export.</summary>
@@ -545,21 +582,60 @@ public sealed class LiveTrack
         bl.Clear();
         br.Clear();
         var seq = notes;
+        var inst = instrument;
         if (fromFrame < 0)
         {
             AddClips(posFrame, n, bl, br, default);
-            if (seq != null) NoteSynth.Render(seq, posFrame, n, sampleRate, bl, br);
+            if (inst != null) inst.Play(posFrame, n, bl, br, Keys);
+            else if (seq != null) NoteSynth.Render(seq, posFrame, n, sampleRate, bl, br);
         }
         else
         {
             AddClips(fromFrame, n, bl, br, wOut);
             AddClips(posFrame, n, bl, br, wIn);
-            if (seq != null)
+            // a plugin can't play two places at once: it jumps (its notes go off) and plays on from the new one
+            if (inst != null) inst.Play(posFrame, n, bl, br, Keys);
+            else if (seq != null)
             {
                 NoteSynth.Render(seq, fromFrame, n, sampleRate, bl, br, wOut);
                 NoteSynth.Render(seq, posFrame, n, sampleRate, bl, br, wIn);
             }
         }
+        // the keyboard: through the plugin above, or the test tone here
+        if (inst != null) Keys.Skip(n);
+        else Keys.Render(n, bl, br);
+        Output(n, anySolo, masterL, masterR, sendOffset);
+    }
+
+    /// <summary>
+    /// While stopped: an instrument plugin keeps running (its tails, the piano roll's keys and the keyboard through it)
+    /// and, while it has something to play, its sound goes through the chain to its output like when it plays. Without
+    /// one, the keyboard's test tone does the same while it sounds (and a little after, for a reverb slot's tail).
+    /// Zero allocations.
+    /// </summary>
+    public void MixIdle(int n, bool anySolo, Span<float> masterL, Span<float> masterR)
+    {
+        if (instrument is { } inst)
+        {
+            if (inst.Idle(n, Chain.BufferL(n), Chain.BufferR(n), Keys)) Output(n, anySolo, masterL, masterR, 0);
+            Keys.Skip(n);
+            return;
+        }
+        if (!Keys.Active) return;
+        var bl = Chain.BufferL(n);
+        var br = Chain.BufferR(n);
+        bl.Clear();
+        br.Clear();
+        Keys.Render(n, bl, br);
+        Output(n, anySolo, masterL, masterR, 0);
+    }
+
+    /// <summary>The engine runs <see cref="MixIdle"/> for it: an instrument plugin, or the keyboard still sounding.</summary>
+    public bool RunsIdle => instrument != null || Keys.Active;
+
+    /// <summary>The chain over what the block filled in, into its output (its folder, a bus or the master) and its sends.</summary>
+    void Output(int n, bool anySolo, Span<float> masterL, Span<float> masterR, int sendOffset)
+    {
         var to = Out;
         if (to != null) RunChain(n, anySolo, to.BufferL(sendOffset + n).Slice(sendOffset), to.BufferR(sendOffset + n).Slice(sendOffset));
         else RunChain(n, anySolo, masterL, masterR);

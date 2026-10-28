@@ -1,0 +1,52 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:GuitarCam.App"
+        x:Class="GuitarCam.App.SplashWindow"
+        Title="GuitarCam Studio Native"
+        Icon="/Assets/GuitarCam.ico"
+        Width="600" Height="360" CanResize="False" ShowInTaskbar="True"
+        WindowStartupLocation="CenterScreen" SystemDecorations="None"
+        TransparencyLevelHint="Transparent" Background="Transparent">
+
+  <Border x:Name="Card" CornerRadius="10" Background="{StaticResource App}" BorderBrush="{StaticResource Line}" BorderThickness="1" ClipToBounds="True" Opacity="0">
+    <Border.Transitions>
+      <Transitions>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.22" Easing="CubicEaseOut" />
+      </Transitions>
+    </Border.Transitions>
+    <Grid RowDefinitions="*,Auto">
+      <!-- the accent glow behind the icon -->
+      <Ellipse x:Name="Glow" Grid.RowSpan="2" Width="520" Height="520" Margin="-220,-170,0,0"
+               HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False" />
+
+      <StackPanel Orientation="Horizontal" Spacing="28" Margin="48,0,48,0" VerticalAlignment="Center">
+        <Image x:Name="Logo" Width="136" Height="136" RenderOptions.BitmapInterpolationMode="HighQuality" />
+        <StackPanel VerticalAlignment="Center" Spacing="6">
+          <TextBlock Text="GuitarCam" FontSize="40" FontWeight="SemiBold" LetterSpacing="-0.6" Foreground="{StaticResource Fg}" />
+          <StackPanel Orientation="Horizontal" Spacing="10" Margin="2,-6,0,0">
+            <TextBlock Text="Studio" FontSize="22" FontWeight="Light" Foreground="{StaticResource Dim}" VerticalAlignment="Center" />
+            <Border Background="{StaticResource AccentSoft}" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+              <TextBlock Text="NATIVE" FontSize="10" FontWeight="Bold" LetterSpacing="1" Foreground="{StaticResource Accent}" />
+            </Border>
+          </StackPanel>
+          <TextBlock Text="{loc:T splash.tagline}" FontSize="13" Foreground="{StaticResource Faint}" Margin="2,10,0,0" />
+        </StackPanel>
+      </StackPanel>
+
+      <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="24,0,24,18">
+        <TextBlock Text="{loc:T splash.loading}" FontSize="11.5" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <Border x:Name="TestChip" IsVisible="False" Background="{StaticResource RecSoft}" CornerRadius="4" Padding="6,1" VerticalAlignment="Center">
+            <TextBlock x:Name="TestText" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Rec}" />
+          </Border>
+          <TextBlock x:Name="VersionText" Classes="mono" FontSize="11.5" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
+        </StackPanel>
+      </Grid>
+
+      <!-- indeterminate bar: a short accent stripe sliding along the bottom edge -->
+      <Canvas Grid.Row="1" x:Name="Track" Height="2" VerticalAlignment="Bottom" Background="{StaticResource Raised}" ClipToBounds="True">
+        <Border x:Name="Stripe" Width="140" Height="2" />
+      </Canvas>
+    </Grid>
+  </Border>
+</Window>

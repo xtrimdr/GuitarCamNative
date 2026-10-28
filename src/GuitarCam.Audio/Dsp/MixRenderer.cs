@@ -35,6 +35,10 @@ public sealed class MixTrackSpec
     public IReadOnlyList<MixClipSpec> Clips { get; init; } = [];
     /// <summary>A MIDI track's notes (<see cref="NoteSynth"/>), added to its clips' sound before the chain; null = none.</summary>
     public NoteSequence? Notes { get; init; }
+    /// <summary>The instrument plugin that plays <see cref="Notes"/> instead of the test tone; null = the test tone.</summary>
+    public Vst.VstInstance? Instrument { get; init; }
+    /// <summary>The project's tempo, for the instrument's transport.</summary>
+    public double Tempo { get; init; } = 120;
     /// <summary>True when there is something to play: clips or notes.</summary>
     public bool HasSound => Clips.Count > 0 || Notes is { Notes.Length: > 0 };
     public double Volume { get; init; } = 1;
@@ -680,6 +684,8 @@ public sealed class MixGraphBus
 public static class MixRenderer
 {
     const int Quantum = 128;
+    /// <summary>What an instrument plugin may still sound after its last note (its release, its own reverb).</summary>
+    public const double InstrumentTailSec = 2;
     /// <summary>How much each stage of <see cref="RenderTo"/> renders at a time: long enough that handing it over costs
     /// nothing, short enough that the stages start working together right away (64 blocks, 0.17 s at 48 kHz).</summary>
     const int ChunkFrames = Quantum * 64;
@@ -715,7 +721,8 @@ public static class MixRenderer
                 var w = c.GetWindow(sampleRate);
                 if (w.End > maxEnd) maxEnd = w.End;
             }
-            if (t.Notes != null) maxEnd = Math.Max(maxEnd, t.Notes.End / (double)sampleRate);
+            // an instrument's own release and effects ring past the last note: two seconds of room
+            if (t.Notes != null) maxEnd = Math.Max(maxEnd, t.Notes.End / (double)sampleRate + (t.Instrument != null ? InstrumentTailSec : 0));
         }
         return maxEnd;
     }
@@ -810,6 +817,8 @@ public static class MixRenderer
             if (t.Solo) { anySolo = true; break; }
 
         var active = new List<(MixClipSpec[] Clips, ClipAudioJoins?[] Joins, NoteSequence? Notes, TrackDspChain Chain, int Out, MixSendSpec[] Sends, bool Pre)>();
+        // each instrument track's plugin, in its own process, and the stretch it rendered (null = the test tone)
+        var instruments = new List<(Vst.InstrumentRender Render, float[] L, float[] R)?>();
         for (int k = 0; k < tracks.Count; k++)
         {
             var t = tracks[k];
@@ -823,6 +832,16 @@ public static class MixRenderer
             var clips = t.Clips.ToArray();
             int to = t.Output >= 0 && t.Output < nodeCount ? t.Output : -1;
             active.Add((clips, TrackDspChain.AudioJoins(clips, sampleRate), t.Notes, chain, to, sends, sends.Any(s => s.Pre)));
+            instruments.Add(null);
+            if (t.Instrument != null && t.Notes != null)
+            {
+                try { instruments[^1] = (new Vst.InstrumentRender(t.Instrument, t.Notes, t.Tempo, sampleRate), new float[ChunkFrames], new float[ChunkFrames]); }
+                catch (Exception e) when (e is InvalidOperationException or IOException)
+                {
+                    foreach (var made in instruments) made?.Render.Dispose();
+                    throw new InvalidOperationException(Texts.T("err.vst.export", "No pude abrir {0} para exportar: {1}", t.Instrument.Name, e.Message), e);
+                }
+            }
         }
         if (only >= 0) anySolo = false;
 
@@ -871,11 +890,17 @@ public static class MixRenderer
                 var b = set.Tracks[k];
                 Array.Clear(b.L, 0, len);
                 Array.Clear(b.R, 0, len);
+                var inst = instruments[k];
+                if (inst is { } plugin) plugin.Render.Render(at, len, plugin.L.AsSpan(0, len), plugin.R.AsSpan(0, len));
                 for (int off = 0; off < len; off += Quantum)
                 {
                     int n = Math.Min(Quantum, len - off);
                     TrackDspChain.SampleClips(clips, at + off, n, sampleRate, chain.BufferL(n), chain.BufferR(n), joins);
-                    if (notes != null) NoteSynth.Render(notes, at + off, n, sampleRate, chain.BufferL(n), chain.BufferR(n));
+                    if (inst is { } p)
+                    {
+                        BusDspChain.Add(p.L.AsSpan(off, n), p.R.AsSpan(off, n), 1f, chain.BufferL(n), chain.BufferR(n));
+                    }
+                    else if (notes != null) NoteSynth.Render(notes, at + off, n, sampleRate, chain.BufferL(n), chain.BufferR(n));
                     chain.ProcessFilledBuffer(n, anySolo, b.L.AsSpan(off, n), b.R.AsSpan(off, n), out _, out _, out _);
                     if (pre && chain.BlockSends.Length > 0)
                     {
@@ -963,8 +988,15 @@ public static class MixRenderer
         var tracksTask = Task.Factory.StartNew(() => Stage(RunTracks, free, tracksDone), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         var nodesTask = Task.Factory.StartNew(() => Stage(RunNodes, tracksDone, nodesDone), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         // the master runs here, so the sink and the progress are called on the caller's thread like before
-        Stage(RunMaster, nodesDone, free);
-        Task.WaitAll(tracksTask, nodesTask);
+        try
+        {
+            Stage(RunMaster, nodesDone, free);
+            Task.WaitAll(tracksTask, nodesTask);
+        }
+        finally
+        {
+            foreach (var made in instruments) made?.Render.Dispose();
+        }
         if (error != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
         ct.ThrowIfCancellationRequested();
 

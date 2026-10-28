@@ -2,6 +2,7 @@ using System.Diagnostics;
 using GuitarCam.App.Model;
 using GuitarCam.Audio;
 using GuitarCam.Audio.Dsp;
+using GuitarCam.Audio.Midi;
 using GuitarCam.Projects;
 
 namespace GuitarCam.App.Audio;
@@ -56,6 +57,15 @@ public sealed class PlaybackEngine : IDisposable
     int notePos, cutPos, cutLeft;
     /// <summary>How long a note cut by the next one takes to fade out (5 ms), so it doesn't click.</summary>
     const int NoteCutFade = 240;
+
+    /// <summary>The MIDI inputs the keys come from (<see cref="MidiInputs"/>), set by the window; null = none.</summary>
+    volatile MidiInputs? midiInputs;
+    /// <summary>The tracks that hear the keyboard now (<see cref="SetMidiListeners"/>), swapped whole.</summary>
+    volatile MidiListener[] midiListeners = [];
+    /// <summary>Audio thread: the listeners of the last block, to let go of the keys of a track that stopped listening.</summary>
+    MidiListener[] heardListeners = [];
+    /// <summary>How late the output is heard (frames): a note recorded goes where the song was heard when it was played.</summary>
+    long midiLatencyFrames;
 
     double bpm = 120;
     long position; // timeline frame (before recStartFrame, maybe negative, during recording count-in)
@@ -163,6 +173,15 @@ public sealed class PlaybackEngine : IDisposable
 
     /// <summary>The armed tracks' inputs, in the order <see cref="SetInputs"/> got them (meters read their peaks).</summary>
     public IReadOnlyList<InputTap> Taps => taps;
+
+    /// <summary>The MIDI inputs whose keys the engine plays (and records); null = none.</summary>
+    public MidiInputs? MidiInputs { get => midiInputs; set => midiInputs = value; }
+
+    /// <summary>
+    /// The tracks that hear the keyboard (the selected MIDI track and the armed ones), each with the input it listens
+    /// to and, while recording, where its notes go. A track left out lets go of what it held at the next block.
+    /// </summary>
+    public void SetMidiListeners(MidiListener[] list) => midiListeners = list;
 
     public bool Loop
     {
@@ -619,11 +638,15 @@ public sealed class PlaybackEngine : IDisposable
     /// before <paramref name="startSec"/> (the playhead; 0 like the web); there, backing tracks, click, and disk
     /// capture start on the exact same sample. The count-in counts from the start, the click after it follows the grid.
     /// </summary>
-    public void StartRecording(IReadOnlyList<(InputRoute? Route, string WavPath)> takes, bool useCountIn = true, int countInBeats = 4, double startSec = 0)
+    public void StartRecording(IReadOnlyList<(InputRoute? Route, string WavPath)> takes, bool useCountIn = true, int countInBeats = 4, double startSec = 0,
+        bool notesOnly = false)
     {
         if (io == null) throw new InvalidOperationException(Loc.T("engine.openFirst"));
         if (recording || activeCalibration != null) return;
-        if (takes.Count == 0) throw new ArgumentException(Loc.T("engine.nothingToRecord"), nameof(takes));
+        // with only MIDI tracks armed there is no take: the keyboard's notes are the recording
+        if (takes.Count == 0 && !notesOnly) throw new ArgumentException(Loc.T("engine.nothingToRecord"), nameof(takes));
+        int outSamples = io.ReportedOutputLatency > 0 ? io.ReportedOutputLatency : io.FramesPerBuffer;
+        Interlocked.Exchange(ref midiLatencyFrames, outSamples + buses.Limiter.Latency);
 
         SetInputs(takes.Select(t => t.Route).ToList());
         var recorders = new List<TakeRecorder>();
@@ -827,6 +850,8 @@ public sealed class PlaybackEngine : IDisposable
         if (curTaps.Length > 0) Pitch.Write(curTaps[0].BlockL, curTaps[0].BlockR);
         else Pitch.Write(procL, procR);
 
+        DispatchMidi(t0);
+
         var cal = activeCalibration;
         if (cal != null)
         {
@@ -929,6 +954,14 @@ public sealed class PlaybackEngine : IDisposable
                             curTaps[i].BlockR.Slice(playOffset, playCount));
                 }
             }
+            else
+            {
+                // the whole block is count-in: the keyboard and the instruments keep playing (a pickup, the first chord)
+                var list = tracks;
+                bool anySolo = false;
+                for (int i = 0; i < list.Length; i++) if (list[i].Soloed) { anySolo = true; break; }
+                for (int i = 0; i < list.Length; i++) if (list[i].RunsIdle) list[i].MixIdle(n, anySolo, ml, mr);
+            }
 
             if (fadeMode != 0) TransportRamp(ref fadeLevel, fadeMode > 0, rampStep, n, rampGain, ml, mr, curNodes);
             // the folders and buses in order, each into the next node or the master (the export runs the same order)
@@ -1027,6 +1060,12 @@ public sealed class PlaybackEngine : IDisposable
             fadeLevel = 0; // the next Play fades in from silence
             long req = Interlocked.Exchange(ref pendingSeek, NoSeek);
             if (req != NoSeek) Interlocked.Exchange(ref position, req);
+            // instrument plugins keep running while stopped: what they still play (the piano roll's keys) goes through
+            // their chain, like when the song plays
+            var idle = tracks;
+            bool idleSolo = false;
+            for (int i = 0; i < idle.Length; i++) if (idle[i].Soloed) { idleSolo = true; break; }
+            for (int i = 0; i < idle.Length; i++) if (idle[i].RunsIdle) idle[i].MixIdle(n, idleSolo, ml, mr);
             // Transport stopped: keep processing the buses with silent input so reverb and delay tails decay
             // naturally in real time (matching MixBus in the web app).
             for (int i = 0; i < curNodes.Length; i++) curNodes[i].End(n, ml, mr);
@@ -1103,6 +1142,54 @@ public sealed class PlaybackEngine : IDisposable
         UpdateLoad(t0, n);
     }
 
+    /// <summary>
+    /// The keyboard's messages since the last block, to the tracks that listen to them (their port and channel), at the
+    /// start of this one. While recording, each note also goes to the track's take at the frame that was being heard
+    /// when it arrived: this block's start, back by the output's latency, and back by how long before the callback it came.
+    /// </summary>
+    /// <summary>A key that arrives more than half a second before its block is old news: it isn't played.</summary>
+    static readonly long StaleKey = Stopwatch.Frequency / 2;
+
+    void DispatchMidi(long t0)
+    {
+        var list = midiListeners;
+        var all = tracks;
+        for (int i = 0; i < all.Length; i++) all[i].Keys.BeginBlock();
+        if (list != heardListeners)
+        {
+            var old = heardListeners;
+            for (int i = 0; i < old.Length; i++)
+            {
+                bool still = false;
+                for (int k = 0; k < list.Length && !still; k++) still = list[k].Track == old[i].Track;
+                if (!still) old[i].Track.Keys.AllOff();
+            }
+            heardListeners = list;
+        }
+        var src = midiInputs;
+        if (src == null) return;
+        bool rec = recording;
+        long pos = Interlocked.Read(ref position);
+        double framesPerTick = SampleRate / (double)Stopwatch.Frequency;
+        while (src.TryRead(out var e))
+        {
+            // a key that waited (the audio was closed or busy) is not played late: only its end counts
+            if (e.Kind == MidiKind.NoteOn && t0 - e.Ticks > StaleKey) continue;
+            for (int i = 0; i < list.Length; i++)
+            {
+                var l = list[i];
+                if (l.Port != 0 && l.Port != e.Port || l.Channel != 0 && l.Channel != e.Channel) continue;
+                var keys = l.Track.Keys;
+                int before = keys.EventCount;
+                keys.Handle(e);
+                if (!rec || l.Take is not { } take) continue;
+                long frame = pos - midiLatencyFrames + (long)(Math.Min(0, e.Ticks - t0) * framesPerTick);
+                var done = keys.Events;
+                for (int k = before; k < done.Length; k++) take.Add(frame, done[k]);
+            }
+        }
+    }
+
     void Monitor(float[][] output, ReadOnlySpan<float> l, ReadOnlySpan<float> r, int n)
     {
         float ol = outL, or = outR;
@@ -1149,3 +1236,10 @@ public sealed class PlaybackEngine : IDisposable
         io = null;
     }
 }
+
+/// <summary>
+/// A track that hears the keyboard (<see cref="PlaybackEngine.SetMidiListeners"/>): which port it listens to
+/// (<see cref="MidiInputs.Port.Id"/>; 0 = all of them, -1 = one that isn't plugged in) and which channel (0 = all), and
+/// the take its notes go to while recording (null = it only plays them).
+/// </summary>
+public sealed record MidiListener(LiveTrack Track, int Port, int Channel, MidiTake? Take);

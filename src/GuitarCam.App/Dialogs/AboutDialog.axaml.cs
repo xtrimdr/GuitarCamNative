@@ -35,7 +35,7 @@ public sealed partial class AboutDialog : UserControl
         VideoText.Text = version == null ? Loc.T("title.ffmpeg.missing") : version.Length > 0 ? Loc.T("about.ffmpeg.version", version) : Loc.T("about.ffmpeg");
 
     /// <summary>"0.9.6 · 9395e4a": the informational version (Directory.Build.props), with the commit the SDK appends after '+' shortened.</summary>
-    static string AppVersion()
+    public static string AppVersion()
     {
         var info = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "?";
         int plus = info.IndexOf('+');

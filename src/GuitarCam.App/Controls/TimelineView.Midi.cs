@@ -28,6 +28,66 @@ public sealed partial class TimelineView
     public event Action<LiveTrack, double>? MidiClipCreateRequested;
     /// <summary>A right click on a MIDI clip: its menu.</summary>
     public event Action<LiveTrack, string, Point>? MidiClipContextRequested;
+    /// <summary>The instrument chip's arrow (or the chip of a track without a working plugin): the instrument list, under it.</summary>
+    public event Action<LiveTrack, Point>? InstrumentMenuRequested;
+    /// <summary>The instrument chip of a track whose plugin is up: its window.</summary>
+    public event Action<LiveTrack>? InstrumentWindowRequested;
+    /// <summary>How each MIDI track's instrument is doing, by track id (the window knows its processes).</summary>
+    public Func<string, InstrumentState>? InstrumentStateOf { get; set; }
+
+    public enum InstrumentState { TestTone, Loading, Ready, Failed }
+
+    /// <summary>The width of the chip's arrow, which always opens the list.</summary>
+    const double ChipArrowW = 20;
+
+    /// <summary>
+    /// A MIDI track's instrument chip, in the header's first row (asked by the user: the instrument shows on the channel
+    /// and changes from there): from the name (which keeps at least 70 px) to just before the ● (an armed MIDI track
+    /// records the keyboard; armed, before its input chip), up to 170 px.
+    /// </summary>
+    Rect InstrumentRect(int i)
+    {
+        double right = armed.Contains(i) && !Recording && InputLabel != null ? InputRect(i).X - 4 : ArmRect(i).X - 6;
+        double left = Math.Max(58 + Indent(i) + NameShift(i) + 70, right - 170);
+        return new(left, LaneY(i) + 8, Math.Max(40, right - left), 24);
+    }
+
+    InstrumentState StateOf(LiveTrack t) =>
+        InstrumentStateOf?.Invoke(t.Track.Id) ?? (t.Track.Instrument == null ? InstrumentState.TestTone : InstrumentState.Loading);
+
+    /// <summary>The chip: the plugin's name (accent once it plays, dim while it loads, amber when it couldn't open) or "Tono de prueba", and its arrow.</summary>
+    void DrawInstrumentChip(DrawingContext ctx, int i)
+    {
+        var t = tracks[i];
+        var r = InstrumentRect(i);
+        var state = StateOf(t);
+        bool ready = state == InstrumentState.Ready, hot = Hot(r);
+        var fill = ready ? Palette.AccentSoft : hot ? Palette.Hover : Palette.Raised;
+        var pen = Palette.Pen(ready ? Palette.Alpha(Palette.AccentColor, hot ? 0.8 : 0.4) : Palette.Line);
+        ctx.DrawRectangle(fill, pen, r, 6, 6);
+        var brush = state switch
+        {
+            InstrumentState.Ready => Palette.Accent, InstrumentState.Loading => Palette.Dim,
+            InstrumentState.Failed => Palette.Alpha(Over, 1), _ => Palette.Faint,
+        };
+        string name = t.Track.Instrument?.Name ?? Loc.T("vst.testTone");
+        ctx.DrawText(name, 11, brush, new Point(r.X + 8, r.Y + 5), ready ? Palette.UiBold : Palette.Ui, Math.Max(0, r.Width - ChipArrowW - 10));
+        double ax = r.Right - ChipArrowW;
+        ctx.DrawLine(Palette.Pen(ready ? Palette.Alpha(Palette.AccentColor, 0.3) : Palette.Line), new Point(ax + 0.5, r.Y + 5), new Point(ax + 0.5, r.Bottom - 5));
+        var c = new Point(ax + ChipArrowW / 2, r.Center.Y + 1);
+        var arrow = Palette.Pen(ready ? Palette.Accent : Palette.Dim, 1.5, PenLineCap.Round);
+        ctx.DrawLine(arrow, new Point(c.X - 3.5, c.Y - 2), c);
+        ctx.DrawLine(arrow, c, new Point(c.X + 3.5, c.Y - 2));
+    }
+
+    /// <summary>A press on the chip: the arrow (or a track without a working plugin) asks for the list, the rest opens the plugin's window.</summary>
+    void InstrumentChipPressed(int i, Point p, bool right)
+    {
+        var t = tracks[i];
+        var r = InstrumentRect(i);
+        if (!right && p.X < r.Right - ChipArrowW && StateOf(t) == InstrumentState.Ready) InstrumentWindowRequested?.Invoke(t);
+        else InstrumentMenuRequested?.Invoke(t, r.BottomLeft + new Point(0, 4));
+    }
 
     // the "midi" gesture: the clip held, its start and length when it was grabbed and now, and whether it is the edge
     MidiClip? midiHeld;

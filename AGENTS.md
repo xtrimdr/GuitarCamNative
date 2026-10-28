@@ -49,7 +49,8 @@ src/
   GuitarCam.Projects   modelo del proyecto, guardado atómico, historial. Sin UI.
   GuitarCam.App        la ventana (Avalonia 11.3). Depende de Audio y Projects.
   GuitarCam.Lab        gclab.exe: consola para probar audio, DSP y proyectos sin la ventana.
-tools/                 probar.ps1 (compila, comprueba y abre una copia de prueba), make-icon.ps1 (ícono), make-shortcut.ps1 (acceso directo), make-track-icons.py (íconos de pista)
+  GuitarCam.VstHost    gcvsthost.exe (C++, SDK de VST3): abre un plugin en su propio proceso. Lo compila el build de Audio.
+tools/                 probar.ps1 (compila, comprueba y abre una copia de prueba), make-icon.ps1 (ícono), make-shortcut.ps1 (acceso directo), make-track-icons.py (íconos de pista), get-vst3sdk.ps1 (baja el SDK de VST3)
 ```
 
 - Las dependencias van **hacia abajo**: App → Projects → Audio. `Audio` y `Projects` no referencian Avalonia; todo lo
@@ -60,7 +61,15 @@ tools/                 probar.ps1 (compila, comprueba y abre una copia de prueba
   salvo la preview: la decodifica FFmpeg dentro del proceso (`NativeVideoSource`, FFmpeg.AutoGen con los DLL de FFmpeg 9
   en `lib\ffmpeg`, fuera de git; ver el README).
 - Sin MVVM ni bindings: code-behind con controles con nombre. No metas un framework sin que el usuario lo pida.
-- Sin dependencias nuevas de NuGet sin preguntar. Hoy: Avalonia 11.3, NAudio 2.2, FFmpeg.AutoGen 9.0.
+- Sin dependencias nuevas de NuGet sin preguntar. Hoy: Avalonia 11.3, NAudio 2.2, FFmpeg.AutoGen 9.0. Fuera de NuGet, el
+  SDK de VST3 de Steinberg (MIT, `lib\vst3sdk`, `tools\get-vst3sdk.ps1`) para `gcvsthost.exe` (decisión del usuario).
+- **Plugins VST3** (`GuitarCam.Audio/Vst`): cada instancia corre en su `gcvsthost.exe` (decisión del usuario: un plugin
+  que se cuelga no tira abajo la grabación). Hablan por memoria compartida (`shared.h` ↔ `VstBridge`, los offsets tienen
+  que coincidir) y líneas de texto por stdin/stdout. En vivo el hilo de audio nunca espera al plugin: lo oye un bloque
+  tarde y le manda las notas ese bloque (más su latencia) antes (`InstrumentPlayer`); la exportación espera cada bloque
+  (`InstrumentRender`, dentro de `MixRenderer`). La ventana de la app maneja procesos y estados (`MainWindow.Vst.cs`).
+  La lista de plugins (`PluginCatalog`, `plugins.json`; carpetas extra y ocultos en `config.json`) se administra en
+  Configuración → Plugins; en la ventana pasa siempre por `PluginScan` (una sola lista y una sola búsqueda a la vez).
 
 ### Modelo del proyecto (`GuitarCam.Projects`)
 
@@ -88,7 +97,14 @@ tools/                 probar.ps1 (compila, comprueba y abre una copia de prueba
 - **Clip**: un pedazo de un media en una pista (`AtSec`, `TrimStartSec`, `TrimEndSec`, `GainDb`, `GainCurve`, encuadre).
 - **Pista MIDI** (`Track.Kind = "midi"`, `TrackKinds`): en vez de clips tiene `MidiClips` (`MidiClip`: `AtSec` en
   segundos, `LengthBeats` y sus `MidiNote` en tiempos, así siguen al tempo); en una pista de audio `MidiClips` es null.
-  Sin video ni entrada; las tomas no entran en ella. Las ediciones pasan por `MidiEditing` (`Midi.cs`).
+  Sin video; las tomas no entran en ella. Toca y graba del teclado MIDI: `MidiInput` (null = todas las entradas) y
+  `MidiChannel` (0 = todos). Las ediciones pasan por `MidiEditing` (`Midi.cs`).
+- **Entradas MIDI** (teclados, controladores): son de la máquina, no del proyecto (`MidiSettings`, `config.json` "midi",
+  por nombre de aparato; `MidiSetup` en la ventana). `MidiInputs` (winmm vía NAudio) filtra canal y velocidad en su
+  hilo y deja las notas en un anillo sin locks; el hilo de audio las reparte al empezar cada bloque
+  (`PlaybackEngine.DispatchMidi`) a las pistas que escuchan (la MIDI elegida y las armadas), cada una con su
+  `LiveNotes` (pedal de sustain, voces del tono de prueba) que suena por su instrumento y su cadena; grabando, cada
+  nota va a su `MidiTake` con el cuadro que se oía y al parar se arma el clip (`MidiEditing.AddRecorded`).
 
 Convenciones: tiempos del timeline en **segundos**, correcciones de latencia/sincronía en **ms**. JSON en camelCase
 (`ProjectStore.Json`). Cada clase lleva `[JsonExtensionData] Extra`, que conserva lo desconocido: no lo saques.

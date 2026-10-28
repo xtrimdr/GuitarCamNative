@@ -37,6 +37,7 @@ static class Program
                 "sistema" => SystemCommands.Run(a),
                 "proyecto" => ProjectCommands.Run(a),
                 "midi" => MidiCommands.Run(a),
+                "vst" => VstCommands.Run(a),
                 "proyectos" => LibraryCommands.Run(a),
                 _ => Help(),
             };
@@ -216,8 +217,29 @@ static class Program
                                            una nota en el clip (pulso y largo en tiempos desde su comienzo)
               midi acordes carpeta --clip id   reemplaza sus notas por Do, Sol, Lam, Fa (un compás cada uno)
               midi quitar carpeta --clip id    saca el clip MIDI
-              midi comprobar               verifica el sonido de las notas (bloques, release, exportación, tempo)
+              midi cuantizar carpeta --clip id [--grilla 1/4|1/8|1/16|1/32|1/8T]
+                                           mueve el comienzo de sus notas a la grilla de la canción (el largo queda)
+              midi entradas                los teclados y controladores MIDI que ve Windows, con sus ajustes de
+                                           Configuración → MIDI (también los que están desconectados)
+              midi escuchar [--entrada nombre] [--segundos 10]
+                                           abre las entradas como la ventana e imprime lo que llega, y lo que toma
+                                           el motor (después del canal y la curva de velocidad)
+              midi instrumento carpeta [--pista n] --plugin "nombre" | --quitar
+                                           el instrumento VST3 que toca la pista (de vst escanear); --quitar vuelve al
+                                           tono de prueba. gclab mezclar lo renderiza con el plugin
+              midi comprobar               verifica el sonido de las notas (bloques, release, exportación, tempo) y el
+                                           teclado (suena como la nota escrita, pedal, tomas, cuantizar)
                                            (gclab mezclar carpeta renderiza el proyecto con sus pistas MIDI)
+              vst escanear [--todo] [--carpeta X] [--archivo X]
+                                           busca los plugins VST3 en las carpetas de vst carpetas (los guarda en
+                                           plugins.json; --todo los abre todos de nuevo, --archivo reintenta uno solo)
+              vst lista                    los plugins encontrados, instrumentos y efectos (y cuáles están ocultos)
+              vst carpetas [--agregar X] [--sacar X]
+                                           dónde busca: las de Windows y las que sumaste (como Configuración → Plugins)
+              vst ocultar|mostrar "nombre" lo saca de las listas de la app o lo vuelve a poner
+              vst probar "nombre" [--segundos 4] [--salida x.wav] [--ventana]
+                                           toca un acorde con ese plugin a un WAV, como la exportación (--ventana abre
+                                           antes su ventana y usa lo que dejes)
               proyectos lista|plantillas [--raiz X]
               proyectos nuevo "Nombre" [--plantilla id] | renombrar carpeta "Nombre" | duplicar carpeta
               proyectos borrar carpeta | guardar-plantilla carpeta "Nombre"

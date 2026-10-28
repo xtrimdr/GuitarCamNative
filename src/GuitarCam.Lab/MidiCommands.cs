@@ -1,5 +1,6 @@
 using System.Globalization;
 using GuitarCam.Audio.Dsp;
+using GuitarCam.Audio.Midi;
 using GuitarCam.Projects;
 
 namespace GuitarCam.Lab;
@@ -13,10 +14,13 @@ static class MidiCommands
 {
     public static int Run(Args a)
     {
+        if (a.Get("datos") is { } data) AppConfig.DirectoryOverride = Path.GetFullPath(data);
         string sub = a.Positional.FirstOrDefault()?.ToLowerInvariant() ?? "";
         if (sub == "comprobar") return Check() ? 0 : 3;
+        if (sub == "entradas") return Inputs();
+        if (sub == "escuchar") return Listen(a.Get("entrada"), a.Double("segundos", 10));
         string? dir = a.Positional.Skip(1).FirstOrDefault();
-        if (dir == null) throw new ArgumentException("midi ver|pista|clip|nota|acordes|quitar <carpeta> (o midi comprobar)");
+        if (dir == null) throw new ArgumentException("midi ver|pista|clip|nota|acordes|cuantizar|quitar|instrumento <carpeta> (o midi comprobar, entradas, escuchar)");
         using var store = ProjectStore.Open(Path.GetFullPath(dir));
         var p = store.Project;
         if (sub != "ver" && store.ReadOnly) throw new IOException(store.ReadOnlyReason);
@@ -56,6 +60,28 @@ static class MidiCommands
             case "quitar":
                 MidiEditing.RemoveClip(p, a.Get("clip") ?? throw new ArgumentException("Falta --clip."));
                 break;
+            case "cuantizar":
+            {
+                string clip = a.Get("clip") ?? throw new ArgumentException("Falta --clip.");
+                double grid = Grid(a.Get("grilla", "1/16")) ?? throw new ArgumentException("--grilla: 1/4, 1/8, 1/16, 1/32 o 1/8T.");
+                Console.WriteLine($"{MidiEditing.Quantize(p, clip, grid)} notas movidas a {a.Get("grilla", "1/16")}.");
+                break;
+            }
+            case "instrumento":
+            {
+                // the plugin that plays the track (from vst escanear's list); --quitar goes back to the test tone
+                var t = TrackOf(p, a.Get("pista")) ?? throw new ArgumentException("Falta --pista (número o id de una pista MIDI).");
+                if (!t.IsMidi) throw new ArgumentException("Esa pista no es MIDI.");
+                if (a.Flag("quitar")) t.Instrument = null;
+                else
+                {
+                    string name = a.Get("plugin") ?? throw new ArgumentException("Falta --plugin \"nombre\" (o --quitar).");
+                    var plugin = PluginCatalog.Find(PluginCatalog.Plugins(PluginCatalog.Load()).Where(x => x.IsInstrument), name)
+                        ?? throw new ArgumentException($"No encontré el instrumento \"{name}\": probá con vst escanear.");
+                    t.Instrument = PluginCatalog.Ref(plugin);
+                }
+                break;
+            }
             default:
                 throw new ArgumentException("midi ver|pista|clip|nota|acordes|quitar <carpeta>");
         }
@@ -66,6 +92,88 @@ static class MidiCommands
         }
         Show(p);
         return 0;
+    }
+
+    /// <summary>The piano roll's magnet steps in beats: "1/16" = 0.25, "1/8T" = a third.</summary>
+    static double? Grid(string s) => s.ToLowerInvariant() switch
+    {
+        "1/4" => 1, "1/8" => 0.5, "1/16" => 0.25, "1/32" => 0.125, "1/8t" => 1.0 / 3, _ => null,
+    };
+
+    /// <summary>The MIDI inputs Windows has, with what Configuración → MIDI says of each one.</summary>
+    static int Inputs()
+    {
+        var settings = MidiSettings.Parse(AppConfig.Get("midi"));
+        var devices = MidiInputs.Devices();
+        if (devices.Count == 0) Console.WriteLine("Windows no ve ninguna entrada MIDI: enchufá el teclado (o su interfaz) y probá de nuevo.");
+        foreach (var d in devices)
+        {
+            var s = settings.Find(d.Name);
+            string uses = s == null ? "" : string.Join("+", new[] { s.Notes ? "Notas" : null, s.Knobs ? "Perillas" : null, s.Transport ? "Transporte" : null }.Where(x => x != null));
+            string how = s == null ? "sin configurar (prendida, todos los canales, Notas y Perillas)"
+                : $"{(s.Enabled ? "prendida" : "apagada")} · {(s.Channel == 0 ? "todos los canales" : $"canal {s.Channel}")} · velocidad {s.Velocity} · {uses}"
+                  + (s.Alias != null ? $" · «{s.Alias}»" : "");
+            Console.WriteLine($"{d.Index + 1}. {d.Name} · {how}");
+        }
+        foreach (var gone in settings.Inputs.Where(i => devices.All(d => d.Name != i.Name)))
+            Console.WriteLine($"-. {gone.Name} · desconectada (sus ajustes quedan guardados)");
+        Console.WriteLine($"Cuantizar al grabar: {(settings.QuantizeOnRecord ? "sí" : "no")}");
+        return 0;
+    }
+
+    /// <summary>
+    /// Opens the inputs as the window does and prints everything that arrives, raw and as the engine takes it
+    /// (after the channel and the velocity curve), for <paramref name="seconds"/>.
+    /// </summary>
+    static int Listen(string? only, double seconds)
+    {
+        var settings = MidiSettings.Parse(AppConfig.Get("midi"));
+        using var inputs = new MidiInputs();
+        var ports = inputs.Apply(settings);
+        if (only != null)
+            ports = [.. ports.Where(p => p.Device.Name.Contains(only, StringComparison.OrdinalIgnoreCase) || p.Settings.Shown.Contains(only, StringComparison.OrdinalIgnoreCase))];
+        if (ports.Count == 0)
+        {
+            Console.WriteLine(only == null ? "No hay entradas MIDI." : $"No encontré la entrada «{only}» (midi entradas las lista).");
+            return 1;
+        }
+        foreach (var p in ports)
+            Console.WriteLine($"{p.Device.Name}: {(p.Open ? "abierta" : p.Error ?? "apagada en Configuración")}");
+        Console.WriteLine($"Escuchando {seconds:0.#} s: tocá algo.");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        inputs.Received += (port, raw) =>
+        {
+            if ((raw & 0xFF) >= 0xF0 || !ports.Contains(port)) return;
+            Console.WriteLine($"{sw.Elapsed.TotalSeconds,8:0.000}  {port.Settings.Shown,-24} {Describe(raw)}");
+        };
+        while (sw.Elapsed.TotalSeconds < seconds)
+        {
+            Thread.Sleep(20);
+            while (inputs.TryRead(out var e))
+            {
+                string note = e.Kind is MidiKind.NoteOn or MidiKind.NoteOff ? MidiNote.Name(e.Pitch) + " " : "";
+                Console.WriteLine($"{"",8}  {"→ al motor:",-24} {e.Kind} {note}vel {e.Velocity} canal {e.Channel}");
+            }
+        }
+        return 0;
+    }
+
+    /// <summary>A raw message in words: "nota C4 vel 96 · canal 1".</summary>
+    static string Describe(int raw)
+    {
+        int status = raw & 0xFF, d1 = (raw >> 8) & 0x7F, d2 = (raw >> 16) & 0x7F, ch = (status & 0x0F) + 1;
+        string what = (status & 0xF0) switch
+        {
+            0x90 when d2 > 0 => $"nota {MidiNote.Name(d1)} vel {d2}",
+            0x80 or 0x90 => $"suelta {MidiNote.Name(d1)}",
+            0xB0 => $"CC {d1} = {d2}",
+            0xE0 => $"pitch bend {((d2 << 7) | d1) - 8192}",
+            0xC0 => $"programa {d1 + 1}",
+            0xD0 => $"aftertouch {d1}",
+            0xA0 => $"aftertouch {MidiNote.Name(d1)} {d2}",
+            _ => $"0x{raw:X6}",
+        };
+        return $"{what} · canal {ch}";
     }
 
     /// <summary>A MIDI track by its number among all tracks (1 = the first) or its id.</summary>
@@ -83,7 +191,7 @@ static class MidiCommands
         if (midi.Count == 0) { Console.WriteLine("Sin pistas MIDI."); return; }
         foreach (var t in midi)
         {
-            Console.WriteLine($"{p.Tracks.IndexOf(t) + 1}. {t.Id} · {t.Name}");
+            Console.WriteLine($"{p.Tracks.IndexOf(t) + 1}. {t.Id} · {t.Name} · {(t.Instrument is { } i ? i.Name + (i.State != null ? " (con su estado)" : "") : "tono de prueba")}");
             foreach (var c in t.MidiClips ?? [])
             {
                 Console.WriteLine($"   {c.Id} · {c.AtSec:0.000}–{c.EndSec(bpm):0.000} s · {c.LengthBeats / 4:0.##} compases · {c.Notes.Count} notas");
@@ -155,10 +263,125 @@ static class MidiCommands
         ok &= convOk;
         Console.WriteLine($"{"MIDI: clip a notas (tempo y cortes)",-36} {built?.Notes.Length ?? 0,12} {"1",10}  {(convOk ? "igual" : "DISTINTO")}");
 
-        bool parseOk = MidiNote.Parse("C4") == 60 && MidiNote.Parse("f#2") == 42 && MidiNote.Parse("Eb3") == 51 && MidiNote.Name(61) == "C#4"
+        // copy and paste: the notes go with the copy, MIDI clips only onto MIDI tracks, and to another project too
+        var cp = new Project();
+        cp.Settings.Bpm = 120;
+        string m1 = MidiEditing.AddTrack(cp), m2 = MidiEditing.AddTrack(cp), audio = ClipEditing.AddEmpty(cp, false);
+        var source = MidiEditing.AddClip(cp, m1, 1, 4);
+        MidiEditing.AddNote(cp, source.Id, 60, 0);
+        MidiEditing.AddNote(cp, source.Id, 64, 2);
+        var board = ClipClipboard.Take(cp, [source.Id])!;
+        var (pastedTrack, pastedClip) = MidiEditing.Find(cp, board.Paste(cp, m2, 3)[0]);
+        bool refused;
+        try { board.Paste(cp, audio, 0); refused = false; }
+        catch (ArgumentException) { refused = true; }
+        var other = new Project();
+        MidiEditing.AddTrack(other);
+        bool crossOk = MidiEditing.TryFind(other, board.Paste(other, null, 0)[0]) is { Notes.Count: 2 };
+        bool pasteOk = pastedTrack.Id == m2 && pastedClip.AtSec == 3 && pastedClip.Id != source.Id && pastedClip.Notes.Count == 2
+            && pastedClip.Notes[0] != source.Notes[0] && refused && crossOk;
+        ok &= pasteOk;
+        Console.WriteLine($"{"MIDI: copiar y pegar clips",-36} {pastedClip.Notes.Count,12} {"2",10}  {(pasteOk ? "igual" : "DISTINTO")}");
+
+        ok &= CheckLive(sr);
+
+        bool parseOk =MidiNote.Parse("C4") == 60 && MidiNote.Parse("f#2") == 42 && MidiNote.Parse("Eb3") == 51 && MidiNote.Name(61) == "C#4"
             && MidiNote.Parse("H2") == null;
         ok &= parseOk;
         Console.WriteLine($"{"MIDI: nombres de notas",-36} {"C4 = 60",12} {"",10}  {(parseOk ? "igual" : "DISTINTO")}");
+        return ok;
+    }
+
+    /// <summary>
+    /// The keyboard: a key played live sounds as the same note written in a clip, the sustain pedal holds what is let
+    /// go, a take pairs its notes, quantizing goes to the song's grid and a recorded clip starts on the bar.
+    /// </summary>
+    static bool CheckLive(int sr)
+    {
+        bool ok = true;
+        void Show(string what, string value, string want, bool good)
+        {
+            ok &= good;
+            Console.WriteLine($"{what,-36} {value,12} {want,10}  {(good ? "igual" : "DISTINTO")}");
+        }
+
+        // held for 84 blocks of 192 (a third of a second), then let go: the same samples as a clip's note of that length
+        const int block = 192;
+        long held = 84 * block;
+        int len = (int)(held + NoteSynth.ReleaseFrames(sr) + 2000);
+        var live = new float[len];
+        var liveR = new float[len];
+        var keys = new LiveNotes(sr);
+        keys.Press(64, 90);
+        for (int at = 0; at < len; at += block)
+        {
+            int n = Math.Min(block, len - at);
+            keys.BeginBlock();
+            if (at == held) keys.Release(64);
+            keys.Render(n, live.AsSpan(at, n), liveR.AsSpan(at, n));
+        }
+        var clip = new NoteSequence([new NoteEvent(0, held, NoteSynth.Hz(64), NoteSynth.Gain(90))], sr);
+        var written = new float[len];
+        NoteSynth.Render(clip, 0, len, sr, written, new float[len]);
+        double diff = 0;
+        for (int i = 0; i < len; i++) diff = Math.Max(diff, Math.Abs(live[i] - written[i]));
+        Show("Teclado: suena como la nota escrita", $"{diff:0.0e0}", "< 1e-6", diff < 1e-6 && held % block == 0 && !keys.AnySounding);
+
+        // the pedal: a key let go while it is down keeps sounding until it comes up; the same key again starts over
+        var p = new LiveNotes(sr);
+        p.BeginBlock();
+        p.Pedal(true);
+        p.Press(60, 100);
+        p.Release(60);
+        bool stillOn = p.AnySounding && p.EventCount == 1;
+        p.BeginBlock();
+        p.Press(60, 80);
+        bool retrig = p.EventCount == 2 && !p.Events[0].On && p.Events[1].On;
+        p.BeginBlock();
+        p.Release(60);
+        p.Pedal(false);
+        bool released = !p.AnySounding && p.EventCount == 1 && !p.Events[0].On;
+        Show("Teclado: pedal de sustain", stillOn && retrig && released ? "sostiene" : "no", "sostiene", stillOn && retrig && released);
+        // the Transponer at the moment of the key: its end goes to the same note even if it changed meanwhile
+        p.Transpose = 2;
+        p.BeginBlock();
+        p.Press(60, 100);
+        p.Transpose = 0;
+        p.Release(60);
+        bool shifted = p.Events[0].Sounds == 62 && p.Events[1].Sounds == 62 && p.Events[1].Pitch == 60;
+        Show("Teclado: Transponer al tocar", "C4 → D4", "", shifted);
+
+        // a take: start and end paired, a key held at the stop ends there, the count-in's notes start with the take
+        var take = new MidiTake();
+        take.Add(-500, new LiveNote { On = true, Pitch = 60, Velocity = 70 });
+        take.Add(1000, new LiveNote { On = false, Pitch = 60 });
+        take.Add(2000, new LiveNote { On = true, Pitch = 67, Velocity = 90 });
+        var notes = take.Notes(0, 5000);
+        bool takeOk = notes is [(0, 1000, 60, 70), (2000, 3000, 67, 90)];
+        Show("Teclado: toma (pares y final)", $"{notes.Count} notas", "2", takeOk);
+
+        // quantize: to the song's grid, not the clip's (a clip an eighth late), and the length stays
+        var q = new List<MidiNote> { new() { Pitch = 60, Beat = 0.1, Beats = 0.4 }, new() { Pitch = 62, Beat = 0.62, Beats = 1 } };
+        int moved = MidiEditing.Quantize(q, 0.25, 120, 0.25);
+        bool quantOk = moved == 2 && Math.Abs(q[0].Beat - 0) < 1e-9 && Math.Abs(q[1].Beat - 0.5) < 1e-9 && q[0].Beats == 0.4
+            && MidiEditing.Quantize(q, 0, 120, 0) == 0;
+        Show("Teclado: cuantizar a la grilla", $"{moved} movidas", "2", quantOk);
+
+        // a recorded clip: from the bar where the take began to the bar after it ended, quantized when asked
+        var proj = new Project();
+        proj.Settings.Bpm = 120;
+        string tid = MidiEditing.AddTrack(proj);
+        var rec = MidiEditing.AddRecorded(proj, tid, 2.7, 5.1, [(2.76, 0.5, 64, 100), (3.49, 0.25, 67, 80)], 0.25);
+        bool recOk = rec is { AtSec: 2, LengthBeats: 8 } && rec.Notes.Count == 2 && Math.Abs(rec.Notes[0].Beat - 1.5) < 1e-9
+            && Math.Abs(rec.Notes[1].Beat - 3) < 1e-9 && MidiEditing.AddRecorded(proj, tid, 0, 1, []) == null;
+        Show("Teclado: clip grabado (compases)", rec == null ? "nada" : $"{rec.AtSec:0.##} s", "2 s", recOk);
+
+        bool curves = VelocityCurves.Apply(VelocityCurves.Soft, 40, 100) > 40 && VelocityCurves.Apply(VelocityCurves.Hard, 40, 100) < 40
+            && VelocityCurves.Apply(VelocityCurves.Fixed, 12, 100) == 100 && VelocityCurves.Apply(VelocityCurves.Normal, 127, 100) == 127;
+        var parsed = MidiSettings.Parse("{\"inputs\":[{\"name\":\"Teclado\",\"channel\":40,\"velocity\":\"rara\"}],\"quantizeOnRecord\":true}");
+        bool settingsOk = parsed.QuantizeOnRecord && parsed.Inputs[0] is { Channel: 16, Velocity: VelocityCurves.Normal }
+            && MidiSettings.Parse("no es json").Inputs.Count == 0;
+        Show("Teclado: curvas y ajustes", curves && settingsOk ? "ok" : "mal", "ok", curves && settingsOk);
         return ok;
     }
 }

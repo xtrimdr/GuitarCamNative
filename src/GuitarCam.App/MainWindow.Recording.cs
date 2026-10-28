@@ -49,7 +49,11 @@ public partial class MainWindow
     /// <summary>"Ajuste fino de audio (canales nuevos)" of Configuración → Sincronización.</summary>
     double OverdubOffsetMs => Settings.OverdubOffsetMs;
 
-    bool RecordingTake => recTakes.Count > 0;
+    bool RecordingTake => recTakes.Count > 0 || recNotes;
+    /// <summary>Armed MIDI tracks are recording the keyboard (with or without audio takes).</summary>
+    bool recNotes;
+    /// <summary>Where the recording started (the playhead), for its takes and its MIDI clips.</summary>
+    double recStartSec;
     bool RecordingBusy => RecordingTake || recStopping;
 
     void InitRecording()
@@ -60,7 +64,7 @@ public partial class MainWindow
         CountCancelButton.Click += async (_, _) => await StopRecording(true);
         Timeline.ArmRequested += ToggleArm;
         Timeline.InputMenuRequested += (t, at) => ShowInputMenu(t, Timeline, at);
-        Timeline.InputLabel = t => InputShort(t.Track);
+        Timeline.InputLabel = t => t.Track.IsMidi ? MidiInputShort(t.Track) : InputShort(t.Track);
     }
 
     /// <summary>Where R records now, in timeline order: the armed tracks, else the web's pick; empty = nothing to record into (Grabar is off).</summary>
@@ -72,12 +76,14 @@ public partial class MainWindow
         return p.Tracks.Where(t => armedIds.Contains(t.Id) && !t.IsMidi).ToList();
     }
 
-    /// <summary>Arms a track, or disarms it when it is lit (armed by hand or picked by the app); the others stay as they are.</summary>
+    /// <summary>
+    /// Arms a track, or disarms it when it is lit (armed by hand or picked by the app); the others stay as they are.
+    /// An armed MIDI track hears the keyboard and records its notes.
+    /// </summary>
     void ToggleArm(LiveTrack t)
     {
         if (RecordingBusy || store == null || store.ReadOnly) return;
-        if (t.Track.IsMidi) { Toast(Loc.T("midi.noArm")); return; }
-        var lit = RecordTargets().Select(x => x.Id).ToList();
+        var lit = RecordTargets().Concat(MidiRecordTargets()).Select(x => x.Id).ToList();
         if (!lit.Remove(t.Track.Id)) lit.Add(t.Track.Id);
         armedIds = lit;
         ShowArm();
@@ -91,12 +97,13 @@ public partial class MainWindow
     {
         if (RecordingTake) return;
         var targets = RecordTargets();
-        string key = string.Join("|", targets.Select(t => $"{t.Id}:{t.Input}:{tracks.FindIndex(l => l.Track == t)}"));
+        var midi = MidiRecordTargets();
+        string key = string.Join("|", targets.Concat(midi).Select(t => $"{t.Id}:{t.Input}:{tracks.FindIndex(l => l.Track == t)}"));
         if (key == armedKey) return;
         armedKey = key;
         armedLive = targets.Select(t => tracks.Find(l => l.Track == t)).ToArray();
         engine.SetInputs(targets.Select(t => InputRoute.Parse(t.Input)).ToList());
-        Timeline.ArmedIndices = targets.Select(t => tracks.FindIndex(l => l.Track == t)).Where(i => i >= 0).ToHashSet();
+        Timeline.ArmedIndices = targets.Concat(midi).Select(t => tracks.FindIndex(l => l.Track == t)).Where(i => i >= 0).ToHashSet();
         if (mixerView) RefreshMixer();
     }
 
@@ -126,6 +133,11 @@ public partial class MainWindow
     /// </summary>
     void ShowInputMenu(LiveTrack t, Control anchor, Point? point = null)
     {
+        if (t.Track.IsMidi)
+        {
+            ShowMidiInputMenu(t, anchor, point);
+            return;
+        }
         if (point == null && PressClosedMenuOf(anchor)) return;
         if (store == null || store.ReadOnly || RecordingBusy) return;
         // a right click picks an input and keeps the menu open (MenuCheck), to try one after the other
@@ -188,7 +200,8 @@ public partial class MainWindow
         Preview.CancelGesture();
         var p = store.Project;
         List<Track?> targets = [.. RecordTargets()];
-        if (targets.Count == 0)
+        var midiTargets = MidiRecordTargets();
+        if (targets.Count == 0 && midiTargets.Count == 0)
         {
             Status(Loc.T("rec.noneArmed"));
             return;
@@ -218,18 +231,23 @@ public partial class MainWindow
                 Mirror = camera.Mirror,
             }, number + i));
         }
-        string? notice = camera.Capture != null && !AudioOnly && cam == null ? Loc.T("rec.noCamera")
+        // only MIDI armed: the keyboard is the recording, the camera has nowhere to go and isn't missed
+        string? notice = targets.Count == 0 ? null
+            : camera.Capture != null && !AudioOnly && cam == null ? Loc.T("rec.noCamera")
             : cam != null && videoAt < 0 ? Loc.T("rec.noVideoTrack")
             : null;
         try
         {
             foreach (var t in takes) store.BeginRecording(t.Journal);
-            engine.StartRecording(targets.Select((t, i) => (InputRoute.Parse(t?.Input), store.Resolve(takes[i].Journal.Audio)!)).ToList(), countIn, startSec: startSec);
+            BeginMidiTakes(midiTargets);
+            engine.StartRecording(targets.Select((t, i) => (InputRoute.Parse(t?.Input), store.Resolve(takes[i].Journal.Audio)!)).ToList(), countIn,
+                startSec: startSec, notesOnly: midiTargets.Count > 0);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
         {
             foreach (var t in takes)
                 try { store.EndRecording(t.Journal.MediaId); } catch (IOException) { }
+            EndMidiTakes(startSec, startSec, discard: true);
             armedKey = ""; // the engine's inputs may have changed: hand them over again
             Status(Loc.T("rec.startFail", e.Message));
             return;
@@ -251,6 +269,8 @@ public partial class MainWindow
             }
         }
         recTakes = takes;
+        recNotes = midiTargets.Count > 0;
+        recStartSec = startSec;
         // a take that replaces the track's clips is played against the rest of the song, not against them
         foreach (var target in targets)
             if (target is { Clips.Count: > 0 } && tracks.Find(t => t.Track == target) is { } silenced)
@@ -259,7 +279,7 @@ public partial class MainWindow
                 recSilenced.Add(silenced);
             }
         Timeline.RecordingStartSec = startSec;
-        Timeline.RecordingLanes = targets.Select(t => t == null ? tracks.Count : p.Tracks.IndexOf(t)).ToHashSet();
+        Timeline.RecordingLanes = targets.Select(t => t == null ? tracks.Count : p.Tracks.IndexOf(t)).Concat(midiTargets.Select(t => p.Tracks.IndexOf(t))).ToHashSet();
         Status(notice ?? "");
         RefreshRecording();
     }
@@ -274,6 +294,7 @@ public partial class MainWindow
         var takes = recTakes;
         recStopping = true;
         bool wasCountingIn = engine.IsCountingIn;
+        double startSec = recStartSec, endSec = engine.PositionSec;
         var st = store;
         bool first = recFirstTake;
         var video = recVideo;
@@ -283,6 +304,7 @@ public partial class MainWindow
         (recVideo, recCamera) = (null, null);
         RecordedTakeResult?[] res = [];
         VideoTakeResult? vres = null;
+        List<(string TrackId, List<(double Sec, double LengthSec, int Pitch, int Velocity)> Notes)> played = [];
         try
         {
             (res, vres) = await Task.Run(() =>
@@ -308,9 +330,12 @@ public partial class MainWindow
             foreach (var t in recSilenced) t.RecordMuted = false;
             recSilenced.Clear();
             recTakes = [];
+            recNotes = false;
+            // after the engine stopped: no note goes into them any more
+            played = EndMidiTakes(startSec, endSec, discard || wasCountingIn);
             armedKey = "";
             Timeline.RecordingLanes = null;
-            Timeline.SetPlayhead(takes[0].Journal.StartSec, true); // back to where the take started (the web: to 0)
+            Timeline.SetPlayhead(startSec, true); // back to where the take started (the web: to 0)
             RefreshRecording();
         }
         try
@@ -328,12 +353,13 @@ public partial class MainWindow
                 if (i < res.Length && res[i] is { } r) kept.Add((takes[i], r));
                 else st.EndRecording(takes[i].Journal.MediaId);
             }
-            if (kept.Count == 0)
+            if (kept.Count == 0 && played.Count == 0)
             {
                 if (problem != null) Toast(problem);
                 else if (discard && !wasCountingIn) Status(takes.Count > 1
                     ? Loc.T("rec.discarded.many")
                     : Loc.T("rec.discarded.one"));
+                else if (takes.Count == 0 && !discard && !wasCountingIn) Toast(Loc.T("midi.rec.nothing"));
                 return;
             }
             foreach (var (t, r) in kept)
@@ -342,11 +368,29 @@ public partial class MainWindow
                 t.Journal.AtSec = t.Journal.StartSec + r.SyncMs / 1000;
             }
             var trackIds = new List<string>();
+            double grid = RecordQuantizeBeats;
+            int noteCount = 0;
+            var noteTracks = new List<string>();
             await EditTimeline(p =>
             {
                 foreach (var (t, r) in kept) trackIds.Add(TakeRecording.AddTake(p, t.Journal, r.DurationSec, r.SampleRate, 2, t.Number).Id);
+                foreach (var (id, notes) in played)
+                    if (p.Tracks.Find(x => x.Id == id) is { IsMidi: true } mt && MidiEditing.AddRecorded(p, id, startSec, endSec, notes, grid) is { } clip)
+                    {
+                        noteCount += clip.Notes.Count;
+                        noteTracks.Add(mt.Name);
+                    }
                 return null;
             }, null);
+            string? notesDone = noteCount == 0 ? null : Loc.T(grid > 0 ? "midi.rec.done.quantized" : "midi.rec.done", noteCount,
+                string.Join(", ", noteTracks.Select(n => $"\"{n}\"")), PianoSnapLabel());
+            if (kept.Count == 0)
+            {
+                if (st == store) await FlushProjectOperation();
+                Toast(problem ?? notesDone ?? Loc.T("midi.rec.nothing"));
+                return;
+            }
+            if (notesDone != null) Status(notesDone);
             if (st != store || kept.Any(k => st.Project.FindMedia(k.Take.Journal.MediaId) == null))
             {
                 // the journals stay, so the takes come back the next time the project opens

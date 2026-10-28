@@ -3,6 +3,44 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-28: Entradas MIDI, etapa 4 del editor MIDI (ideada con el usuario): Configuración → MIDI con cada teclado o
+  controlador (lucecita de actividad, nombre propio, prendido, canal, curva de velocidad, Notas / Perillas / Transporte;
+  `SettingsDialog.Midi.cs`, `MidiSetup`, `config.json` "midi"), el teclado suena en la pista MIDI elegida y en las
+  armadas con su instrumento y su cadena, con pedal de sustain (`GuitarCam.Audio/Midi`, `PlaybackEngine.DispatchMidi`,
+  `LiveNotes`), las pistas MIDI se arman y graban las notas en un clip nuevo (`MidiEditing.AddRecorded`), cada pista
+  elige su entrada y canal (`Track.MidiInput`), y cuantizar con Q, el menú del clip o al grabar, al imán del piano roll
+  (`MidiEditing.Quantize`). En gclab: `midi entradas`, `midi escuchar`, `midi cuantizar` y sus comprobaciones.
+- 2026-10-28: Splash al abrir (pedido del usuario): ícono, nombre, versión con commit y franja de carga animada, con
+  los colores del tema, mientras se arma la ventana principal (`SplashWindow`, `App.axaml.cs`).
+- 2026-10-28: Inspector de la pista MIDI (pedido del usuario): el instrumento se elige en un desplegable en vez de una
+  lista a la vista, con los grupos Nativos y VST3 (submenú por marca desde 12) también en el timeline y el piano roll,
+  y debajo la salida y los envíos a buses (`MainWindow.Vst.cs`, `PlaceInspectorSends`). La búsqueda de VST3 detecta
+  sola si cada uno es instrumento o efecto por sus entradas de audio y de notas, no solo por su categoría
+  (`gcvsthost --scan`, `VstPluginInfo.IsInstrument`; los ya encontrados se reabren una vez, `PluginCatalog.CurrentFormat`).
+
+- 2026-10-28: El piano roll muestra la pista MIDI entera y sigue al timeline (pedido del usuario): clic en otra pista
+  MIDI la abre entera en el clip bajo el cabezal, clic en un clip lo muestra, los clips de la pista se marcan en la
+  regla y en la grilla (los otros, tenues, se eligen con un clic) y grilla e imán cuentan desde el timeline. Notas
+  redondeadas con una rayita de velocidad (`PianoRollView`, `MainWindow.Midi.cs`: `FollowPiano`, `PianoClipFor`).
+
+- 2026-10-28: Configuración → Plugins, para buscar y administrar los VST3 (pedido del usuario): carpetas propias además
+  de las de Windows, buscar nuevos o revisar todos con avance y Cancelar, lista con filtro y búsqueda donde se ocultan
+  los que no se usan, y los que no abrieron con "Probar de nuevo" (`SettingsDialog.Plugins.cs`, `PluginScan`,
+  `PluginCatalog`). En gclab: `vst carpetas`, `vst ocultar|mostrar`, `vst escanear --archivo`.
+
+- 2026-10-28: Instrumentos VST3 en las pistas MIDI (etapa 3 del editor MIDI, primero instrumentos por pedido del
+  usuario): `gcvsthost.exe` (`src/GuitarCam.VstHost`, C++ con el SDK de Steinberg, MIT, en `lib\vst3sdk`) abre cada
+  plugin en su propio proceso y habla con la app por memoria compartida (`VstBridge`); en vivo el audio nunca lo espera
+  (un bloque de demora, compensado mandando las notas antes: `InstrumentPlayer`), la exportación lo espera bloque a
+  bloque (`InstrumentRender` en `MixRenderer`, igual dos veces seguidas con MT-PowerDrumKit). Escaneo con caché
+  (`VstScanner`, `PluginCatalog`), elección desde el clic derecho de la pista y el piano roll, su ventana, su estado
+  guardado en el proyecto (`Track.Instrument`) y avisos si no abre o se cae (`MainWindow.Vst.cs`). `gclab vst …` y
+  `midi instrumento`. Probados Surge XT y MT-PowerDrumKit; EZdrummer 3 todavía no suena.
+- 2026-10-28: Piano roll: la franja de velocidad se agranda desde su barrita (`VelocityHeight`, `pianoVelHeight`) y
+  arrastrar la barra de una nota elegida cambia la de todas las elegidas que empiezan ahí (`velGroup`), pedidos del usuario.
+- 2026-10-28: Ctrl+C / Ctrl+X / Ctrl+V también con clips MIDI, solos o mezclados con tomas (pedido del usuario): el
+  portapapeles lleva sus notas (`ClipClipboard.MidiItems`), los pega solo en pistas MIDI y, sin tomas, también en otro
+  proyecto; copiar y cortar en su clic derecho. `gclab midi comprobar` lo verifica.
 - 2026-10-28: Lo que el usuario anotó al probar la etapa 1 del editor MIDI: varios clips MIDI a la vez con Ctrl+clic
   (también en las tomas, al soltar sin mover) y con el rectángulo, mezclados con tomas, que se mueven, duplican y borran
   juntos en un paso (`TimelineView.Midi.cs`: `ToggleBoxed`, `StartMidiCarry`; `MidiEditing.DuplicateMany`, `RemoveAny`);
