@@ -13,7 +13,7 @@ It is designed to be used with the guitar strapped on: one-key shortcuts, big bu
 **record → mix → export**.
 
 <p align="center">
-  <a href="https://github.com/xtrimdr/GuitarCamNative/releases/latest">
+  <a href="https://github.com/xtrimdr/GuitarCamNative/releases/latest/download/GuitarCamStudio-Setup.exe">
     <img src="https://img.shields.io/github/v/release/xtrimdr/GuitarCamNative?style=for-the-badge&label=Download%20for%20Windows&color=22d3ee&labelColor=18181b" alt="Download for Windows" height="56">
   </a>
   <br>

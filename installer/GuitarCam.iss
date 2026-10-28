@@ -15,7 +15,8 @@ UninstallDisplayIcon={app}\GuitarCam.exe
 SetupIconFile=..\src\GuitarCam.App\Assets\GuitarCam.ico
 LicenseFile=..\LICENSE
 OutputDir=..\artifacts
-OutputBaseFilename=GuitarCamStudio-Setup-{#AppVersion}
+; no version in the name: the README's download button links to releases/latest/download/GuitarCamStudio-Setup.exe
+OutputBaseFilename=GuitarCamStudio-Setup
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequiredOverridesAllowed=dialog

@@ -13,7 +13,7 @@ Está pensada para usarse con la guitarra colgada: atajos de una tecla, botones 
 de **grabar → mezclar → exportar**.
 
 <p align="center">
-  <a href="https://github.com/xtrimdr/GuitarCamNative/releases/latest">
+  <a href="https://github.com/xtrimdr/GuitarCamNative/releases/latest/download/GuitarCamStudio-Setup.exe">
     <img src="https://img.shields.io/github/v/release/xtrimdr/GuitarCamNative?style=for-the-badge&label=Descargar%20para%20Windows&color=22d3ee&labelColor=18181b" alt="Descargar para Windows" height="56">
   </a>
   <br>
