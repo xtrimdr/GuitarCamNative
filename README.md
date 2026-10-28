@@ -12,6 +12,14 @@ sirve para hacer música sin video).
 Está pensada para usarse con la guitarra colgada: atajos de una tecla, botones grandes y un camino corto
 de **grabar → mezclar → exportar**.
 
+## Descargar
+
+**[Bajá el instalador de la última versión](https://github.com/xtrimdr/GuitarCamNative/releases/latest)**
+(`GuitarCamStudio-Setup-x.y.z.exe`, Windows 10/11 de 64 bits). No hace falta instalar .NET. Para la cámara, el video
+y la exportación necesitás **FFmpeg** en el `PATH`, y para grabar audio, una interfaz con driver **ASIO** (ver
+[Requisitos](#requisitos)). El instalador no está firmado: si Windows SmartScreen avisa, elegí "Más información" →
+"Ejecutar de todas formas".
+
 ![El timeline en modo Video: un panel por toma, carpetas de pistas con su color, los knobs de cada pista y la pestaña de color](docs/screenshots/timeline-es.png)
 
 | | |
