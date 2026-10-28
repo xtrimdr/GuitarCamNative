@@ -86,6 +86,9 @@ tools/                 probar.ps1 (compila, comprueba y abre una copia de prueba
   (Reverb/Delay fijos, retornos, `reverbSend`…, el fader/M/S/slots de carpeta) se leen como `Old*` y se convierten al
   normalizar.
 - **Clip**: un pedazo de un media en una pista (`AtSec`, `TrimStartSec`, `TrimEndSec`, `GainDb`, `GainCurve`, encuadre).
+- **Pista MIDI** (`Track.Kind = "midi"`, `TrackKinds`): en vez de clips tiene `MidiClips` (`MidiClip`: `AtSec` en
+  segundos, `LengthBeats` y sus `MidiNote` en tiempos, así siguen al tempo); en una pista de audio `MidiClips` es null.
+  Sin video ni entrada; las tomas no entran en ella. Las ediciones pasan por `MidiEditing` (`Midi.cs`).
 
 Convenciones: tiempos del timeline en **segundos**, correcciones de latencia/sincronía en **ms**. JSON en camelCase
 (`ProjectStore.Json`). Cada clase lleva `[JsonExtensionData] Extra`, que conserva lo desconocido: no lo saques.
@@ -134,7 +137,8 @@ El callback de ASIO (`AsioDuplex.ProcessBlock`, `PlaybackEngine.Process`) corre 
 - Motor a 48 kHz (`PlaybackEngine.SampleRate`); los medios se remuestrean con `AudioLoader`. Si un cambio sube mucho la
   carga "DSP x %" de la barra de título, decilo.
 
-Cadena por pista: clips (fades, ganancia; el audio ya transpuesto si la pista tiene Transponer) → los **slots de
+Cadena por pista: clips (fades, ganancia; el audio ya transpuesto si la pista tiene Transponer) y, en una pista MIDI,
+sus notas (`NoteSynth`: el tono de prueba, sin estado, desde `ChannelDsp.Notes`) → los **slots de
 efectos** del canal en su orden (`Channel.Inserts`; por defecto saturación → compresor con su EQ de preset antes y
 después → EQ de pista, que se pueden sacar, repetir y reordenar) → paneo → fader → su salida (su carpeta, un bus o el
 master); los envíos salen del fader (post, por defecto) o de antes (PRE: después de los slots y el paneo; mute y solo

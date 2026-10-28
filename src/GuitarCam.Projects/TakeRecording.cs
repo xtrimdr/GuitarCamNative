@@ -29,9 +29,9 @@ public static class TakeRecording
     public static Track? PickTarget(Project p, string? selectedTrackId)
     {
         int sel = p.Tracks.FindIndex(t => t.Id == selectedTrackId);
-        if (sel >= 0 && p.Tracks[sel].Clips.Count == 0) return p.Tracks[sel];
-        return p.Tracks.Where((t, i) => i > sel && t.Clips.Count == 0).FirstOrDefault()
-            ?? p.Tracks.Find(t => t.Clips.Count == 0);
+        static bool Free(Track t) => t.Clips.Count == 0 && !t.IsMidi;
+        if (sel >= 0 && Free(p.Tracks[sel])) return p.Tracks[sel];
+        return p.Tracks.Where((t, i) => i > sel && Free(t)).FirstOrDefault() ?? p.Tracks.Find(Free);
     }
 
     /// <summary>The web's isFirstTake: no track has a clip yet, so nothing plays against the take.</summary>

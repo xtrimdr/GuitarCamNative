@@ -276,9 +276,9 @@ public sealed partial class ExportDialog : UserControl
         }
         audio = store.Project.Settings.AudioOnly;
         var takes = ExtractVideoTakes(store, liveTracks);
-        if (audio ? !store.Project.Tracks.Any(t => t.Clips.Count > 0) : takes.Count == 0)
+        if (audio ? !store.Project.Tracks.Any(t => t.HasContent) : takes.Count == 0)
         {
-            statusError = Loc.T(audio || !store.Project.Tracks.Any(t => t.Clips.Count > 0) ? "exp.needTrack" : "exp.needVideo");
+            statusError = Loc.T(audio || !store.Project.Tracks.Any(t => t.HasContent) ? "exp.needTrack" : "exp.needVideo");
             return false;
         }
 
@@ -541,7 +541,7 @@ public sealed partial class ExportDialog : UserControl
         var preset = ExportTargets.Get(target);
         string aspect = ExportTargets.AspectFor(target, summary.AspectRatio);
         var (outW, outH) = Mp4Exporter.ExportSize(aspect, resolution);
-        int tracksWithClips = currentStore?.Project.Tracks.Count(t => t.Clips.Count > 0) ?? 0;
+        int tracksWithClips = currentStore?.Project.Tracks.Count(t => t.HasContent) ?? 0;
         HeaderSubtitle.Text = audio
             ? Loc.T("exp.sub.audio", Loc.T(tracksWithClips == 1 ? "tracks.one" : "tracks.many", tracksWithClips), Mp4Exporter.FormatTime(summary.DurationSec))
             : $"{outW}×{outH} · {aspect} · {summary.Takes} {takesWord} · {Mp4Exporter.FormatTime(summary.DurationSec)}";

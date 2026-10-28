@@ -91,7 +91,7 @@ public static class AudioImport
             SyncMs = 0,
         };
         p.Media.Add(media);
-        var track = p.Tracks.Find(t => t.Id == trackId && t.Clips.Count == 0);
+        var track = p.Tracks.Find(t => t.Id == trackId && t.Clips.Count == 0 && !t.IsMidi);
         if (track == null)
         {
             track = new Track { Video = false };

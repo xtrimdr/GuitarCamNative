@@ -59,6 +59,7 @@ public static class ChannelDsp
         {
             Name = t.Name,
             Clips = clips,
+            Notes = Notes(t, p.Settings.Bpm, MidiSampleRate),
             Volume = ch.Volume,
             Pan = ch.Pan,
             Muted = ch.Muted,
@@ -67,6 +68,32 @@ public static class ChannelDsp
             Output = IndexOf(nodes, TrackOutput(t)),
             Sends = Sends(nodes, ch),
         };
+    }
+
+    /// <summary>The rate the export renders notes at: the engine's (<c>PlaybackEngine.SampleRate</c>).</summary>
+    const int MidiSampleRate = 48000;
+
+    /// <summary>
+    /// A MIDI track's notes as the engine plays them (<see cref="NoteSynth"/>), in frames at <paramref name="sampleRate"/>
+    /// with the tempo turning beats into time; null for an audio track or one without notes. A note that runs past its
+    /// clip's end is cut there and one that starts past it is left out.
+    /// </summary>
+    public static NoteSequence? Notes(Track t, double bpm, int sampleRate)
+    {
+        if (!t.IsMidi || t.MidiClips is not { Count: > 0 } clips) return null;
+        double beatSec = 60 / Math.Max(1, bpm);
+        var list = new List<NoteEvent>();
+        foreach (var c in clips)
+            foreach (var n in c.Notes)
+            {
+                if (n.Beat >= c.LengthBeats) continue;
+                double start = c.AtSec + n.Beat * beatSec;
+                double end = c.AtSec + Math.Min(n.EndBeat, c.LengthBeats) * beatSec;
+                long from = (long)Math.Round(start * sampleRate);
+                long len = Math.Max(1, (long)Math.Round(end * sampleRate) - from);
+                list.Add(new NoteEvent(from, len, NoteSynth.Hz(n.Pitch + t.Transpose), NoteSynth.Gain(n.Velocity)));
+            }
+        return list.Count == 0 ? null : new NoteSequence([.. list], sampleRate);
     }
 
     /// <summary>The bus side of the mix (the folders and buses as nodes, and the master), for the export and gclab.</summary>

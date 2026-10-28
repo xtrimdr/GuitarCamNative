@@ -38,7 +38,7 @@ public static class AudioExporter
     public static async Task<ExportResult> ExportAsync(ExportJobSpec job, AudioFormat format,
         Action<AudioExportProgress>? onProgress = null, CancellationToken ct = default)
     {
-        if (job.MixTracks.All(t => t.Clips.Count == 0))
+        if (job.MixTracks.All(t => !t.HasSound))
             throw new ExportException(Texts.T("err.export.noTracks", "Necesitás al menos un canal en el timeline para exportar."));
         string ext = Extension(format);
         var target = Mp4Exporter.CheckDestination(job.ProjectDir, job.OutDir,

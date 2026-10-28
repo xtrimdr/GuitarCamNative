@@ -36,6 +36,7 @@ static class Program
                 "camara" => CameraCommands.Run(a),
                 "sistema" => SystemCommands.Run(a),
                 "proyecto" => ProjectCommands.Run(a),
+                "midi" => MidiCommands.Run(a),
                 "proyectos" => LibraryCommands.Run(a),
                 _ => Help(),
             };
@@ -208,6 +209,15 @@ static class Program
                                            --camara: con el video de la cámara que elige la app)
               proyecto cortar   carpeta [--segundos 3] [--camara]
                                            graba un tono (y el video) y corta sin cerrar, para probar la recuperación
+              midi ver carpeta             las pistas MIDI con sus clips y sus notas
+              midi pista carpeta           agrega una pista MIDI (suena con un tono de prueba hasta que tenga instrumento)
+              midi clip carpeta [--pista n|id] [--en segundos] [--compases 4]   un clip MIDI vacío en esa pista
+              midi nota carpeta --clip id [--altura C4|60] [--pulso 0] [--largo 1] [--vel 100]
+                                           una nota en el clip (pulso y largo en tiempos desde su comienzo)
+              midi acordes carpeta --clip id   reemplaza sus notas por Do, Sol, Lam, Fa (un compás cada uno)
+              midi quitar carpeta --clip id    saca el clip MIDI
+              midi comprobar               verifica el sonido de las notas (bloques, release, exportación, tempo)
+                                           (gclab mezclar carpeta renderiza el proyecto con sus pistas MIDI)
               proyectos lista|plantillas [--raiz X]
               proyectos nuevo "Nombre" [--plantilla id] | renombrar carpeta "Nombre" | duplicar carpeta
               proyectos borrar carpeta | guardar-plantilla carpeta "Nombre"

@@ -366,7 +366,20 @@ public sealed class LiveTrack
     public CompPresets.TakeEnvelope? Envelope => Clips.FirstOrDefault(c => c.Audio != null)?.Audio!.Envelope;
 
     public bool HasPanel => Track.Video && Clips.Count > 0;
-    public double EndSec => Clips.Count == 0 ? 0 : Clips.Max(c => c.ClipEndSec);
+    public double EndSec => Math.Max(MidiEndSec, Clips.Count == 0 ? 0 : Clips.Max(c => c.ClipEndSec));
+
+    volatile NoteSequence? notes;
+    /// <summary>A MIDI track's notes in frames (<see cref="ChannelDsp.Notes"/>), swapped whole by <see cref="SetMidi"/>; null = none.</summary>
+    public NoteSequence? Notes => notes;
+    /// <summary>Where its last MIDI clip ends (seconds), for the song's length.</summary>
+    public double MidiEndSec { get; private set; }
+
+    /// <summary>Takes the track's notes again at <paramref name="bpm"/> (after an edit or a tempo change). UI thread.</summary>
+    public void SetMidi(double bpm)
+    {
+        notes = ChannelDsp.Notes(Track, bpm, sampleRate);
+        MidiEndSec = Track.MidiClips is { Count: > 0 } mc ? mc.Max(c => c.EndSec(bpm)) : 0;
+    }
 
     /// <summary>The clip whose picture shows in the panel: the last one under the playhead, the one on top in the timeline and the export.</summary>
     public LiveClip? ShownClip => Clips.LastOrDefault(c => c.InClip);
@@ -531,11 +544,21 @@ public sealed class LiveTrack
         var br = Chain.BufferR(n);
         bl.Clear();
         br.Clear();
-        if (fromFrame < 0) AddClips(posFrame, n, bl, br, default);
+        var seq = notes;
+        if (fromFrame < 0)
+        {
+            AddClips(posFrame, n, bl, br, default);
+            if (seq != null) NoteSynth.Render(seq, posFrame, n, sampleRate, bl, br);
+        }
         else
         {
             AddClips(fromFrame, n, bl, br, wOut);
             AddClips(posFrame, n, bl, br, wIn);
+            if (seq != null)
+            {
+                NoteSynth.Render(seq, fromFrame, n, sampleRate, bl, br, wOut);
+                NoteSynth.Render(seq, posFrame, n, sampleRate, bl, br, wIn);
+            }
         }
         var to = Out;
         if (to != null) RunChain(n, anySolo, to.BufferL(sendOffset + n).Slice(sendOffset), to.BufferR(sendOffset + n).Slice(sendOffset));

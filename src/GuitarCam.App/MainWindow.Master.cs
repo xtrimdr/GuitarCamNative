@@ -85,6 +85,7 @@ public partial class MainWindow
     void ShowBottomView(bool mastering)
     {
         masteringView = mastering;
+        pianoView = false;
         SetMixerView(true);
         ApplyMasteringView();
     }
@@ -92,13 +93,15 @@ public partial class MainWindow
     /// <summary>Shows the mixer's or the mastering's content in <see cref="MixerHost"/> and lights the right button.</summary>
     void ApplyMasteringView()
     {
-        if (!mixerView) masteringView = false; // back on the timeline, the next Mixer is the mixer
-        bool m = masteringView && mixerView;
+        if (!mixerView) masteringView = pianoView = false; // back on the timeline, the next Mixer is the mixer
+        bool m = masteringView && mixerView, piano = PianoShown;
         masteringScroll.IsVisible = m;
-        mixerScroll.IsVisible = !m;
-        if (mixerHeader != null) mixerHeader.IsVisible = !m;
-        MixerViewButton.Classes.Set("on", mixerView && !m);
+        pianoHost.IsVisible = piano;
+        mixerScroll.IsVisible = !m && !piano;
+        if (mixerHeader != null) mixerHeader.IsVisible = !m && !piano;
+        MixerViewButton.Classes.Set("on", mixerView && !m && !piano);
         MasteringViewButton.Classes.Set("on", m);
+        PianoViewButton.Classes.Set("on", piano);
         BottomSplitter.IsEnabled = AudioSplitter.IsEnabled = !m;
         if (m)
         {

@@ -636,6 +636,7 @@ static class DspCommands
         allOk &= InsertCommands.Check();
         allOk &= BusCommands.Check();
         allOk &= MeterChecks.Check();
+        allOk &= MidiCommands.Check();
 
         Console.WriteLine();
         Console.WriteLine(allOk

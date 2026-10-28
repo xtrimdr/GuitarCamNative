@@ -60,6 +60,10 @@ public partial class MainWindow
         store.Project.Settings.Bpm = value;
         engine.Bpm = value;
         Timeline.Bpm = value;
+        // MIDI notes are in beats: they follow the tempo
+        foreach (var t in tracks) t.SetMidi(value);
+        engine.RefreshClipTiming();
+        Timeline.LengthSec = engine.LengthSec;
         Tempo.Set(value);
         Timeline.InvalidateVisual();
         MarkDirty();

@@ -162,6 +162,8 @@ public partial class MainWindow
         foreach (var lt in tracks)
         {
             double semis = lt.Track.Transpose;
+            // a MIDI track's notes just play higher or lower: nothing to render
+            if (lt.Track.IsMidi) lt.SetMidi(st.Project.Settings.Bpm);
             foreach (var lc in lt.Clips)
             {
                 if (lc.Audio is not { } audio || lc.Media is not { } media) continue;

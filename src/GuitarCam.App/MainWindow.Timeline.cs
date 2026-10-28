@@ -247,14 +247,15 @@ public partial class MainWindow
             if (target != null) return ClipEditing.MoveToTrack(p, clip.Id, target, swap);
             return ClipEditing.Find(p, clip.Id).Track.Id;
         }, "clip-edited", clip.Id);
-        Timeline.ClipsMoved += async clips =>
+        Timeline.ClipsMoved += async (clips, midi) =>
         {
             var ids = Timeline.BoxedClipIds.ToList();
             await EditTimeline(p =>
             {
                 foreach (var c in clips) ClipEditing.Replace(p, c);
-                return ClipEditing.Find(p, clips[0].Id).Track.Id;
-            }, "clips-moved", clips[0].Id);
+                foreach (var (id, at) in midi) MidiEditing.Move(p, id, at);
+                return clips.Count > 0 ? ClipEditing.Find(p, clips[0].Id).Track.Id : MidiEditing.Find(p, midi[0].Id).Track.Id;
+            }, "clips-moved", clips.Count > 0 ? clips[0].Id : null);
             // the moved clips stay selected together
             Timeline.BoxClips(ids);
         };
@@ -363,9 +364,11 @@ public partial class MainWindow
                 live.ApplyChannel();
             }
             else live = new LiveTrack(t, clips, PlaybackEngine.SampleRate);
+            live.SetMidi(p.Settings.Bpm);
             live.SetProjectSettings(p.Settings);
             list.Add(live);
         }
+        RefreshPiano();
 
         var dropped = liveClips.Values.Where(c => !used.Contains(c)).ToList();
         tracks = list;
@@ -410,13 +413,14 @@ public partial class MainWindow
     {
         if (sel == null || store == null) return Task.CompletedTask;
         string trackId = sel.Track.Id;
-        // the clips caught by the selection box go all at once (one step to undo)
+        // the clips caught by the selection box (takes and MIDI clips) go all at once (one step to undo)
         if (Timeline.BoxedClipIds.ToList() is { Count: > 1 } boxed)
             return EditTimeline(p =>
             {
-                foreach (var id in boxed) ClipEditing.RemoveClip(p, id);
+                foreach (var id in boxed) MidiEditing.RemoveAny(p, id);
                 return trackId;
             }, "clips-removed");
+        if (Timeline.SelectedMidiId is { } midi) return RemoveMidiClip(midi);
         string? clipId = Timeline.SelectedClipId ?? sel.Clips.FirstOrDefault()?.Clip.Id;
         return EditTimeline(p =>
         {
@@ -461,6 +465,7 @@ public partial class MainWindow
     /// even on several tracks, go as one block after the block's end (<see cref="ClipEditing.DuplicateMany"/>).</summary>
     Task DuplicateSelection()
     {
+        if (Timeline.BoxedClipIds.Count <= 1 && Timeline.SelectedMidiId is { } midi) return DuplicateMidiClip(midi);
         var ids = PickedClipIds();
         if (ids.Count == 0) { Status(Loc.T("timeline.dup.pick")); return Task.CompletedTask; }
         return DuplicateClips(ids);
@@ -470,13 +475,15 @@ public partial class MainWindow
     {
         if (sel == null) return;
         string trackId = sel.Track.Id;
-        int keep = ids.IndexOf(Timeline.SelectedClipId ?? "");
+        int keep = ids.IndexOf(Timeline.SelectedMidiId ?? Timeline.SelectedClipId ?? "");
         var lengths = LiveLengths();
         List<string> copies = [];
-        await EditTimeline(p => { copies = ClipEditing.DuplicateMany(p, ids, lengths); return trackId; },
+        await EditTimeline(p => { copies = MidiEditing.DuplicateMany(p, ids, lengths); return trackId; },
             ids.Count > 1 ? "clips-duplicated" : "clip-duplicated");
         if (copies.Count == 0) return;
-        Timeline.SelectClip(Timeline.Selected, keep >= 0 ? copies[keep] : null);
+        string? kept = keep >= 0 && keep < copies.Count ? copies[keep] : null;
+        if (kept != null && store != null && MidiEditing.TryFind(store.Project, kept) != null) Timeline.SelectMidiClip(Timeline.Selected, kept);
+        else Timeline.SelectClip(Timeline.Selected, kept);
         Timeline.BoxClips(copies);
     }
 
@@ -487,10 +494,12 @@ public partial class MainWindow
     async Task CopySelection(bool cut)
     {
         if (store == null) return;
-        var ids = PickedClipIds();
+        var picked = PickedClipIds();
+        // MIDI clips don't go to the clipboard yet: the takes among them do
+        var ids = picked.Where(id => MidiEditing.TryFind(store.Project, id) == null).ToList();
         if (ids.Count == 0 || ClipClipboard.Take(store.Project, ids, LiveLengths()) is not { } taken)
         {
-            Status(Loc.T("clipboard.pick"));
+            Status(Loc.T(ids.Count == 0 && (picked.Count > 0 || Timeline.SelectedMidiId != null) ? "midi.noCopy" : "clipboard.pick"));
             return;
         }
         if (cut)
@@ -505,6 +514,7 @@ public partial class MainWindow
         }
         clipboard = taken;
         Status(Loc.T((cut ? "clipboard.cut" : "clipboard.copied") + (ids.Count > 1 ? ".many" : ""), ids.Count, Shortcuts.Label("paste")));
+        if (ids.Count < picked.Count) Status(Loc.T("midi.noCopy.some"));
     }
 
     /// <summary>
@@ -662,6 +672,7 @@ public partial class MainWindow
             list.Add(MenuAction(Loc.T("menu.trackVideo"), () => EditTimeline(p => ClipEditing.AddEmpty(p, true), "track-added"), enabled: enabled, icon: "empty", tip: tip));
             list.Add(MenuAction(Loc.T("menu.trackAudio"), () => EditTimeline(p => ClipEditing.AddEmpty(p, false), "track-added"), enabled: enabled, icon: "empty", tip: tip));
         }
+        list.Add(MenuAction(Loc.T("menu.trackMidi"), NewMidiTrack, enabled: enabled, icon: "", tip: Loc.T("menu.trackMidi.hint")));
         list.Add(MenuAction(Loc.T("menu.folder"), () => NewFolder(), enabled: enabled, icon: "", tip: Loc.T("menu.folder.hint")));
         var presets = PresetSubmenu(enabled);
         ToolTip.SetTip(presets, Loc.T("preset.menu.hint"));
@@ -738,7 +749,8 @@ public partial class MainWindow
             {
                 await EditTimeline(p =>
                 {
-                    foreach (var b in boxed) ClipEditing.AlignToGrid(p, b, grid, tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Clip.Id == b)?.LengthSec);
+                    foreach (var b in boxed.Where(b => MidiEditing.TryFind(p, b) == null))
+                        ClipEditing.AlignToGrid(p, b, grid, tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Clip.Id == b)?.LengthSec);
                     return track.Track.Id;
                 }, "clip-aligned", id);
                 Timeline.BoxClips(boxed);
@@ -761,7 +773,7 @@ public partial class MainWindow
         }
         else
         {
-            if (!AudioOnly)
+            if (!AudioOnly && !track.Track.IsMidi)
                 list.Add(MenuAction(track.Track.Video ? Loc.T("menu.hideVideo") : Loc.T("menu.showVideo"), () => SetInVideo(track, !track.Track.Video),
                     enabled: enabled, icon: ""));
             list.Add(MenuAction(Loc.T("menu.renameTrack") + "…", () => { RenameInPlace(track.Track.Id, () => takeName.Focus()); return Task.CompletedTask; }, enabled: enabled, icon: ""));

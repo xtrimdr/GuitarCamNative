@@ -442,7 +442,12 @@ public sealed class Track
 {
     public string Id { get; set; } = Ids.New("trk");
     public string Name { get; set; } = "";
-    /// <summary>False = audio only: the track gets no panel in the video.</summary>
+    /// <summary>Takes or notes (<see cref="TrackKinds"/>): "audio" or "midi". Native only.</summary>
+    public string Kind { get; set; } = TrackKinds.Audio;
+    [JsonIgnore] public bool IsMidi => Kind == TrackKinds.Midi;
+    /// <summary>It has something to play: takes or MIDI clips.</summary>
+    [JsonIgnore] public bool HasContent => Clips.Count > 0 || MidiClips is { Count: > 0 };
+    /// <summary>False = audio only: the track gets no panel in the video. Always false on a MIDI track.</summary>
     public bool Video { get; set; } = true;
     /// <summary>
     /// The driver inputs it records from when armed, "3" or "3-4" (<see cref="GuitarCam.Audio.InputRoute"/>);
@@ -469,10 +474,22 @@ public sealed class Track
     public double Transpose { get; set; }
     public Channel Channel { get; set; } = new();
     public List<Clip> Clips { get; set; } = [];
+    /// <summary>The notes of a MIDI track (<see cref="MidiClip"/>); null on an audio track, so its file doesn't change. Native only.</summary>
+    public List<MidiClip>? MidiClips { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
     internal void Normalize()
     {
+        Kind = TrackKinds.Normalize(Kind);
+        if (IsMidi)
+        {
+            Video = false;
+            Input = null;
+            MidiClips ??= [];
+            MidiClips.RemoveAll(c => c == null);
+            foreach (var c in MidiClips) c.Normalize();
+        }
+        else MidiClips = null;
         Input = GuitarCam.Audio.InputRoute.Parse(Input)?.Key;
         Icon = string.IsNullOrWhiteSpace(Icon) || Icon.Length > 64 ? null : Icon.Trim();
         Color = NormalizeColor(Color);

@@ -396,7 +396,7 @@ public sealed partial class TimelineView : Control
         tracks = list;
         SetFolders(folderList);
         picked.RemoveWhere(id => !list.Any(t => t.Track.Id == id));
-        boxed.RemoveWhere(id => !list.Any(t => t.Clips.Any(c => c.Clip.Id == id)));
+        boxed.RemoveWhere(id => !list.Any(t => t.Clips.Any(c => c.Clip.Id == id) || t.Track.MidiClips?.Any(c => c.Id == id) == true));
         Relayout();
         if (shownTop.Count > 0) slide.Start();
         var live = list.SelectMany(t => t.Clips).ToHashSet();
@@ -429,8 +429,8 @@ public sealed partial class TimelineView : Control
 
     /// <summary>The clips caught by the selection box, by id (empty or one = a plain selection).</summary>
     public IReadOnlyCollection<string> BoxedClipIds => boxed.Count > 1 ? boxed : [];
-    /// <summary>The boxed clips were dragged: each one as it lands, the grabbed one first.</summary>
-    public event Action<IReadOnlyList<Clip>>? ClipsMoved;
+    /// <summary>The boxed clips were dragged: each take as it lands (the grabbed one first) and each MIDI clip's new start.</summary>
+    public event Action<IReadOnlyList<Clip>, IReadOnlyList<(string Id, double AtSec)>>? ClipsMoved;
 
     /// <summary>Boxes these clips together again (after the window moved them), keeping the selected one.</summary>
     public void BoxClips(IReadOnlyCollection<string> ids)
@@ -448,6 +448,7 @@ public sealed partial class TimelineView : Control
         {
             boxBase.UnionWith(boxed);
             if (SelectedClipId != null) boxBase.Add(SelectedClipId);
+            if (SelectedMidiId != null) boxBase.Add(SelectedMidiId);
         }
         boxSec = Sec(Math.Max(HeaderW, lastPointer.X));
         boxTop = lastPointer.Y - RulerH + scrollY;
@@ -472,6 +473,7 @@ public sealed partial class TimelineView : Control
             if (hidden.Contains(tracks[i].Track.Id)) continue;
             foreach (var c in tracks[i].Clips)
                 if (ClipRect(i, Window(c)).Intersects(b)) boxed.Add(c.Clip.Id);
+            BoxMidi(i, b);
         }
     }
 
@@ -481,6 +483,13 @@ public sealed partial class TimelineView : Control
         foreach (var r in rows)
         {
             if (r.Folder != null) continue;
+            if (FirstBoxedMidi(r.Track) is { } firstMidi)
+            {
+                if (boxed.Count == 1) { SelectMidiClip(r.Track, firstMidi.Id); return; }
+                SelectedMidiId = firstMidi.Id;
+                SelectOne(r.Track);
+                return;
+            }
             var first = tracks[r.Track].Clips.Where(c => boxed.Contains(c.Clip.Id)).MinBy(c => Window(c).Start);
             if (first == null) continue;
             if (boxed.Count == 1) { SelectClip(r.Track, first.Clip.Id); return; }
@@ -491,14 +500,16 @@ public sealed partial class TimelineView : Control
         InvalidateVisual();
     }
 
-    /// <summary>Grabbing a boxed clip by its body carries the other boxed ones with it.</summary>
-    void StartCarry(LiveClip grabbed)
+    /// <summary>Grabbing a boxed clip by its body carries the other boxed ones with it, takes and MIDI clips alike
+    /// (<paramref name="grabbed"/> = null when the one grabbed is a MIDI clip).</summary>
+    void StartCarry(LiveClip? grabbed)
     {
         carriedAlong.Clear();
         carriedPreview.Clear();
         foreach (var t in tracks)
             foreach (var c in t.Clips)
                 if (c != grabbed && boxed.Contains(c.Clip.Id)) carriedAlong.Add((c, ClipEditing.Copy(c.Clip)));
+        StartMidiCarry();
     }
 
     /// <summary>The grabbed clip moved (and snapped): the carried ones move by the same time, none ending before 0.</summary>
@@ -507,6 +518,8 @@ public sealed partial class TimelineView : Control
         if (dragged == null || original == null || preview == null) return;
         double shift = preview.AtSec - original.AtSec;
         foreach (var (c, o) in carriedAlong) shift = Math.Max(shift, ClipEnvelope.MinClipSec - Window(c, o).End);
+        foreach (double from in midiCarried.Values) shift = Math.Max(shift, -from);
+        carryShift = shift;
         preview.AtSec = ClipEditing.ToSample(original.AtSec + shift);
         foreach (var (c, o) in carriedAlong)
         {
@@ -559,6 +572,7 @@ public sealed partial class TimelineView : Control
         SelectedFolderId = null;
         if (i < 0 || i >= tracks.Count) SelectedClipId = null;
         else if (!tracks[i].Clips.Any(c => c.Clip.Id == SelectedClipId)) SelectedClipId = tracks[i].Clips.FirstOrDefault()?.Clip.Id;
+        if (i < 0 || i >= tracks.Count || tracks[i].Track.MidiClips?.Any(c => c.Id == SelectedMidiId) != true) SelectedMidiId = null;
         SelectionChanged?.Invoke(i);
         InvalidateVisual();
     }
@@ -1086,6 +1100,7 @@ public sealed partial class TimelineView : Control
             if (liftedId != null && folderById.TryGetValue(liftedId, out var liftedFolder)) DrawFolderLane(ctx, liftedFolder, W);
             if (recordingLanes != null)
                 foreach (int r in recordingLanes) DrawRecordingBar(ctx, r, W);
+            DrawMidiCarried(ctx, W);
             DrawStripGuides(ctx, W, H);
             DrawSocialMarks(ctx, W);
             // the snap guide: the edge the dragged clip is stuck to, across every lane (asked by the user)
@@ -1639,6 +1654,7 @@ public sealed partial class TimelineView : Control
         foreach (var (gx, major) in grid)
             if (gx >= HeaderW) ctx.DrawLine(major ? majorPen : minorPen, new Point(gx, y), new Point(gx, y + lh));
         foreach (var c in t.Clips) DrawClip(ctx, t, c, y, sel, W);
+        if (t.Track.IsMidi) DrawMidiClips(ctx, i, y, W);
         DrawJoins(ctx, i, W);
         if (Range is { } r && rangeTracks.Contains(t.Track.Id)) DrawRange(ctx, y, lh, W, r.Start, r.End);
         DrawSplitHover(ctx, i, y, lh);
@@ -2167,7 +2183,7 @@ public sealed partial class TimelineView : Control
         if (!RecordingInto(i) && lastPointer.Y >= y && lastPointer.Y < y + lh)
             DrawTrash(ctx, RemoveRect(i), Hot(RemoveRect(i)));
         ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, y + lh - 0.5), new Point(HeaderW, y + lh - 0.5));
-        DrawArm(ctx, ArmRect(i), isArmed || RecordingInto(i), Hot(ArmRect(i)));
+        if (!tracks[i].Track.IsMidi) DrawArm(ctx, ArmRect(i), isArmed || RecordingInto(i), Hot(ArmRect(i)));
 
         var ch = t.Channel;
         string pan = Math.Abs(ch.Pan) < 0.01 ? "C" : ch.Pan < 0 ? $"L{-ch.Pan * 100:0}" : $"R{ch.Pan * 100:0}";
@@ -2386,6 +2402,7 @@ public sealed partial class TimelineView : Control
             else if (row == null && p.X < HeaderW && p.Y >= RulerH) NewTrackRequested?.Invoke(p);
             else if (i >= 0 && i < tracks.Count && p.Y >= RulerH)
             {
+                if (p.X > HeaderW && tracks[i].Track.IsMidi && MidiContext(i, p)) { e.Handled = true; return; }
                 // The header asks for the track menu (no clip); the lane, for the clip under the pointer.
                 var clip = p.X > HeaderW ? ClipAt(i, p.X) : null;
                 SelectedClipId = clip?.Clip.Id ?? tracks[i].Clips.FirstOrDefault(c => c.Clip.Id == SelectedClipId)?.Clip.Id;
@@ -2467,7 +2484,7 @@ public sealed partial class TimelineView : Control
             e.Handled = true;
             return;
         }
-        if (p.X < HeaderW && ArmRect(i).Contains(p))
+        if (p.X < HeaderW && ArmRect(i).Contains(p) && !tracks[i].Track.IsMidi)
         {
             ArmRequested?.Invoke(tracks[i]);
             e.Handled = true;
@@ -2522,6 +2539,7 @@ public sealed partial class TimelineView : Control
             // Shift+drag over a lane selects a range, like the Rango tool (native only)
             StartRange(i, p, e);
         }
+        else if (p.X >= HeaderW && tracks[i].Track.IsMidi) MidiPressed(i, p, e);
         else if (p.X >= HeaderW)
         {
             var clip = ClipAt(i, p.X);
@@ -2556,6 +2574,8 @@ public sealed partial class TimelineView : Control
                 return;
             }
             dragMode = HitHandle(clip, p);
+            // with Ctrl, a click (released without moving) adds the clip to the selection or takes it out
+            toggleBase = (modifiers & KeyModifiers.Control) != 0 && e.ClickCount == 1 ? SelectionSeed() : null;
             // a boxed clip grabbed by its body carries the other boxed ones; its edges trim it alone
             if (boxed.Count > 1 && boxed.Contains(clip.Clip.Id) && dragMode == ClipEditMode.Move)
             {
@@ -2798,6 +2818,7 @@ public sealed partial class TimelineView : Control
             DragRange();
         else if (gesture == "erase")
             DragErase();
+        else if (gesture == "midi") UpdateMidiDrag();
         else if (gesture is "zoom" or "listen")
         {
             // nothing follows the pointer: Zoom acts on release (its band is drawn from the pointer), Escuchar on press
@@ -2874,8 +2895,13 @@ public sealed partial class TimelineView : Control
         var movedTracks = dragIds.ToList();
         bool gathers = dragGathers;
         List<string> erased = [.. erasing];
-        List<Clip>? together = kind == "clip" && carriedAlong.Count > 0 && value != null ? [value, .. carriedPreview.Values] : null;
-        string? grabbedId = dragged?.Clip.Id;
+        bool midiCarry = kind == "midi" && midiCarrying;
+        List<Clip>? together = kind == "clip" && (carriedAlong.Count > 0 || midiCarried.Count > 0) && value != null ? [value, .. carriedPreview.Values]
+            : midiCarry ? [.. carriedPreview.Values] : null;
+        var midiMoves = together != null ? MidiMoves() : [];
+        string? grabbedId = kind == "midi" ? midiHeld?.Id : dragged?.Clip.Id;
+        var midi = kind == "midi" && !midiCarry ? MidiResult() : null;
+        var toggle = toggleBase;
         // the new height is applied while the dragged one still holds: applied after, the rows below went back to the
         // old height for a moment and glided from there, so everything jumped on release
         if (kind == "row-height" && changed && heightDrag is { } rh) RowHeightRequested?.Invoke(rh.Id, rh.H);
@@ -2886,11 +2912,18 @@ public sealed partial class TimelineView : Control
         if (kind == "zoom") EndZoom(lastPointer, (modifiers & KeyModifiers.Alt) != 0);
         if (kind is "marker" or "loop") StripReleased(kind, changed);
         if (kind == "box" && changed) EndBox();
+        // Ctrl+click on a take adds it or takes it out (with Ctrl held, a drag still swaps it with another track's clip)
+        if (toggle != null && !changed && grabbedId != null) ToggleBoxed(grabbedId, toggle);
         // a click on a boxed clip without moving it leaves just that one selected
-        if (together != null && !changed) SelectClip(from, grabbedId);
-        else if (together != null) ClipsMoved?.Invoke(together);
+        else if (together != null && !changed)
+        {
+            if (kind == "midi") SelectMidiClip(from, grabbedId);
+            else SelectClip(from, grabbedId);
+        }
+        else if (together != null) ClipsMoved?.Invoke(together, midiMoves);
         else if (kind == "clip" && changed && value != null) ClipEditCommitted?.Invoke(value, target, swap);
         if (kind == "curve" && changed && value != null) ClipEditCommitted?.Invoke(value, null, null);
+        if (kind == "midi") ReleaseMidi(midi);
         if (kind == "reorder" && changed && landed is { } l && (l != from0 || gathers))
         {
             if (movedFolder != null) FolderMoveRequested?.Invoke(movedFolder.Id, l.Pos);
@@ -2944,6 +2977,8 @@ public sealed partial class TimelineView : Control
         capturedPointer = null;
         dragged = null;
         original = preview = null;
+        toggleBase = null;
+        ClearMidiGesture();
         carriedAlong.Clear();
         carriedPreview.Clear();
         stuckTo = null;
@@ -2973,6 +3008,7 @@ public sealed partial class TimelineView : Control
             if (lastPointer.X < 20 || (lastPointer.X < HeaderW && (FoldRect(fo).Contains(lastPointer) || FolderIconRect(fo).Contains(lastPointer))))
                 cursor = StandardCursorType.Hand;
         }
+        else if (MidiCursor(i, lastPointer) is { } midiCursor) cursor = midiCursor;
         else if (i >= 0 && i < tracks.Count)
         {
             if (OnHandle(i, lastPointer) || BadgeRect(i).Contains(lastPointer) || JoinChipAt(i, lastPointer) != null) cursor = StandardCursorType.Hand;

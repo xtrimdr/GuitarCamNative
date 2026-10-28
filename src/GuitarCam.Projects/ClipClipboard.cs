@@ -57,6 +57,8 @@ public sealed class ClipClipboard
         if (at < 0) throw new ArgumentException(Texts.T("err.clip.trackNotFound", "No encontré esa pista."));
         at = Math.Min(at, p.Tracks.Count - Lanes);
         if (at < 0) throw new ArgumentException(Texts.T("err.clip.pasteTracks", "Esos clips ocupan {0} pistas y el proyecto tiene {1}.", Lanes, p.Tracks.Count));
+        if (Items.Any(i => p.Tracks[at + i.Lane].IsMidi))
+            throw new ArgumentException(Texts.T("err.midi.noAudio", "Las tomas no van en una pista MIDI: elegí una pista de audio."));
         double shift = atSec - StartSec;
         List<string> pasted = [];
         foreach (var item in Items)

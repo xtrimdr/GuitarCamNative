@@ -49,6 +49,13 @@ public sealed class PlaybackEngine : IDisposable
     int clickPos;
     // a single click asked for by the sound menu; the callback takes it, so it also sounds while stopped
     float[]? previewClick;
+    /// <summary>A note the piano roll asked to hear (<see cref="PreviewNote"/>), taken by the audio thread.</summary>
+    float[]? pendingNote;
+    // audio thread only: the note being heard and where it is, and the one it cut, fading out
+    float[]? note, cutNote;
+    int notePos, cutPos, cutLeft;
+    /// <summary>How long a note cut by the next one takes to fade out (5 ms), so it doesn't click.</summary>
+    const int NoteCutFade = 240;
 
     double bpm = 120;
     long position; // timeline frame (before recStartFrame, maybe negative, during recording count-in)
@@ -1044,6 +1051,46 @@ public sealed class PlaybackEngine : IDisposable
             outR = or;
         }
 
+        if (Interlocked.Exchange(ref pendingNote, null) is { } nextNote)
+        {
+            if (note != null)
+            {
+                cutNote = note;
+                cutPos = notePos;
+                cutLeft = NoteCutFade;
+            }
+            note = nextNote;
+            notePos = 0;
+        }
+        // straight to the output, like the click: heard while it plays and while it is stopped
+        if (cutNote != null)
+        {
+            var heard = cutNote;
+            int k = Math.Min(n, Math.Min(cutLeft, heard.Length - cutPos));
+            for (int i = 0; i < k; i++)
+            {
+                float v = heard[cutPos + i] * (cutLeft - i) / NoteCutFade;
+                output[0][i] += v;
+                output[1][i] += v;
+            }
+            cutPos += k;
+            cutLeft -= k;
+            if (cutLeft <= 0 || cutPos >= heard.Length) cutNote = null;
+        }
+        if (note != null)
+        {
+            var heard = note;
+            int k = Math.Min(n, heard.Length - notePos);
+            for (int i = 0; i < k; i++)
+            {
+                float v = heard[notePos + i];
+                output[0][i] += v;
+                output[1][i] += v;
+            }
+            notePos += k;
+            if (notePos >= heard.Length) note = null;
+        }
+
         if (softwareMonitor)
         {
             // the armed tracks' inputs, each once; with none armed, input 1-2
@@ -1083,6 +1130,9 @@ public sealed class PlaybackEngine : IDisposable
 
     /// <summary>Plays one click of the current sound and volume, playing or not (the web's playClick from the sound menu).</summary>
     public void PreviewClick(bool accent = true) => Volatile.Write(ref previewClick, accent ? clickHi : clickLo);
+
+    /// <summary>Plays one note on its own (<see cref="NoteSynth.Audition"/>), playing or not, cutting the one before.</summary>
+    public void PreviewNote(float[] samples) => Volatile.Write(ref pendingNote, samples);
 
     public void SetClickSound(ClickSound s, double volumeDb = 0)
     {

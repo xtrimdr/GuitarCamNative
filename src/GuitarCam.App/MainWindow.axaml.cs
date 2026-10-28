@@ -481,6 +481,7 @@ public partial class MainWindow : Window
         await Task.Run(() => { foreach (var old in previous) old.CloseVideo(); });
         tracks = list;
         if (!preserveView) dirty = false;
+        foreach (var t in list) t.SetMidi(p.Settings.Bpm);
         engine.SetTracks(list, p.Settings);
         RefreshTranspose();
         SessionName.Text = p.Name;
@@ -490,6 +491,7 @@ public partial class MainWindow : Window
         Timeline.LengthSec = engine.LengthSec;
         ApplyRouting(p, list);
         Timeline.SetTracks(list, p.Folders, preserveView);
+        RefreshPiano();
         RefreshMarkers();
         UpdateResetHeights();
         Preview.SetProject(list, p.Settings);
@@ -582,6 +584,7 @@ public partial class MainWindow : Window
         if (e.Source is Control source && source.FindAncestorOfType<TextBox>(true) != null) return;
         if (restoring) { e.Handled = true; return; }
         if (RecordingBusy && await RecordingKey(e)) return;
+        if (PianoShown && pianoRoll.HandleKey(e)) { e.Handled = true; return; }
         if (e.Key == Key.Escape)
         {
             Timeline.CancelGesture();
@@ -662,7 +665,7 @@ public partial class MainWindow : Window
                 await PasteClips();
                 break;
             case "mixer":
-                if (mixerView && !masteringView) SetMixerView(false);
+                if (mixerView && !masteringView && !pianoView) SetMixerView(false);
                 else ShowBottomView(mastering: false);
                 break;
             case "click":
@@ -735,6 +738,7 @@ public partial class MainWindow : Window
             t.GrShow = gr < t.GrShow ? gr : t.GrShow + (gr - t.GrShow) * 0.12;
         }
         Timeline.SetPlayhead(pos, engine.Playing);
+        pianoRoll.SetPlayhead(pos);
         bool newFrame = false;
         var look = store?.Project.Settings;
         foreach (var t in tracks)
@@ -870,7 +874,8 @@ public partial class MainWindow : Window
             {
                 var restored = st.Project.Tracks[i];
                 return t.Track.Id == restored.Id && t.Track.Video == restored.Video
-                    && JsonSerializer.Serialize(t.Track.Clips, ProjectStore.Json) == JsonSerializer.Serialize(restored.Clips, ProjectStore.Json);
+                    && JsonSerializer.Serialize(t.Track.Clips, ProjectStore.Json) == JsonSerializer.Serialize(restored.Clips, ProjectStore.Json)
+                    && JsonSerializer.Serialize(t.Track.MidiClips, ProjectStore.Json) == JsonSerializer.Serialize(restored.MidiClips, ProjectStore.Json);
             }).All(same => same);
             if (sameClips)
             {

@@ -176,8 +176,9 @@ public partial class MainWindow
         MixerHost.Children.Add(miniRow);
         MixerHost.Children.Add(header);
         // the DockPanel fills only its last child: the mixer and the Mastering view share it, so both fill the place
-        MixerHost.Children.Add(new Panel { Children = { mixerScroll, masteringScroll } });
+        MixerHost.Children.Add(new Panel { Children = { mixerScroll, masteringScroll, pianoHost } });
         InitMastering();
+        InitPiano();
 
         TimelineViewButton.Click += (_, _) => SetMixerView(false);
         MixerViewButton.Click += (_, _) => ShowBottomView(mastering: false);
@@ -258,7 +259,7 @@ public partial class MainWindow
             headerRefresh.Add(() =>
             {
                 bool lit = tracks.Any(t => solo ? t.Channel.Solo : t.Channel.Muted);
-                b.IsEnabled = store != null && !store.ReadOnly && !restoring && tracks.Any(t => t.Clips.Count > 0);
+                b.IsEnabled = store != null && !store.ReadOnly && !restoring && tracks.Any(t => t.Track.HasContent);
                 b.Classes.Set("lit", lit);
                 b.Background = lit ? (solo ? Palette.Fg : Palette.Accent) : Brushes.Transparent;
                 b.BorderBrush = lit ? (solo ? Palette.Fg : Palette.Accent) : Palette.Line;
@@ -356,7 +357,7 @@ public partial class MainWindow
     void ApplyPanTemplate(string id)
     {
         if (syncing || restoring || store == null || store.ReadOnly) return;
-        var takes = tracks.Where(t => t.Clips.Count > 0).ToList();
+        var takes = tracks.Where(t => t.Track.HasContent).ToList();
         if (takes.Count == 0) return;
         undo.Checkpoint(store.Project);
         var pans = PanTemplates.Positions(id, takes.Count, panWidth);
@@ -407,7 +408,7 @@ public partial class MainWindow
         {
             bool editable = store != null && !store.ReadOnly && !restoring;
             mixerStrips.IsEnabled = editable;
-            if (panButton != null) panButton.IsEnabled = editable && tracks.Any(t => t.Clips.Count > 0);
+            if (panButton != null) panButton.IsEnabled = editable && tracks.Any(t => t.Track.HasContent);
             foreach (var r in headerRefresh) r();
             foreach (var r in mx.Refresh) r();
             if (slotWindowRefresh is { } w) foreach (var r in w) r();
@@ -631,8 +632,8 @@ public partial class MainWindow
         }
         mx.Refresh.Add(Paint);
 
-        bool empty = t.Clips.Count == 0;
-        bool Silent() => empty || t.Silenced || (tracks.Any(x => x.Clips.Count > 0 && x.Soloed) && !t.Soloed);
+        bool empty = !t.Track.HasContent;
+        bool Silent() => empty || t.Silenced || (tracks.Any(x => x.Track.HasContent && x.Soloed) && !t.Soloed);
         var name = new TextBlock { Text = t.Track.Name, FontSize = wide ? 12 : 11, FontWeight = wide ? FontWeight.Medium : FontWeight.Normal, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
         mx.Refresh.Add(() => { name.Text = t.Track.Name; name.Foreground = Silent() ? Palette.Faint : Palette.Fg; ToolTip.SetTip(name, t.Track.Name); });
         var emptyHint = new TextBlock { Text = Loc.T("mixer.emptyTag"), FontSize = 9, LetterSpacing = 0.8, Foreground = Palette.Faint, IsVisible = empty, VerticalAlignment = VerticalAlignment.Center };

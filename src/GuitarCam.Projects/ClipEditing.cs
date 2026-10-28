@@ -135,6 +135,7 @@ public static class ClipEditing
         var (from, clip) = Find(p, clipId);
         var to = p.Tracks.Find(t => t.Id == targetId) ?? throw new ArgumentException(Texts.T("err.clip.trackNotFound", "No encontré esa pista."));
         if (from == to) return to.Id;
+        if (to.IsMidi) throw new ArgumentException(Texts.T("err.midi.noAudio", "Las tomas no van en una pista MIDI: elegí una pista de audio."));
         Clip? other = swapId == null ? null : to.Clips.Find(c => c.Id == swapId)
             ?? throw new ArgumentException(Texts.T("err.clip.swapNotFound", "No encontré el clip para intercambiar."));
         int index = from.Clips.IndexOf(clip);
@@ -175,7 +176,7 @@ public static class ClipEditing
     {
         var media = p.FindMedia(mediaId) ?? throw new ArgumentException(Texts.T("err.clip.mediaNotFound", "No encontré ese canal en el historial."));
         if (p.Tracks.Any(t => t.Clips.Any(c => c.MediaId == mediaId))) throw new ArgumentException(Texts.T("err.clip.mediaInUse", "Ese canal ya está en el timeline."));
-        var target = p.Tracks.Find(t => t.Id == selectedTrackId && t.Clips.Count == 0);
+        var target = p.Tracks.Find(t => t.Id == selectedTrackId && t.Clips.Count == 0 && !t.IsMidi);
         Channel? previousChannel = null;
         Clip? previousClip = null;
         if (media.Extra?.TryGetValue("lastTimelineChannel", out var channelJson) == true)
@@ -372,7 +373,8 @@ public static class ClipEditing
     /// end, each copy on its original's track and at the same distance from the others, so a phrase played on several
     /// tracks repeats whole. With one clip it is <see cref="Duplicate"/>. Returns the copies' ids, in the given order.
     /// </summary>
-    public static List<string> DuplicateMany(Project p, IReadOnlyList<string> ids, Func<Clip, double?>? lengthOf = null)
+    /// <param name="shift">How far the copies go; null = right after the block the clips make.</param>
+    public static List<string> DuplicateMany(Project p, IReadOnlyList<string> ids, Func<Clip, double?>? lengthOf = null, double? shift = null)
     {
         var picked = ids.Distinct().Select(id => Find(p, id)).ToList();
         if (picked.Count == 0) return [];
@@ -382,7 +384,7 @@ public static class ClipEditing
         {
             var copy = Copy(clip);
             copy.Id = Ids.New("clp");
-            copy.AtSec = ToSample(clip.AtSec + end - start);
+            copy.AtSec = ToSample(clip.AtSec + (shift ?? end - start));
             track.Clips.Insert(track.Clips.IndexOf(clip) + 1, copy);
             copies.Add(copy.Id);
         }

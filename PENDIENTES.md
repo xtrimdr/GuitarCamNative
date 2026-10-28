@@ -64,10 +64,11 @@ _Ideas y mejoras para la nativa._
 - Primero un **sampler propio** (tus WAV), después VST3 (punto 2).
 
 Etapas (cada una sirve sola):
-- [ ] **Etapa 1: pistas y clips MIDI con piano roll.** Una pista MIDI no lleva panel de video. Notas con altura,
-  inicio, largo y velocidad, en pulsos para que sigan el tempo (el clip sigue en segundos como los demás). En el
-  timeline, el clip muestra sus notas en chiquito. En el piano roll se dibuja, mueve, alarga y borra con ajuste a la
-  grilla, y se edita la velocidad. Se puede deshacer y probar con `gclab`. Por ahora suena con un tono de prueba.
+- [x] **Etapa 1: pistas y clips MIDI con piano roll** (hecho, ver [HECHO.md](HECHO.md)). Lo que anotó el usuario al
+  probarla (2026-10-28):
+  - [x] Varios clips MIDI a la vez, el piano roll después de Timeline y su grilla (hechos, ver [HECHO.md](HECHO.md)).
+  - [ ] Le falta: que los clips MIDI entren en las herramientas (dividir, borrar, escuchar), en el rango y en copiar y
+    pegar; que la nota que suena al tocar el piano roll pase por la cadena de la pista; copiar y pegar notas.
 - [ ] **Etapa 2: sampler.** Un WAV por nota (kit de batería) o uno melódico que se transpone. Voces preasignadas en el
   hilo de audio, y el mismo camino en la reproducción y en la exportación.
 - [ ] **Etapa 3: instrumentos VST3** con el puente del punto 2.

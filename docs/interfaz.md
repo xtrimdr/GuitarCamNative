@@ -20,7 +20,7 @@ Todo lo que se describe acá lo decidió el usuario: no lo cambies sin preguntar
 ├──────────────────┴─ separador arrastrable ─────────────────────────┴───────────────────┤                                │
 │ timeline (280): regla (32) · encabezados fijos (324) · un carril por pista (64, 40–320) │                                │
 ├ transporte, siempre abajo (~52) ────────────────────────────────────────────────────────────────────────────────────────────┤
-│ ·························· medidor de entrada (kHz · buffer debajo) · Monitor  [ reloj │ ⏮ ■ ▶ ● loop │ Compás Tempo TAP Cuenta Click ▾ ] ··· Timeline/Mixer · Ver todo │
+│ ·························· medidor de entrada (kHz · buffer debajo) · Monitor  [ reloj │ ⏮ ■ ▶ ● loop │ Compás Tempo TAP Cuenta Click ▾ ] ··· Timeline/Piano roll/Mixer/Mastering · Ver todo │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -239,7 +239,9 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   tiene **"Alinear a la grilla"**: lleva el comienzo de la toma a la línea más cercana con la subdivisión del imán
   (`ClipEditing.AlignToGrid`; deshabilitada con el imán apagado). Sobre un clip marcado, alinea o quita todos los marcados.
 - **Selección de varios clips** (pedido del usuario): arrastrar en la parte vacía de las pistas (o debajo de la
-  última) dibuja un rectángulo que marca cada clip que toca; con Ctrl suma a lo marcado (`boxed`, `UpdateBox`). Agarrar
+  última) dibuja un rectángulo que marca cada clip que toca, tomas y clips MIDI; con Ctrl suma a lo marcado (`boxed`,
+  `UpdateBox`). **Ctrl+clic** en un clip lo suma o lo saca (en una toma, al soltar sin mover: Ctrl+arrastrar sigue
+  intercambiando con el clip de otra pista; `ToggleBoxed`). Agarrar
   uno marcado por el cuerpo mueve todos el mismo tiempo, cada uno en su pista (`StartCarry`, `DragCarried`, evento `ClipsMoved`: un solo paso para deshacer); sus bordes recortan solo ese. Supr los saca a
   todos. Un clic sin mover, o cualquier selección común, deja uno solo.
 - **Rango**: la herramienta Rango, o Shift+arrastrar con Seleccionar, marca un tramo; arrastrando hacia arriba o abajo
@@ -563,6 +565,46 @@ tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
   por bus de su lista (knob y %, el nombre del bus, qué hace, ON, **PRE** y × para sacarlo) con "+ Envío" debajo. Cada
   pista elige sus buses (`Send.Hidden`, `ProjectBuses.Shown` / `ShowSend`): sacar uno lo apaga y guarda su nivel;
   una pista o un bus nuevos traen todos. La clave de `RefreshMixer` lleva los envíos sacados para rearmar las tiras.
+
+## Pistas MIDI y piano roll (`MainWindow.Midi.cs`, `Controls/PianoRollView.cs`, `Controls/TimelineView.Midi.cs`)
+
+Etapa 1 del editor MIDI (pedido del usuario: armar bases "al más puro estilo FL Studio", con clips por pista como
+Logic o Studio One). Etapas siguientes en PENDIENTES: sampler, después VST3.
+
+- **Pista MIDI** (`Track.Kind = "midi"`, "+ Nueva pista" → Pista MIDI, ícono de piano): nunca lleva panel de video ni
+  se arma para grabar (el ● no aparece; el del mixer avisa con un toast). Tomas y clips de audio no entran en ella.
+  Tiene su tira en el mixer como cualquier pista (fader, paneo, slots, envíos) y su Transponer sube o baja las notas.
+- **Clips MIDI en el timeline**: caja con el color de la pista y sus notas en chiquito (entre su nota más grave y la
+  más aguda, con una octava como mínimo). Clic elige, arrastrar el cuerpo lo mueve (en el tiempo y a otra pista MIDI,
+  con el imán del timeline; Alt, libre), el borde derecho cambia el largo de a pasos de la grilla, doble clic lo abre
+  en el piano roll y doble clic en un tramo vacío del carril crea uno de 4 compases ahí y lo abre. Supr lo quita, D lo
+  duplica justo después; clic derecho: abrir, duplicar, quitar. Entran en la selección de varios (Ctrl+clic y
+  rectángulo, mezclados con tomas): arrastrar uno marcado por el cuerpo los mueve a todos el mismo tiempo, cada uno en
+  su pista (`ClipsMoved`, un solo paso de deshacer), y Supr, D y el clic derecho actúan sobre todos
+  (`MidiEditing.DuplicateMany`: el bloque entero va justo después de sí mismo). Copiar y pegar se lleva solo las tomas
+  (avisa). Las herramientas que no son Seleccionar y el rango todavía no los tocan.
+- **Tiempos**: el clip empieza en segundos (`AtSec`) como todos, pero su largo y sus notas van en tiempos
+  (`LengthBeats`, `MidiNote.Beat/Beats`), así siguen al tempo. Una nota que pasa el final del clip se corta ahí.
+- **Piano roll**: una vista más en el lugar del mixer (botón "Piano roll" del transporte, justo después de
+  Timeline, pedido del usuario; o doble clic en un clip),
+  como Mastering: misma altura y lugar que el mixer, con la mini timeline arriba en Clásico. Arriba, el nombre de la
+  pista con el largo y la cantidad de notas, el **imán** propio (1/4 · 1/8 · 1/16 · 1/32 · 1/8T · Libre, `pianoSnap`
+  en config.json, 1/16 de entrada), la **grilla** ("Grilla: …", también con clic derecho en la regla; pedido del
+  usuario: imán y grilla juntos o cada uno por su lado, como en el timeline): **Igual que el imán** (de entrada; con el
+  imán en Libre, Auto), **Auto** (se afina con el zoom: el paso más fino con 14 px entre líneas) o una subdivisión fija
+  (Compás a 1/64, 1/8T), guardada en `pianoGrid`; las líneas a menos de 6 px no se dibujan (`PianoRollView.GridMode`).
+  Y un ícono de ayuda con los gestos. Teclado a la izquierda (sus teclas suenan; las
+  filas de las negras más oscuras, una línea en cada Do), la regla con los compases del clip (clic mueve el cabezal),
+  lo que pasa del final del clip oscurecido, el cabezal de acento y, abajo, la franja **VEL** con una barra por nota
+  (se arrastra para cambiarla). Gestos como FL: clic en vacío escribe una nota con el largo y la velocidad de la
+  última tocada (y se arrastra), arrastrar una nota la mueve (con las elegidas; Alt, libre), su borde derecho la
+  alarga, clic derecho borra (arrastrando, varias), Ctrl+arrastrar en vacío elige con un rectángulo, Ctrl+clic suma o
+  saca. Teclas con el foco en el piano roll: Supr borra las elegidas (nunca el clip), Ctrl+A todas, ↑ ↓ un semitono
+  (Shift: una octava), Esc. La ruedita con los mismos modificadores que el timeline (zoom, costados, alto de las filas).
+  Cada gesto que cambia algo es un paso de deshacer (`NotesCommitted` → `MidiEditing.SetNotes` por `EditTimeline`).
+- **Sonido**: hasta que haya instrumento, un tono de prueba (`NoteSynth`, sin estado: igual en la reproducción, la
+  exportación y gclab). Las notas que suenan al tocar el teclado o escribir van directo a la salida
+  (`PlaybackEngine.PreviewNote`), sin la cadena de la pista.
 
 ## Video | Solo audio (`MainWindow.Mode.cs`, `ProjectSettings.Mode`)
 

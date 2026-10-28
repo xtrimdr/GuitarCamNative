@@ -600,7 +600,7 @@ public partial class MainWindow
             noSelection.IsVisible = sel == null && folder == null;
             folderPanel.IsVisible = folder != null;
             if (folder != null) foreach (var refresh in folderRefresh) refresh();
-            noSelectionHint.Text = tracks.Any(t => t.Clips.Count > 0) ? Loc.T("insp.none.hint") : Loc.T("insp.none.empty");
+            noSelectionHint.Text = tracks.Any(t => t.Track.HasContent) ? Loc.T("insp.none.hint") : Loc.T("insp.none.empty");
             takeHead.IsVisible = sel != null;
             takeBadge.Set(sel?.Track, sel == null ? 0 : tracks.IndexOf(sel) + 1, c != null);
             takeInfo.Text = sel == null ? "" : c == null ? Loc.T("insp.trackEmpty") : c.Offline ? Loc.T("clip.offline") : "";

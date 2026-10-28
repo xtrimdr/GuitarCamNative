@@ -33,6 +33,10 @@ public sealed class MixTrackSpec
     /// <summary>The track's name, for its stem file.</summary>
     public string Name { get; init; } = "";
     public IReadOnlyList<MixClipSpec> Clips { get; init; } = [];
+    /// <summary>A MIDI track's notes (<see cref="NoteSynth"/>), added to its clips' sound before the chain; null = none.</summary>
+    public NoteSequence? Notes { get; init; }
+    /// <summary>True when there is something to play: clips or notes.</summary>
+    public bool HasSound => Clips.Count > 0 || Notes is { Notes.Length: > 0 };
     public double Volume { get; init; } = 1;
     public double Pan { get; init; }
     public bool Muted { get; init; }
@@ -700,7 +704,7 @@ public static class MixRenderer
         public readonly float[] L = new float[ChunkFrames], R = new float[ChunkFrames];
     }
 
-    /// <summary>Port of <c>mixDurationSec</c> in <c>mixGraph.ts</c>: end of the last clip (at least 1 s).</summary>
+    /// <summary>Port of <c>mixDurationSec</c> in <c>mixGraph.ts</c>: end of the last clip or note's release (at least 1 s).</summary>
     public static double MixDurationSec(IEnumerable<MixTrackSpec> tracks, int sampleRate)
     {
         double maxEnd = 1.0;
@@ -711,6 +715,7 @@ public static class MixRenderer
                 var w = c.GetWindow(sampleRate);
                 if (w.End > maxEnd) maxEnd = w.End;
             }
+            if (t.Notes != null) maxEnd = Math.Max(maxEnd, t.Notes.End / (double)sampleRate);
         }
         return maxEnd;
     }
@@ -720,7 +725,7 @@ public static class MixRenderer
     {
         bool anySolo = tracks.Any(t => t.Solo);
         for (int i = 0; i < tracks.Count; i++)
-            if (tracks[i].Clips.Count > 0 && !tracks[i].Muted && (!anySolo || tracks[i].Solo)) yield return i;
+            if (tracks[i].HasSound && !tracks[i].Muted && (!anySolo || tracks[i].Solo)) yield return i;
     }
 
     /// <summary>
@@ -804,12 +809,12 @@ public static class MixRenderer
         foreach (var t in tracks)
             if (t.Solo) { anySolo = true; break; }
 
-        var active = new List<(MixClipSpec[] Clips, ClipAudioJoins?[] Joins, TrackDspChain Chain, int Out, MixSendSpec[] Sends, bool Pre)>();
+        var active = new List<(MixClipSpec[] Clips, ClipAudioJoins?[] Joins, NoteSequence? Notes, TrackDspChain Chain, int Out, MixSendSpec[] Sends, bool Pre)>();
         for (int k = 0; k < tracks.Count; k++)
         {
             var t = tracks[k];
             bool mute = t.Muted || (anySolo && !t.Solo);
-            if (only >= 0 ? k != only : mute || t.Clips.Count == 0) continue;
+            if (only >= 0 ? k != only : mute || !t.HasSound) continue;
             var chain = new TrackDspChain(sampleRate);
             chain.Configure(t);
             if (only >= 0) chain.Muted = chain.Solo = false;
@@ -817,7 +822,7 @@ public static class MixRenderer
             chain.Sends = [.. sends.Select(s => new TrackSend(null, s.To, (float)Math.Clamp(s.Level, 0, 1), s.Pre))];
             var clips = t.Clips.ToArray();
             int to = t.Output >= 0 && t.Output < nodeCount ? t.Output : -1;
-            active.Add((clips, TrackDspChain.AudioJoins(clips, sampleRate), chain, to, sends, sends.Any(s => s.Pre)));
+            active.Add((clips, TrackDspChain.AudioJoins(clips, sampleRate), t.Notes, chain, to, sends, sends.Any(s => s.Pre)));
         }
         if (only >= 0) anySolo = false;
 
@@ -862,7 +867,7 @@ public static class MixRenderer
             int at = c * ChunkFrames, len = Math.Min(ChunkFrames, totalFrames - at);
             void Track(int k)
             {
-                var (clips, joins, chain, _, _, pre) = active[k];
+                var (clips, joins, notes, chain, _, _, pre) = active[k];
                 var b = set.Tracks[k];
                 Array.Clear(b.L, 0, len);
                 Array.Clear(b.R, 0, len);
@@ -870,6 +875,7 @@ public static class MixRenderer
                 {
                     int n = Math.Min(Quantum, len - off);
                     TrackDspChain.SampleClips(clips, at + off, n, sampleRate, chain.BufferL(n), chain.BufferR(n), joins);
+                    if (notes != null) NoteSynth.Render(notes, at + off, n, sampleRate, chain.BufferL(n), chain.BufferR(n));
                     chain.ProcessFilledBuffer(n, anySolo, b.L.AsSpan(off, n), b.R.AsSpan(off, n), out _, out _, out _);
                     if (pre && chain.BlockSends.Length > 0)
                     {
@@ -891,7 +897,7 @@ public static class MixRenderer
             for (int k = 0; k < active.Count; k++)
             {
                 var b = set.Tracks[k];
-                var (_, _, _, to, sends, _) = active[k];
+                var (_, _, _, _, to, sends, _) = active[k];
                 ReadOnlySpan<float> l = b.L.AsSpan(0, len), r = b.R.AsSpan(0, len);
                 BusDspChain.Add(l, r, 1f, to >= 0 ? set.NodeL[to].AsSpan(0, len) : set.L.AsSpan(0, len), to >= 0 ? set.NodeR[to].AsSpan(0, len) : set.R.AsSpan(0, len));
                 foreach (var s in sends)

@@ -27,7 +27,7 @@ public partial class MainWindow
             Status(Loc.T("master.suggest.wait"));
             return;
         }
-        if (!st.Project.Tracks.Any(t => t.Clips.Count > 0))
+        if (!st.Project.Tracks.Any(t => t.HasContent))
         {
             Status(Loc.T("master.suggest.empty"));
             return;

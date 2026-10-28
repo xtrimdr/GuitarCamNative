@@ -69,13 +69,14 @@ public partial class MainWindow
         if (store == null) return [];
         var p = store.Project;
         if (armedIds == null) return TakeRecording.PickTarget(p, sel?.Track.Id) is { } pick ? [pick] : [];
-        return p.Tracks.Where(t => armedIds.Contains(t.Id)).ToList();
+        return p.Tracks.Where(t => armedIds.Contains(t.Id) && !t.IsMidi).ToList();
     }
 
     /// <summary>Arms a track, or disarms it when it is lit (armed by hand or picked by the app); the others stay as they are.</summary>
     void ToggleArm(LiveTrack t)
     {
         if (RecordingBusy || store == null || store.ReadOnly) return;
+        if (t.Track.IsMidi) { Toast(Loc.T("midi.noArm")); return; }
         var lit = RecordTargets().Select(x => x.Id).ToList();
         if (!lit.Remove(t.Track.Id)) lit.Add(t.Track.Id);
         armedIds = lit;

@@ -3,6 +3,19 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-28: Lo que el usuario anotó al probar la etapa 1 del editor MIDI: varios clips MIDI a la vez con Ctrl+clic
+  (también en las tomas, al soltar sin mover) y con el rectángulo, mezclados con tomas, que se mueven, duplican y borran
+  juntos en un paso (`TimelineView.Midi.cs`: `ToggleBoxed`, `StartMidiCarry`; `MidiEditing.DuplicateMany`, `RemoveAny`);
+  "Piano roll" justo después de "Timeline" en el selector de vistas; y la grilla del piano roll, igual que el imán, Auto
+  o fija, desde su cabecera o con clic derecho en su regla (`PianoRollView.GridMode`, `pianoGrid`).
+- 2026-10-28: Editor MIDI, etapa 1: pistas MIDI ("+ Nueva pista" → Pista MIDI; `Track.Kind`, `MidiClips`,
+  `MidiEditing` en `Midi.cs`) con clips que se crean con doble clic, se mueven, se alargan y pasan a otra pista MIDI en
+  el timeline (`TimelineView.Midi.cs`), y el **piano roll** como cuarta vista en el lugar del mixer
+  (`PianoRollView`, `MainWindow.Midi.cs`): escribir, mover, alargar y borrar notas al estilo FL, imán propio,
+  velocidad abajo, teclado que suena, deshacer. Suenan con un tono de prueba sin estado (`NoteSynth`), igual en vivo
+  (`LiveTrack`), en la exportación (`MixRenderer`, `MixTrackSpec.Notes`) y en gclab (`ChannelDsp.Notes`); las notas
+  siguen al tempo y al Transponer. `gclab midi …` las arma y `midi comprobar` (también en `comprobar-dsp`) verifica el
+  sonido. Arreglado de paso: deshacer no veía los cambios de notas.
 - 2026-10-26: Marcas de duración por red en el timeline: el clic derecho en la regla prende una o varias (historias de
   1:00 que se repiten en cada corte, X 2:20, Reels · Shorts 3:00, TikTok 10:00); la línea punteada se pone ámbar con
   "no entra" si el tema o la toma que se graba la pasa; cada marca lleva el nombre de sus redes. En ese menú el clic
