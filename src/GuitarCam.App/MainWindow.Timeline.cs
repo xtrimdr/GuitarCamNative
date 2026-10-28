@@ -9,6 +9,7 @@ using Avalonia.Threading;
 using GuitarCam.App.Audio;
 using GuitarCam.App.Controls;
 using GuitarCam.App.Model;
+using GuitarCam.Audio;
 using GuitarCam.Audio.Dsp;
 using GuitarCam.Projects;
 
@@ -89,7 +90,8 @@ public partial class MainWindow
         ToolTip.SetTip(SnapClipsPanel, lit ? Loc.T("snap.clips.on.tip", ClipSnapHints[k].ToLowerInvariant()) : Loc.T("snap.clips.off.tip"));
     }
 
-    /// <summary>The ruler's right click: how the grid is drawn, the current choice checked.</summary>
+    /// <summary>The ruler's right click: how the grid is drawn, the current choice checked, and which networks' length
+    /// marks the timeline shows (<see cref="SocialLengths"/>, several at once, each one toggled).</summary>
     void ShowGridMenu(Point point)
     {
         string label(string id) => id switch
@@ -100,19 +102,24 @@ public partial class MainWindow
         {
             "auto" => Loc.T("grid.auto.hint"), "snap" => Loc.T("grid.snap.hint"), _ => Loc.T("grid.fixed.hint", label(id)),
         };
+        void Save() { timelinePrefs?.Stop(); timelinePrefs?.Start(); }
+        var refresh = new List<Action>();
         var list = new List<object> { new MenuItem { Header = Loc.T("grid.title"), IsEnabled = false, FontSize = 11 } };
         foreach (var id in GridIds)
         {
-            list.Add(MenuAction(label(id), () =>
-            {
-                Timeline.GridMode = id;
-                timelinePrefs?.Stop();
-                timelinePrefs?.Start();
-                return Task.CompletedTask;
-            }, icon: Timeline.GridMode == id ? "" : " ", tip: hint(id)));
+            list.Add(MenuCheck(label(id), () => Timeline.GridMode == id, () => { Timeline.GridMode = id; Save(); }, refresh, tip: hint(id)));
             if (id == "snap") list.Add(new Separator());
         }
-        OpenTimelineMenu(Popup(list, 240), point, MenuHeight(list));
+        list.Add(new Separator());
+        list.Add(new MenuItem { Header = Loc.T("social.title"), IsEnabled = false, FontSize = 11 });
+        foreach (var s in SocialLengths.All)
+            list.Add(MenuCheck(Loc.T($"social.{s.Id}", SocialLengths.Clock(s.Sec)), () => Timeline.SocialMarks.Contains(s), () =>
+            {
+                bool on = Timeline.SocialMarks.Contains(s);
+                Timeline.SocialMarks = [.. SocialLengths.All.Where(x => x == s ? !on : Timeline.SocialMarks.Contains(x))];
+                Save();
+            }, refresh, tip: Loc.T(s.Repeats ? "social.hint.repeats" : "social.hint", SocialLengths.Clock(s.Sec))));
+        OpenTimelineMenu(Popup(list, 330), point, MenuHeight(list));
     }
 
     void InitTimelineEditing()
@@ -127,6 +134,7 @@ public partial class MainWindow
         SnapClipsBox.SelectedIndex = Math.Max(0, Array.IndexOf(ClipSnapIds, clipSnap));
         Timeline.SnapToClips = ClipSnapValues[SnapClipsBox.SelectedIndex];
         Timeline.GridMode = AppConfig.Get("timelineGrid") is { } gm && GridIds.Contains(gm) ? gm : "auto";
+        Timeline.SocialMarks = SocialLengths.Parse(AppConfig.Get("socialMarks"));
         Timeline.RulerMenuRequested += ShowGridMenu;
         Timeline.RulerInBars = AppConfig.Get("rulerMode") != "time";
         if (double.TryParse(AppConfig.Get("trackHeight"), CultureInfo.InvariantCulture, out double height))
@@ -142,6 +150,7 @@ public partial class MainWindow
             string grid = Timeline.SnapMode;
             string toClips = ClipSnapIds[Math.Max(0, Array.IndexOf(ClipSnapValues, Timeline.SnapToClips))];
             string gridMode = Timeline.GridMode;
+            string social = SocialLengths.Join(Timeline.SocialMarks);
             string h = Timeline.TrackHeight.ToString(CultureInfo.InvariantCulture);
             string hw = Timeline.HeaderW.ToString(CultureInfo.InvariantCulture);
             try
@@ -152,6 +161,7 @@ public partial class MainWindow
                     AppConfig.Set("timelineSnap", grid);
                     AppConfig.Set("snapToClips", toClips);
                     AppConfig.Set("timelineGrid", gridMode);
+                    AppConfig.Set("socialMarks", social);
                     AppConfig.Set("trackHeight", h);
                     AppConfig.Set("headerWidth", hw);
                 });
@@ -551,6 +561,38 @@ public partial class MainWindow
         item.Click += async (_, _) => await action();
         return item;
     }
+
+    /// <summary>
+    /// An entry of a menu of options (the ruler's grid and length marks, a track's input, a folder's fold, a separator's
+    /// visibility): a left click picks it and closes the menu like any entry; a right click picks it and leaves the menu
+    /// open, so several can be changed in a row (asked by the user). <paramref name="look"/> gives its text and icon
+    /// now (a fold says "Desplegar" once folded), and after either click every entry that shares
+    /// <paramref name="refresh"/> redraws, so the checks follow without rebuilding the menu.
+    /// </summary>
+    static MenuItem MenuChoice(Func<(string Label, string Icon)> look, Action apply, List<Action> refresh,
+        string? hint = null, string? tip = null, bool enabled = true)
+    {
+        var (label, icon) = look();
+        var item = MenuAction(label, () => { apply(); return Task.CompletedTask; }, hint, enabled, icon: icon, tip: tip);
+        // MenuAction puts the icon and the label in the header's first row
+        var row = (StackPanel)((Grid)item.Header!).Children[0];
+        var (glyph, text) = ((TextBlock)row.Children[0], (TextBlock)row.Children[1]);
+        refresh.Add(() => (text.Text, glyph.Text) = look());
+        // the menu only clicks with the left button: the right one is left to us, even when something handled it
+        item.AddHandler(InputElement.PointerReleasedEvent, (_, e) =>
+        {
+            if (e.InitialPressMouseButton != MouseButton.Right || !item.IsEnabled) return;
+            e.Handled = true;
+            apply();
+            foreach (var r in refresh) r();
+        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+        return item;
+    }
+
+    /// <summary>A <see cref="MenuChoice(Func{ValueTuple{string, string}}, Action, List{Action}, string?, string?, bool)"/>
+    /// checked while <paramref name="isOn"/>, one of a set of options.</summary>
+    static MenuItem MenuCheck(string label, Func<bool> isOn, Action apply, List<Action> refresh, string? hint = null, string? tip = null) =>
+        MenuChoice(() => (label, isOn() ? "" : " "), apply, refresh, hint, tip);
 
     ContextMenu Popup(IEnumerable<object> items, double width) => new()
     {

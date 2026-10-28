@@ -82,6 +82,8 @@ Ese es el diseño **Clásico**. Para el **Vertical**, ver el apartado que sigue.
 - **Toasts** (`Controls/ToastHost`): `Toast(texto)` es para lo que conviene ver en el momento; sale abajo a la
   derecha, encima de todo, se va sola a los 6 s (el puntero encima la frena) y también queda en la campanita. Una
   fija (`sticky`) se va solo con su ×: la usa `--probar "texto"` ("Para probar"). Puede llevar un botón (`action`).
+  Su letra es más grande que la del resto de la ventana (texto 14, título 12, 420 px de ancho; pedido del usuario,
+  para leerla de un vistazo).
   Salen como toast (lo eligió el usuario; el resto queda solo en la campanita): los errores al guardar el proyecto o
   una toma (el reintento del guardado, solo la primera vez seguida), la toma guardada (o su problema), la exportación
   terminada (con "Mostrar" en el Explorador), la cámara que deja de mandar imagen (`TickCamera`, no en solo audio) y
@@ -282,6 +284,17 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   o del marcador (nombres de la lista `MarkerNames`, "Repetir hasta el siguiente", borrar). Los marcadores van en
   `Project.Markers` y se deshacen; el rango va en `ProjectSettings.LoopStartSec/LoopEndSec`, fuera del deshacer como el
   tempo (`ProjectMarkers`). Atajos: L loop, I / O ponen A / B en el cabezal, K marcador, `,` / `.` saltan.
+- **Marcas de duración por red** (`Controls/TimelineView.Social.cs`, `SocialLengths` en `GuitarCam.Audio`, pedido del
+  usuario): el clic derecho en la regla, debajo de la grilla, prende o apaga cada una (varias a la vez; ninguna de
+  entrada; `socialMarks` en config.json, de la app y no del proyecto, como la grilla). En ese menú (pedido del usuario)
+  el clic izquierdo elige y cierra, y el **clic derecho elige y lo deja abierto**, para cambiar varias seguidas
+  (`MenuChoice`; vale también para la grilla y para los otros menús de opciones: entrada de la pista, plegar una
+  carpeta, mostrar u ocultar un separador). Una línea punteada tenue cruza las pistas en el límite, contado desde 0
+  como la exportación, con el nombre de la red ("Instagram Reels · YouTube Shorts · 3:00") en una cajita a la
+  izquierda, justo debajo de la regla (una fila por marca, así dos en 3:00 no se tapan). Si el tema, o la toma que se
+  está grabando, pasa una, se pone ámbar con "no entra". Las historias se repiten: una línea en cada corte que necesita
+  el tema ("Historia 1 · Instagram · Facebook · WhatsApp"; con poco lugar, solo "Historia 1"; sin nombre cuando tampoco
+  entra). Los largos cambian cada tanto: se actualizan en `SocialLengths`.
 - **Loop**: al cruzar B (o el final del tema, sin rango) vuelve a A con el crossfade de los saltos, sin reiniciar los
   efectos (`PlaybackEngine.SetLoopRange`). Si arrancás después de B, sigue hasta el final y desde ahí vuelve a A.
 - **Clic derecho** (`ShowTimelineMenu`): sobre un clip, solo cosas del clip (dividir, duplicar, copiar, cortar, al inicio, corregir
@@ -456,9 +469,9 @@ tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
   (`FxNarrowW`) en vez de recortar controles.
 - En las tiras amplias la cabecera (● M S) y el paneo quedan fijos y solo scrollean los efectos, cada uno en su
   panel. La **tira compacta** va como la de una consola (pedido del usuario, `CompactChain`): la lista de EFECTOS
-  (un renglón por slot con su punto de encendido; un clic abre sus controles en la ventanita, arrastrado cambia el
+  (un renglón por slot con su ⏻ de encendido; un clic abre sus controles en la ventanita, arrastrado cambia el
   orden, y el + suma uno, `ShowAddSlotMenu`; una rayita bajo el primer compresor muestra cuánto comprime), la de
-  ENVÍOS (una barra por bus de su lista con su nombre, su % y su punto, `HBar`; el + elige los buses), el paneo como
+  ENVÍOS (una barra por bus de su lista con su nombre, su % y su ⏻, `HBar`; el + elige los buses), el paneo como
   barra desde el centro (`HBar` bipolar) y ● M S. Efectos y envíos son secciones de alto fijo, el mismo en todas
   las tiras (pedido del usuario: todo parejo); una manija abajo de cada una (`ListBox`) las estira en todas a la vez
   (`SetListH`, "mixer.fxH" / "mixer.sendsH" en `config.json`; doble clic vuelve al de siempre). `StripTopH` sale de

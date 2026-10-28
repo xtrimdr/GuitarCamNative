@@ -177,13 +177,16 @@ public partial class MainWindow
             return;
         }
         bool enabled = !store.ReadOnly;
+        string id = f.Id;
+        var refresh = new List<Action>();
         var list = new List<object> { new MenuItem { Header = f.Name, IsEnabled = false, FontSize = 11 } };
         list.Add(MenuAction(Loc.T("folder.rename") + "…", () => { RenameInPlace(f.Id, () => RenameFolder(f, Timeline, point)); return Task.CompletedTask; }, enabled: enabled, icon: ""));
         var color = new MenuItem { Header = MenuHeader(Loc.T("look.color") + "…", Swatch(f.Color)), IsEnabled = enabled };
         color.Click += (_, _) => ShowFolderLook(f, Timeline, point);
         list.Add(color);
-        list.Add(MenuAction(Loc.T(f.Collapsed ? "folder.unfold" : "folder.fold"), () => { FolderEdit(f, x => x.Collapsed = !x.Collapsed, "fold", undoable: false); return Task.CompletedTask; },
-            enabled: enabled, icon: f.Collapsed ? "" : ""));
+        // looked up by id at each click: a right click keeps the menu open while the folder changes under it
+        list.Add(MenuChoice(() => FolderById(id)?.Collapsed == true ? (Loc.T("folder.unfold"), "") : (Loc.T("folder.fold"), ""),
+            () => { if (FolderById(id) is { } x) FolderEdit(x, y => y.Collapsed = !y.Collapsed, "fold", undoable: false); }, refresh, enabled: enabled));
         list.Add(new Separator());
         list.Add(MenuAction(Loc.T("folder.newTrack"), () => EditTimeline(p =>
         {
@@ -204,6 +207,7 @@ public partial class MainWindow
     {
         bool enabled = store is { ReadOnly: false } && !restoring;
         string id = f.Id;
+        var refresh = new List<Action>();
         var list = new List<object> { new MenuItem { Header = f.Name, IsEnabled = false, FontSize = 11 } };
         list.Add(MenuAction(Loc.T("separator.rename") + "…", () =>
         {
@@ -217,9 +221,9 @@ public partial class MainWindow
         var color = new MenuItem { Header = MenuHeader(Loc.T("look.color") + "…", Swatch(f.Color)), IsEnabled = enabled };
         color.Click += (_, _) => { if (FolderById(id) is { } x) ShowFolderLook(x, anchor, point); };
         list.Add(color);
-        list.Add(MenuAction(Loc.T(f.HiddenInTimeline ? "separator.show" : "separator.hide"),
-            () => { if (FolderById(id) is { } x) FolderEdit(x, y => y.HiddenInTimeline = !y.HiddenInTimeline, "hidden"); return Task.CompletedTask; },
-            enabled: enabled, icon: f.HiddenInTimeline ? "" : "", tip: Loc.T("separator.hide.tip")));
+        list.Add(MenuChoice(() => FolderById(id)?.HiddenInTimeline == true ? (Loc.T("separator.show"), "") : (Loc.T("separator.hide"), ""),
+            () => { if (FolderById(id) is { } x) FolderEdit(x, y => y.HiddenInTimeline = !y.HiddenInTimeline, "hidden"); }, refresh,
+            tip: Loc.T("separator.hide.tip"), enabled: enabled));
         list.Add(new Separator());
         list.Add(MenuAction(Loc.T("separator.remove"), () => FolderById(id) is { } x ? RemoveFolderNow(x, false) : Task.CompletedTask, enabled: enabled, danger: true));
         return list;

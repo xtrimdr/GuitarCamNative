@@ -12,7 +12,8 @@ namespace GuitarCam.App.Controls;
 /// worth seeing right away instead of waiting in the <see cref="NotificationBell"/> (the window also adds it there).
 /// A plain toast goes away by itself after <see cref="Life"/> (the pointer over it holds it); a sticky one, like
 /// the "what to test" note of <c>--probar</c>, stays until closed. At most <see cref="MaxShown"/> at once, newest
-/// at the bottom. No shadow and no animation, like the rest of the window.
+/// at the bottom. No shadow and no animation, like the rest of the window. Bigger text than the rest of the window
+/// (asked by the user: the toasts were hard to read at a glance).
 /// </summary>
 public sealed class ToastHost : StackPanel
 {
@@ -21,8 +22,8 @@ public sealed class ToastHost : StackPanel
 
     public ToastHost()
     {
-        Spacing = 8;
-        Width = 340;
+        Spacing = 10;
+        Width = 420;
         HorizontalAlignment = HorizontalAlignment.Right;
         VerticalAlignment = VerticalAlignment.Bottom;
     }
@@ -42,10 +43,10 @@ public sealed class ToastHost : StackPanel
             Children.Remove(card!);
         }
 
-        var body = new StackPanel { Spacing = 4 };
+        var body = new StackPanel { Spacing = 6 };
         if (title != null)
-            body.Children.Add(new TextBlock { Text = title.ToUpperInvariant(), FontSize = 10.5, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.8, Foreground = Palette.Accent });
-        body.Children.Add(new TextBlock { Text = text, FontSize = 12, Foreground = Palette.Fg, TextWrapping = TextWrapping.Wrap });
+            body.Children.Add(new TextBlock { Text = title.ToUpperInvariant(), FontSize = 12, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.8, Foreground = Palette.Accent });
+        body.Children.Add(new TextBlock { Text = text, FontSize = 14, LineHeight = 20, Foreground = Palette.Fg, TextWrapping = TextWrapping.Wrap });
         if (action is var (label, run))
         {
             var act = new Button { Classes = { "chip" }, Content = label, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 0) };
@@ -55,9 +56,9 @@ public sealed class ToastHost : StackPanel
 
         var close = new Button
         {
-            Classes = { "ghost" }, Width = 24, Height = 24, Padding = new Thickness(0), VerticalAlignment = VerticalAlignment.Top,
+            Classes = { "ghost" }, Width = 28, Height = 28, Padding = new Thickness(0), VerticalAlignment = VerticalAlignment.Top,
             HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
-            Content = new TextBlock { Classes = { "icon" }, Text = "", FontSize = 10 },
+            Content = new TextBlock { Classes = { "icon" }, Text = "", FontSize = 12 },
         };
         ToolTip.SetTip(close, Loc.T("toast.close"));
         Avalonia.Automation.AutomationProperties.SetName(close, Loc.T("toast.close"));
@@ -70,7 +71,7 @@ public sealed class ToastHost : StackPanel
 
         card = new Border
         {
-            Padding = new Thickness(12, 10, 6, 10), CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(16, 14, 8, 14), CornerRadius = new CornerRadius(8),
             Background = Palette.Raised, BorderBrush = sticky ? Palette.Alpha(Palette.AccentColor, 0.45) : Palette.Line,
             BorderThickness = new Thickness(1), Child = row,
             Tag = sticky ? null : (Action)Close,

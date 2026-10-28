@@ -39,6 +39,7 @@ static class ProjectCommands
             "modo" => Mode(dir, a),
             "marcadores" => Markers(dir, a),
             "repetir" => Loop(dir, a),
+            "duracion" => Length(dir),
             "plantillas-de-pista" => ListPresets(),
             "cortar" => Crash(dir, a.Double("segundos", 3), a.Flag("camara")),
             "toma" => RecordTake(dir, a.Double("segundos", 3), a.Get("pista"), a.Flag("camara")),
@@ -467,6 +468,23 @@ static class ProjectCommands
         }
         if (p.Markers.Count == 0) Console.WriteLine("Sin marcadores.");
         foreach (var m in p.Markers) Console.WriteLine($"{m.Id} · {m.Sec,8:0.000} s · {m.Name}");
+        return 0;
+    }
+
+    /// <summary>How long the song is (from 0, like the export) and whether it fits each network's limit
+    /// (<see cref="SocialLengths"/>, the lines the timeline can mark).</summary>
+    static int Length(string dir)
+    {
+        using var store = ProjectStore.Open(dir);
+        var p = store.Project;
+        double end = p.Tracks.SelectMany(t => t.Clips).Select(c => ClipEditing.Window(c, p.FindMedia(c.MediaId)).End).DefaultIfEmpty(0).Max();
+        Console.WriteLine($"Dura {SocialLengths.Clock(end)} ({end:0.000} s)");
+        foreach (var s in SocialLengths.All)
+        {
+            int n = SocialLengths.Pieces(s, end);
+            string verdict = n == 1 ? "entra" : n == 0 ? $"no entra: sobran {end - s.Sec:0.0} s" : $"en {n} partes";
+            Console.WriteLine($"  {s.Label,-46} {SocialLengths.Clock(s.Sec),5}{(s.Repeats ? " c/u" : "    ")} · {verdict}");
+        }
         return 0;
     }
 

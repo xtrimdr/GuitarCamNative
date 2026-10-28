@@ -1087,6 +1087,7 @@ public sealed partial class TimelineView : Control
             if (recordingLanes != null)
                 foreach (int r in recordingLanes) DrawRecordingBar(ctx, r, W);
             DrawStripGuides(ctx, W, H);
+            DrawSocialMarks(ctx, W);
             // the snap guide: the edge the dragged clip is stuck to, across every lane (asked by the user)
             if (gesture == "clip" && stuckTo is { } guide && X(guide) >= HeaderW)
             {

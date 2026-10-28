@@ -3,6 +3,13 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-26: Marcas de duración por red en el timeline: el clic derecho en la regla prende una o varias (historias de
+  1:00 que se repiten en cada corte, X 2:20, Reels · Shorts 3:00, TikTok 10:00); la línea punteada se pone ámbar con
+  "no entra" si el tema o la toma que se graba la pasa; cada marca lleva el nombre de sus redes. En ese menú el clic
+  derecho elige sin cerrarlo (`MenuChoice` / `MenuCheck`), igual que en los menús de entrada de la pista, plegar
+  carpeta y ocultar separador. Los largos viven en `SocialLengths` (`GuitarCam.Audio`), se
+  dibujan en `TimelineView.Social.cs`, se guardan en `config.json` ("socialMarks") y `gclab proyecto duracion` dice
+  si entra en cada una.
 - 2026-10-26: Arreglado el cierre al abrir por falta de memoria: con "Ver todo", un timeline apenas más ancho que los
   encabezados (mientras se acomoda la ventana) daba zoom 0 o negativo y la grilla crecía sin fin (`TimelineView.Render` /
   `BuildGrid`).

@@ -46,6 +46,9 @@ de **grabar → mezclar → exportar**.
 - Arriba de la regla, un **rango A–B** para repetir un tramo (practicar el solo, mezclar un pedazo) y **marcadores**
   con nombre (Intro, Estribillo, Solo…) para saltar de una parte a otra. Zoom de un tiempo a toda la canción con
   atajos que se asignan en Configuración → Atajos de teclado.
+- **Marcas de duración por red** (clic derecho en la regla; con clic derecho en una opción el menú queda abierto): una
+  línea donde termina una historia, un post de X, un Reel o Short, un TikTok, así sabés mientras grabás si el tema entra. Si te pasás, la línea se pone ámbar; la de
+  historias se repite en cada corte.
 
 ### Mezclar
 
@@ -252,6 +255,7 @@ la consola, sin abrir la ventana.
 | `proyecto encuadre\|sincronia\|formato\|modo carpeta …` | encuadre del clip, ajuste de sincronía, formato del video y modo Video / Solo audio |
 | `proyecto importar-audio carpeta archivo` | copia un audio de afuera a `media/` y lo pone en una pista |
 | `proyecto marcadores carpeta [agregar\|mover\|renombrar\|quitar …]`, `proyecto repetir carpeta [desde hasta \| --quitar]` | marcadores del tema y rango A–B del loop |
+| `proyecto duracion carpeta` | cuánto dura el tema y si entra en cada red (historias, X, Reels · Shorts, TikTok) |
 | `proyecto historial carpeta` | tomas en uso y no usadas, exportaciones y actividad |
 | `proyecto insertos carpeta pista [agregar vida\|comp\|eq [--en n] \| quitar n \| mover n m \| duplicar n \| prender n \| apagar n \| plegar n]` | los slots de efectos de la pista en su orden; sin operación, los lista (`plegar` lo pliega en el mixer) |
 | `proyecto insertos carpeta --bus id\|n [agregar reverb\|delay\|vida\|comp\|eq … \| quitar n \| …]` | lo mismo para un bus (la reverb y el delay solo van en buses) |

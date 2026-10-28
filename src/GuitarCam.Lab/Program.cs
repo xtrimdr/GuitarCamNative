@@ -178,6 +178,7 @@ static class Program
               proyecto marcadores carpeta [agregar segundos [nombre] | mover id segundos | renombrar id nombre | quitar id]
                                            los marcadores del tema (Intro, Solo…); sin operación, los lista
               proyecto repetir carpeta [desde hasta | --quitar]   el rango A–B que repite el loop; sin nada, lo muestra
+              proyecto duracion carpeta           cuánto dura el tema y si entra en cada red (historias, X, Reels, TikTok)
               proyecto verificar-marcadores verifica orden, nombres, saltos, deshacer y guardado de marcadores y del rango A–B
               proyecto editar carpeta ganancia clip dB | curva clip "seg:dB,..."   volumen del clip y su curva (seg desde el inicio de la toma)
               proyecto verificar-tomas     verifica a qué pista va una toma nueva, su nombre y su canal

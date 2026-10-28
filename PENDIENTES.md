@@ -40,11 +40,12 @@ _Ideas y mejoras para la nativa._
 - …y más: ir sumando acá
 
 #### 2. Soporte de plugins VST
-- [ ] Cargar VST3 en las pistas y en los buses (amps, pedales, reverbs de terceros). Es la etapa 2: va después de
-  los slots internos (punto 1), como un tipo de slot más, mezclado con los internos
-- Notas: en .NET no hay un host VST3 listo; probablemente haga falta un puente en C++ (SDK de Steinberg: GPL o
-  licencia propietaria) o una librería de terceros. Cualquiera es dependencia nueva: decidirlo con el usuario.
-  Conviene correr los plugins en otro proceso (memoria compartida), así si uno se cuelga no tira abajo la grabación.
+- [ ] Cargar VST3 en las pistas y en los buses (amps, pedales, reverbs de terceros), y como instrumento de las
+  pistas MIDI (punto 3). Va después de los slots internos (punto 1), como un tipo de slot más, mezclado con los internos
+- Notas: decidido con el usuario (2026-10-28): **puente en C++ con el SDK oficial de Steinberg, en otro proceso**,
+  comunicado por memoria compartida, así si un plugin se cuelga no tira abajo la grabación. El SDK de VST3 es MIT
+  desde la 3.8 (octubre de 2025): ya no hay tema de GPL. Hace falta el compilador de C++ de Visual Studio y es un
+  proyecto nuevo en `src/`.
   La exportación tiene que pasar por los mismos plugins, igual que hoy el mix offline usa el mismo grafo (ojo: hoy
   el render corre por tramos en paralelo, con plugins con estado eso se complica).
   Compensar la latencia de los plugins (PDC) en todas las pistas y en el click, como ya se hace con el limitador.
@@ -56,10 +57,27 @@ _Ideas y mejoras para la nativa._
   encendido y "Abrir".
 
 #### 3. MIDI
-- [ ] Pedalera o controlador MIDI: grabar/parar, play, marcar tomas, con los pies y sin soltar la guitarra
+**Prioridad del usuario (2026-10-28): un editor para armar bases con instrumentos virtuales.** Decidido:
+- **Clips MIDI por pista**, como Logic o Studio One: cada clip tiene sus notas y se edita en un piano roll. Sin
+  patrones reusables ni step sequencer (se puede sumar después).
+- El piano roll va **abajo, en lugar del mixer** (se alternan), sin esperar a los paneles desacoplables.
+- Primero un **sampler propio** (tus WAV), después VST3 (punto 2).
+
+Etapas (cada una sirve sola):
+- [ ] **Etapa 1: pistas y clips MIDI con piano roll.** Una pista MIDI no lleva panel de video. Notas con altura,
+  inicio, largo y velocidad, en pulsos para que sigan el tempo (el clip sigue en segundos como los demás). En el
+  timeline, el clip muestra sus notas en chiquito. En el piano roll se dibuja, mueve, alarga y borra con ajuste a la
+  grilla, y se edita la velocidad. Se puede deshacer y probar con `gclab`. Por ahora suena con un tono de prueba.
+- [ ] **Etapa 2: sampler.** Un WAV por nota (kit de batería) o uno melódico que se transpone. Voces preasignadas en el
+  hilo de audio, y el mismo camino en la reproducción y en la exportación.
+- [ ] **Etapa 3: instrumentos VST3** con el puente del punto 2.
+- [ ] Después: importar y exportar .mid, cuantizar, grabar notas desde un teclado MIDI.
+
+Otras de MIDI:
 - [ ] Mapear perillas y faders de un controlador al mixer (MIDI learn)
-- [ ] Pistas MIDI con instrumentos VST (batería, bajo) para armar la base
 - [ ] MIDI clock / tempo sincronizado con otros equipos
+- [ ] (Baja prioridad: al usuario no le interesa mucho por ahora) Pedalera o controlador MIDI: grabar/parar, play,
+  marcar tomas con los pies
 
 #### 4. Edición de video más completa
 - [ ] Color por toma, además del color global
@@ -117,10 +135,6 @@ _Ideas que surgieron charlando. Todas apuntan al video._
 - [ ] **Amp sim + cargador de IRs de gabinete**: grabar la guitarra directa (DI) y que suene bien sin VSTs
 - [ ] **Grabación en loop / tomas múltiples (comping)**: grabar varias pasadas del solo y elegir
   los mejores pedazos
-- [ ] **Marcas de duración por red en el timeline**: una línea vertical donde termina el largo ideal o máximo de
-  cada red (historia de Instagram/Facebook 60 s, Reels, Shorts, TikTok…), para saber mientras grabás si entra o
-  vas a tener que cortarlo en varias historias. Que se pueda elegir cuál mostrar (o ninguna); podría salir del mismo
-  `ExportTargets` que usa el Destino de la exportación
 - [ ] **Visualizadores de audio** como capa del video (onda o espectro animado)
 - [ ] **Acordes / tablatura / letra en pantalla** mientras grabás (tipo teleprompter) y opcionalmente en el video
 

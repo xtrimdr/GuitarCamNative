@@ -145,6 +145,13 @@ Para un control nuevo, primero reutilizá estas. Los controles Fluent (sliders, 
 - Todo botón de ícono tiene `ToolTip.Tip`. Los cambios se aplican en vivo (se escucha mientras movés el slider). El
   paneo se imanta al centro (|x| < 0,04).
 
+## Menús
+
+- Las opciones que se tildan o se prenden y apagan en un menú (grilla, marcas de duración, entrada de la pista, plegar
+  carpeta, ocultar separador) van con `MenuCheck` / `MenuChoice` (pedido del usuario): clic izquierdo elige y cierra,
+  clic derecho elige y deja el menú abierto, y el tilde o el texto se actualizan en el lugar. Lo que se lee al
+  aplicar se busca de nuevo (por id), porque el menú sigue abierto mientras cambia. Las acciones comunes, con `MenuAction`.
+
 ## Mensajes al usuario
 
 - Van a la campanita (`Status`) o, si conviene verlos en el momento, a un toast (`Toast`). En primera persona y en

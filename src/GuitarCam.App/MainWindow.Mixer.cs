@@ -735,7 +735,7 @@ public partial class MainWindow
 
     /// <summary>
     /// The compact strip's controls (asked by the user, like a console's strip): the effects as a list (a click opens
-    /// one in its window, <see cref="ShowSlotWindow"/>; dragged, it moves in the chain; its dot turns it on or off), the
+    /// one in its window, <see cref="ShowSlotWindow"/>; dragged, it moves in the chain; its power switch turns it on or off), the
     /// sends as bars with the bus's name (shown with the mixer's "Envíos"), the pan as a bar from the centre, and M S ●.
     /// The action writes the first compressor's reduction under its row.
     /// </summary>
@@ -808,7 +808,7 @@ public partial class MainWindow
         rows.Add((listRow, list, false));
     }
 
-    /// <summary>The compact strip's sends: a bar per bus in the list of <paramref name="router"/> (a track or a folder), its dot turning it on or off.</summary>
+    /// <summary>The compact strip's sends: a bar per bus in the list of <paramref name="router"/> (a track or a folder), its power switch turning it on or off.</summary>
     StackPanel CompactSends(Router router)
     {
         var sends = new StackPanel { Spacing = 1 };
@@ -818,7 +818,7 @@ public partial class MainWindow
             (double Level, bool On, bool Pre) S() => router.Get() is { } r ? ProjectBuses.SendOf(r, id) : (0, true, false);
             var bar = new HBar { ResetTo = 0 };
             bar.Changed += v => router.Edit((p, x) => ProjectBuses.SetSend(p, x, id, v, v > 0 ? true : null) != null, $"send.{id}.level");
-            var power = ListDot(() => S().On && S().Level > 0, () => router.Edit((p, x) => ProjectBuses.SetSend(p, x, id, on: !S().On) != null, $"send.{id}.on"));
+            var power = ListPower(() => S().On && S().Level > 0, () => router.Edit((p, x) => ProjectBuses.SetSend(p, x, id, on: !S().On) != null, $"send.{id}.on"));
             var line = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Height = CompactRowH };
             line.Children.Add(power);
             Grid.SetColumn(bar, 1); line.Children.Add(bar);
@@ -952,29 +952,31 @@ public partial class MainWindow
         return g;
     }
 
-    /// <summary>The on/off dot of a compact list's row: accent when on, a grey ring when off.</summary>
-    Button ListDot(Func<bool> on, Action toggle)
+    /// <summary>
+    /// The power switch of a compact list's row (asked by the user: the ⏻ of a real switch, the same glyph as the wide
+    /// strip's ON/OFF): accent when on, grey when off.
+    /// </summary>
+    Button ListPower(Func<bool> on, Action toggle)
     {
-        var dot = new Avalonia.Controls.Shapes.Ellipse { Width = 8, Height = 8, StrokeThickness = 1.5 };
+        var glyph = new TextBlock { Classes = { "icon" }, Text = "", FontSize = 10, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
         var b = new Button { Classes = { "ghost", "slothead" }, Width = 16, Height = 16, MinHeight = 16, Padding = new Thickness(0), Focusable = false, Margin = new Thickness(0, 0, 3, 0),
-            Cursor = new Cursor(StandardCursorType.Hand), Content = dot, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
+            Cursor = new Cursor(StandardCursorType.Hand), Content = glyph, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
         b.Click += (_, _) => toggle();
         mx.Refresh.Add(() =>
         {
             bool lit = on();
-            dot.Fill = lit ? Palette.Accent : Brushes.Transparent;
-            dot.Stroke = lit ? Palette.Accent : Palette.Faint;
+            glyph.Foreground = lit ? Palette.Accent : Palette.Faint;
             ToolTip.SetTip(b, Loc.T(lit ? "mix.list.off" : "mix.list.on"));
         });
         return b;
     }
 
-    /// <summary>A row of the compact effects list: its dot and its name, on a block that lights under the pointer.</summary>
+    /// <summary>A row of the compact effects list: its power switch and its name, on a block that lights under the pointer.</summary>
     Border ListRow(string name, Func<bool> on, Action toggle)
     {
         var text = new TextBlock { Text = name, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
         var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
-        g.Children.Add(ListDot(on, toggle));
+        g.Children.Add(ListPower(on, toggle));
         Grid.SetColumn(text, 1); g.Children.Add(text);
         var row = new Border { Height = CompactRowH, CornerRadius = new CornerRadius(3), Padding = new Thickness(1, 0, 4, 0), Child = g, Background = Palette.Raised, ClipToBounds = true };
         row.PointerEntered += (_, _) => row.Background = Palette.Hover;

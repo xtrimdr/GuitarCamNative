@@ -127,9 +127,10 @@ public partial class MainWindow
     {
         if (point == null && PressClosedMenuOf(anchor)) return;
         if (store == null || store.ReadOnly || RecordingBusy) return;
-        string? check(string? value) => t.Track.Input == value ? "" : null;
+        // a right click picks an input and keeps the menu open (MenuCheck), to try one after the other
+        var refresh = new List<Action>();
         MenuItem Pick(string label, string? value, string? hint = null) =>
-            MenuAction(label, () => { SetTrackInput(t, value); return Task.CompletedTask; }, hint, icon: check(value) ?? " ");
+            MenuCheck(label, () => t.Track.Input == value, () => SetTrackInput(t, value), refresh, hint);
         var list = new List<object>
         {
             new MenuItem { Header = Loc.T("rec.from"), IsEnabled = false, FontSize = 10.5 },
