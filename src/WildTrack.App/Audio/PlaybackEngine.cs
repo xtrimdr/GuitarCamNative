@@ -14,7 +14,8 @@ namespace WildTrack.App.Audio;
 /// its output into its folder, a bus or the master, and post-fader (or pre-fader) sends into buses; the folders and buses
 /// (<see cref="BusDspChain"/> nodes, <see cref="SetBuses"/>, native only) run in order, each into the next or the master;
 /// the master into the <see cref="MasterChain"/> (native only) and the <see cref="MasterLimiter"/>; click mixed outside the limiter (delayed by
-/// <see cref="MasterLimiter.Latency"/> so it lands on the same sample as the limited tracks).
+/// <see cref="MasterLimiter.Latency"/> and the plugin delay compensation, <see cref="PdcFrames"/>, so it lands on the
+/// same sample as the limited tracks).
 /// Also processes input 1-2 (<see cref="InputProcessor"/>: channel mode, pre-amp gain (0 dB default), soft-limiter,
 /// optional software monitoring), runs count-in + recording on the same sample clock via <see cref="TakeRecorder"/>,
 /// and runs round-trip latency calibration (<see cref="CalibrationSession"/>).
@@ -66,6 +67,12 @@ public sealed class PlaybackEngine : IDisposable
     MidiListener[] heardListeners = [];
     /// <summary>How late the output is heard (frames): a note recorded goes where the song was heard when it was played.</summary>
     long midiLatencyFrames;
+    /// <summary>How late the whole mix is heard because of the VST3 effects (<see cref="UpdateLatency"/>), in frames.</summary>
+    volatile int pdcFrames;
+    /// <summary>The PDC when the take started: the take is moved back by it.</summary>
+    int recPdcFrames;
+    /// <summary>What the last <see cref="UpdateLatency"/> worked from, so a tick with nothing new costs one pass.</summary>
+    int latencyKey;
 
     double bpm = 120;
     long position; // timeline frame (before recStartFrame, maybe negative, during recording count-in)
@@ -157,6 +164,13 @@ public sealed class PlaybackEngine : IDisposable
     /// and out over <see cref="MonoFoldSamples"/>, so it never clicks.
     /// </summary>
     public bool MonoCheck { get; set; }
+
+    /// <summary>
+    /// The mixer's FX switch (UI thread): every track's and bus's slots go to the engine off, as their own power would
+    /// (<see cref="ChannelDsp.Specs(IReadOnlyList{InsertSlot}, double, double, Func{InsertSlot, Vst.VstBridge?}?, bool)"/>).
+    /// Only what you hear, like <see cref="MonoCheck"/>: the project and the export keep them as they are; not saved.
+    /// </summary>
+    public static bool FxBypass { get; set; }
     /// <summary>10 ms at 48 kHz.</summary>
     const int MonoFoldSamples = 480;
     // audio thread only: 0 = stereo, 1 = mono
@@ -349,6 +363,8 @@ public sealed class PlaybackEngine : IDisposable
             OutputOffset = outputOffset;
             io.Start();
             for (int i = 0; i < 100 && io.FramesPerBuffer == 0; i++) Thread.Sleep(10);
+            // a VST3 effect is heard one driver block late
+            if (io.FramesPerBuffer > 0) WildTrack.Audio.Vst.VstInsert.LiveBlock = io.FramesPerBuffer;
             double ms = 1000.0 * io.FramesPerBuffer / SampleRate;
             Status = Loc.T("engine.status", driver, SampleRate / 1000, io.FramesPerBuffer, $"{ms:0.0}");
 
@@ -390,7 +406,7 @@ public sealed class PlaybackEngine : IDisposable
                 node.Volume = bus.Volume;
                 node.Pan = bus.Pan;
                 node.Muted = bus.Muted;
-                node.SetInserts(ChannelDsp.BusSpecs(bus, bpm), fade: known[i]);
+                node.SetInserts(ChannelDsp.BusSpecs(bus, bpm, LiveVst.Of(bus.Id), FxBypass), fade: known[i]);
             }
             next[i] = node;
             map[ids[i]] = node;
@@ -402,7 +418,7 @@ public sealed class PlaybackEngine : IDisposable
         {
             var r = Routed(ids[i]);
             next[i].Out = r.Output != null ? map.GetValueOrDefault(r.Output) : null;
-            next[i].Sends = SendsTo(map, r);
+            next[i].Sends = SendsTo(map, r, next[i].Sends);
         }
         for (int i = 0; i < next.Length; i++) if (!known[i]) Route(i);
         if (!same) nodes = next;
@@ -417,8 +433,11 @@ public sealed class PlaybackEngine : IDisposable
         }
     }
 
-    /// <summary>What <paramref name="r"/> sends, as the audio thread reads it: the sends that are on, above 0 and whose bus the engine has.</summary>
-    public static TrackSend[] SendsTo(IReadOnlyDictionary<string, BusDspChain>? map, IRouted r)
+    /// <summary>
+    /// What <paramref name="r"/> sends, as the audio thread reads it: the sends that are on, above 0 and whose bus the
+    /// engine has. Each takes the PDC delay of the send to the same bus in <paramref name="old"/>, so it keeps what it holds.
+    /// </summary>
+    public static TrackSend[] SendsTo(IReadOnlyDictionary<string, BusDspChain>? map, IRouted r, TrackSend[]? old = null)
     {
         int n = 0;
         foreach (var s in r.Sends)
@@ -428,16 +447,66 @@ public sealed class PlaybackEngine : IDisposable
         int k = 0;
         foreach (var s in r.Sends)
             if (s.On && s.Level > 0 && map!.TryGetValue(s.BusId, out var to))
-                next[k++] = new TrackSend(to, -1, (float)Math.Clamp(s.Level, 0, 1), s.Pre);
+                next[k++] = new TrackSend(to, -1, (float)Math.Clamp(s.Level, 0, 1), s.Pre, old?.FirstOrDefault(o => o.To == to)?.Delay);
         return next;
     }
 
-    /// <summary>The slots of every bus again (the tempo changed: their delays follow it).</summary>
-    void ApplyBusSlots(IReadOnlyList<Bus> list)
+    /// <summary>The slots of every bus again (the tempo changed: their delays follow it; a VST3 effect came up or went away).</summary>
+    public void ApplyBusSlots(IReadOnlyList<Bus> list)
     {
         foreach (var b in list)
-            if (nodeById.TryGetValue(b.Id, out var node)) node.SetInserts(ChannelDsp.BusSpecs(b, bpm));
+            if (nodeById.TryGetValue(b.Id, out var node)) node.SetInserts(ChannelDsp.BusSpecs(b, bpm, LiveVst.Of(b.Id), FxBypass));
     }
+
+    /// <summary>
+    /// The plugin delay compensation (PDC), live: when a track's or a bus's slots put out their sound late (a VST3 effect
+    /// is heard one block plus its own latency late), every other path into the same node and into the master waits as
+    /// much (<see cref="MixLatency"/>), and so do the click and a recorded take (<see cref="PdcFrames"/>). UI thread, on
+    /// every tick: it only works it out again when a latency, an output or a list of sends changed.
+    /// </summary>
+    public void UpdateLatency()
+    {
+        var list = tracks;
+        var ns = nodes;
+        var h = new HashCode();
+        h.Add(list);
+        h.Add(ns);
+        foreach (var t in list)
+        {
+            h.Add(t.Chain.LatencySamples);
+            h.Add(t.Out);
+            h.Add(t.Chain.Sends);
+        }
+        foreach (var n in ns)
+        {
+            h.Add(n.LatencySamples);
+            h.Add(n.Out);
+            h.Add(n.Sends);
+        }
+        int key = h.ToHashCode();
+        if (key == latencyKey) return;
+        latencyKey = key;
+        int Index(BusDspChain? b) => b == null ? -1 : Array.IndexOf(ns, b);
+        var plan = MixLatency.Compute(
+            [.. list.Select(t => new MixLatency.Source(t.Chain.LatencySamples, Index(t.Out), [.. t.Chain.Sends.Select(s => Index(s.To))]))],
+            [.. ns.Select(n => new MixLatency.Source(n.LatencySamples, Index(n.Out), [.. n.Sends.Select(s => Index(s.To))]))]);
+        for (int k = 0; k < list.Length; k++)
+        {
+            list[k].Chain.OutDelay.Set(plan.TrackOut[k]);
+            var sends = list[k].Chain.Sends;
+            for (int i = 0; i < sends.Length; i++) sends[i].Delay.Set(plan.TrackSends[k][i]);
+        }
+        for (int j = 0; j < ns.Length; j++)
+        {
+            ns[j].OutDelay.Set(plan.NodeOut[j]);
+            var sends = ns[j].Sends;
+            for (int i = 0; i < sends.Length; i++) sends[i].Delay.Set(plan.NodeSends[j][i]);
+        }
+        pdcFrames = plan.Master;
+    }
+
+    /// <summary>How late the whole mix is heard because of the VST3 effects (frames); 0 without them.</summary>
+    public int PdcFrames => pdcFrames;
 
     /// <summary>A folder's or bus's node (for its strip's meter), or null.</summary>
     public BusDspChain? Node(string id) => nodeById.GetValueOrDefault(id);
@@ -671,7 +740,9 @@ public sealed class PlaybackEngine : IDisposable
         // with only MIDI tracks armed there is no take: the keyboard's notes are the recording
         if (takes.Count == 0 && !notesOnly) throw new ArgumentException(Loc.T("engine.nothingToRecord"), nameof(takes));
         int outSamples = io.ReportedOutputLatency > 0 ? io.ReportedOutputLatency : io.FramesPerBuffer;
-        Interlocked.Exchange(ref midiLatencyFrames, outSamples + buses.Limiter.Latency);
+        // what you hear while you play comes this much late: the take and the keyboard's notes go back by as much
+        recPdcFrames = pdcFrames;
+        Interlocked.Exchange(ref midiLatencyFrames, outSamples + buses.Limiter.Latency + recPdcFrames);
 
         SetInputs(takes.Select(t => t.Route).ToList());
         var recorders = new List<TakeRecorder>();
@@ -742,7 +813,7 @@ public sealed class PlaybackEngine : IDisposable
         Interlocked.Exchange(ref position, Interlocked.Read(ref recStartFrame));
         foreach (var t in cur) t.Recorder = null;
 
-        double latencyMs = GetLatencyInfo().AppliedMs;
+        double latencyMs = GetLatencyInfo().AppliedMs + recPdcFrames * 1000.0 / SampleRate;
         var results = new RecordedTakeResult?[recs.Length];
         Exception? error = null;
         long dropped = 0;
@@ -1000,7 +1071,7 @@ public sealed class PlaybackEngine : IDisposable
             FoldMono(ref monoLevel, MonoCheck, ml, mr);
 
             double beatLen = SampleRate * 60.0 / bpm;
-            int limLatency = buses.Limiter.Latency;
+            int limLatency = buses.Limiter.Latency + pdcFrames;
             var hi = clickHi;
             var lo = clickLo;
             float ol = outL, or = outR;

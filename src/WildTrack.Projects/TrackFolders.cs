@@ -57,7 +57,9 @@ public static class TrackFolders
             ids.Add(f.Id);
             f.Name ??= "";
             f.Color = Track.NormalizeColor(f.Color);
-            f.Height = Track.NormalizeHeight(f.Height, Folder.MinHeight, Folder.MaxHeight);
+            // what a drag can reach between the zoom's ends
+            f.Height = Track.NormalizeHeight(f.Height, Folder.MinHeight * Track.DefaultHeight / Track.MaxHeight,
+                Folder.MaxHeight * Track.DefaultHeight / Track.MinHeight);
             f.HeightScale = Track.NormalizeHeight(f.HeightScale, 0.1, 8);
             f.Normalize();
         }
@@ -162,8 +164,8 @@ public static class TrackFolders
     public static void Move(Project p, IReadOnlyCollection<string> trackIds, int at, string? folderId)
     {
         var block = p.Tracks.Where(t => trackIds.Contains(t.Id)).ToList();
-        if (block.Count == 0) throw new ArgumentException(Texts.T("err.folder.noTrack", "No encontré esa pista."));
-        if (folderId != null && !Holds(p, folderId)) throw new ArgumentException(Texts.T("err.folder.none", "No encontré esa carpeta."));
+        if (block.Count == 0) throw new ArgumentException(Texts.T("err.folder.noTrack", "Pista no encontrada."));
+        if (folderId != null && !Holds(p, folderId)) throw new ArgumentException(Texts.T("err.folder.none", "Carpeta no encontrada."));
         var seq = Sequence(p);
         seq.RemoveAll(x => x is Track t && block.Contains(t));
         foreach (var t in block) t.FolderId = folderId;
@@ -183,7 +185,7 @@ public static class TrackFolders
     /// <summary>Moves a folder with its children to <paramref name="at"/> in the sequence without them (always at the root).</summary>
     public static void MoveFolder(Project p, string folderId, int at)
     {
-        var f = p.Folders.Find(x => x.Id == folderId) ?? throw new ArgumentException(Texts.T("err.folder.none", "No encontré esa carpeta."));
+        var f = p.Folders.Find(x => x.Id == folderId) ?? throw new ArgumentException(Texts.T("err.folder.none", "Carpeta no encontrada."));
         var seq = Sequence(p);
         var block = seq.Where(x => x == f || x is Track t && t.FolderId == f.Id).ToList();
         seq.RemoveAll(block.Contains);

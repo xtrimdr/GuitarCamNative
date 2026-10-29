@@ -159,15 +159,15 @@ public static class MidiEditing
     {
         foreach (var t in p.Tracks)
             if (t.MidiClips?.Find(c => c.Id == clipId) is { } c) return (t, c);
-        throw new ArgumentException(Texts.T("err.midi.clipNotFound", "No encontré ese clip MIDI."));
+        throw new ArgumentException(Texts.T("err.midi.clipNotFound", "Clip MIDI no encontrado."));
     }
 
     public static MidiClip? TryFind(Project p, string? clipId) => clipId == null ? null : p.Tracks.SelectMany(t => t.MidiClips ?? []).FirstOrDefault(c => c.Id == clipId);
 
     public static MidiClip AddClip(Project p, string trackId, double atSec, double lengthBeats = MidiClip.DefaultBeats)
     {
-        var t = p.Tracks.Find(x => x.Id == trackId) ?? throw new ArgumentException(Texts.T("err.midi.trackNotFound", "No encontré esa pista."));
-        if (!t.IsMidi) throw new ArgumentException(Texts.T("err.midi.notMidi", "Esa pista no es MIDI: los clips MIDI van en una pista MIDI."));
+        var t = p.Tracks.Find(x => x.Id == trackId) ?? throw new ArgumentException(Texts.T("err.midi.trackNotFound", "Pista no encontrada."));
+        if (!t.IsMidi) throw new ArgumentException(Texts.T("err.midi.notMidi", "Los clips MIDI van en pistas MIDI."));
         var c = new MidiClip { AtSec = ClipEditing.ToSample(Math.Max(0, atSec)), LengthBeats = lengthBeats };
         c.Normalize();
         (t.MidiClips ??= []).Add(c);
@@ -359,8 +359,8 @@ public static class MidiEditing
         IReadOnlyList<(double Sec, double LengthSec, int Pitch, int Velocity)> played, double gridBeats = 0)
     {
         if (played.Count == 0) return null;
-        var t = p.Tracks.Find(x => x.Id == trackId) ?? throw new ArgumentException(Texts.T("err.midi.trackNotFound", "No encontré esa pista."));
-        if (!t.IsMidi) throw new ArgumentException(Texts.T("err.midi.notMidi", "Esa pista no es MIDI: los clips MIDI van en una pista MIDI."));
+        var t = p.Tracks.Find(x => x.Id == trackId) ?? throw new ArgumentException(Texts.T("err.midi.trackNotFound", "Pista no encontrada."));
+        if (!t.IsMidi) throw new ArgumentException(Texts.T("err.midi.notMidi", "Los clips MIDI van en pistas MIDI."));
         double bpm = Math.Max(1, p.Settings.Bpm);
         double barSec = 4 * 60 / bpm;
         double start = Math.Floor(Math.Max(0, fromSec) / barSec + 1e-9) * barSec;
@@ -391,12 +391,12 @@ public static class MidiEditing
     public static (string TrackId, MidiClip Clip) AddExtracted(Project p, string? trackId, string belowTrackId, double fromSec, double toSec,
         IReadOnlyList<AudioToMidi.Note> notes, string? name = null, double gridBeats = 0)
     {
-        var below = p.Tracks.Find(x => x.Id == belowTrackId) ?? throw new ArgumentException(Texts.T("err.midi.trackNotFound", "No encontré esa pista."));
+        var below = p.Tracks.Find(x => x.Id == belowTrackId) ?? throw new ArgumentException(Texts.T("err.midi.trackNotFound", "Pista no encontrada."));
         Track t;
         if (trackId != null)
         {
-            t = p.Tracks.Find(x => x.Id == trackId) ?? throw new ArgumentException(Texts.T("err.midi.trackNotFound", "No encontré esa pista."));
-            if (!t.IsMidi) throw new ArgumentException(Texts.T("err.midi.notMidi", "Esa pista no es MIDI: los clips MIDI van en una pista MIDI."));
+            t = p.Tracks.Find(x => x.Id == trackId) ?? throw new ArgumentException(Texts.T("err.midi.trackNotFound", "Pista no encontrada."));
+            if (!t.IsMidi) throw new ArgumentException(Texts.T("err.midi.notMidi", "Los clips MIDI van en pistas MIDI."));
         }
         else
         {

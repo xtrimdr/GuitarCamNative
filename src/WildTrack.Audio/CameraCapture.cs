@@ -207,8 +207,8 @@ public sealed class CameraCapture : IDisposable
         Opening = false;
         if (!disposed)
             Error = source.IsIp
-                ? Texts.T("camera.errIp", "No pudimos conectar al stream directo de DroidCam en {0}. Verificá que la IP y puerto (4747) sean los que muestra la app en el celu y que el cliente DroidCam de PC esté detenido.", source.IpHost)
-                : Texts.T("camera.errDroid", "DroidCam Video está seleccionado pero no entrega imagen. Asegurate de que el programa DroidCam Client en Windows esté abierto y con el video corriendo (\"Start\"), o cambiá al botón \"Modo IP DroidCam\" arriba.");
+                ? Texts.T("camera.errIp", "No se pudo conectar a DroidCam en {0}. Verificá la IP y el puerto (4747) que muestra el celular, y que DroidCam Client en la PC esté detenido.", source.IpHost)
+                : Texts.T("camera.errDroid", "DroidCam Video no entrega imagen. Abrí DroidCam Client en Windows con el video iniciado (\"Start\"), o usá el modo IP DroidCam.");
     }
 
     /// <summary>Starts FFmpeg and waits for the output stream's size, which FFmpeg prints before the first frame.</summary>

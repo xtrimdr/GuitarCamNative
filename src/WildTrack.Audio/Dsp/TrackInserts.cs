@@ -1,8 +1,10 @@
+using WildTrack.Audio.Vst;
+
 namespace WildTrack.Audio.Dsp;
 
 /// <summary>
 /// One effect in a track's insert slots (<see cref="TrackDspChain"/>). The chain only knows this shape, so a built-in
-/// effect and a future VST3 plugin are both just a kind of slot. Runs on the audio thread: <see cref="Process"/> never
+/// effect and a VST3 plugin (<see cref="VstInsert"/>) are both just a kind of slot. Runs on the audio thread: <see cref="Process"/> never
 /// allocates, locks or throws. Its settings live in the project (<c>InsertSlot</c>); <see cref="TrackInserts.Apply"/>
 /// hands them over from the UI thread as whole immutable values, like every other effect.
 /// </summary>
@@ -10,7 +12,8 @@ public interface ITrackInsert
 {
     /// <summary>The slot kind (<see cref="TrackInserts.Sat"/>…), as saved in the project.</summary>
     string Kind { get; }
-    /// <summary>How late its output comes out. Zero for every built-in effect; a plugin's delay gets compensated later.</summary>
+    /// <summary>How late its output comes out (frames). Zero for every built-in effect; a plugin's is compensated in the
+    /// rest of the mix (<see cref="MixLatency"/>). UI thread.</summary>
     int LatencySamples { get; }
     void Process(Span<float> left, Span<float> right);
     void Reset();
@@ -179,6 +182,8 @@ public sealed record InsertSpec(string Id, string Kind)
     public double Bpm { get; init; } = 120;
     /// <summary>A gate slot's settings (<see cref="GateParams.On"/> = the slot is on).</summary>
     public GateParams Gate { get; init; } = GateParams.Defaults;
+    /// <summary>A VST3 effect slot's plugin, whether it is on and its process (<see cref="VstSlotSpec"/>).</summary>
+    public VstSlotSpec? Vst { get; init; }
 }
 
 /// <summary>
@@ -195,9 +200,11 @@ public static class TrackInserts
     public const string Reverb = "reverb";
     public const string Delay = "delay";
     public const string Gate = "gate";
+    /// <summary>A VST3 effect (<see cref="VstInsert"/>).</summary>
+    public const string Vst = "vst";
     public static readonly string[] DefaultOrder = [Sat, Comp, Eq];
 
-    public static bool IsKind(string? kind) => kind is Sat or Comp or Eq or Reverb or Delay or Gate;
+    public static bool IsKind(string? kind) => kind is Sat or Comp or Eq or Reverb or Delay or Gate or Vst;
 
     /// <summary>The kinds only a return's chain offers (a track's and a folder's menus don't).</summary>
     public static bool ReturnOnly(string? kind) => kind is Reverb or Delay;
@@ -210,6 +217,7 @@ public static class TrackInserts
         Reverb => new ReverbInsert(sampleRate),
         Delay => new DelayInsert(sampleRate),
         Gate => new GateInsert(sampleRate),
+        Vst => new VstInsert(sampleRate),
         _ => throw new ArgumentException($"unknown insert kind '{kind}'", nameof(kind)),
     };
 
@@ -223,13 +231,15 @@ public static class TrackInserts
             case ReverbInsert r: r.Set(spec.Reverb); break;
             case DelayInsert d: d.Set(spec.Delay, spec.Bpm); break;
             case GateInsert g: g.Set(spec.Gate); break;
+            case VstInsert v when spec.Vst != null: v.Set(spec.Vst, spec.Bpm); break;
         }
     }
 
     /// <summary>
     /// The inserts for <paramref name="specs"/>, in their order: an insert of <paramref name="current"/> with the same id
     /// and kind is reused (its state carries on), the rest are new. Returns <paramref name="current"/> itself when nothing
-    /// was added, removed or moved, so the caller knows the chain doesn't need swapping. UI thread.
+    /// was added, removed or moved, so the caller knows the chain doesn't need swapping. UI thread. If one can't be set up
+    /// (an export's plugin that doesn't open) it throws, after closing the ones it had made.
     /// </summary>
     public static ITrackInsert[] Build(IReadOnlyList<InsertSpec> specs, ITrackInsert[] current, string[] currentIds,
         int sampleRate, out string[] ids)
@@ -242,7 +252,16 @@ public static class TrackInserts
             var s = specs[i];
             int k = Array.IndexOf(currentIds, s.Id);
             var insert = k >= 0 && current[k].Kind == s.Kind ? current[k] : Create(s.Kind, sampleRate);
-            Apply(insert, s);
+            try
+            {
+                Apply(insert, s);
+            }
+            catch
+            {
+                foreach (var made in next.Take(i).Append(insert))
+                    if (Array.IndexOf(current, made) < 0) (made as IDisposable)?.Dispose();
+                throw;
+            }
             next[i] = insert;
             ids[i] = s.Id;
             same &= k == i && insert == current[i];

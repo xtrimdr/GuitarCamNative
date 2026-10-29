@@ -19,7 +19,7 @@ static class MixCompareChecks
             if (!ok) failed++;
         }
 
-        var guitar = new Track { Name = "Guitarra" };
+        var guitar = new Track { Name = "Guitarra", Channel = new Channel { Inserts = Channel.DefaultInserts() } };
         var p = new Project { Tracks = [guitar] };
         string reverb = p.Settings.Buses[0].Id;
         guitar.Channel.Volume = 0.8;

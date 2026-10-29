@@ -16,7 +16,8 @@ static class InsertCommands
 
     /// <summary>
     /// wtlab proyecto insertos carpeta (pista | --bus id|n) [agregar tipo [--en n] | quitar n | mover n m | duplicar n | prender n | apagar n | plegar n]
-    /// Reverb and delay slots only go in a bus's chain, like the mixer's "+ Efecto" offers them.
+    /// Reverb and delay slots only go in a bus's chain, like the mixer's "+ Efecto" offers them; <c>agregar vst
+    /// --plugin "nombre"</c> adds a VST3 effect from the scanned plugins (<c>vst escanear</c>).
     /// </summary>
     public static int Run(string dir, Args a)
     {
@@ -52,13 +53,15 @@ static class InsertCommands
         bool changed = op switch
         {
             "" => false,
+            "agregar" when v1.Equals("vst", StringComparison.OrdinalIgnoreCase) =>
+                ChannelInserts.AddVst(slots, Plugin(a), a.Get("en") is { } at ? int.Parse(at) - 1 : null) != null,
             "agregar" => ChannelInserts.Add(slots, KindFor(v1, isReturn), a.Get("en") is { } at ? int.Parse(at) - 1 : null) != null,
             "quitar" => ChannelInserts.Remove(slots, Id(v1)),
             "mover" => ChannelInserts.Move(slots, Id(v1), int.Parse(v2) - int.Parse(v1)),
             "duplicar" => ChannelInserts.Duplicate(slots, Id(v1)) != null,
             "prender" or "apagar" => Toggle(slots.Find(s => s.Id == Id(v1))!, op == "prender"),
             "plegar" => Fold(slots.Find(s => s.Id == Id(v1))!),
-            _ => throw new ArgumentException("insertos: agregar vida|comp|eq|puerta (y reverb|delay en un bus) | quitar n | mover n m | duplicar n | prender n | apagar n | plegar n"),
+            _ => throw new ArgumentException("insertos: agregar vida|comp|eq|puerta (y reverb|delay en un bus) | agregar vst --plugin \"nombre\" | quitar n | mover n m | duplicar n | prender n | apagar n | plegar n"),
         };
         if (changed)
         {
@@ -68,6 +71,16 @@ static class InsertCommands
         Console.WriteLine($"{name}: {slots.Count} slot{(slots.Count == 1 ? "" : "s")}");
         for (int i = 0; i < slots.Count; i++) Console.WriteLine($"  {i + 1}. {Describe(slots[i])}");
         return 0;
+    }
+
+    /// <summary>The VST3 effect <c>--plugin</c> names, from the scanned plugins.</summary>
+    static PluginRef Plugin(Args a)
+    {
+        string name = a.Get("plugin") ?? throw new ArgumentException("insertos: agregar vst --plugin \"nombre\"");
+        var found = PluginCatalog.Find(PluginCatalog.Plugins(PluginCatalog.Load()), name)
+            ?? throw new ArgumentException($"No encontré \"{name}\" en la lista: probá con wtlab vst escanear.");
+        if (found.IsInstrument) Console.WriteLine($"Ojo: {found.Name} figura como instrumento; lo pongo como efecto igual.");
+        return PluginCatalog.Ref(found);
     }
 
     static bool Toggle(InsertSlot s, bool on)
@@ -118,6 +131,7 @@ static class InsertCommands
             InsertSlot.ReverbKind => $"{on} Reverb {ReverbPreset(s.Reverb!)}{s.Reverb!.Decay:0.0} s",
             InsertSlot.GateKind => $"{on} Puerta {(s.Gate!.Mode switch { "soft" => "suave", "hard" => "firme", _ => "normal" })} {s.Gate.Threshold:0.#} dB",
             InsertSlot.DelayKind => $"{on} Delay {(s.Delay!.Sync ? s.Delay.Division : $"{s.Delay.TimeMs:0} ms")} · repite {s.Delay.Feedback * 100:0}%",
+            InsertSlot.VstKind when s.Known => $"{on} VST3 {s.Vst!.Plugin.Name}{(s.Vst.Plugin.Vendor.Length > 0 ? $" · {s.Vst.Plugin.Vendor}" : "")}{(s.Vst.Plugin.State != null ? " (con su ajuste guardado)" : "")}",
             _ => $"--- {s.Type} (desconocido: se guarda tal cual y no suena)",
         } + $"  [{s.Id}]";
     }
@@ -245,7 +259,9 @@ static class InsertCommands
         Line("Slots: cambio de lista sin saltos", Math.Abs(end - 0.5f) < 1e-6 ? jump : 1, 0.5 / TrackDspChain.SwapFade + 1e-6, "rampa");
 
         // 4. the model: a kind with no slot gives a spare; turning it on puts it back where it went; unknown slots stay
-        var m = new Channel();
+        // a template's chain (a new channel has none)
+        var m = new Channel { Inserts = Channel.DefaultInserts() };
+        bool bare = new Channel().Slots.Count == 0;
         ChannelInserts.Remove(m, m.Slots[1].Id);
         bool spare = m.Slots.Count == 2 && !m.Comp.On;
         m.Comp.On = true;
@@ -262,7 +278,16 @@ static class InsertCommands
             && ChannelInserts.MoveNextTo(m, firstId, m.Slots[0].Id, false) && m.Slots[0].Id == firstId
             && ChannelInserts.MoveNextTo(m, firstId, m.Slots[2].Id, true) && m.Slots[2].Id == firstId
             && !ChannelInserts.MoveNextTo(m, firstId, firstId, true);
-        Line("Slots: repuesto, desconocidos, editar", spare && adopted && future && edits ? 0 : 1, 0, "bien");
+        Line("Slots: repuesto, desconocidos, editar, canal nuevo vacío", bare && spare && adopted && future && edits ? 0 : 1, 0, "bien");
+
+        // the mixer's FX switch: every slot goes to the engine off, and the channel keeps them on
+        var fx = new Channel { Inserts = Channel.DefaultInserts() };
+        foreach (var sl in fx.Slots) sl.On = true;
+        var all = ChannelDsp.Specs(fx, rms, bypass: true);
+        bool bypassed = all.Length == fx.Slots.Count && fx.Slots.All(sl => sl.On)
+            && all.Where(sp => sp.Kind == TrackInserts.Sat).All(sp => sp.Sat.Bypass) && all.Where(sp => sp.Kind == TrackInserts.Comp).All(sp => !sp.Comp.On)
+            && all.Where(sp => sp.Kind == TrackInserts.Eq).All(sp => !sp.EqOn);
+        Line("Slots: el bypass de FX los apaga sin tocar el canal", bypassed ? 0 : 1, 0, "bien");
 
         // 5. buses: with an EQ, the mix is that EQ on the sum of the tracks routed there; a stem goes through it alone;
         // the live bus swaps its slots without jumps

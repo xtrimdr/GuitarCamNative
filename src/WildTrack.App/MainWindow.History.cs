@@ -17,15 +17,17 @@ namespace WildTrack.App;
 /// The Biblioteca and Historial tabs of the project bar (once one tab, HistoryPanel.tsx). Biblioteca: Canales (filter,
 /// search, by day, listen to the raw file in a mini player under its row (wave, seek, ±5 s), show in Explorer,
 /// take off the timeline or use again, send one unused take to the Recycle Bin) and "Borrar no usados".
-/// Historial: Exportaciones (watch, show, Recycle Bin with an inline confirmation) and Actividad (the log as sentences,
-/// by day, "Ver más"). Both are refreshed together while either is on screen. Same as the web except:
+/// Historial: Pasos and Versiones (MainWindow.Steps.cs) and Exportaciones (watch, show, go back to the version it was made
+/// from, Recycle Bin with an inline confirmation). Actividad, the log as sentences, left the tab when Pasos and
+/// Versiones came (the user's call); the log is still written and wtlab still reads it. Both tabs are refreshed together
+/// while either is on screen. Same as the web except:
 /// there are no "Guardando / Reintentar" rows, as a native take is written to disk while it is recorded, and listening
 /// goes through Windows' default output (the web's &lt;audio&gt;), not the ASIO engine. The work is in ProjectHistory.
 /// </summary>
 public partial class MainWindow
 {
     readonly StackPanel historyPanel = new(), libraryPanel = new();
-    readonly StackPanel historyTakes = new(), historyExports = new(), historyActivity = new();
+    readonly StackPanel historyTakes = new(), historyExports = new();
     readonly Border historyPurge = new() { Padding = new Thickness(16) };
     readonly TextBlock historyTotal = new() { Classes = { "mono" }, FontSize = 10, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap };
     readonly StackPanel historyFilters = new() { Spacing = 8 };
@@ -36,7 +38,6 @@ public partial class MainWindow
     readonly TakePreview takePreview = new();
     readonly DispatcherTimer historyClock = new() { Interval = TimeSpan.FromMinutes(1) };
     string historyFilter = "all";
-    int historyShown = ProjectHistory.ActivityPage;
     string? historyBusyId, historyBytesDir;
     string? historyDeletingExport, historyDeletingTake;
     bool historyExportBusy, historyTakeBusy, historyConfirmPurge, historyPurging;
@@ -96,12 +97,17 @@ public partial class MainWindow
         takes.Children.Add(historyTotal);
         libraryPanel.Children.Add(historyPurge);
 
+        BuildStepsPanel();
         ColorSection("Exportaciones", "\uE8B2", host: historyPanel, scope: "history").Children.Add(historyExports);
-        ColorSection("Actividad", "\uE81C", host: historyPanel, scope: "history").Children.Add(historyActivity);
 
         BuildTakePlayer();
         takePreview.Stopped += RefreshHistory;
-        historyClock.Tick += (_, _) => { if (HistoryVisible) RefreshHistory(); };
+        historyClock.Tick += (_, _) =>
+        {
+            if (!HistoryVisible) return;
+            RefreshHistory();
+            ReloadVersions(); // the automatic ones are written in the background as the project saves
+        };
         historyClock.Start();
     }
 
@@ -111,8 +117,10 @@ public partial class MainWindow
         if (!HistoryVisible) return;
         historyTakes.Children.Clear();
         historyExports.Children.Clear();
-        historyActivity.Children.Clear();
         var st = store;
+        if (StepsVisible && versionsDir != st?.Dir) ReloadVersions();
+        RefreshSteps();
+        RefreshVersions();
         historyPanel.IsEnabled = libraryPanel.IsEnabled = st != null;
         if (st == null)
         {
@@ -166,27 +174,6 @@ public partial class MainWindow
             var list = new StackPanel { Margin = new Thickness(-16, -4) };
             foreach (var e in exports) list.Children.Add(e.File == historyDeletingExport ? ExportDeleteRow(st, e) : ExportRow(st, e, editable));
             historyExports.Children.Add(list);
-        }
-
-        // Actividad
-        var activity = ProjectHistory.BuildActivity(p);
-        if (activity.Count == 0) historyActivity.Children.Add(Help(Loc.T("hist.activity.empty")));
-        else
-        {
-            var list = new StackPanel { Margin = new Thickness(-16, -4) };
-            foreach (var g in activity.Take(historyShown).GroupBy(l => l.At.ToLocalTime().Date))
-            {
-                list.Children.Add(DayHeader(ProjectHistory.DayLabel(g.Key), list.Children.Count == 0));
-                foreach (var l in g) list.Children.Add(ActivityRow(l));
-            }
-            historyActivity.Children.Add(list);
-            if (activity.Count > historyShown)
-            {
-                var more = new Button { Classes = { "ghost" }, Content = Loc.T("hist.more", activity.Count - historyShown), FontSize = 11, Foreground = Palette.Dim,
-                    Padding = new Thickness(0), MinHeight = 20, Height = 20, HorizontalAlignment = HorizontalAlignment.Left };
-                more.Click += (_, _) => { historyShown += ProjectHistory.ActivityPage; RefreshHistory(); };
-                historyActivity.Children.Add(more);
-            }
         }
 
         historyPurge.Child = historyConfirmPurge ? PurgeConfirm(st, unused) : PurgeButton(unused, editable);
@@ -404,7 +391,7 @@ public partial class MainWindow
     {
         string name = Path.GetFileName(e.File.Replace('/', '\\'));
         bool audioFile = WildTrack.Audio.AudioExporter.IsAudioFile(name); // "Exportar audio" of a solo audio project
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), ColumnSpacing = 4 };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto,Auto"), ColumnSpacing = 4 };
         var body = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 12 };
         body.Children.Add(HistoryIcon(audioFile ? "\uE8D6" : "\uE8B2", 14, Palette.Faint));
         var text = new StackPanel();
@@ -432,8 +419,17 @@ public partial class MainWindow
         Grid.SetColumn(reveal, 1); grid.Children.Add(reveal);
         var delete = RowButton("\uE74D", audioFile ? Loc.T("hist.trashFile") : Loc.T("hist.trashVideo"), () => { historyDeletingExport = e.File; RefreshHistory(); }, danger: true);
         delete.IsEnabled = editable;
-        Grid.SetColumn(delete, 2); grid.Children.Add(delete);
-        return HistoryRow(grid, [reveal, delete], new Thickness(0, 0, 8, 0));
+        Grid.SetColumn(delete, 3); grid.Children.Add(delete);
+        var hover = new List<Control> { reveal, delete };
+        // the mix it was made with, saved as a version when it finished (exports older than that have none)
+        if (versionsDir == st.Dir && versions.FirstOrDefault(v => v.Export == e.File) is { Path: not null } version)
+        {
+            var back = RowButton("\uE7A7", Loc.T("hist.exportVersion"), async () => await RestoreVersion(st, version));
+            back.IsEnabled = editable && !Export.IsRunning;
+            Grid.SetColumn(back, 2); grid.Children.Add(back);
+            hover.Insert(0, back);
+        }
+        return HistoryRow(grid, hover, new Thickness(0, 0, 8, 0));
     }
 
     Control ExportDeleteRow(ProjectStore st, ExportRecord e)
@@ -456,30 +452,6 @@ public partial class MainWindow
         Grid.SetColumn(yes, 3); grid.Children.Add(yes);
         if (!historyExportBusy) Dispatcher.UIThread.Post(() => yes.Focus());
         return new Border { Child = grid, Background = Palette.RecSoft, Padding = new Thickness(16, 6, 8, 6) };
-    }
-
-    static Control ActivityRow(ProjectHistory.ActivityLine l)
-    {
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 10, Margin = new Thickness(16, 6) };
-        string glyph = l.Icon switch
-        {
-            "plus" => "\uE710", "folder" => "\uE8B7", "mic" => "\uE720", "minus" => "\uE738", "trash" => "\uE74D", "film" => "\uE8B2", _ => "\uE81C",
-        };
-        var icon = HistoryIcon(glyph, 12, l.Rec ? Palette.Rec : Palette.Faint);
-        icon.VerticalAlignment = VerticalAlignment.Top;
-        icon.Margin = new Thickness(0, 2, 0, 0);
-        grid.Children.Add(icon);
-        var text = new TextBlock { FontSize = 12, Foreground = Palette.Dim, TextWrapping = TextWrapping.Wrap };
-        foreach (var part in l.Parts)
-        {
-            var run = new Run(part.Text);
-            if (part.Strong) run.Foreground = Palette.Fg;
-            text.Inlines!.Add(run);
-        }
-        Grid.SetColumn(text, 1); grid.Children.Add(text);
-        var time = new TextBlock { Classes = { "mono" }, FontSize = 10, Foreground = Palette.Faint, Text = l.At.ToLocalTime().ToString("HH:mm"), Margin = new Thickness(0, 1, 0, 0) };
-        Grid.SetColumn(time, 2); grid.Children.Add(time);
-        return grid;
     }
 
     Control PurgeButton(List<Media> unused, bool editable)
@@ -625,6 +597,7 @@ public partial class MainWindow
         foreach (var m in purged) { historyBytes.Remove(m.Id); takePeaks.Remove(m.Id); }
         if (purged.Count == 0) return;
         undo.Clear(); // purged files are gone; older states could reference them
+        ResetSteps(Loc.T("steps.origin.purged"));
         UpdateUndoButtons();
         MarkDirty();
         SaveSoon();
@@ -637,8 +610,13 @@ public partial class MainWindow
         RefreshHistory();
         try
         {
-            await Task.Run(() => ProjectHistory.TrashExport(st.Dir, e));
+            await Task.Run(() =>
+            {
+                ProjectHistory.TrashExport(st.Dir, e);
+                st.UnlinkExport(e.File);
+            });
             ProjectHistory.ForgetExport(st.Project, e);
+            ReloadVersions();
             MarkDirty();
             SaveSoon();
         }

@@ -78,7 +78,7 @@ public static class TrackPresets
     public static List<TrackPreset> Save(TrackPreset preset)
     {
         preset.Name = ProjectLibrary.CleanName(preset.Name);
-        if (preset.Name.Length == 0) throw new ArgumentException(Texts.T("err.preset.name", "Ponele un nombre."));
+        if (preset.Name.Length == 0) throw new ArgumentException(Texts.T("err.preset.name", "Falta el nombre."));
         var list = All();
         var existing = list.Find(x => string.Equals(x.Name, preset.Name, StringComparison.OrdinalIgnoreCase));
         if (existing != null)

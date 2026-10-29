@@ -40,8 +40,10 @@ lo que falta en [PENDIENTES.md](PENDIENTES.md); [HECHO.md](HECHO.md) es historia
 - Siguen en español a propósito las plantillas que el usuario ya guardó y los nombres que se crean ("Canal 1").
 - Vocabulario de músico, no de programador: **canal**, **pista**, **click**, **Vida** (saturación; niveles Apenas /
   Sutil / Con vida / Caliente / Al palo), **Válvula / Cinta**, **Rasgueo / Arpegio / Punteo**, **Ver todo**.
-- Tono: claro y corto en botones y tooltips; el humor (suave) va en estados vacíos, avisos y confirmaciones, nunca
-  cuando el usuario puede perder algo.
+- **Tono profesional** (pedido del usuario, 2026-10-29: es una app profesional): corto y al grano en todo, botones,
+  tooltips, estados, avisos y ayudas. Sin humor, sin charla ni frases de relleno, sin explicar lo obvio ni cómo
+  funciona por dentro; si un texto no le suma nada al usuario, no va. Un estado entra en una línea ("Activo · latencia
+  5 ms, compensada", "Cargando…").
 
 ## 3. Arquitectura
 
@@ -72,7 +74,15 @@ tools/                 probar.ps1 (compila, comprueba y abre una copia de prueba
   que se cuelga no tira abajo la grabación). Hablan por memoria compartida (`shared.h` ↔ `VstBridge`, los offsets tienen
   que coincidir) y líneas de texto por stdin/stdout. En vivo el hilo de audio nunca espera al plugin: lo oye un bloque
   tarde y le manda las notas ese bloque (más su latencia) antes (`InstrumentPlayer`); la exportación espera cada bloque
-  (`InstrumentRender`, dentro de `MixRenderer`). La ventana de la app maneja procesos y estados (`MainWindow.Vst.cs`).
+  (`InstrumentRender`, dentro de `MixRenderer`). Un **efecto** es un slot más (`VstInsert`, tipo `vst`): en vivo manda
+  cada bloque y toma el anterior, así que se oye un bloque del driver (`VstInsert.LiveBlock`) más su latencia tarde; en
+  la exportación abre su propia copia y espera cada bloque. La ventana de la app maneja procesos y estados
+  (`MainWindow.Vst.cs` los instrumentos, `MainWindow.VstFx.cs` los efectos, que el motor encuentra por `LiveVst`).
+- **Compensación de latencia (PDC)**: lo que un slot atrasa (`ITrackInsert.LatencySamples`) lo espera el resto de la
+  mezcla. `MixLatency.Compute` (un solo cálculo para el vivo y la exportación) dice cuánto espera cada tramo (la salida
+  y cada envío de pistas y nodos, `LatencyDelay`) para que todo llegue junto a cada nodo y al master; el master queda
+  `PdcFrames` tarde y con eso se corren el click, las notas grabadas y las tomas (`PlaybackEngine.UpdateLatency`, en
+  cada tick, solo si algo cambió). La exportación recorta ese atraso del principio, como el del limitador.
   La lista de plugins (`PluginCatalog`, `plugins.json`; carpetas extra y ocultos en `config.json`) se administra en
   Configuración → Plugins; en la ventana pasa siempre por `PluginScan` (una sola lista y una sola búsqueda a la vez).
 
@@ -88,15 +98,15 @@ tools/                 probar.ps1 (compila, comprueba y abre una copia de prueba
   el mismo orden, nunca toma pistas ni rutea, y se puede ocultar del timeline (`HiddenInTimeline`). Pistas de la raíz,
   carpetas y buses tienen su lado del mixer (`MixerSide`, `MixerSides`: null = el de siempre).
 - **Buses y ruteo**: un solo concepto para "bus" y "FX" (`ProjectSettings.Buses`, `Bus`: nombre, fader, paneo, mute,
-  slots, salida y envíos; una reverb o un delay son un slot más, `InsertSlot.Reverb` / `Delay`). Un proyecto nuevo trae
-  "Reverb" y "Delay" (`ProjectBuses.Defaults`). Pista (`Channel`), carpeta y bus son `IRouted`: `Output` (null = Master,
+  slots, salida y envíos; una reverb o un delay son un slot más, `InsertSlot.Reverb` / `Delay`). Un proyecto nuevo vacío
+  arranca sin buses (sin envíos); las plantillas traen los suyos o "Reverb" y "Delay" (`ProjectBuses.Defaults`). Pista (`Channel`), carpeta y bus son `IRouted`: `Output` (null = Master,
   o un bus; una pista en carpeta sale por la carpeta) y `Sends` (`Send`: bus, nivel 0..1, ON y PRE). Las ediciones
   pasan por `ProjectBuses`. **Por ahora un bus sale solo al Master** (decisión del usuario, 2026-10-26: las cadenas
   entre buses no se entendían): `CanFeed` rechaza un bus como origen y `Normalize` le borra salida y envíos, además de
   sacar lo que apunta a buses que no existen. El motor sigue sabiendo correr buses que alimentan buses (`Order`), por
   si vuelven. Cada pista (y carpeta) elige a qué buses manda (pedido del usuario): un envío con `Hidden` está sacado
-  de su lista (apagado, con su nivel guardado) y un bus sin envío se muestra, así una pista o un bus nuevos traen todos
-  (`ProjectBuses.Shown`, `ShowSend`); el timeline, el mixer y el inspector muestran solo esos. La versión 3 trajo esto: los campos de la 2
+  de su lista (apagado, con su nivel guardado) y un bus sin envío tampoco está: una pista o un bus nuevos no traen
+  ninguno, el usuario los suma (pedido del usuario, 2026-10-29; `ProjectBuses.Shown`, `ShowSend`); el timeline, el mixer y el inspector muestran solo esos. La versión 3 trajo esto: los campos de la 2
   (Reverb/Delay fijos, retornos, `reverbSend`…, el fader/M/S/slots de carpeta) se leen como `Old*` y se convierten al
   normalizar.
 - **Clip**: un pedazo de un media en una pista (`AtSec`, `TrimStartSec`, `TrimEndSec`, `GainDb`, `GainCurve`, encuadre).
@@ -160,8 +170,8 @@ El callback de ASIO (`AsioDuplex.ProcessBlock`, `PlaybackEngine.Process`) corre 
 
 Cadena por pista: clips (fades, ganancia; el audio ya transpuesto si la pista tiene Transponer) y, en una pista MIDI,
 sus notas (`NoteSynth`: el tono de prueba, sin estado, desde `ChannelDsp.Notes`) → los **slots de
-efectos** del canal en su orden (`Channel.Inserts`; por defecto saturación → compresor con su EQ de preset antes y
-después → EQ de pista, que se pueden sacar, repetir y reordenar) → paneo → fader → su salida (su carpeta, un bus o el
+efectos** del canal en su orden (`Channel.Inserts`; un canal nuevo no trae ninguno y las plantillas de fábrica
+saturación → compresor con su EQ de preset antes y después → EQ de pista, que se pueden sacar, repetir y reordenar) → paneo → fader → su salida (su carpeta, un bus o el
 master); los envíos salen del fader (post, por defecto) o de antes (PRE: después de los slots y el paneo; mute y solo
 igual los callan) hacia los buses. Carpetas y buses son nodos (`BusDspChain`: suma de lo que le llega → slots → paneo →
 fader/mute → su salida y sus envíos) que corren en orden, cada uno después de todo lo que lo alimenta
@@ -171,12 +181,12 @@ bus), `BusDspChain` y `MixGraphBus` (`WildTrack.Audio/Dsp/MixRenderer.cs`) los u
 exportación: no los dupliques. La conversión proyecto → motor es una sola, `ChannelDsp` (`Track`, `Bus`, `Nodes`).
 `wtlab comprobar-dsp` corre las comprobaciones del DSP.
 
-Slots: cada efecto es un `ITrackInsert` (`WildTrack.Audio/Dsp/TrackInserts.cs`); un VST3 tiene que ser un tipo de slot
+Slots: cada efecto es un `ITrackInsert` (`WildTrack.Audio/Dsp/TrackInserts.cs`); un VST3 es un tipo de slot
 más. `TrackDspChain.SetInserts` reusa el efecto de cada slot por su id (no pierde el estado al editar) y, si cambia la
 lista, el hilo de audio funde 5 ms de salida y 5 ms de entrada. La conversión canal → motor es una sola,
 `ChannelDsp.Specs` (en vivo, exportación y wtlab); las ediciones de la lista, `ChannelInserts`. La pestaña Canal y la
-tira amplia muestran la cadena entera (cada slot editado por su id); `Channel.Sat/Comp/Eq` son el primer slot de cada
-tipo, el atajo de las perillas del timeline y la tira compacta.
+lista de la tira del mixer muestran la cadena entera (cada slot editado por su id); `Channel.Sat/Comp/Eq` son el
+primer slot de cada tipo, el atajo de las perillas del timeline.
 
 ## 5. Estilo de código
 

@@ -5,7 +5,8 @@ namespace WildTrack.App;
 
 /// <summary>
 /// The project chip's menu (asked by the user): the projects manager, and "Volver a una versión guardada" with the
-/// snapshots of historial/ (<see cref="ProjectStore.Snapshots"/>), which before could only be restored from wtlab.
+/// snapshots of historial/ (<see cref="ProjectStore.Snapshots"/>), which before could only be restored from wtlab; the
+/// same versions, with their names, are in Historial → Versiones (MainWindow.Steps.cs), which goes back through here.
 /// Going back saves the current state as one more snapshot first, so it is undone from the same list; the undo
 /// steps are dropped, since they belong to the state that was left.
 /// </summary>
@@ -26,7 +27,8 @@ public partial class MainWindow
         {
             Header = new TextBlock { Text = Loc.T("ver.title"), FontSize = 12 },
             IsEnabled = canRestore && snapshots.Count > 0,
-            ItemsSource = snapshots.Select(s => MenuAction(VersionTime(s.Time), () => RestoreVersion(st, s), hint: s.Time.ToString("dd/MM/yyyy HH:mm:ss"))).ToList(),
+            ItemsSource = snapshots.Select(s => MenuAction(s.Name is { } name ? $"{VersionTime(s.Time)} · {name}" : VersionTime(s.Time),
+                () => RestoreVersion(st, s), hint: s.Time.ToString("dd/MM/yyyy HH:mm:ss"))).ToList(),
         };
         ToolTip.SetTip(versions, snapshots.Count == 0 ? Loc.T("ver.none") : st.ReadOnly ? st.ReadOnlyReason : Loc.T("ver.tip"));
         ToolTip.SetShowDelay(versions, (int)MenuTipDelay.TotalMilliseconds);
@@ -60,10 +62,12 @@ public partial class MainWindow
             return;
         }
         undo.Clear();
+        ResetSteps(s.Name is { } named ? Loc.T("steps.origin.restoredNamed", named) : Loc.T("steps.origin.restored", VersionTime(s.Time)));
         await ShowProject(st);
         ResetMaster();
         UpdateUndoButtons();
         RefreshHistory();
-        Toast(Loc.T("ver.restored", VersionTime(s.Time)));
+        ReloadVersions();
+        Toast(s.Name is { } name ? Loc.T("ver.restoredNamed", name) : Loc.T("ver.restored", VersionTime(s.Time)));
     }
 }

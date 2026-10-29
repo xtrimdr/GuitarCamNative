@@ -359,7 +359,7 @@ public partial class MainWindow
         HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
     };
     readonly Button midiOpen = new() { Classes = { "chip" }, Height = 30, Padding = new Avalonia.Thickness(12, 0), HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left };
-    /// <summary>Where <see cref="inspectorSends"/> goes while a MIDI track is shown.</summary>
+    /// <summary>Where the output and sends tray goes while a MIDI track is shown.</summary>
     readonly StackPanel midiSends = new() { Margin = new Avalonia.Thickness(0, 6, 0, 0) };
 
     void InitMidiInspector()
@@ -392,7 +392,6 @@ public partial class MainWindow
         };
         ToolTip.SetTip(midiOpen, Loc.T("vst.openWindow.tip"));
         midiOpen.Click += (_, _) => { if (sel is { Track.IsMidi: true } t) OpenInstrumentWindow(t); };
-        midiPanel.Children.Add(Help(Loc.T("vst.insp.hint")));
         midiPanel.Children.Add(midiSends);
         Inspector.Children.Add(midiPanel);
     }
@@ -405,8 +404,7 @@ public partial class MainWindow
         var state = InstrumentStateOf(t.Track.Id);
         midiNow.Text = plugin?.Name ?? Loc.T("vst.testTone");
         midiNow.Foreground = state == TimelineView.InstrumentState.Ready ? Palette.Accent : Palette.Fg;
-        midiNowKind.Text = plugin == null ? Loc.T("vst.kind.native")
-            : plugin.Vendor.Length > 0 ? $"{Loc.T("vst.group.vst")} · {plugin.Vendor}" : Loc.T("vst.group.vst");
+        midiNowKind.Text = Loc.T(plugin == null ? "vst.kind.native" : "vst.group.vst");
         midiNowInfo.Text = state switch
         {
             TimelineView.InstrumentState.Ready => Loc.T("vst.insp.ready"),
@@ -420,13 +418,13 @@ public partial class MainWindow
         midiOpen.IsEnabled = state == TimelineView.InstrumentState.Ready;
     }
 
-    /// <summary>Puts the output and send sections in <paramref name="host"/>: the Canal tab's place for an audio track
+    /// <summary>Puts the output and sends tray in <paramref name="host"/>: the Canal tab's place for an audio track
     /// (right after its effects), <see cref="midiSends"/> for a MIDI one. One set of sections, moved, not two.</summary>
     void PlaceInspectorSends(Panel host)
     {
-        if (inspectorSends.Parent == host) return;
-        (inspectorSends.Parent as Panel)?.Children.Remove(inspectorSends);
-        if (host == takeSections) takeSections.Children.Insert(takeSections.Children.IndexOf(inspectorChain) + 1, inspectorSends);
-        else host.Children.Add(inspectorSends);
+        if (sendsTray.Parent == host) return;
+        (sendsTray.Parent as Panel)?.Children.Remove(sendsTray);
+        if (host == takeSections) takeSections.Children.Insert(takeSections.Children.IndexOf(chainTray) + 1, sendsTray);
+        else host.Children.Add(sendsTray);
     }
 }

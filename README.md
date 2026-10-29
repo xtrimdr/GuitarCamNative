@@ -2,15 +2,16 @@
 
 **Español** · [English](README_EN.md)
 
-**WildTrack** es un DAW de escritorio para Windows que también hace **videos de guitarra**:
-grabás tomas con cámara y audio, las mezclás y exportás un video con un panel por toma.
+**WildTrack** es un DAW de escritorio para Windows, para cualquier músico: guitarra, bajo, voz, teclados,
+batería o lo que toques. Y además hace **videos**: grabás tomas con cámara y audio, las mezclás y exportás un
+video con un panel por toma.
 Antes se llamaba **GuitarCam Studio Native**: al actualizar, tus ajustes y proyectos siguen ahí.
 
 Funciona tanto como un **cam studio** (grabar tomas con cámara y armar el video) como un **DAW** (grabar,
 editar y mezclar audio en un timeline y un mixer completos, con o sin imagen: el modo **Solo audio**
 sirve para hacer música sin video).
 
-Está pensada para usarse con la guitarra colgada: atajos de una tecla, botones grandes y un camino corto
+Está pensada para usarse con el instrumento en la mano: atajos de una tecla, botones grandes y un camino corto
 de **grabar → mezclar → exportar**.
 
 <p align="center">
@@ -70,6 +71,10 @@ Más detalles en [Requisitos](#requisitos).
   velocidad de cada nota. Cada pista MIDI toca con un **instrumento VST3** (Surge XT, MT-PowerDrumKit…: clic derecho
   en la pista → Instrumento, o el botón del piano roll, que también abre la ventana del plugin) o, sin plugin, con un
   tono de prueba. Cada plugin corre en su propio proceso: si se cuelga, se calla ese y el resto sigue sonando.
+- **Efectos VST3** en los canales y los buses (amps, pedales, reverbs de terceros): "+ Efecto" → VST3, mezclados en
+  cualquier orden con los propios; "Abrir" abre su ventana y lo que ajustes ahí queda en el proyecto. Lo que un plugin
+  atrasa se compensa en toda la mezcla, el click y las tomas que grabás encima (PDC), y la exportación pasa por los
+  mismos plugins.
 - Arriba de la regla, un **rango A–B** para repetir un tramo (practicar el solo, mezclar un pedazo) y **marcadores**
   con nombre (Intro, Estribillo, Solo…) para saltar de una parte a otra. Zoom de un tiempo a toda la canción con
   atajos que se asignan en Configuración → Atajos de teclado.
@@ -81,7 +86,7 @@ Más detalles en [Requisitos](#requisitos).
 
 - Cadena de efectos por pista: saturación (**Vida**, válvula o cinta), **compresor** con presets (Rasgueo / Arpegio /
   Punteo), **EQ de 6 bandas** con espectro en vivo, **puerta de ruido** para el zumbido entre frases, y envíos a
-  **reverb** y **delay**, más limitador master, botón **MONO** para chequear la mezcla y paneo con plantillas.
+  **reverb** y **delay**, más limitador master, botón **MONO** para chequear la mezcla, **FX** para escucharla sin efectos y paneo con plantillas.
 - **Transponer** por pista (−12 a +12 semitonos) sin cambiar el largo, así la toma sigue en sincronía con el video:
   se calcula en segundo plano (unos 4 s por 3 min) con un vocoder de fase de alta calidad, se ve el progreso sobre los
   clips y queda guardada en `cache/`.
@@ -116,8 +121,9 @@ Más detalles en [Requisitos](#requisitos).
 ### Y además
 
 - **No pierde nada**: guardado atómico (solo después de cada edición, cada X minutos o a mano con Ctrl+S o el
-  diskette, a elección en Configuración → Guardado y exportación; las tomas se guardan siempre), copias en `historial/` para volver
-  atrás, recuperación de grabaciones interrumpidas y un gestor de proyectos con Papelera y **paquetes ZIP** para
+  diskette, a elección en Configuración → Guardado y exportación; las tomas se guardan siempre), la pestaña
+  **Historial** para volver atrás (cada paso de esta sesión con su nombre, a un clic, y versiones guardadas: solas, con
+  nombre o la de cada exportación), recuperación de grabaciones interrumpidas y un gestor de proyectos con Papelera y **paquetes ZIP** para
   mandar un proyecto a otra compu o guardar un respaldo completo.
 - Idiomas, tema, atajos de teclado y diseño de la ventana (Clásico o Vertical, para videos 9:16) configurables.
 
@@ -127,8 +133,8 @@ WildTrack está **en desarrollo constante**. La idea es llevarla a un nivel que 
 para quien recién empieza y quiere hacer música rápido y sin complicaciones, como para profesionales que
 quieren hacer música en serio.
 
-Ya están las pistas MIDI con su piano roll y los instrumentos VST3; lo próximo son los **efectos VST3** en los slots
-de las pistas y los buses, un sampler propio y más herramientas de estudio. Lo que está
+Ya están las pistas MIDI con su piano roll y los instrumentos y efectos VST3; lo próximo son perillas propias para
+los parámetros de los plugins, un sampler propio y más herramientas de estudio. Lo que está
 planeado y lo que falta está en [PENDIENTES.md](PENDIENTES.md).
 
 ## Requisitos
@@ -198,8 +204,9 @@ Todos se pueden cambiar en ⚙ Configuración → Atajos de teclado (menos Esc).
 | Arrastrar en vacío sobre las pistas (Ctrl: sumar) | marcar varios clips con un rectángulo para moverlos o borrarlos juntos |
 | Ctrl+clic / Shift+clic en un encabezado | marcar varias pistas (una por una / un rango) para moverlas juntas |
 | Ctrl+S | guardar ya |
-| B / P | mostrar u ocultar el panel de la toma / del proyecto |
-| Rueda, Shift+rueda, Ctrl+rueda, Alt+rueda | subir y bajar, zoom, desplazar a los costados, alto de pista (los modificadores y el sentido de cada uno, con "Invertir", se cambian en Configuración → Atajos de teclado; zoom y alto también con los sliders al pie de los encabezados) |
+| B / P | plegar o abrir el panel del canal / del proyecto (si está oculto con su botón de la barra de título, lo vuelve a mostrar) |
+| F11 | pantalla completa (otra vez F11 vuelve a como estaba) |
+| Rueda, Shift+rueda, Ctrl+rueda, Alt+rueda | subir y bajar, zoom, desplazar a los costados, alto de pista (los modificadores y el sentido de cada uno, con "Invertir", se cambian en Configuración → Atajos de teclado; zoom y alto también con los sliders al pie de los encabezados). En el mixer, la rueda sola y Ctrl+rueda lo desplazan a los costados y Shift+rueda (o la barra de su cabecera) agranda o achica el ancho de los canales |
 
 En el clip seleccionado, un clic sobre su línea de volumen agrega un punto; los puntos se arrastran y un
 doble clic los saca.
@@ -219,7 +226,8 @@ elige cuál se ve. **Bloquear clip** o **Bloquear pista** (clic derecho) deja un
 mueve, no se recorta, no se borra y grabar no la pisa; el volumen, los fades y el encuadre se siguen tocando.
 
 Cada pista o carpeta puede tener su propio alto: arrastrá el borde de abajo de su encabezado (doble clic en el borde
-la vuelve al alto general). El botón ↺ al pie de los encabezados iguala todas.
+la vuelve al alto de siempre). El botón ↺ al pie de los encabezados iguala todas. Las carpetas llevan una perilla por
+envío a bus debajo del nombre, como las pistas.
 
 ## Cómo está hecho
 
@@ -285,7 +293,7 @@ la consola, sin abrir la ventana.
 | `sistema [--segundos 5] [--instalar-ffmpeg]` | CPU, GPU y RAM, si FFmpeg está en el PATH y con qué placa de video exporta; `--instalar-ffmpeg` lo instala antes con winget, como el aviso de la ventana |
 | `version` | esta versión contra la última release de GitHub (lo que avisa la ventana y muestra "Acerca de") |
 | `espectro [toma.wav]` | el espectro en vivo del EQ |
-| `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas, reinicio de la cadena, afinador, LUFS y mastering (bandas que suman plano, reducción por banda sin importar el nivel, Cinta, Ancho (graves mono y mismo volumen), soft clip, limitador prendido y apagado) y slots de efectos (un canal viejo migrado suena idéntico a la cadena fija, repetir, reordenar, cambio de lista sin saltos), puerta de ruido (baja el zumbido, deja pasar la nota, no aletea cuando una nota se apaga); además Nitidez, Claridad y Resplandor (un cuadro plano queda igual, un borde se marca, una luz en lo oscuro deja su halo de su color, los looks HDR y Soñado suman lo suyo solo con el filtro prendido) |
+| `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas, reinicio de la cadena, afinador, LUFS y mastering (bandas que suman plano, reducción por banda sin importar el nivel, Cinta, Ancho (graves mono y mismo volumen), soft clip, limitador prendido y apagado) y slots de efectos (un canal viejo migrado suena idéntico a la cadena fija, repetir, reordenar, cambio de lista sin saltos, el bypass de FX los apaga sin tocar el canal), puerta de ruido (baja el zumbido, deja pasar la nota, no aletea cuando una nota se apaga); además Nitidez, Claridad y Resplandor (un cuadro plano queda igual, un borde se marca, una luz en lo oscuro deja su halo de su color, los looks HDR y Soñado suman lo suyo solo con el filtro prendido) |
 | `looks [--look id] [--salida look.cube] [--blancos n] [--negros n] [--luz n]` | los looks de color con colores de prueba, comprobación de rango y, con `--look`, el LUT `.cube` de ese look con Blancos, Negros y Sensación de luz |
 | `masterizar archivo.wav [--cuanto 0.35] [--banda-graves\|--banda-medios\|--banda-agudos 0..1] [--corte] [--barro] [--graves] [--presencia] [--aire] [--inclinacion] [--cinta] [--ancho] [--graves-mono] [--recorte] [--empuje] [--techo] [--release] [--sin-limitador] [--volumen youtube\|instagram\|tiktok\|spotify\|apple] [--pua 0..1] [--look natural\|glue\|bright\|warm\|front\|pick [--cuanto-look 1]] [--sugerime]` | el mastering de la ventana sobre un WAV: cuánto comprime cada banda (y la Púa), cuánto recortan el soft clip (Auto incluido) y el limitador y los LUFS de entrada y salida; `--volumen` es el Destino del master (mide el archivo y usa esa ganancia en vez del Empuje), `--look` pone un look, `--sugerime` muestra qué oye y qué propone, y masteriza con eso |
 | `midi ver\|pista\|clip\|nota\|acordes\|quitar carpeta` | pistas MIDI, sus clips y sus notas (`clip --pista n --en 0 --compases 4`, `nota --clip id --altura C4 --pulso 0 --largo 1 --vel 100`, `acordes --clip id` escribe Do, Sol, Lam, Fa); `mezclar carpeta` las renderiza |
@@ -298,6 +306,7 @@ la consola, sin abrir la ventana.
 | `vst escanear [--todo] [--archivo X]` / `vst lista` | busca los plugins VST3 (cada archivo en su propio proceso; los recuerda en `plugins.json`; `--archivo` reintenta uno) / los lista |
 | `vst carpetas [--agregar X] [--sacar X]` / `vst ocultar\|mostrar "nombre"` | dónde se buscan los plugins y cuáles salen en los menús (lo mismo que Configuración → Plugins) |
 | `vst probar "nombre" [--segundos 4] [--ventana] [--espera s] [--tiempo-real]` | toca un acorde (o un ritmo, si es una batería) con el plugin a un WAV, por el mismo puente que la exportación; `--ventana` abre antes su ventana. Con la variable `GCVST_DEBUG=1`, el puente cuenta sus salidas y cada bloque |
+| `vst efecto "nombre" [--entrada x.wav] [--segundos 4] [--bloque 256] [--apagado]` | pasa audio (o acordes de prueba) por un efecto como la exportación y en vivo, en bloques del driver a tiempo real; escribe los dos WAV y comprueba que en vivo llega justo un bloque después (lo que cuenta la compensación de latencia) |
 | `midi comprobar` | el sonido de las notas: igual en cualquier tamaño de bloque, termina con el release, la exportación suena como la reproducción y el clip pasa a notas con el tempo; y el teclado: una tecla suena como la nota escrita, el pedal, las tomas, cuantizar y el clip grabado (también corre en `comprobar-dsp`) |
 | `transponer archivo.wav [--semitonos 2] [--salida x.wav]` | cambia el tono sin cambiar el largo, como el Transponer de la pista (de −12 a +12, admite cents) |
 | `proyecto editar carpeta transponer pista semitonos` | el Transponer de esa pista; deja sus tomas transpuestas en `cache/` |
@@ -317,6 +326,7 @@ la consola, sin abrir la ventana.
 | `exportar proyecto … --resolucion 720\|1080\|1440\|2160 --bitrate 20` | el "Avanzado" del diálogo: lado corto del cuadro y bitrate del video en Mbps |
 | `exportar proyecto … --destino reels\|youtube\|ig-square\|ig-portrait [--volumen como-esta\|youtube\|…] [--lufs -14] [--cola 8]` | con el cuadro de esa red; el volumen es el Destino del master del proyecto (`--volumen` lo cambia para esta exportación, `--lufs` lleva la mezcla a ese volumen integrado), `--cola` deja sonar reverb y delay hasta N s después del último clip (0 = corta). Muestra los LUFS del resultado |
 | `proyecto abrir\|clips\|versiones\|volver carpeta` | abre un proyecto, lista pistas y clips, y recorre el historial |
+| `proyecto guardar-version carpeta [nombre] \| nombrar-version carpeta n [nombre]` | guarda una versión ahora / le pone nombre a la n de la lista (con nombre no se borra sola; sin nombre se lo saca) |
 | `proyecto toma\|cortar carpeta [--camara]` | graba un tono como la ventana / lo corta sin cerrar, para probar la recuperación |
 | `proyecto editar carpeta mover\|recortar-inicio\|recortar-final\|fade-in\|fade-out clip delta` | edita un clip como en el timeline (más: `a-pista`, `dividir`, `duplicar` (varios ids con comas), `pegar`, `ganancia`, `curva`, `quitar-clip`, `nueva-pista`…) |
 | `proyecto mezcla carpeta [ab\|copiar\|olvidar]` | el A \| B del mixer: pasa a la otra mezcla, copia esta sobre la otra u olvida la otra |
@@ -332,11 +342,11 @@ la consola, sin abrir la ventana.
 | `proyecto marcadores carpeta [agregar\|mover\|renombrar\|quitar … \| capitulos]`, `proyecto repetir carpeta [desde hasta \| --quitar]` | marcadores del tema y rango A–B del loop (`capitulos`: los marcadores como capítulos de YouTube) |
 | `proyecto duracion carpeta` | cuánto dura el tema y si entra en cada red (historias, X, Reels · Shorts, TikTok) |
 | `proyecto historial carpeta` | tomas en uso y no usadas, exportaciones y actividad |
-| `proyecto insertos carpeta pista [agregar vida\|comp\|eq\|puerta [--en n] \| quitar n \| mover n m \| duplicar n \| prender n \| apagar n \| plegar n]` | los slots de efectos de la pista en su orden; sin operación, los lista (`plegar` lo pliega en el mixer) |
+| `proyecto insertos carpeta pista [agregar vida\|comp\|eq\|puerta [--en n] \| agregar vst --plugin "nombre" \| quitar n \| mover n m \| duplicar n \| prender n \| apagar n \| plegar n]` | los slots de efectos de la pista en su orden; sin operación, los lista (`plegar` lo pliega en el mixer) |
 | `proyecto insertos carpeta --bus id\|n [agregar reverb\|delay\|vida\|comp\|eq\|puerta … \| quitar n \| …]` | lo mismo para un bus (la reverb y el delay solo van en buses) |
-| `proyecto buses carpeta [agregar [nombre] [--tipo reverb\|delay\|vacio] \| quitar n \| renombrar n nombre \| volumen n x \| paneo n x \| mute n]` | los buses, en el orden en que suenan, con sus slots, su salida y sus envíos; quitar uno se lleva los envíos que le llegaban |
+| `proyecto buses carpeta [agregar [nombre] [--tipo reverb\|delay\|vacio] \| quitar n \| renombrar n nombre \| volumen n x \| paneo n x \| mute n \| color n #rrggbb\|ninguno \| icono n id\|ninguno]` | los buses, en el orden en que suenan, con sus slots, su salida y sus envíos; quitar uno se lleva los envíos que le llegaban |
 | `proyecto envios carpeta quien [bus [nivel] [--pre\|--post] [--apagar\|--prender] [--quitar\|--sumar]] [--salida bus\|master]` | la salida y los envíos de una pista (número o id) o `carpeta:n`; un bus (`bus:n`) sale solo al master, así que lo rechaza; `--quitar`/`--sumar` saca o vuelve a poner un bus en su lista |
-| `proyecto verificar-deshacer\|verificar-clips\|verificar-tomas\|verificar-importar\|verificar-historial\|verificar-carpetas\|verificar-marcadores\|verificar-paquete` | pruebas automáticas sobre una carpeta temporal |
+| `proyecto verificar-deshacer\|verificar-pasos\|verificar-clips\|verificar-tomas\|verificar-importar\|verificar-historial\|verificar-carpetas\|verificar-marcadores\|verificar-paquete` | pruebas automáticas sobre una carpeta temporal |
 | `proyectos lista\|plantillas\|nuevo\|renombrar\|duplicar\|borrar\|olvidar\|carpeta\|buscar` | lo que hace el gestor de proyectos (`buscar`: qué abre "Abrir carpeta") |
 | `proyectos empaquetar carpeta [--completo] [--salida x.zip] \| desempaquetar x.zip` | el proyecto en un ZIP (para compartir: lo que suena; `--completo`: también las tomas sin usar, las versiones y las exportaciones) y de vuelta a un proyecto nuevo |
 | `proyectos guardar-plantilla\|borrar-plantilla` | plantillas de proyecto del usuario |

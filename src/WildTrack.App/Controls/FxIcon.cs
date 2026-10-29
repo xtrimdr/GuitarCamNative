@@ -9,11 +9,11 @@ namespace WildTrack.App.Controls;
 /// Port of FX_ICONS (GuitarCam/src/components/fxIcons.ts): one icon per effect, shared by the inspector and the mixer
 /// so both always show the same one. Drawn from lucide's own paths (24×24 grid, 2 px round stroke, like the web)
 /// because Segoe Fluent Icons has no flame or waves: Sat = Flame, Comp = Gauge, EQ = SlidersVertical,
-/// Reverb = Waves, Delay = Repeat, Gate = DoorOpen. <see cref="Create"/> also takes a Segoe glyph, so a section header accepts either.
+/// Reverb = Waves, Delay = Repeat, Gate = DoorOpen, a VST3 effect = Plug. <see cref="Create"/> also takes a Segoe glyph, so a section header accepts either.
 /// </summary>
 public sealed class FxIcon : Control
 {
-    public const string Sat = "sat", Comp = "comp", Eq = "eq", Reverb = "reverb", Delay = "delay", Gate = "gate", Transpose = "transpose";
+    public const string Sat = "sat", Comp = "comp", Eq = "eq", Reverb = "reverb", Delay = "delay", Gate = "gate", Transpose = "transpose", Vst = "vst";
     /// <summary>Not an effect: the timeline's Mano tool (its button and pointer), because Segoe has no open hand.</summary>
     public const string Hand = "hand";
 
@@ -28,6 +28,8 @@ public sealed class FxIcon : Control
         [Delay] = Geometry.Parse("M17 2l4 4-4 4 M3 11v-1a4 4 0 0 1 4-4h14 M7 22l-4-4 4-4 M21 13v1a4 4 0 0 1-4 4H3"),
         // lucide "door-open"
         [Gate] = Geometry.Parse("M11 20H2 M11 4.562v16.157a1 1 0 0 0 1.242.97L19 20V5.562a2 2 0 0 0-1.515-1.94l-4-1A2 2 0 0 0 11 4.561z M11 4H8a2 2 0 0 0-2 2v14 M14 12h.01 M22 20h-3"),
+        // lucide "plug": a VST3 effect, whatever it does
+        [Vst] = Geometry.Parse("M12 22v-5 M9 8V2 M15 8V2 M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"),
         // lucide "music": a note for the track's pitch (Transponer)
         [Transpose] = Geometry.Parse("M9 18V5l12-2v13 M3 18a3 3 0 1 0 6 0a3 3 0 1 0-6 0 M15 16a3 3 0 1 0 6 0a3 3 0 1 0-6 0"),
         // lucide "hand"

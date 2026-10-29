@@ -15,7 +15,8 @@ namespace WildTrack.App.Controls;
 /// <see cref="ClipDb"/> (the same threshold as <see cref="StereoMeter"/>'s light). A click anywhere on the meter
 /// resets them. The window feeds <see cref="Set"/> (peaks as amplitude with their fall-off, RMS as amplitude already
 /// integrated) from its tick, so any strip (track, folder, return, master) can drive one; it redraws only when what
-/// it shows changes, and the readout's text is rebuilt only when its tenth of a dB changes.
+/// it shows changes, and the readout's text is rebuilt only when its tenth of a dB changes. Without its
+/// <see cref="Scale"/> (a very narrow strip) it is only as wide as its bars and the readout drops the tenths.
 /// </summary>
 public sealed class MixerMeter : Control
 {
@@ -57,6 +58,7 @@ public sealed class MixerMeter : Control
     /// <summary>The readout as shown, in tenths of a dB (int.MinValue = −∞), and its text.</summary>
     int holdTenths = int.MinValue;
     string holdText = "-∞";
+    bool scale = true;
 
     public MixerMeter(bool wide = false)
     {
@@ -68,6 +70,21 @@ public sealed class MixerMeter : Control
         holdTip = Loc.T("meter.mixer.hold.tip");
         ToolTip.SetTip(this, barTip);
     }
+
+    /// <summary>The dB marks beside the bars; off, the meter is as wide as its bars and its readout is in whole dB.</summary>
+    public bool Scale
+    {
+        set
+        {
+            if (value == scale) return;
+            scale = value;
+            Width = pairW + (scale ? 2 + ScaleW : 0);
+            holdText = HoldText(holdTenths);
+            InvalidateVisual();
+        }
+    }
+
+    string HoldText(int tenths) => tenths == int.MinValue ? "-∞" : scale ? $"{tenths / 10.0:+0.0;-0.0;0.0}" : $"{Math.Round(tenths / 10.0):+0;-0;0}";
 
     /// <summary>One bar with the louder side instead of two (a mono source); the light is lit if either side clipped.</summary>
     public bool Mono
@@ -97,7 +114,7 @@ public sealed class MixerMeter : Control
             if (tenths != holdTenths)
             {
                 holdTenths = tenths;
-                holdText = tenths == int.MinValue ? "-∞" : $"{tenths / 10.0:+0.0;-0.0;0.0}";
+                holdText = HoldText(tenths);
                 dirty = true;
             }
         }
@@ -165,7 +182,7 @@ public sealed class MixerMeter : Control
             Bar(ctx, 0, barW, h, levelL, rmsL, clipL, marks[..nMarks]);
             Bar(ctx, barW + Gap, barW, h, levelR, rmsR, clipR, marks[..nMarks]);
         }
-        for (int k = 0; k < nMarks; k++)
+        for (int k = 0; k < nMarks && scale; k++)
         {
             int db = ScaleMarks[marks[k]];
             var m = Palette.Text(MarkTexts[marks[k]], 8, db == 0 ? Palette.Dim : Palette.Faint, Palette.Mono);

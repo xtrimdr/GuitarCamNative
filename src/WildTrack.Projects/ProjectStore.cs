@@ -12,7 +12,7 @@ namespace WildTrack.Projects;
 ///   guitarcam.json        the project
 ///   guitarcam.json.bak    the previous save
 ///   guitarcam.lock        held while it's open (a second window opens it read-only)
-///   historial/            snapshots, to go back further than the .bak
+///   historial/            snapshots, to go back further than the .bak (versiones.json: their names)
 ///   media/                recordings and imported files (never rewritten)
 ///   exports/
 /// </code>
@@ -28,10 +28,14 @@ public sealed class ProjectStore : IDisposable
     public const string CacheDir = "cache";
     public const string LockName = "guitarcam.lock";
     const string SnapshotStamp = "yyyy-MM-dd_HH-mm-ss";
+    /// <summary>In historial/: what the user named each version and which export it was (<see cref="VersionInfo"/>).</summary>
+    const string VersionsFile = "versiones.json";
+    /// <summary>Longest name of a version.</summary>
+    public const int MaxVersionName = 60;
 
     /// <summary>A new snapshot at most this often while saving.</summary>
     public static TimeSpan SnapshotEvery { get; set; } = TimeSpan.FromMinutes(10);
-    /// <summary>The newest ones always stay; older ones keep one per day.</summary>
+    /// <summary>The newest ones always stay; older ones keep one per day. Named and exported ones always stay.</summary>
     public const int KeepRecentSnapshots = 30;
     public const int KeepDailySnapshotsDays = 90;
 
@@ -98,7 +102,7 @@ public sealed class ProjectStore : IDisposable
         if (project.Format != Project.FormatId)
             store.ReadOnlyReason = Texts.T("store.notProject", "El archivo no es un proyecto de WildTrack");
         else if (project.Version > Project.CurrentVersion)
-            store.ReadOnlyReason = Texts.T("store.newer", "Lo guardó una versión más nueva de WildTrack: abierto solo para ver");
+            store.ReadOnlyReason = Texts.T("store.newer", "Guardado con una versión más nueva de WildTrack: abierto en solo lectura");
         if (!store.ReadOnly)
         {
             Directory.CreateDirectory(Path.Combine(dir, MediaDir));
@@ -153,7 +157,7 @@ public sealed class ProjectStore : IDisposable
         string what = best.Path.EndsWith(".bak")
             ? Texts.T("store.fromBak", "el guardado anterior (.bak)")
             : Texts.T("store.fromHistory", "la copia del historial {0}", Path.GetFileNameWithoutExtension(best.Path));
-        notices.Add(Texts.T("store.damaged", "El proyecto estaba dañado: lo abrí desde {0}", what));
+        notices.Add(Texts.T("store.damaged", "El proyecto estaba dañado: se abrió desde {0}", what));
         if (File.Exists(main))
         {
             string keep = Path.Combine(dir, $"guitarcam.dañado-{DateTime.Now.ToString(SnapshotStamp, CultureInfo.InvariantCulture)}.json");
@@ -237,11 +241,12 @@ public sealed class ProjectStore : IDisposable
         }
     }
 
-    void WriteSnapshot(string json)
+    /// <param name="force">A version the user (or an export) asked for: written even if nothing changed since the last one.</param>
+    Snapshot? WriteSnapshot(string json, bool force = false, VersionInfo? info = null)
     {
         lastSnapshot = DateTime.UtcNow;
         if (lastSnapshotText == null && Snapshots(Dir) is [var newest, ..]) lastSnapshotText = TryRead(newest.Path);
-        if (json == lastSnapshotText) return;
+        if (json == lastSnapshotText && !force) return null;
         string dir = Path.Combine(Dir, HistoryDir);
         Directory.CreateDirectory(dir);
         string name = DateTime.Now.ToString(SnapshotStamp, CultureInfo.InvariantCulture);
@@ -251,7 +256,15 @@ public sealed class ProjectStore : IDisposable
         File.WriteAllText(tmp, json, Encoding.UTF8);
         File.Move(tmp, path);
         lastSnapshotText = json;
+        if (info != null)
+        {
+            var all = ReadVersions(Dir);
+            all[Path.GetFileName(path)] = info;
+            WriteVersions(all);
+        }
         PruneSnapshots();
+        var stamp = DateTime.ParseExact(name, SnapshotStamp, CultureInfo.InvariantCulture);
+        return new Snapshot(path, stamp, info?.Name, info?.Export, info?.Before);
     }
 
     static string? TryRead(string path)
@@ -270,6 +283,7 @@ public sealed class ProjectStore : IDisposable
     {
         var all = Snapshots(Dir);
         var keep = new HashSet<string>(all.Take(KeepRecentSnapshots).Select(s => s.Path));
+        foreach (var s in all.Where(s => s.Kept)) keep.Add(s.Path);
         var cutoff = DateTime.Now.AddDays(-KeepDailySnapshotsDays);
         foreach (var day in all.Where(s => s.Time >= cutoff).GroupBy(s => s.Time.Date))
             keep.Add(day.First().Path); // newest of each day
@@ -283,41 +297,150 @@ public sealed class ProjectStore : IDisposable
             {
             }
         }
+        var versions = ReadVersions(Dir);
+        var files = keep.Select(Path.GetFileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var gone = versions.Keys.Where(k => !files.Contains(k)).ToList();
+        if (gone.Count == 0) return;
+        foreach (var k in gone) versions.Remove(k);
+        WriteVersions(versions);
     }
 
-    public readonly record struct Snapshot(string Path, DateTime Time);
+    /// <summary>
+    /// A saved version: when, and what the user called it (<see cref="Name"/>), the export it was made with
+    /// (<see cref="Export"/>, as in <see cref="ExportRecord.File"/>) or the version that going back left it for
+    /// (<see cref="Before"/>, that one's file name). Named and exported ones are never pruned.
+    /// </summary>
+    public readonly record struct Snapshot(string Path, DateTime Time, string? Name = null, string? Export = null, string? Before = null)
+    {
+        public bool Kept => Name != null || Export != null;
+        public string File => System.IO.Path.GetFileName(Path);
+    }
 
-    /// <summary>The project's snapshots, newest first.</summary>
+    /// <summary>What versiones.json says of one version. Losing the file only loses the names: the versions stay.</summary>
+    public sealed class VersionInfo
+    {
+        public string? Name { get; set; }
+        public string? Export { get; set; }
+        public string? Before { get; set; }
+        [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+    }
+
+    static Dictionary<string, VersionInfo> ReadVersions(string dir)
+    {
+        string path = Path.Combine(dir, HistoryDir, VersionsFile);
+        try
+        {
+            if (!File.Exists(path)) return new(StringComparer.OrdinalIgnoreCase);
+            var read = JsonSerializer.Deserialize<Dictionary<string, VersionInfo>>(File.ReadAllText(path, Encoding.UTF8), Json) ?? [];
+            return read.Where(kv => kv.Value != null).ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
+        {
+            return new(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>tmp → move over, like the project: the names are either the old ones or the new ones.</summary>
+    void WriteVersions(Dictionary<string, VersionInfo> all)
+    {
+        string dir = Path.Combine(Dir, HistoryDir);
+        Directory.CreateDirectory(dir);
+        string path = Path.Combine(dir, VersionsFile), tmp = path + ".tmp";
+        File.WriteAllText(tmp, JsonSerializer.Serialize(all, Json), Encoding.UTF8);
+        Retry(() => File.Move(tmp, path, true));
+    }
+
+    /// <summary>
+    /// Saves the project and a version of it now, with a name (null = none) or as the version of an export: those are
+    /// kept until the user takes the name off or deletes the export. Safe from any thread, like <see cref="Write"/>.
+    /// </summary>
+    public Snapshot SaveVersion(string json, string? name, string? export = null)
+    {
+        if (ReadOnly) throw new InvalidOperationException(ReadOnlyReason);
+        lock (writeLock)
+        {
+            lastSnapshot = DateTime.UtcNow; // this save makes its own version, not an automatic one too
+            Write(json);
+            return WriteSnapshot(json, force: true, new VersionInfo { Name = CleanName(name), Export = export })!.Value;
+        }
+    }
+
+    /// <summary>Names a version or, with null or blank, takes its name off (an unnamed one can be pruned again).</summary>
+    public void RenameVersion(Snapshot s, string? name)
+    {
+        if (ReadOnly) throw new InvalidOperationException(ReadOnlyReason);
+        lock (writeLock)
+        {
+            var all = ReadVersions(Dir);
+            var info = all.GetValueOrDefault(s.File) ?? new VersionInfo();
+            info.Name = CleanName(name);
+            if (info is { Name: null, Export: null, Before: null, Extra: null }) all.Remove(s.File);
+            else all[s.File] = info;
+            WriteVersions(all);
+        }
+    }
+
+    /// <summary>The export was deleted: its version stops being kept (it stays while it is among the recent ones).</summary>
+    public void UnlinkExport(string exportFile)
+    {
+        if (ReadOnly) return;
+        lock (writeLock)
+        {
+            var all = ReadVersions(Dir);
+            var linked = all.Values.Where(v => v.Export == exportFile).ToList();
+            if (linked.Count == 0) return;
+            foreach (var info in linked) info.Export = null;
+            WriteVersions(all);
+        }
+    }
+
+    static string? CleanName(string? name)
+    {
+        string n = name?.Trim() ?? "";
+        return n.Length == 0 ? null : n.Length > MaxVersionName ? n[..MaxVersionName] : n;
+    }
+
+    /// <summary>The project's snapshots, newest first, with their names.</summary>
     public static List<Snapshot> Snapshots(string dir)
     {
         string h = Path.Combine(dir, HistoryDir);
         if (!Directory.Exists(h)) return [];
+        var versions = ReadVersions(dir);
         var list = new List<Snapshot>();
         foreach (var f in Directory.GetFiles(h, "*.json"))
         {
             string n = Path.GetFileNameWithoutExtension(f);
             if (n.Length >= SnapshotStamp.Length
                 && DateTime.TryParseExact(n[..SnapshotStamp.Length], SnapshotStamp, CultureInfo.InvariantCulture, DateTimeStyles.None, out var t))
-                list.Add(new Snapshot(f, t));
+            {
+                var info = versions.GetValueOrDefault(Path.GetFileName(f));
+                list.Add(new Snapshot(f, t, info?.Name, info?.Export, info?.Before));
+            }
         }
         return list.OrderByDescending(s => s.Time).ThenByDescending(s => s.Path, StringComparer.Ordinal).ToList();
     }
 
     /// <summary>
     /// Goes back to a snapshot. The current state is saved as a snapshot first, so this can be undone
-    /// from the same list.
+    /// from the same list. Only the song goes back: the takes recorded since, the exports, the log and the name stay
+    /// (a take only the old version knew comes back too, offline if its file went to the Recycle Bin).
     /// </summary>
     public void Restore(Snapshot s)
     {
         if (ReadOnly) throw new InvalidOperationException(ReadOnlyReason);
         var old = Parse(File.ReadAllText(s.Path, Encoding.UTF8));
-        lock (writeLock) WriteSnapshot(Serialize());
+        lock (writeLock) WriteSnapshot(Serialize(), force: true, new VersionInfo { Before = s.File });
         Migrate(old);
+        var now = Project;
+        var known = now.Media.Select(m => m.Id).ToHashSet();
+        old.Media = [.. now.Media, .. old.Media.Where(m => !known.Contains(m.Id))];
+        old.Exports = now.Exports;
+        old.Log = now.Log;
+        (old.Id, old.Name, old.CreatedAt) = (now.Id, now.Name, now.CreatedAt);
         Project = old;
         timeline = ProjectHistory.TimelineState(old);
         Project.AddLog("snapshot-restored", Path.GetFileNameWithoutExtension(s.Path));
-        lastSnapshot = DateTime.MinValue;
-        Save();
+        Save(); // no automatic version of it: it is the one just brought back
         Notices.Clear();
         CheckMedia();
     }
@@ -334,7 +457,7 @@ public sealed class ProjectStore : IDisposable
         }
         catch (IOException)
         {
-            ReadOnlyReason = Texts.T("store.locked", "Está abierto en otra ventana de WildTrack: abierto solo para ver");
+            ReadOnlyReason = Texts.T("store.locked", "Abierto en otra ventana de WildTrack: solo lectura");
         }
     }
 
@@ -436,7 +559,7 @@ public sealed class ProjectStore : IDisposable
             }
             catch (Exception e) when (e is IOException or InvalidDataException)
             {
-                Notices.Add(Texts.T("store.recoverFail", "No pude recuperar la grabación {0}: {1}", j.Name, e.Message));
+                Notices.Add(Texts.T("store.recoverFail", "No se pudo recuperar la grabación {0}: {1}", j.Name, e.Message));
                 continue;
             }
             if (info.DurationSec < 0.05)
@@ -470,7 +593,7 @@ public sealed class ProjectStore : IDisposable
             }
             track.Clips.Add(new Clip { MediaId = m.Id, AtSec = j.AtSec, Framing = new Framing { Mirror = j.Mirror && video != null } });
             Project.AddLog("recording-recovered", j.Name);
-            Notices.Add(Texts.T("store.recovered", "Recuperé la grabación interrumpida \"{0}\" ({1:0.0} s)", j.Name, info.DurationSec));
+            Notices.Add(Texts.T("store.recovered", "Grabación interrumpida recuperada: \"{0}\" ({1:0.0} s)", j.Name, info.DurationSec));
             done.Add(jf);
         }
         return done;
@@ -519,7 +642,7 @@ public sealed class ProjectStore : IDisposable
         if (names.Count > 0)
         {
             Project.AddLog("media-adopted", string.Join(", ", names));
-            Notices.Add(Texts.T("store.adopted", "Había {0} archivo(s) en media/ que el proyecto no tenía: los sumé a los medios ({1})", names.Count, string.Join(", ", names)));
+            Notices.Add(Texts.T("store.adopted", "{0} archivo(s) de media/ agregados al proyecto ({1})", names.Count, string.Join(", ", names)));
         }
         return names.Count;
     }

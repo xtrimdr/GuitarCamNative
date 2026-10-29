@@ -2,15 +2,16 @@
 
 [Español](README.md) · **English**
 
-**WildTrack** is a Windows desktop DAW that also makes **guitar videos**: you record takes
-with camera and audio, mix them, and export a video with one panel per take.
+**WildTrack** is a Windows desktop DAW for every musician: guitar, bass, vocals, keys, drums or whatever you
+play. It also makes **videos**: you record takes with camera and audio, mix them, and export a video with one
+panel per take.
 It used to be called **GuitarCam Studio Native**: when you update, your settings and projects are still there.
 
 It works both as a **cam studio** (record takes with a camera and build the video) and as a **DAW** (record,
 edit and mix audio in a full timeline and mixer, with or without picture: **Audio only** mode is for making
 music without video).
 
-It is designed to be used with the guitar strapped on: one-key shortcuts, big buttons and a short path of
+It is designed to be used with your instrument in hand: one-key shortcuts, big buttons and a short path of
 **record → mix → export**.
 
 <p align="center">
@@ -71,7 +72,7 @@ More details in [Requirements](#requirements).
 
 - A per-track effects chain: saturation (**Vida**, tube or tape), a **compressor** with presets (Strumming /
   Arpeggio / Lead), a **6-band EQ** with live spectrum, a **noise gate** for the hum between phrases, and sends to
-  **reverb** and **delay**, plus a master limiter, a **MONO** button to check the mix and pan templates.
+  **reverb** and **delay**, plus a master limiter, a **MONO** button to check the mix, **FX** to hear it without effects, and pan templates.
 - A full **mixer** with **buses**: every track or folder picks its output (the master or a bus) and sends to the
   buses (before or after the fader); the buses go to the master. A bus has volume, pan and effects, so it works for a reverb, a delay or to process
   a group. Folders only group. Strips are reordered by dragging them in the mixer (the timeline follows), sit on the
@@ -102,7 +103,8 @@ More details in [Requirements](#requirements).
 ### And also
 
 - **Never loses anything**: atomic saving (after every edit, every X minutes or by hand with Ctrl+S or the disk
-  button, chosen in Settings → Saving and export; takes are always saved), copies in `historial/` to go back, recovery of
+  button, chosen in Settings → Saving and export; takes are always saved), the **History** tab to go back (every step of
+  the session by name, one click away, and saved versions: automatic, named or the one of each export), recovery of
   interrupted recordings and a project manager with a Recycle Bin and **ZIP packages** to take a project to another
   computer or keep a full backup.
 - Configurable language, theme and keyboard shortcuts.
@@ -113,7 +115,8 @@ WildTrack is **under constant development**. The goal is to take it to a level t
 for people just starting out who want to make music quickly and without complications, and for professionals
 who want to make music seriously.
 
-Next up is support for **MIDI**, **VST plugins** and more studio tools. What is planned and what is missing is
+MIDI tracks with a piano roll and VST3 instruments and effects are in; next up are knobs of your own for the plugins'
+parameters, a built-in sampler and more studio tools. What is planned and what is missing is
 in [PENDIENTES.md](PENDIENTES.md) (in Spanish).
 
 ## Requirements
@@ -166,8 +169,9 @@ Spanish by default; the language is chosen in Settings.
 | Ctrl+Shift+N | new track |
 | Ctrl+click / Shift+click on a header | pick several tracks (one by one / a range) to move them together |
 | Ctrl+S | save now |
-| B / P | show or hide the take panel / the project panel |
-| Wheel, Shift+wheel, Ctrl+wheel, Alt+wheel | scroll up and down, zoom, scroll sideways, track height (the modifiers can be changed in Settings → Keyboard shortcuts) |
+| B / P | fold or open the channel panel / the project panel (hidden with its title bar button, it shows it again) |
+| F11 | full screen (F11 again goes back to how it was) |
+| Wheel, Shift+wheel, Ctrl+wheel, Alt+wheel | scroll up and down, zoom, scroll sideways, track height (the modifiers can be changed in Settings → Keyboard shortcuts). In the mixer, the plain wheel and Ctrl+wheel scroll sideways and Shift+wheel (or the bar in its header) widens or narrows the channels |
 
 On the selected clip, a click on its volume line adds a point; points drag, and a double-click removes one.
 

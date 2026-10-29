@@ -97,7 +97,8 @@ public static class ProjectTemplates
     /// <summary>The compressor's raw values get computed from the first take that fills the track.</summary>
     static TemplateTrack Track(string name, string preset, Action<Channel>? set = null, double amount = 0.5)
     {
-        var ch = new Channel { Comp = new CompSettings { On = true, Preset = preset, Amount = amount } };
+        var ch = new Channel { Inserts = Channel.DefaultInserts() };
+        ch.Comp = new CompSettings { On = true, Preset = preset, Amount = amount };
         set?.Invoke(ch);
         string[] known = ["Rítmica", "Rítmica L", "Rítmica R", "Punteo", "Arpegio", "Guitarra"];
         return new TemplateTrack { Name = Array.IndexOf(known, name) >= 0 ? Texts.T("tpl.track." + TrackIds[name], name) : name, Channel = ch };
@@ -155,7 +156,7 @@ public static class ProjectTemplates
         {
             Id = "builtin:vertical",
             Name = Texts.T("tpl.vertical.name", "Rítmica + Punteo vertical"),
-            Hint = Texts.T("tpl.vertical.hint", "9:16 una arriba de la otra, para Reels / Shorts / TikTok"),
+            Hint = Texts.T("tpl.vertical.hint", "9:16, una arriba de la otra (Reels, Shorts, TikTok)"),
             Builtin = true,
             Tracks =
             [
@@ -168,7 +169,7 @@ public static class ProjectTemplates
         {
             Id = "builtin:single",
             Name = Texts.T("tpl.single.name", "Canal único"),
-            Hint = Texts.T("tpl.single.hint", "Una guitarra sola con un poco de placa"),
+            Hint = Texts.T("tpl.single.hint", "Una guitarra con algo de placa"),
             Builtin = true,
             Tracks = [Track("Guitarra", "lead", c => ProjectBuses.SendToDefaults(c, 0.2), amount: 0.4)],
             Settings = new() { Layout = "side-by-side", Aspect = "16:9", Buses = ProjectBuses.Defaults(Placa()) },

@@ -434,7 +434,7 @@ public static partial class Mp4Exporter
             throw new ExportException("No hay canales activos para exportar.");
         var takes = job.Range is { } range ? ExportRange.Takes(job.Takes, range) : job.Takes;
         if (takes.Count == 0)
-            throw new ExportException(Texts.T("err.export.rangeEmpty", "Entre A y B no se ve ninguna toma: mové el loop adonde haya video."));
+            throw new ExportException(Texts.T("err.export.rangeEmpty", "No hay tomas entre A y B."));
 
         var (outW, outH) = ExportSize(job.AspectRatio, job.Resolution);
         int numTakes = takes.Count;
@@ -697,7 +697,7 @@ public static partial class Mp4Exporter
         CancellationToken ct = default)
     {
         if (job.Takes.Count == 0)
-            throw new ExportException(Texts.T("err.export.noTracks", "Necesitás al menos un canal en el timeline para exportar."));
+            throw new ExportException(Texts.T("err.export.noTracks", "No hay canales en el timeline."));
 
         var target = CheckDestination(job.ProjectDir, job.OutDir, string.IsNullOrWhiteSpace(job.FileName) ? job.ProjectName : job.FileName);
         if (target.Exists && !job.Overwrite)
@@ -777,7 +777,7 @@ public static partial class Mp4Exporter
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
                 throw new ExportException(
-                    Texts.T("err.export.replace", "No se pudo reemplazar {0}: puede que esté abierto en otro programa.", outFilename));
+                    Texts.T("err.export.replace", "No se pudo reemplazar {0}: puede estar abierto en otro programa.", outFilename));
             }
 
             long bytes = File.Exists(target.FullPath) ? new FileInfo(target.FullPath).Length : 0;

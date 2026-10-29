@@ -17,7 +17,10 @@ public sealed class SectionHeader : Border
     readonly Grid row = new() { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*,Auto,Auto") };
     readonly TextBlock chevron = new() { Classes = { "icon" }, Text = "", Foreground = Palette.Faint, FontSize = 10, Width = 16, VerticalAlignment = VerticalAlignment.Center };
     readonly TextBlock label;
-    bool hover;
+    /// <summary>What a folded section holds in a few words (an effect's amount, a send's level), beside the label.</summary>
+    readonly TextBlock summary = new() { Classes = { "mono" }, FontSize = 11, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center,
+        TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(8, 0, 6, 0), IsVisible = false };
+    bool hover, collapsed;
     /// <summary>A Segoe glyph or an effect's <see cref="FxIcon"/>; paint it with <see cref="FxIcon.SetColor"/>.</summary>
     public Control Icon { get; }
     public event Action? Toggled;
@@ -37,7 +40,9 @@ public sealed class SectionHeader : Border
         Avalonia.Automation.AutomationProperties.SetName(this, title.ToUpperInvariant());
         Grid.SetColumn(chevron, 1); row.Children.Add(chevron);
         Grid.SetColumn(Icon, 2); row.Children.Add(Icon);
-        Grid.SetColumn(label, 3); row.Children.Add(label);
+        var titled = new DockPanel { Children = { label, summary } };
+        DockPanel.SetDock(label, Dock.Left);
+        Grid.SetColumn(titled, 3); row.Children.Add(titled);
         Child = row;
         Paint();
     }
@@ -52,8 +57,17 @@ public sealed class SectionHeader : Border
     /// <summary>A handle before the chevron (an effect slot's grip): it takes its own presses, so they don't fold the section.</summary>
     public void SetGrip(Control grip) { Grid.SetColumn(grip, 0); row.Children.Add(grip); }
 
+    /// <summary>The words shown beside the label while folded (empty = none); open, the section shows it all.</summary>
+    public void SetSummary(string text)
+    {
+        if (summary.Text != text) summary.Text = text;
+        summary.IsVisible = collapsed && text.Length > 0;
+    }
+
     public void SetCollapsed(bool collapsed)
     {
+        this.collapsed = collapsed;
+        summary.IsVisible = collapsed && summary.Text is { Length: > 0 };
         chevron.Text = collapsed ? "" : "";
         ToolTip.SetTip(this, collapsed ? "Mostrar" : "Ocultar");
     }

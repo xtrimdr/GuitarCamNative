@@ -51,7 +51,8 @@ public sealed unsafe class VstBridge : IDisposable
         OffInstrument = 28, OffRequested = 32, OffDone = 40, OffError = 48, OffSlots = 560, SlotSize = 139304, TotalSize = 279168;
     const int SlotSeq = 0, SlotFrames = 8, SlotNumEvents = 12, SlotTime = 16, SlotTempo = 24, SlotFlags = 32, SlotEvents = 40,
         SlotIn = 8232, SlotOut = 73768, EventSize = 16;
-    public const int FlagAllNotesOff = 1, FlagPlaying = 2;
+    /// <summary>FlagReset: the plugin forgets its tails and delay lines before this block (the transport starts).</summary>
+    public const int FlagAllNotesOff = 1, FlagPlaying = 2, FlagReset = 4;
     const int StatusReady = 1, StatusFailed = 2, StatusCrashed = 3;
 
     readonly MemoryMappedFile map;
@@ -74,7 +75,8 @@ public sealed unsafe class VstBridge : IDisposable
     /// <summary>Blocks it did not finish in time (live), for the diagnostics.</summary>
     public int Misses;
 
-    /// <summary>A line from the plugin's process that is not an answer: "dirty", "editor-open", "editor-closed", "error …". Raised on a background thread.</summary>
+    /// <summary>A line from the plugin's process that is not an answer: "dirty", "editor-open", "editor-closed", "latency N"
+    /// (after <see cref="Latency"/> changed), "error …". Raised on a background thread.</summary>
     public event Action<string>? Message;
     /// <summary>The process ended (it crashed, or was closed). Raised on a background thread.</summary>
     public event Action? Exited;
@@ -86,7 +88,7 @@ public sealed unsafe class VstBridge : IDisposable
     VstBridge(string pluginPath, string cid, string name, int sampleRate, bool offline)
     {
         Name = name;
-        string exe = VstHost.Find() ?? throw new FileNotFoundException(Texts.T("err.vst.noHost", "Falta wtvsthost.exe, el programa que abre los plugins VST3."));
+        string exe = VstHost.Find() ?? throw new FileNotFoundException(Texts.T("err.vst.noHost", "Falta wtvsthost.exe."));
         string id = $"WtVst-{Environment.ProcessId}-{Guid.NewGuid():N}";
         map = MemoryMappedFile.CreateNew(id, TotalSize);
         view = map.CreateViewAccessor(0, TotalSize);
@@ -116,7 +118,7 @@ public sealed unsafe class VstBridge : IDisposable
         process = new Process { StartInfo = psi, EnableRaisingEvents = true };
         process.Exited += (_, _) =>
         {
-            if (!Ready && !Broken) Error ??= Texts.T("err.vst.exited", "El plugin se cerró al abrirse.");
+            if (!Ready && !Broken) Error ??= Texts.T("err.vst.exited", "El plugin se cerró al abrir.");
             *(int*)(mem + OffStatus) = StatusCrashed;
             readyEvent.Set();
             stateReply?.TrySetResult(null);
@@ -169,6 +171,10 @@ public sealed unsafe class VstBridge : IDisposable
                         break;
                     case "loaded":
                         loadReply?.TrySetResult("ok");
+                        break;
+                    case "latency":
+                        if (int.TryParse(arg, out int now)) Latency = Math.Max(0, now);
+                        Message?.Invoke(line);
                         break;
                     default:
                         Message?.Invoke(line);
@@ -281,6 +287,37 @@ public sealed unsafe class VstBridge : IDisposable
         seq++;
         WriteRequest(seq, notes, frames, timeSamples, tempo, flags, inL, inR);
         return true;
+    }
+
+    /// <summary>
+    /// Audio thread, an effect (<see cref="VstInsert"/>): sends <paramref name="inL"/> / <paramref name="inR"/> as the next
+    /// block without waiting. Returns its number, or -1 when it can't go (the plugin is two blocks behind: the slot it
+    /// would take is still in use).
+    /// </summary>
+    public long TrySend(ReadOnlySpan<float> inL, ReadOnlySpan<float> inR, int frames, long timeSamples, double tempo, int flags)
+    {
+        if (!Ready) return -1;
+        frames = Math.Clamp(frames, 1, MaxBlock);
+        if (Volatile.Read(ref *(long*)(mem + OffDone)) < seq - 1) return -1;
+        seq++;
+        WriteRequest(seq, [], frames, timeSamples, tempo, flags, inL, inR);
+        return seq;
+    }
+
+    /// <summary>
+    /// Audio thread: block <paramref name="block"/>'s output (sent with <see cref="TrySend"/>) into
+    /// <paramref name="outL"/> / <paramref name="outR"/>. Returns its frames, or -1 if the plugin hasn't finished it.
+    /// </summary>
+    public int TryTake(long block, Span<float> outL, Span<float> outR)
+    {
+        if (Volatile.Read(ref *(long*)(mem + OffDone)) < block) return -1;
+        int slot = (int)(block & 1);
+        // the slot is reused two blocks later: past that, what is there is no longer this block
+        if (*(long*)(mem + OffSlots + slot * SlotSize + SlotSeq) != block) return -1;
+        int n = Math.Min(Math.Min(*(int*)(mem + OffSlots + slot * SlotSize + SlotFrames), outL.Length), outR.Length);
+        SlotSpan(slot, SlotOut, 0, n).CopyTo(outL);
+        SlotSpan(slot, SlotOut, 1, n).CopyTo(outR);
+        return n;
     }
 
     /// <summary>The export: sends a block and waits for it, writing its output to <paramref name="outL"/> / <paramref name="outR"/>.</summary>

@@ -10,7 +10,7 @@ using WildTrack.App.Model;
 namespace WildTrack.App;
 
 /// <summary>
-/// A track's color and icon (native only, asked by the user): one picker, opened from the track's badge in the
+/// A track's or a bus's color and icon (native only, asked by the user): one picker, opened from the badge in the
 /// timeline, the inspector or the mixer. A color applies at once and leaves the picker open so an icon can follow;
 /// an icon closes it. Each pick is an edit like any other (<see cref="EditTrack"/>: undo, autosave).
 /// </summary>
@@ -20,20 +20,31 @@ public partial class MainWindow
 
     void InitTrackLook() => Timeline.LookRequested += (t, at) => ShowTrackLook(t, Timeline, at);
 
-    void ShowTrackLook(LiveTrack t, Control anchor, Point? at = null)
+    void ShowTrackLook(LiveTrack t, Control anchor, Point? at = null) =>
+        ShowLook(() => t.Track.Color, () => t.Track.Icon, hex => SetTrackLook(t, x => x.Color = hex, "color"), id => SetTrackLook(t, x => x.Icon = id, "icon"),
+            Loc.T("look.icon.none.tip"), anchor, at);
+
+    /// <summary>A bus's color and icon: the same picker as a track's; without an icon it shows its reverb's or delay's.</summary>
+    void ShowBusLook(string id, Control anchor, Point? at = null) =>
+        ShowLook(() => BusById(id)?.Color, () => BusById(id)?.Icon, hex => BusEdit(id, b => b.Color = hex, "color"), icon => BusEdit(id, b => b.Icon = icon, "icon"),
+            Loc.T("look.icon.none.bus.tip"), anchor, at);
+
+    /// <summary>The color and icon picker of whatever has them (a track or a bus): <paramref name="color"/> and
+    /// <paramref name="icon"/> read what it has now, the setters edit it (one undo step each).</summary>
+    void ShowLook(Func<string?> color, Func<string?> icon, Action<string?> setColor, Action<string?> setIcon, string noneTip, Control anchor, Point? at = null)
     {
         if (store == null || store.ReadOnly || restoring) return;
         var refresh = new List<Action>();
         var body = new StackPanel { Spacing = 8 };
 
         body.Children.Add(new TextBlock { Classes = { "label" }, Text = Loc.T("look.color").ToUpperInvariant() });
-        body.Children.Add(ColorChips(() => t.Track.Color, hex => SetTrackLook(t, x => x.Color = hex, "color"), refresh));
+        body.Children.Add(ColorChips(color, setColor, refresh));
 
         var none = new Button { Classes = { "chip" }, Content = Loc.T("look.icon.none"), FontSize = 11, MinHeight = 26, Padding = new Thickness(8, 0),
             HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-        ToolTip.SetTip(none, Loc.T("look.icon.none.tip"));
-        none.Click += (_, _) => { SetTrackLook(t, x => x.Icon = null, "icon"); lookFlyout?.Hide(); };
-        refresh.Add(() => none.IsEnabled = t.Track.Icon != null);
+        ToolTip.SetTip(none, noneTip);
+        none.Click += (_, _) => { setIcon(null); lookFlyout?.Hide(); };
+        refresh.Add(() => none.IsEnabled = icon() != null);
         var iconHead = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(0, 6, 0, 0) };
         iconHead.Children.Add(new TextBlock { Classes = { "label" }, Text = Loc.T("look.icon").ToUpperInvariant(), VerticalAlignment = VerticalAlignment.Center });
         Grid.SetColumn(none, 1); iconHead.Children.Add(none);
@@ -49,11 +60,11 @@ public partial class MainWindow
                     CornerRadius = new CornerRadius(6), HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
                 ToolTip.SetTip(b, TrackIcons.Name(id));
                 Avalonia.Automation.AutomationProperties.SetName(b, TrackIcons.Name(id));
-                b.Click += (_, _) => { SetTrackLook(t, x => x.Icon = id, "icon"); lookFlyout?.Hide(); };
+                b.Click += (_, _) => { setIcon(id); lookFlyout?.Hide(); };
                 refresh.Add(() =>
                 {
-                    bool on = TrackIcons.Resolve(t.Track.Icon) == id;
-                    var tint = TrackIcons.ColorOf(t.Track);
+                    bool on = TrackIcons.Resolve(icon()) == id;
+                    var tint = TrackIcons.ColorOf(color());
                     b.Classes.Set("lit", on);
                     b.Background = on ? tint is { } c ? Palette.Alpha(c, 0.22) : Palette.AccentSoft : Brushes.Transparent;
                     view.Foreground = on ? tint is { } k ? Palette.Alpha(k, 1) : Palette.Accent : Palette.Dim;

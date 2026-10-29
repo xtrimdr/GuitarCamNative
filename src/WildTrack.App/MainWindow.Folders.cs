@@ -34,18 +34,21 @@ public partial class MainWindow
         Timeline.FolderContextRequested += ShowFolderMenu;
         Timeline.FolderLookRequested += (f, at) => ShowFolderLook(f, Timeline, at);
         InitFolderInspector();
+        InitBusInspector();
         InitNameEditor();
         Timeline.RowHeightRequested += SetRowHeight;
         ResetHeightsButton.Click += (_, _) => ResetRowHeights();
     }
 
-    /// <summary>A track's or a folder's own height in px (null = the shared one). A track and a folded folder keep it as
-    /// a multiple of the shared height, so the slider goes on scaling it. A view setting like folding: saved, without undo.</summary>
+    /// <summary>A track's or a folder's own height in px (null = its usual one). A track and a folded folder keep it as
+    /// a multiple of the shared height and an open folder as px at the default one, so the slider goes on scaling it.
+    /// A view setting like folding: saved, without undo.</summary>
     void SetRowHeight(string id, double? h)
     {
         if (store == null || store.ReadOnly || restoring) return;
-        if (FolderById(id) is { Collapsed: true } folded) folded.HeightScale = Scale(h);
-        else if (FolderById(id) is { } f) f.Height = h;
+        // a folded folder's usual height is its own, not the shared one: any height dragged to stays
+        if (FolderById(id) is { Collapsed: true } folded) folded.HeightScale = h / Timeline.TrackHeight;
+        else if (FolderById(id) is { } f) f.Height = h is { } px ? Timeline.FolderUnzoomed(px) : null;
         else if (tracks.Find(t => t.Track.Id == id) is { } t) t.Track.HeightScale = Scale(h);
         else return;
         RowHeightsChanged();
@@ -53,7 +56,7 @@ public partial class MainWindow
 
     double? Scale(double? h) => h is { } px && Math.Abs(px - Timeline.TrackHeight) >= 1 ? px / Timeline.TrackHeight : null;
 
-    /// <summary>Every track and folder back to the shared height.</summary>
+    /// <summary>Every track and folder back to its usual height.</summary>
     void ResetRowHeights()
     {
         if (store == null || store.ReadOnly || restoring) return;
@@ -165,7 +168,7 @@ public partial class MainWindow
     static Control Swatch(string? hex) => new Border
     {
         Width = 12, Height = 12, CornerRadius = new CornerRadius(3), VerticalAlignment = VerticalAlignment.Center,
-        Background = hex == null ? Palette.Accent : Palette.Brush(hex),
+        Background = hex == null ? Palette.Dim : Palette.Brush(hex),
     };
 
     void ShowFolderMenu(Folder f, Point point)
@@ -282,9 +285,6 @@ public partial class MainWindow
     Folder? FolderOfTrack(LiveTrack t) => t.Track.FolderId is { } id ? FolderById(id) : null;
     /// <summary>The band above the strips where folder names sit (every column gets it while the project has folders).</summary>
     const double FolderBandH = 26;
-    /// <summary>A wide folder strip is as wide as the narrowest track strip: its send panels need the same room.</summary>
-    static double FolderStripW(bool wide) => wide ? WideMin : CompactW;
-
     /// <summary>A mixer column with the folder band on top (empty for strips at the root and the returns).</summary>
     static Grid Banded(Control? band, Control body)
     {
@@ -296,13 +296,13 @@ public partial class MainWindow
     }
 
     /// <summary>A folder in the mixer: a tinted group with its name, fold arrow and track count above its strips.</summary>
-    Control FolderGroup(Folder folder, bool wide, double stripW)
+    Control FolderGroup(Folder folder, double stripW)
     {
         string id = folder.Id;
         Folder F() => FolderById(id) ?? folder;
         var strips = new StackPanel { Orientation = Orientation.Horizontal };
         // the folder's strip drags the whole folder; its open tracks drag on their own (MainWindow.MixerOrder.cs)
-        var own = FolderStrip(folder, wide);
+        var own = FolderStrip(folder, stripW);
         MixerDraggable(own, folder);
         strips.Children.Add(own);
         if (!folder.MixerCollapsed)
@@ -310,7 +310,7 @@ public partial class MainWindow
             mx.Order.FolderStrips[id] = own;
             foreach (var t in tracks.Where(t => t.Track.FolderId == id).ToList())
             {
-                var card = Strip(t, tracks.IndexOf(t), wide, stripW);
+                var card = Strip(t, stripW);
                 MixerDraggable(card, t.Track);
                 mx.Order.Inner.Add((card, t.Track, id));
                 strips.Children.Add(card);
@@ -322,10 +322,6 @@ public partial class MainWindow
             Content = new TextBlock { Classes = { "icon" }, Text = folder.MixerCollapsed ? "" : "", FontSize = 9, Foreground = Palette.Dim } };
         ToolTip.SetTip(fold, Loc.T(folder.MixerCollapsed ? "mixer.folder.unfold" : "mixer.folder.fold"));
         fold.Click += (_, _) => FolderEdit(F(), x => x.MixerCollapsed = !x.MixerCollapsed, "mixerFold", undoable: false);
-        var icon = new TextBlock { Classes = { "icon" }, Text = "", FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
-        // the folder strip already shows the folder glyph: a compact band leaves that room to the name
-        icon.IsVisible = wide;
-        icon.Margin = new Thickness(6, 0, 0, 0);
         // name and count are one text so they trim together when the band is as narrow as a folded compact strip
         var nameRun = new Run { FontSize = 11.5, FontWeight = FontWeight.SemiBold, Foreground = Palette.Fg };
         var count = new Run { FontSize = 10.5, Foreground = Palette.Faint };
@@ -334,10 +330,10 @@ public partial class MainWindow
         ToolTip.SetTip(name, Loc.T("mixer.folder.name.tip"));
         name.DoubleTapped += (_, _) => RenameFolder(F(), name, null);
         // the band never widens the group: the strips set the width and the name trims to it
-        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"), Margin = new Thickness(8, 4, 8, 0), VerticalAlignment = VerticalAlignment.Center };
+        // the folder strip already shows the folder glyph: the band leaves that room to the name
+        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Margin = new Thickness(8, 4, 8, 0), VerticalAlignment = VerticalAlignment.Center };
         row.Children.Add(fold);
-        Grid.SetColumn(icon, 1); row.Children.Add(icon);
-        Grid.SetColumn(name, 2); row.Children.Add(name);
+        Grid.SetColumn(name, 1); row.Children.Add(name);
         var band = new NoWidth { Child = row };
         var decor = new Border { CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1), Margin = new Thickness(1, 2, 1, StripGap / 2), IsHitTestVisible = false };
         mx.Refresh.Add(() =>
@@ -346,7 +342,6 @@ public partial class MainWindow
             var c = TimelineView.FolderColor(f);
             int n = tracks.Count(t => t.Track.FolderId == id);
             nameRun.Text = f.Name;
-            icon.Foreground = Palette.Alpha(c, 1);
             count.Text = n == 0 ? Loc.T("folder.empty") : n == 1 ? Loc.T("folder.count.one") : Loc.T("folder.count", n);
             decor.Background = Palette.Alpha(c, 0.06);
             decor.BorderBrush = Palette.Alpha(c, 0.35);
@@ -356,58 +351,40 @@ public partial class MainWindow
 
     /// <summary>
     /// The folder's own strip: it only holds its tracks, so no fader, M, S or effects. Its meter shows the sum of its
-    /// tracks (what goes to its output); wide, it shows its output and its send panels, compact its sends as bars and its output.
+    /// tracks (what goes to its output); its sends show as bars and its output under them. It takes the mixer's zoom
+    /// width and gives way as it narrows, like the other strips.
     /// </summary>
-    Control FolderStrip(Folder folder, bool wide)
+    Control FolderStrip(Folder folder, double width)
     {
         string id = folder.Id;
         Folder F() => FolderById(id) ?? folder;
-        var box = StripCard(FolderStripW(wide));
-        var top = new Border { Height = 2, VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false };
+        // as wide as the other strips (asked by the user: it follows the mixer's zoom)
+        var box = StripCard(width);
+        mx.Boxes.Add(box);
         // a click on the folder's strip selects the folder, like a track's strip selects its track
-        box.Cursor = new Cursor(StandardCursorType.Hand);
-        box.PointerPressed += (_, e) => { if (e.GetCurrentPoint(box).Properties.IsLeftButtonPressed) Timeline.SelectFolder(id); };
+        var top = StripCardLook(box, () => Timeline.SelectedFolderId == id, () => false, () => TimelineView.FolderColor(F()), () => Timeline.SelectFolder(id));
         var meter = new MixerMeter();
-        mx.NodeMeters.Add((id, meter));
+        mx.NodeMeters.Add((id, meter, null));
         var tag = new TextBlock { Text = Loc.T("mixer.folderTag"), FontSize = 9, LetterSpacing = 0.8, Foreground = Palette.Faint, HorizontalAlignment = HorizontalAlignment.Center };
         ToolTip.SetTip(tag, Loc.T("mixer.folderTag.tip"));
-        var glyph = new TextBlock { Classes = { "icon" }, Text = "", FontSize = wide ? 16 : 13, HorizontalAlignment = HorizontalAlignment.Center };
-        var sum = new TextBlock { Text = Loc.T("mixer.folder.sum"), FontSize = wide ? 11 : 10, Foreground = Palette.Faint };
+        var glyph = new TextBlock { Classes = { "icon" }, Text = "", FontSize = 13, HorizontalAlignment = HorizontalAlignment.Center };
+        var sum = new TextBlock { Text = Loc.T("mixer.folder.sum"), FontSize = 10, Foreground = Palette.Faint };
         ToolTip.SetTip(sum, Loc.T("mixer.folder.sum.tip"));
         mx.Refresh.Add(() =>
         {
-            var f = F();
-            var c = TimelineView.FolderColor(f);
-            bool selected = Timeline.SelectedFolderId == id;
-            top.Background = selected ? Palette.Accent : Palette.Alpha(c, 1);
-            box.Background = selected ? Palette.Raised : Palette.Panel;
-            box.BorderBrush = selected ? Palette.Alpha(Palette.AccentColor, 0.4) : Palette.Line;
-            glyph.Foreground = Palette.Alpha(c, 1);
+            glyph.Foreground = Palette.Alpha(TimelineView.FolderColor(F()), 1);
         });
-        var router = RouterOf(folder);
-        Control head, controls;
-        if (wide)
+        var head = new StackPanel { Spacing = 4, Children = { glyph, tag } };
+        // its icon grows with the strip, like a channel's; "CARPETA" goes when it doesn't fit
+        mx.Resize.Add(w =>
         {
-            var h = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Height = 28 };
-            tag.VerticalAlignment = glyph.VerticalAlignment = VerticalAlignment.Center;
-            tag.HorizontalAlignment = HorizontalAlignment.Left;
-            tag.Margin = new Thickness(8, 0);
-            h.Children.Add(glyph);
-            Grid.SetColumn(tag, 1); h.Children.Add(tag);
-            head = h;
-            // its output and sends, scrolling like a track strip's effects
-            var fx = new StackPanel { Spacing = 8, Margin = new Thickness(0, 0, 4, 6) };
-            fx.Children.Add(OutputRow(router));
-            SendPanels(fx, router);
-            controls = new ScrollViewer { Content = fx, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-        }
-        else
-        {
-            head = new StackPanel { Spacing = 4, Children = { glyph, tag } };
-            controls = CompactFolderControls(router);
-        }
+            glyph.FontSize = Math.Clamp(Math.Round(10 + w * 0.045), 12, 17);
+            tag.IsVisible = w >= HeadNameW;
+        });
         var content = new Grid();
-        content.Children.Add(StripLayout(wide, head, controls, meter, sum));
+        var layout = StripLayout(head, CompactFolderControls(RouterOf(folder)), meter, sum);
+        NarrowParts(layout, null, null, meter, sum);
+        content.Children.Add(layout);
         content.Children.Add(top);
         box.Child = content;
         return box;

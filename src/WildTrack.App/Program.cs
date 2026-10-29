@@ -9,7 +9,7 @@ static class Program
     public static void Main(string[] args)
     {
         // The ASIO callback is managed code, so every blocking GC stalls it: keep full collections in the background.
-        // Short ones still stop it, so the UI avoids allocation bursts while audio runs (see MainWindow.compactMixer).
+        // Short ones still stop it, so the UI avoids allocation bursts while audio runs (see MainWindow.mixerLayout).
         SessionLog.Start(args);
         System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
         Audio.AudioWarmUp.Start();

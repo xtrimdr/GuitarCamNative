@@ -161,7 +161,10 @@ static class Program
               version                      esta versión contra la última release de GitHub (el aviso de "Acerca de")
               proyecto abrir    carpeta    abre un proyecto nativo y muestra pistas, avisos e historial
               proyecto versiones carpeta   lista las versiones guardadas, de más nueva a más vieja
-              proyecto volver   carpeta n  restaura la versión n y conserva el estado actual en el historial
+              proyecto volver   carpeta n  restaura la versión n y conserva el estado actual en el historial (tomas y exportaciones quedan)
+              proyecto guardar-version carpeta [nombre]   guarda una versión ahora; con nombre no se borra sola
+              proyecto nombrar-version carpeta n [nombre] le pone nombre a la versión n (sin nombre se lo saca)
+              proyecto verificar-pasos     verifica los nombres de los pasos de Historial, saltar a un paso y las versiones
               proyecto verificar-deshacer  verifica fotos, agrupación de sliders, rehacer y color e ícono de pista sin modificar archivos
               proyecto verificar-clips     verifica anclaje, imanes, recortes, fades y operaciones de pistas
               proyecto clips carpeta       lista los IDs de pistas y clips para editar desde la consola
@@ -210,14 +213,14 @@ static class Program
               proyecto verificar-tomas     verifica a qué pista va una toma nueva, su nombre y su canal
               proyecto importar-audio carpeta archivo [--en segundos] [--pista id]   copia un audio de afuera a media/ y lo pone en una pista
               proyecto verificar-importar  verifica la importación de audio (formato, nombres, archivos rotos)
-              proyecto insertos carpeta pista [agregar vida|comp|eq|puerta [--en n] | quitar n | mover n m | duplicar n | prender n | apagar n | plegar n]
+              proyecto insertos carpeta pista [agregar vida|comp|eq|puerta [--en n] | agregar vst --plugin "nombre" | quitar n | mover n m | duplicar n | prender n | apagar n | plegar n]
                                            los slots de efectos de la pista (número o id), en el orden en que suenan; sin
                                            operación, los lista. Como el menú de cada efecto en la tira ancha del mixer;
                                            plegar n lo pliega o despliega en el mixer (no cambia el sonido)
               proyecto insertos carpeta --bus id|n [agregar reverb|delay|vida|comp|eq|puerta … | quitar n | …]
                                            lo mismo para un bus (la reverb y el delay solo van en buses)
               proyecto buses carpeta [agregar [nombre] [--tipo reverb|delay|vacio] | quitar n | renombrar n nombre |
-                        volumen n 0.8 | paneo n -0.3 | mute n]
+                        volumen n 0.8 | paneo n -0.3 | mute n | color n #rrggbb|ninguno | icono n id|ninguno]
                                            los buses, en el orden en que suenan, con sus slots, su salida y sus envíos;
                                            uno nuevo trae una reverb, un delay o nada; quitar uno se lleva los envíos que
                                            le llegaban y lo que salía a él va al master
@@ -269,6 +272,9 @@ static class Program
               vst probar "nombre" [--segundos 4] [--salida x.wav] [--ventana]
                                            toca un acorde con ese plugin a un WAV, como la exportación (--ventana abre
                                            antes su ventana y usa lo que dejes)
+              vst efecto "nombre" [--entrada x.wav] [--segundos 4] [--bloque 256] [--salida x.wav] [--apagado]
+                                           pasa audio (o acordes de prueba) por un efecto como la exportación y en vivo
+                                           en bloques del driver; comprueba que en vivo llega justo un bloque después
               proyectos lista|plantillas [--raiz X]
               proyectos nuevo "Nombre" [--plantilla id] | renombrar carpeta "Nombre" | duplicar carpeta
               proyectos borrar carpeta | guardar-plantilla carpeta "Nombre"

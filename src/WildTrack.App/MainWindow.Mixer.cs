@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using WildTrack.App.Controls;
 using WildTrack.App.Model;
 using WildTrack.Audio.Dsp;
@@ -14,25 +15,35 @@ namespace WildTrack.App;
 
 /// <summary>
 /// Port of Mixer.tsx and MiniTimeline.tsx: the bottom view that alternates with the timeline (X). One strip per track,
-/// empty ones too ("vacía": what you set there goes to the next take), wide with a panel per effect or compact with
-/// knobs; the buses (MainWindow.Buses.cs); the master with its LIM light and its card (MainWindow.Master.cs); pan templates for the whole
+/// empty ones too ("vacía": what you set there goes to the next take), its effects as a list over the fader at any
+/// width (the mixer's zoom); the buses (MainWindow.Buses.cs); the master with its LIM light and its card (MainWindow.Master.cs); pan templates for the whole
 /// mix. Every change is an undo step (same keys as the inspector), saved and heard live. Same as the web except: the
 /// toggle sits in the bottom transport bar (where the native transport is), the EQ summary has no live spectrum yet
 /// (like the inspector), and empty strips edit their channel without the take analysis (as in the web). Also unlike
 /// the web (asked by the user): every strip is a card, all strips share the same rows so every meter has the same
-/// height, and narrow effect panels rearrange instead of cutting their controls. Wide strips keep their head and pan
-/// fixed and scroll only the effects, each in its own panel; compact strips put the record-arm ● under the name, since
-/// ● M S C don't fit side by side.
+/// height, and the strips give way part by part as they narrow (<see cref="NarrowParts"/>) instead of cutting their
+/// controls. An effect opens in a small window of its own (<see cref="ShowSlotWindow"/>).
 /// Track folders (native only) show as a tinted group with their name above it: a folder strip first (no fader: its
 /// output, its sends and the meter of its tracks' sum), then its tracks, unless the group is folded.
 /// </summary>
 public partial class MainWindow
 {
-    // Strip widths (px), as in the web (compact a bit wider for the card's border). "Amplio" strips grow to share the free width.
-    // Buses are racks (their chain beside the fader), so they take more room than a track.
-    const double CompactW = 104, WideMin = 200, WideMax = 400, ReturnCompactW = 270, ReturnWideW = 330, MasterW = 76;
+    // Strip widths (px). Tracks and buses take one width, the mixer's zoom (mixerStripW, asked by the user: one flow
+    // instead of Compacto / Amplio, and one strip, the list, at every width): MinStripW to WideMax (asked by the user:
+    // wider than that adds nothing). Folder strips follow it too.
+    const double CompactW = 104, WideMax = 150, MasterW = 76;
+    /// <summary>The narrowest strip (px): a slim fader and the meter's bars, the effects as icons, M and S, the badge.</summary>
+    const double MinStripW = 42;
+    /// <summary>Under this width (px) a compact strip drops its meter's scale and its dB, and tightens its margins.</summary>
+    const double NarrowW = 90;
+    /// <summary>Under this width (px) a compact strip takes the slim fader and its thinnest margins.</summary>
+    const double TinyW = 64;
+    /// <summary>The strips' width before the user zooms the mixer (px).</summary>
+    const double DefaultStripW = 120;
+    /// <summary>How much one wheel notch widens or narrows the strips (the timeline's zoom is 1.18 per notch).</summary>
+    const double MixerZoomStep = 1.12;
     /// <summary>Rows every strip shares (takes, returns and master), so all faders and meters start and end at the same
-    /// height: head, controls (compact strips only: in wide ones they sit beside the fader), fader, foot.</summary>
+    /// height: head, controls, fader, foot.</summary>
     const double StripHeadH = 38, StripFootH = 22;
     /// <summary>The compact strip's fixed rows (px): a list's title, the pan bar and M S ●.</summary>
     const double ListHeadH = 20, PanRowH = 26, TogglesRowH = 30;
@@ -50,28 +61,32 @@ public partial class MainWindow
     bool SendsRow => mixerSends && Buses.Count > 0;
     /// <summary>Space between strip cards.</summary>
     const double StripGap = 6;
+    /// <summary>The extra room (px) a folder keeps from a channel or separator beside it.</summary>
+    const double FolderGap = 6;
     /// <summary>Below this width an effect panel drops its ON/OFF text and icon, and puts its knob over its other controls.</summary>
     const double FxNarrowW = 150;
-    /// <summary>The mixer keeps its own height: wide strips want more room than the timeline.</summary>
+    /// <summary>The mixer keeps its own height: its strips want more room than the timeline.</summary>
     const double MixerDefaultH = 440, MixerMinH = 250;
 
-    /// <summary>One way of drawing the strips (compact or wide) with what the window updates on it.</summary>
+    /// <summary>The strips with what the window updates on them (and an effect's window, <see cref="ShowSlotWindow"/>, its own).</summary>
     sealed class MixerLayout
     {
-        public readonly Grid Strips = new() { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), IsVisible = false };
+        public readonly Grid Strips = new() { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto") };
         /// <summary>The order and sides of its strips, for dragging them (MainWindow.MixerOrder.cs).</summary>
         public readonly MixerOrder Order = new();
         public readonly List<Action> Refresh = [];
         /// <summary>The strips' Transponer tags, refreshed while a transpose is being made (its progress).</summary>
         public readonly List<Action> Transpose = [];
         public readonly Dictionary<string, (MixerMeter Meter, Action<double> Gr)> Meters = [];
-        /// <summary>The track strips' cards, resized in place when only the strip width changes.</summary>
+        /// <summary>The track and bus strips' cards, resized in place when only the strip width changes.</summary>
         public readonly List<Border> Boxes = [];
         /// <summary>Every strip's controls row and the compact lists' rows with what they hold, resized in place (<see cref="ApplyMixerHeights"/>).</summary>
         public readonly List<RowDefinition> TopRows = [];
         public readonly List<(RowDefinition Row, Control What, bool Head)> FxRows = [], SendRows = [];
-        /// <summary>The folders' and buses' meters, by node id (<see cref="Audio.PlaybackEngine.Node"/>).</summary>
-        public readonly List<(string Id, MixerMeter Meter)> NodeMeters = [];
+        /// <summary>The folders' and buses' meters, by node id (<see cref="Audio.PlaybackEngine.Node"/>), and what writes a bus's "Comprime".</summary>
+        public readonly List<(string Id, MixerMeter Meter, Action<double>? Gr)> NodeMeters = [];
+        /// <summary>What a strip changes with its width (the zoom) without being rebuilt.</summary>
+        public readonly List<Action<double>> Resize = [];
         public MixerMeter? Master;
         public TextBlock? Lim;
         /// <summary>The master's correlation readout and the hundredth it shows (so the text changes only with it).</summary>
@@ -82,10 +97,10 @@ public partial class MainWindow
         public int LufsTenths = int.MaxValue;
     }
 
-    // Both layouts are built together whenever the tracks change, and "Compacto / Amplio" only shows the other one:
-    // building a mixer's worth of controls makes the GC stop every thread, the audio callback's too, for 10-40 ms.
-    readonly MixerLayout compactMixer = new(), wideMixer = new();
-    /// <summary>The layout on screen (or the one being built).</summary>
+    // Built whenever the tracks change, and only resized by the zoom: building a mixer's worth of controls makes the GC
+    // stop every thread, the audio callback's too, for 10-40 ms.
+    readonly MixerLayout mixerLayout = new();
+    /// <summary>The layout being filled: the mixer's, or an effect's window while it is built.</summary>
     MixerLayout mx = null!;
     readonly Panel mixerStrips = new();
     readonly ScrollViewer mixerScroll = new() { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled };
@@ -96,7 +111,14 @@ public partial class MainWindow
     Border miniRow = null!;
     Button? panButton;
     string mixerKey = "";
-    string mixerWidth = "auto";
+    /// <summary>Every track and bus strip's width (px, <see cref="MinStripW"/>..<see cref="WideMax"/>), kept in config.json ("mixerStripW").</summary>
+    double mixerStripW = DefaultStripW;
+    /// <summary>The header's zoom bar (like the timeline's) and its icon; the wheel gesture is the timeline's zoom.</summary>
+    readonly Slider mixerZoomSlider = new() { Minimum = 0, Maximum = 1, Width = 120, VerticalAlignment = VerticalAlignment.Center };
+    readonly TextBlock mixerZoomIcon = new() { Classes = { "icon" }, Text = "", FontSize = 15, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center };
+    bool mixerZoomSyncing;
+    /// <summary>Saves the width once the wheel or the bar stops, not on every notch.</summary>
+    readonly DispatcherTimer mixerZoomSaver = new() { Interval = TimeSpan.FromMilliseconds(500) };
     double panWidth = 0.3; // the templates' opening; asked by the user (the web starts at 60%)
     const double TimelineDefaultH = 280, TimelineMinH = 110; // web: TIMELINE_MIN_H (its default is 240; the native layout keeps 280)
     double timelineH = TimelineDefaultH, mixerH = MixerDefaultH;
@@ -128,7 +150,18 @@ public partial class MainWindow
 
     void InitMixer()
     {
-        mixerWidth = AppConfig.Get("mixerWidth") is "compact" or "wide" ? AppConfig.Get("mixerWidth")! : "auto";
+        // before the zoom there were three widths: "Compacto" keeps its narrow strips
+        mixerStripW = double.TryParse(AppConfig.Get("mixerStripW"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double sw)
+            ? Math.Round(Math.Clamp(sw, MinStripW, WideMax)) : AppConfig.Get("mixerWidth") == "compact" ? CompactW : DefaultStripW;
+        mixerZoomSaver.Tick += (_, _) =>
+        {
+            mixerZoomSaver.Stop();
+            SaveViewPref("mixerStripW", mixerStripW.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        };
+        mixerZoomSlider.ValueChanged += (_, e) => { if (!mixerZoomSyncing) ZoomMixer(MinStripW * Math.Pow(WideMax / MinStripW, e.NewValue)); };
+        Avalonia.Automation.AutomationProperties.SetName(mixerZoomSlider, Loc.T("mixer.zoom"));
+        mixerZoomIcon.Margin = new Thickness(0, 0, 8, 0);
+        mixerScroll.AddHandler(PointerWheelChangedEvent, OnMixerWheel, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         if (double.TryParse(AppConfig.Get("mixerHeight"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double h))
             mixerH = Math.Max(MixerMinH, h);
         if (double.TryParse(AppConfig.Get("timelineHeight"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double th))
@@ -153,9 +186,8 @@ public partial class MainWindow
         miniTimeline.SeekRequested += sec => engine.Seek(sec);
         miniTimeline.ScrubChanged += Scrub;
         var header = mixerHeader = BuildMixerHeader();
-        mx = compactMixer;
-        mixerStrips.Children.Add(compactMixer.Strips);
-        mixerStrips.Children.Add(wideMixer.Strips);
+        mx = mixerLayout;
+        mixerStrips.Children.Add(mixerLayout.Strips);
         mixerScroll.Content = mixerStrips;
         InitMixerMenu();
         mixerScroll.SizeChanged += (_, _) => { mixerStrips.MinWidth = mixerScroll.Viewport.Width; RefreshMixer(); };
@@ -183,6 +215,7 @@ public partial class MainWindow
         InitMastering();
         InitPiano();
         InitInstruments();
+        InitEffects();
 
         TimelineViewButton.Click += (_, _) => SetMixerView(false);
         MixerViewButton.Click += (_, _) => ShowBottomView(mastering: false);
@@ -236,24 +269,19 @@ public partial class MainWindow
         row.Children.Add(SectionSwitch(FxIcon.Eq, "mixer.fx", () => mixerFx, v => mixerFx = v, "mixer.fx"));
         row.Children.Add(SectionSwitch(FxIcon.Reverb, "mixer.sends", () => mixerSends, v => mixerSends = v, "mixer.sends"));
 
-        var seg = new StackPanel { Orientation = Orientation.Horizontal };
-        foreach (var (id, label, tip) in new[]
+        // the strips' width, like the timeline's zoom bar (the header's own refreshers survive strip rebuilds)
+        var zoom = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0),
+            Children = { mixerZoomIcon, mixerZoomSlider } };
+        headerRefresh.Add(() =>
         {
-            ("auto", Loc.T("mixer.width.auto"), Loc.T("mixer.width.auto.tip")),
-            ("compact", Loc.T("mixer.width.compact"), Loc.T("mixer.width.compact.tip")),
-            ("wide", Loc.T("mixer.width.wide"), Loc.T("mixer.width.wide.tip")),
-        })
-        {
-            var b = new ToggleButton { Classes = { "seg" }, Content = label, FontSize = 12 };
-            ToolTip.SetTip(b, tip);
-            b.Click += (_, _) => { mixerWidth = id; SaveViewPref("mixerWidth", id); RefreshMixer(); };
-            // the header's own refreshers survive strip rebuilds
-            headerRefresh.Add(() => b.IsChecked = mixerWidth == id);
-            seg.Children.Add(b);
-        }
+            mixerZoomSyncing = true;
+            mixerZoomSlider.Value = Math.Log(mixerStripW / MinStripW) / Math.Log(WideMax / MinStripW);
+            mixerZoomSyncing = false;
+        });
 
         // Cubase's "deactivate all mute / solo states" (native only), lit while any track has one
         var clear = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
+        clear.Children.Add(FxBypassButton());
         foreach (bool solo in new[] { false, true })
         {
             var b = new Button { Classes = { "chip" }, Width = 24, Height = 24, MinHeight = 24, Padding = new Thickness(0), CornerRadius = new CornerRadius(4),
@@ -279,12 +307,44 @@ public partial class MainWindow
         // the mix's A | B (MainWindow.MixCompare.cs)
         var compare = BuildMixCompare();
         Grid.SetColumn(compare, 2); grid.Children.Add(compare);
-        var segBox = new Border { Classes = { "seg" }, Child = seg, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
-        Grid.SetColumn(segBox, 3); grid.Children.Add(segBox);
+        Grid.SetColumn(zoom, 3); grid.Children.Add(zoom);
         return new Border { Height = 40, Background = Palette.Panel, BorderBrush = Palette.Line, BorderThickness = new Thickness(0, 0, 0, 1), Child = grid };
     }
 
     readonly List<Action> headerRefresh = [];
+
+    static readonly IBrush BypassAmber = Palette.Brush("#f59e0b");
+
+    /// <summary>
+    /// The mixer's FX switch (asked by the user): every effect of every track and bus in bypass, or back, to hear the mix
+    /// without them. Only what you hear (<see cref="Audio.PlaybackEngine.FxBypass"/>): lit amber like a mute, and the
+    /// strips' effect lists dim while it is on.
+    /// </summary>
+    Button FxBypassButton()
+    {
+        var text = new TextBlock { Text = "FX", Classes = { "mono" }, FontSize = 10, FontWeight = FontWeight.Bold };
+        var b = new Button { Classes = { "chip" }, Height = 24, MinHeight = 24, Padding = new Thickness(6, 0), CornerRadius = new CornerRadius(4), Focusable = false,
+            HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center, Content = text };
+        b.Click += (_, _) => SetFxBypass(!Audio.PlaybackEngine.FxBypass);
+        headerRefresh.Add(() =>
+        {
+            bool off = Audio.PlaybackEngine.FxBypass;
+            b.Classes.Set("lit", off);
+            b.Background = off ? BypassAmber : Brushes.Transparent;
+            b.BorderBrush = off ? BypassAmber : Palette.Line;
+            text.Foreground = off ? Palette.App : Palette.Faint;
+            ToolTip.SetTip(b, Loc.T(off ? "mixer.fxBypass.on.tip" : "mixer.fxBypass.off.tip"));
+        });
+        return b;
+    }
+
+    void SetFxBypass(bool on)
+    {
+        Audio.PlaybackEngine.FxBypass = on;
+        foreach (var t in tracks) t.ApplyInserts();
+        engine.ApplyBusSlots(Buses);
+        RefreshMixer();
+    }
 
     /// <summary>Whether the strips show their effects and their sends to the buses (the header's switches, kept in config.json).</summary>
     bool mixerFx = AppConfig.Get("mixer.fx") != "off", mixerSends = AppConfig.Get("mixer.sends") != "off";
@@ -385,30 +445,24 @@ public partial class MainWindow
         if (!mixerView) return;
         miniTimeline.SetTracks(tracks);
         if (masteringView) return;
-        double areaW = mixerScroll.Viewport.Width > 0 ? mixerScroll.Viewport.Width : MixerHost.Bounds.Width;
-        // folder strips take their own width; folded groups hide their tracks
-        int n = Math.Max(1, tracks.Count(t => FolderOfTrack(t)?.MixerCollapsed != true));
-        double freeWide = (areaW - Buses.Count * (ReturnWideW + StripGap) - MasterW - StripGap
-            - Folders.Count(f => !f.Separator) * (FolderStripW(true) + StripGap) - Folders.Count(f => f.Separator) * (SeparatorW + StripGap)) / n - StripGap;
-        bool wide = mixerWidth == "wide" || (mixerWidth == "auto" && freeWide >= WideMin);
-        double stripW = wide ? Math.Max(WideMin, Math.Min(WideMax, Math.Floor(freeWide))) : CompactW;
+        // tracks and buses take the zoom's width (folder strips, separators and the master keep their own)
+        double stripW = mixerStripW;
         // a new width or layout only resizes the cards or shows the other layout (see compactMixer)
         string key = string.Join(",", tracks.Select(t => t.Track.Id + ":" + t.Clips.Count + ":" + t.Track.FolderId + ":" + t.Track.MixerSide + ":" + string.Join("/", t.Channel.Slots.Select(s => s.Id))
-                + ":" + string.Join("/", t.Channel.Sends.Where(s => s.Hidden).Select(s => s.BusId))))
-            + "|" + string.Join(",", Folders.Select(f => f.Id + ":" + f.Index + ":" + f.MixerCollapsed + ":" + f.Separator + ":" + f.MixerSide + ":" + string.Join("/", f.Sends.Where(s => s.Hidden).Select(s => s.BusId))))
+                + ":" + string.Join("/", t.Channel.Sends.Where(s => !s.Hidden).Select(s => s.BusId))))
+            + "|" + string.Join(",", Folders.Select(f => f.Id + ":" + f.Index + ":" + f.MixerCollapsed + ":" + f.Separator + ":" + f.MixerSide + ":" + string.Join("/", f.Sends.Where(s => !s.Hidden).Select(s => s.BusId))))
             // a bus's routing changes which buses the others can send to: their send panels come and go
-            + "|" + string.Join(",", Buses.Select(b => b.Id + ":" + b.Name + ":" + b.MixerSide + ":" + b.Output + ":" + string.Join("/", b.Sends.Select(x => x.BusId)) + ":" + string.Join("/", b.Inserts.Select(s => s.Id + s.Type))));
+            + "|" + string.Join(",", Buses.Select(b => b.Id + ":" + b.Name + ":" + b.MixerSide + ":" + b.Output + ":" + string.Join("/", b.Sends.Select(x => x.BusId)) + ":" + string.Join("/", b.Inserts.Select(s => s.Id + s.Type))))
+;
         if (key != mixerKey)
         {
             mixerKey = key;
-            BuildStrips(compactMixer, false, CompactW);
-            BuildStrips(wideMixer, true, stripW);
+            BuildStrips(stripW);
         }
-        mx = wide ? wideMixer : compactMixer;
+        mx = mixerLayout;
         ApplyMixerHeights();
-        wideMixer.Strips.IsVisible = wide;
-        compactMixer.Strips.IsVisible = !wide;
-        if (wide) foreach (var box in mx.Boxes) box.Width = stripW;
+        foreach (var box in mx.Boxes) box.Width = stripW;
+        foreach (var resize in mx.Resize) resize(stripW);
         bool was = syncing;
         syncing = true;
         try
@@ -422,6 +476,68 @@ public partial class MainWindow
         }
         finally { syncing = was; }
     }
+
+    /// <summary>
+    /// The mixer's zoom (asked by the user: one flow, no Compacto / Amplio): every track and bus strip takes width
+    /// <paramref name="w"/>, kept between <see cref="MinStripW"/> and <see cref="WideMax"/>, without rebuilding them.
+    /// What sits under <paramref name="atX"/> (px from the view's left; its middle by default) stays there, as the
+    /// timeline's zoom keeps the playhead.
+    /// </summary>
+    void ZoomMixer(double w, double? atX = null)
+    {
+        w = Math.Round(Math.Clamp(w, MinStripW, WideMax));
+        if (w == mixerStripW || !mixerView || masteringView) return;
+        double x = atX ?? mixerScroll.Viewport.Width / 2;
+        // the strip under that point and where in it; elsewhere (a folder strip, a gap) the same share of the whole width
+        int under = -1;
+        double frac = 0, share = mixerStrips.Bounds.Width > 0 ? (mixerScroll.Offset.X + x) / mixerStrips.Bounds.Width : 0;
+        for (int i = 0; i < mx.Boxes.Count; i++)
+        {
+            var box = mx.Boxes[i];
+            if (!box.IsEffectivelyVisible || box.Bounds.Width <= 0 || box.TranslatePoint(default, mixerScroll) is not { } p) continue;
+            if (x < p.X || x >= p.X + box.Bounds.Width) continue;
+            under = i;
+            frac = (x - p.X) / box.Bounds.Width;
+            break;
+        }
+        mixerStripW = w;
+        mixerZoomSaver.Stop();
+        mixerZoomSaver.Start();
+        RefreshMixer();
+        mixerScroll.UpdateLayout();
+        double content = under >= 0 && under < mx.Boxes.Count && mx.Boxes[under].TranslatePoint(default, mixerStrips) is { } at
+            ? at.X + frac * mx.Boxes[under].Bounds.Width
+            : share * mixerStrips.Bounds.Width;
+        mixerScroll.Offset = new Vector(Math.Clamp(content - x, 0, Math.Max(0, mixerScroll.Extent.Width - mixerScroll.Viewport.Width)), mixerScroll.Offset.Y);
+    }
+
+    /// <summary>
+    /// The mixer's wheel, with the timeline's modifiers (<see cref="Shortcuts.Wheel"/>): its zoom widens or narrows the
+    /// strips around the pointer; its sideways gesture, and the plain wheel where nothing under the pointer scrolls,
+    /// move the mixer sideways. Over a knob, fader or bar the wheel is theirs (Shift = fine), as over the timeline's knobs.
+    /// </summary>
+    void OnMixerWheel(object? sender, PointerWheelEventArgs e)
+    {
+        string? wheel = Shortcuts.FindWheel(e.KeyModifiers);
+        bool listScrolls = false;
+        for (var v = e.Source as Visual; v != null && v != mixerScroll; v = v.GetVisualParent())
+        {
+            if (v is Knob or InspectorKnob or Fader or HBar or EqEditor) return;
+            if (v is ScrollViewer s && s.Extent.Height > s.Viewport.Height + 0.5) listScrolls = true;
+        }
+        // some mice and drivers turn a modified wheel into a sideways delta, so take whichever axis moved
+        double d = e.Delta.Y != 0 ? e.Delta.Y : e.Delta.X;
+        if (wheel == "wheelZoom") ZoomMixer(mixerStripW * Math.Pow(MixerZoomStep, d * Shortcuts.WheelSign(wheel)), e.GetPosition(mixerScroll).X);
+        // wheel up goes right, as in the timeline (reversed: down)
+        else if (wheel == "wheelSideways") ScrollMixerBy((e.Delta.Y + e.Delta.X) * Shortcuts.WheelSign(wheel) * 80);
+        // a list or an effects column that has more to show takes the plain wheel; a touchpad's sideways swipe never
+        else if (wheel == null && (!listScrolls || e.Delta.Y == 0)) ScrollMixerBy(-(e.Delta.Y * Shortcuts.WheelSign(Shortcuts.WheelScroll) + e.Delta.X) * 80);
+        else return;
+        e.Handled = true;
+    }
+
+    void ScrollMixerBy(double dx) =>
+        mixerScroll.Offset = new Vector(Math.Clamp(mixerScroll.Offset.X + dx, 0, Math.Max(0, mixerScroll.Extent.Width - mixerScroll.Viewport.Width)), mixerScroll.Offset.Y);
 
     /// <summary>Called from the window tick: meters, compressor reduction, LIM and the mini timeline's playhead.</summary>
     void TickMixer(double pos, float outL, float outR)
@@ -514,23 +630,30 @@ public partial class MainWindow
 
     // --- strips ----------------------------------------------------------------------------------------
 
-    void BuildStrips(MixerLayout layout, bool wide, double stripW)
+    /// <summary>Empties a layout: its controls and everything the window updates on them.</summary>
+    static void ClearStrips(MixerLayout l)
     {
-        mx = layout;
-        mx.Refresh.Clear();
-        mx.Transpose.Clear();
-        mx.Meters.Clear();
-        mx.Boxes.Clear();
-        mx.TopRows.Clear();
-        mx.FxRows.Clear();
-        mx.SendRows.Clear();
-        mx.NodeMeters.Clear();
+        l.Refresh.Clear();
+        l.Transpose.Clear();
+        l.Meters.Clear();
+        l.Boxes.Clear();
+        l.TopRows.Clear();
+        l.FxRows.Clear();
+        l.SendRows.Clear();
+        l.NodeMeters.Clear();
+        l.Resize.Clear();
+        l.Order.Top.Clear();
+        l.Order.Inner.Clear();
+        l.Order.FolderStrips.Clear();
+        l.Strips.Children.Clear();
+    }
+
+    void BuildStrips(double stripW)
+    {
+        mx = mixerLayout;
+        ClearStrips(mixerLayout);
         var order = mx.Order;
-        order.Top.Clear();
-        order.Inner.Clear();
-        order.FolderStrips.Clear();
         var mixerStrips = mx.Strips;
-        mixerStrips.Children.Clear();
         // the two sides (asked by the user): tracks and folders on the left by default, buses on the right, and
         // anything can be moved to the other one; the free space between them grows with the window
         var strips = order.Left = new StackPanel { Orientation = Orientation.Horizontal };
@@ -560,10 +683,10 @@ public partial class MainWindow
                 MixerDraggable(card, sep);
                 Put(Column(card), sep, MixerSides.IsRight(sep));
             }
-            else if (item is Folder f) Put(FolderGroup(f, wide, stripW), f, MixerSides.IsRight(f));
+            else if (item is Folder f) Put(FolderGroup(f, stripW), f, MixerSides.IsRight(f));
             else if (item is WildTrack.Projects.Track { FolderId: null } tr && tracks.FirstOrDefault(t => t.Track == tr) is { } lt)
             {
-                var card = Strip(lt, tracks.IndexOf(lt), wide, stripW);
+                var card = Strip(lt, stripW);
                 MixerDraggable(card, tr);
                 Put(Column(card), tr, MixerSides.IsRight(tr));
             }
@@ -572,11 +695,20 @@ public partial class MainWindow
         // the buses, on their side after the tracks (a new one comes from the mixer's right-click menu)
         foreach (var b in Buses)
         {
-            var card = BusStrip(b, wide);
+            var card = BusStrip(b, stripW);
             MixerDraggable(card, b);
             Put(Column(card), b, MixerSides.IsRight(b));
         }
-        var master = Column(Master(wide)); Grid.SetColumn(master, 3); mixerStrips.Children.Add(master);
+        // a folder keeps a little room from the column beside it (asked by the user), not from the mixer's start nor
+        // the free space: on the left side, from its neighbours; on the right one, also from the master after it
+        foreach (var (side, right) in new[] { (strips, false), (returns, true) })
+            for (int i = 0; i < side.Children.Count; i++)
+            {
+                var column = side.Children[i];
+                if (order.Top.Find(x => x.Column == column).Item is Folder { Separator: false })
+                    column.Margin = new Thickness(i > 0 ? FolderGap : 0, 0, right || i < side.Children.Count - 1 ? FolderGap : 0, 0);
+            }
+        var master = Column(Master()); Grid.SetColumn(master, 3); mixerStrips.Children.Add(master);
     }
 
     /// <summary>A strip as a card on the mixer's background, so each channel reads apart from its neighbours.</summary>
@@ -587,81 +719,49 @@ public partial class MainWindow
     };
 
     /// <summary>Puts a strip's parts on the rows every strip shares (<see cref="StripHeadH"/>…), so all faders and meters
-    /// start and end at the same height whatever the name, the strip type or its controls: compact strips stack the
-    /// controls over the fader, wide ones put them beside it. Without controls (the master) the meter is centred.</summary>
-    Grid StripLayout(bool wide, Control head, Control? controls, Control faders, Control foot)
+    /// start and end at the same height whatever the name, the strip type or its controls (the master has none: its
+    /// row stays empty).</summary>
+    Grid StripLayout(Control head, Control? controls, Control faders, Control foot)
     {
-        var g = new Grid { Margin = new Thickness(wide ? 8 : 6, 8, wide ? 8 : 6, 6) };
+        var g = new Grid { Margin = new Thickness(6, 8, 6, 6) };
         g.RowDefinitions.Add(new RowDefinition(StripHeadH, GridUnitType.Pixel));
-        if (!wide)
-        {
-            var top = new RowDefinition(StripTopH, GridUnitType.Pixel);
-            mx.TopRows.Add(top);
-            g.RowDefinitions.Add(top);
-        }
+        var top = new RowDefinition(StripTopH, GridUnitType.Pixel);
+        mx.TopRows.Add(top);
+        g.RowDefinitions.Add(top);
         g.RowDefinitions.Add(new RowDefinition(1, GridUnitType.Star));
         g.RowDefinitions.Add(new RowDefinition(StripFootH, GridUnitType.Pixel));
-        void Put(Control c, int row, int col = 0, int span = 1, int rowSpan = 1)
+        void Put(Control c, int row)
         {
-            Grid.SetRow(c, row); Grid.SetColumn(c, col); Grid.SetColumnSpan(c, span); Grid.SetRowSpan(c, rowSpan);
+            Grid.SetRow(c, row);
             g.Children.Add(c);
         }
         head.VerticalAlignment = VerticalAlignment.Top;
         foot.VerticalAlignment = VerticalAlignment.Bottom;
         foot.HorizontalAlignment = HorizontalAlignment.Center;
-        if (wide && controls != null)
-        {
-            g.ColumnDefinitions = new ColumnDefinitions("*,Auto");
-            Put(head, 0, 0, 2);
-            controls.Margin = new Thickness(0, 0, 8, 0);
-            Put(controls, 1, rowSpan: 2);
-            Put(faders, 1, 1);
-            Put(foot, 2, 1);
-        }
-        else
-        {
-            int row = wide ? 1 : 2;
-            Put(head, 0);
-            if (controls != null) { controls.VerticalAlignment = VerticalAlignment.Top; Put(controls, 1); }
-            faders.HorizontalAlignment = HorizontalAlignment.Center;
-            faders.Margin = new Thickness(0, wide ? 0 : 6, 0, 0);
-            Put(faders, row);
-            Put(foot, row + 1);
-        }
+        Put(head, 0);
+        if (controls != null) { controls.VerticalAlignment = VerticalAlignment.Top; Put(controls, 1); }
+        faders.HorizontalAlignment = HorizontalAlignment.Center;
+        faders.Margin = new Thickness(0, 6, 0, 0);
+        Put(faders, 2);
+        Put(foot, 3);
         return g;
     }
 
-    Control Strip(LiveTrack t, int index, bool wide, double width)
+    Control Strip(LiveTrack t, double width)
     {
         var box = StripCard(width);
         mx.Boxes.Add(box);
-        box.Cursor = new Cursor(StandardCursorType.Hand);
-        var top = new Border { Height = 2, VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false };
-        bool hover = false;
-        box.PointerEntered += (_, _) => { hover = true; Paint(); };
-        box.PointerExited += (_, _) => { hover = false; Paint(); };
-        box.PointerPressed += (_, e) =>
+        var top = StripCardLook(box, () => sel == t, () => Timeline.ArmedIndices.Contains(tracks.IndexOf(t)), () => TrackIcons.ColorOf(t.Track), () =>
         {
-            if (!e.GetCurrentPoint(box).Properties.IsLeftButtonPressed) return;
             int i = tracks.IndexOf(t);
             if (i >= 0 && sel != t) Timeline.Select(i);
-        };
-        void Paint()
-        {
-            bool selected = sel == t, armed = Timeline.ArmedIndices.Contains(tracks.IndexOf(t));
-            // the armed strip (where R records) is tinted red, like its lane in the timeline
-            box.Background = armed && !selected ? Palette.Alpha(Palette.RecColor, 0.08)
-                : selected ? Palette.Raised : hover ? Palette.Alpha(Palette.RaisedColor, 0.6) : Palette.Panel;
-            box.BorderBrush = armed ? Palette.Alpha(Palette.RecColor, 0.5) : selected ? Palette.Alpha(Palette.AccentColor, 0.4) : Palette.Line;
-            // a track with a color shows it along the card's top edge; selected, the accent takes its place
-            top.Background = selected ? Palette.Accent : TrackIcons.ColorOf(t.Track) is { } c ? Palette.Alpha(c, 1) : Brushes.Transparent;
-        }
-        mx.Refresh.Add(Paint);
+        });
 
         bool empty = !t.Track.HasContent;
         bool Silent() => empty || t.Silenced || (tracks.Any(x => x.Track.HasContent && x.Soloed) && !t.Soloed);
-        var name = new TextBlock { Text = t.Track.Name, FontSize = wide ? 12 : 11, FontWeight = wide ? FontWeight.Medium : FontWeight.Normal, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
-        mx.Refresh.Add(() => { name.Text = t.Track.Name; name.Foreground = Silent() ? Palette.Faint : Palette.Fg; ToolTip.SetTip(name, t.Track.Name); });
+        var name = new TextBlock { Text = t.Track.Name, FontSize = 11.5, FontWeight = FontWeight.Medium, TextTrimming = TextTrimming.CharacterEllipsis };
+        mx.Refresh.Add(() => { name.Text = t.Track.Name; name.Foreground = Silent() ? Palette.Faint : Palette.Fg; ToolTip.SetTip(name, Loc.T("mix.name.tip", t.Track.Name)); });
+        name.DoubleTapped += (_, _) => RenameTrackIn(t, name);
         var emptyHint = new TextBlock { Text = Loc.T("mixer.emptyTag"), FontSize = 9, LetterSpacing = 0.8, Foreground = Palette.Faint, IsVisible = empty, VerticalAlignment = VerticalAlignment.Center };
         ToolTip.SetTip(emptyHint, Loc.T("mixer.emptyTag.tip"));
         // armed, the strip shows where it records from in the place of "VACÍA" (native only)
@@ -672,103 +772,139 @@ public partial class MainWindow
             input.IsVisible = armed;
             emptyHint.IsVisible = empty && !armed;
         });
-        double badgeSize = wide ? 28 : 22;
-        var badge = new TrackBadge { Width = badgeSize, Height = badgeSize, VerticalAlignment = VerticalAlignment.Center };
+        var badge = new TrackBadge { Width = 22, Height = 22 };
         badge.Clicked += () => ShowTrackLook(t, badge);
-        mx.Refresh.Add(() => badge.Set(t.Track, tracks.IndexOf(t) + 1, sel == t));
-        double btn = wide ? 28 : 24;
-        var mute = StripToggle("M", Shortcuts.Tip("Mute", "mute"), btn, () => t.Channel.Muted, false, () => EditTrack(t, x => x.Channel.Muted = !x.Channel.Muted, "mute"));
-        var solo = StripToggle("S", Shortcuts.Tip("Solo", "solo"), btn, () => t.Channel.Solo, true, () => EditTrack(t, x => x.Channel.Solo = !x.Channel.Solo, "solo"));
-        var arm = ArmToggle(t, wide ? btn : 18);
+        mx.Refresh.Add(() => badge.Set(t.Track, tracks.IndexOf(t) + 1, sel == t, !AudioOnly));
         var fader = new Fader();
         fader.Changed += v => EditTrack(t, x => x.Channel.Volume = v, "volume");
-        var db = new TextBlock { Classes = { "mono" }, FontSize = wide ? 11 : 10, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center };
+        var db = new TextBlock { Classes = { "mono" }, FontSize = 10, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center };
         mx.Refresh.Add(() => { fader.Value = t.Channel.Volume; db.Text = $"{Fader.Db(t.Channel.Volume)} dB"; });
         var meter = new MixerMeter();
         var faders = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         faders.Children.Add(fader); faders.Children.Add(meter);
 
-        Control head, controls, foot;
-        if (wide)
-        {
-            var h = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto,Auto,Auto"), Height = 28 };
-            h.Children.Add(badge);
-            name.Margin = new Thickness(8, 0); Grid.SetColumn(name, 1); h.Children.Add(name);
-            emptyHint.Margin = new Thickness(0, 0, 8, 0); Grid.SetColumn(emptyHint, 2); h.Children.Add(emptyHint);
-            input.Margin = new Thickness(0, 0, 6, 0); Grid.SetColumn(input, 2); h.Children.Add(input);
-            arm.Margin = new Thickness(0, 0, 4, 0); Grid.SetColumn(arm, 3); h.Children.Add(arm);
-            Grid.SetColumn(mute, 4); h.Children.Add(mute);
-            solo.Margin = new Thickness(4, 0, 0, 0); Grid.SetColumn(solo, 5); h.Children.Add(solo);
-            head = h;
-            // pan stays put with the head and the fader; only the effects scroll under the line (asked by the user)
-            var c = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*") };
-            c.Children.Add(PanRow(t));
-            var line = new Border { Height = 1, Background = Palette.Line, Margin = new Thickness(0, 6, 0, 0) };
-            Grid.SetRow(line, 1); c.Children.Add(line);
-            // the scroll bar takes its own room beside the panels (App.axaml); the margin is the gap to it
-            var fx = new StackPanel { Spacing = 8, Margin = new Thickness(0, 8, 4, 6) };
-            WideFx(fx, t);
-            var scroll = new ScrollViewer { Content = fx, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-            Grid.SetRow(scroll, 2); c.Children.Add(scroll);
-            controls = c;
-            foot = db;
-            mx.Meters[t.Track.Id] = (meter, wideGr ?? (_ => { }));
-            wideGr = null;
-        }
-        else
-        {
-            // the name on one line and "VACÍA" under it, in a head of fixed height: a long name never pushes the fader down
-            var h = new StackPanel { Spacing = 2 };
-            name.HorizontalAlignment = HorizontalAlignment.Center; name.TextAlignment = TextAlignment.Center; name.Margin = new Thickness(0, 2, 0, 0);
-            h.Children.Add(name);
-            // "VACÍA", its input while armed or its transpose under the name (● goes with M and S, over the fader)
-            var under = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, HorizontalAlignment = HorizontalAlignment.Center };
-            under.Children.Add(emptyHint); under.Children.Add(input); under.Children.Add(TransposeTagText(t));
-            h.Children.Add(under);
-            head = h;
-            // like a console's strip (asked by the user): its effects and its sends as lists, the pan as a bar, then M S ●
-            var (list, gr) = CompactChain(t);
-            controls = list;
-            var f = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-            f.Children.Add(badge); f.Children.Add(db);
-            foot = f;
-            mx.Meters[t.Track.Id] = (meter, gr);
-        }
+        // its icon, its name and "VACÍA", its input while armed or its transpose under the name
+        var under = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5 };
+        under.Children.Add(emptyHint); under.Children.Add(input); under.Children.Add(TransposeTagText(t));
+        var head = StripHead(badge, name, under);
+        // like a console's strip (asked by the user): its effects and its sends as lists, the pan as a bar, then M S ●
+        var (controls, gr) = CompactChain(SlotsOf(t), RouterOf(t), () => t.Channel.Pan, v => EditTrack(t, x => x.Channel.Pan = v, "pan"),
+            StripToggle("M", Shortcuts.Tip("Mute", "mute"), 26, () => t.Channel.Muted, false, () => EditTrack(t, x => x.Channel.Muted = !x.Channel.Muted, "mute")),
+            StripToggle("S", Shortcuts.Tip("Solo", "solo"), 26, () => t.Channel.Solo, true, () => EditTrack(t, x => x.Channel.Solo = !x.Channel.Solo, "solo")),
+            ArmToggle(t, 26));
+        mx.Meters[t.Track.Id] = (meter, gr);
         var content = new Grid();
-        content.Children.Add(StripLayout(wide, head, controls, faders, foot));
+        var layout = StripLayout(head, controls, faders, db);
+        NarrowParts(layout, faders, fader, meter, db);
+        content.Children.Add(layout);
         content.Children.Add(top);
         box.Child = content;
         return box;
     }
 
-    /// <summary>Set by <see cref="WideFx"/> for the strip being built: writes the "Comprime" meter.</summary>
-    Action<double>? wideGr;
-
-    /// <summary>The wide strip's pan: label, knob and readout, fixed above the scrolling effects.</summary>
-    Control PanRow(LiveTrack t)
+    /// <summary>
+    /// A track's or a bus's head, in its fixed row (asked by the user: the channel's icon always in sight, its size
+    /// following the strip): the badge beside the name and the line under it, or, under <see cref="HeadNameW"/>, the
+    /// badge alone over that line (the name is in its tooltip and the inspector).
+    /// </summary>
+    Control StripHead(TrackBadge badge, TextBlock name, Control under)
     {
-        var pan = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(4, 0) };
-        pan.Children.Add(new TextBlock { Text = Loc.T("mix.pan.upper"), FontSize = 10, LetterSpacing = 0.8, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center });
-        var panKnob = new Knob(24);
-        panKnob.Changed += v => EditTrack(t, x => x.Channel.Pan = Math.Abs(v) < 0.04 ? 0 : v, "pan");
-        var panText = new TextBlock { Classes = { "mono" }, FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
-        mx.Refresh.Add(() => { panKnob.Value = t.Channel.Pan; panKnob.Tip = Loc.T("tl.tip.pan", FmtPan(t.Channel.Pan)); panText.Text = FmtPan(t.Channel.Pan); });
-        pan.Children.Add(panKnob); pan.Children.Add(panText);
-        return pan;
+        var text = new StackPanel { Spacing = 1, Children = { name, under } };
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Height = StripHeadH };
+        g.Children.Add(badge);
+        g.Children.Add(text);
+        mx.Resize.Add(w =>
+        {
+            badge.Width = badge.Height = Math.Clamp(Math.Round(16 + w * 0.08), 20, 28);
+            bool alone = w < HeadNameW;
+            name.IsVisible = !alone;
+            Grid.SetColumnSpan(badge, alone ? 2 : 1);
+            badge.HorizontalAlignment = alone ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+            badge.VerticalAlignment = alone ? VerticalAlignment.Top : VerticalAlignment.Center;
+            Grid.SetColumn(text, alone ? 0 : 1);
+            Grid.SetColumnSpan(text, alone ? 2 : 1);
+            text.VerticalAlignment = alone ? VerticalAlignment.Bottom : VerticalAlignment.Center;
+            text.Margin = new Thickness(alone ? 0 : 7, 0, 0, 0);
+            under.HorizontalAlignment = alone ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        });
+        return g;
+    }
+
+    /// <summary>A compact strip's parts that give way as it narrows: under <see cref="NarrowW"/> the meter's scale, the
+    /// dB under the fader and some margin; under <see cref="TinyW"/> the fader's cap slims down.</summary>
+    void NarrowParts(Grid layout, StackPanel? faders, Fader? fader, MixerMeter meter, Control db) => mx.Resize.Add(w =>
+    {
+        bool narrow = w < NarrowW, tiny = w < TinyW;
+        meter.Scale = !narrow;
+        db.IsVisible = !narrow;
+        // a folder strip has no fader: only its meter
+        if (fader != null) fader.Slim = tiny;
+        if (faders != null) faders.Spacing = tiny ? 2 : 4;
+        double side = tiny ? 2 : narrow ? 3 : 6;
+        layout.Margin = new Thickness(side, 8, side, 6);
+    });
+
+    /// <summary>
+    /// A strip's card look, the same for every channel (asked by the user: a bus selects like a track): hover, selected
+    /// (raised, accent border and top edge), armed (tinted red), and its color along the top edge. A press selects it.
+    /// Returns the top edge, which the strip lays over its content.
+    /// </summary>
+    Border StripCardLook(Border box, Func<bool> selected, Func<bool> armed, Func<Color?> color, Action select)
+    {
+        var top = new Border { Height = 2, VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false };
+        box.Cursor = new Cursor(StandardCursorType.Hand);
+        bool hover = false;
+        box.PointerEntered += (_, _) => { hover = true; Paint(); };
+        box.PointerExited += (_, _) => { hover = false; Paint(); };
+        box.PointerPressed += (_, e) => { if (e.GetCurrentPoint(box).Properties.IsLeftButtonPressed) select(); };
+        void Paint()
+        {
+            bool on = selected(), rec = armed();
+            // the armed strip (where R records) is tinted red, like its lane in the timeline
+            box.Background = rec && !on ? Palette.Alpha(Palette.RecColor, 0.08)
+                : on ? Palette.Raised : hover ? Palette.Alpha(Palette.RaisedColor, 0.6) : Palette.Panel;
+            box.BorderBrush = rec ? Palette.Alpha(Palette.RecColor, 0.5) : on ? Palette.Alpha(Palette.AccentColor, 0.4) : Palette.Line;
+            // a channel with a color shows it along the card's top edge; selected, the accent takes its place
+            top.Background = on ? Palette.Accent : color() is { } c ? Palette.Alpha(c, 1) : Brushes.Transparent;
+        }
+        mx.Refresh.Add(Paint);
+        return top;
+    }
+
+    /// <summary>A track's name from the mixer: a double click on it asks for the new one (one undo step).</summary>
+    void RenameTrackIn(LiveTrack t, Control anchor)
+    {
+        if (store?.ReadOnly != false || restoring) return;
+        AskName(anchor, null, Loc.T("menu.renameTrack"), t.Track.Name, Loc.T("folder.rename.ok"), n =>
+        {
+            if (n.Trim() is { Length: > 0 } name && name != t.Track.Name) EditTrack(t, x => x.Track.Name = name, "name");
+        });
     }
 
     /// <summary>Height (px) of a row of the compact strip's lists.</summary>
     const double CompactRowH = 18;
+    /// <summary>The compact strip's M S ● at their usual width (px); narrower strips squeeze them down to <see cref="MinToggleW"/>.</summary>
+    const double ToggleMaxW = 26, MinToggleW = 16;
+    /// <summary>
+    /// What a compact row shows by its own width (px): its icon always; its power switch from <see cref="RowPowerW"/>
+    /// (under it a click opens the effect, where it is switched); its name from <see cref="RowNameW"/>; and what the
+    /// effect is set to from <see cref="RowBriefW"/>, in at most <see cref="RowBriefShare"/> of the row. A list's title
+    /// shows from <see cref="RowNameW"/>.
+    /// </summary>
+    const double RowPowerW = 40, RowNameW = 58, RowBriefW = 110, RowBriefShare = 0.42;
+    /// <summary>A strip's head shows its name beside its icon from this width (px); under it, the icon alone (asked by
+    /// the user: the channel's icon always in sight), its size following the strip's.</summary>
+    const double HeadNameW = 84;
 
     /// <summary>
-    /// The compact strip's controls (asked by the user, like a console's strip): the effects as a list (a click opens
-    /// one in its window, <see cref="ShowSlotWindow"/>; dragged, it moves in the chain; its power switch turns it on or off), the
-    /// sends as bars with the bus's name (shown with the mixer's "Envíos"), the pan as a bar from the centre, and M S ●.
-    /// The action writes the first compressor's reduction under its row.
+    /// The compact strip's controls, the same for a track and a bus (asked by the user, like a console's strip): the
+    /// effects as a list (a click opens one in its window, <see cref="ShowSlotWindow"/>; dragged, it moves in the chain;
+    /// its power switch turns it on or off), the sends as bars with the bus's name (shown with the mixer's "Envíos"; a
+    /// bus, which has none, keeps the section empty so its fader stays level), the pan as a bar from the centre, and its
+    /// <paramref name="toggles"/> (M S ● or a bus's M). The action writes the first compressor's reduction under its row.
     /// </summary>
-    (Control Controls, Action<double> Gr) CompactChain(LiveTrack t)
+    (Control Controls, Action<double> Gr) CompactChain(SlotOwner o, Router? sends, Func<double> panOf, Action<double> setPan, params Control[] toggles)
     {
-        var o = SlotsOf(t);
         var g = new Grid();
         void Section(List<(RowDefinition, Control, bool)> rows, Control head, Control list) => ListSection(g, rows, head, list);
 
@@ -783,40 +919,74 @@ public partial class MainWindow
             if (!slot.Known) continue;
             int nth = 1;
             for (int k = 0; k < i; k++) if (slots[k].Type == slot.Type) nth++;
-            string id = slot.Id, name = SlotTitle(SlotName(slot.Type), nth);
-            var row = ListRow(name, () => o.Slot(id)?.On == true, () => SlotEdit(o, id, x => x.On = !x.On, "on"));
+            string id = slot.Id, name = SlotLabel(slots, slot, nth);
+            var row = ListRow(name, slot.Type, () => o.Slot(id)?.On == true, () => SlotEdit(o, id, x => x.On = !x.On, "on"),
+                () => o.Slot(id) is { } s ? SlotBrief(s) : "");
             if (slot.Type == InsertSlot.CompKind && grBar == null)
             {
                 grBar = new Border { Height = 2, Width = 0, Background = Palette.Accent, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom, IsHitTestVisible = false };
                 ((Grid)row.Child!).Children.Add(grBar);
                 Grid.SetColumnSpan(grBar, 2);
             }
-            ToolTip.SetTip(row, Loc.T("mix.list.fx.tip", name));
+            ToolTip.SetTip(row, Loc.T(slot.Type == InsertSlot.VstKind ? "mix.list.vst.tip" : "mix.list.fx.tip", name));
             row.Tag = id;
+            row.PointerReleased += (_, e) =>
+            {
+                if (e.InitialPressMouseButton != MouseButton.Right || store == null) return;
+                e.Handled = true; // not the strip's or the mixer's menu too
+                ShowSlotMenu(o, id, row, row);
+            };
             fxList.Children.Add(drag.Add(row, id, row));
         }
-        drag.Clicked += id => { if (fxList.Children.OfType<Border>().FirstOrDefault(c => c.Tag as string == id) is { } r) ShowSlotWindow(o, id, r); };
+        // a VST3 that is loaded opens its own window at once (asked by the user: no window in between); the others,
+        // and a plugin still loading or that failed, open their panel
+        drag.Clicked += id =>
+        {
+            if (o.Slot(id)?.Type == InsertSlot.VstKind && EffectStateOf(o.OwnerId, id) == EffectState.Ready) OpenEffectWindow(o.OwnerId, id);
+            else if (fxList.Children.OfType<Border>().FirstOrDefault(c => c.Tag as string == id) is { } r) ShowSlotWindow(o, id, r);
+        };
         foreach (var c in fxList.Children.OfType<Border>()) c.Cursor = new Cursor(StandardCursorType.Hand);
-        Section(mx.FxRows, ListHead(Loc.T("mix.list.fx"), Loc.T("mix.slot.add.tip"), b => ShowAddSlotMenu(o, b)), ListBox(fxList, false));
+        var fxBox = ListBox(fxList, false);
+        // the mixer's FX switch puts them all in bypass
+        mx.Refresh.Add(() => fxBox.Opacity = Audio.PlaybackEngine.FxBypass ? 0.4 : 1);
+        Section(mx.FxRows, ListHead(Loc.T("mix.list.fx"), Loc.T("mix.slot.add.tip"), b => ShowAddSlotMenu(o, b)), fxBox);
 
-        var router = RouterOf(t);
-        Section(mx.SendRows, ListHead(Loc.T("mix.list.sends"), Loc.T("send.add.tip"), b => OpenAnchoredMenu(Popup(SendChoices(router), 220), b)), ListBox(CompactSends(router), true));
+        if (sends != null)
+            Section(mx.SendRows, ListHead(Loc.T("mix.list.sends"), Loc.T("send.add.tip"), b => OpenAnchoredMenu(Popup(SendChoices(sends), 220), b)), ListBox(CompactSends(sends), true));
+        else Section(mx.SendRows, new Border(), new Border());
 
         var pan = new HBar { Bipolar = true, ResetTo = 0, Margin = new Thickness(0, 4, 0, 6) };
-        pan.Changed += v => EditTrack(t, x => x.Channel.Pan = v, "pan");
+        pan.Changed += setPan;
         mx.Refresh.Add(() =>
         {
-            pan.Value = t.Channel.Pan;
-            pan.Readout = FmtPan(t.Channel.Pan);
-            ToolTip.SetTip(pan, Loc.T("tl.tip.pan", FmtPan(t.Channel.Pan)));
+            double v = panOf();
+            pan.Value = v;
+            pan.Readout = FmtPan(v);
+            ToolTip.SetTip(pan, Loc.T("tl.tip.pan", FmtPan(v)));
         });
         Grid.SetRow(pan, g.RowDefinitions.Count); g.RowDefinitions.Add(new RowDefinition(PanRowH, GridUnitType.Pixel)); g.Children.Add(pan);
 
-        var toggles = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top };
-        toggles.Children.Add(StripToggle("M", Shortcuts.Tip("Mute", "mute"), 26, () => t.Channel.Muted, false, () => EditTrack(t, x => x.Channel.Muted = !x.Channel.Muted, "mute")));
-        toggles.Children.Add(StripToggle("S", Shortcuts.Tip("Solo", "solo"), 26, () => t.Channel.Solo, true, () => EditTrack(t, x => x.Channel.Solo = !x.Channel.Solo, "solo")));
-        toggles.Children.Add(ArmToggle(t, 26));
-        Grid.SetRow(toggles, g.RowDefinitions.Count); g.RowDefinitions.Add(new RowDefinition(TogglesRowH, GridUnitType.Pixel)); g.Children.Add(toggles);
+        // M S ● share the width (each at most its usual size), so they still fit a very narrow strip
+        var buttons = new Grid { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Top, MaxWidth = toggles.Length * (ToggleMaxW + 2) };
+        foreach (var toggle in toggles)
+        {
+            toggle.Width = double.NaN;
+            toggle.MaxWidth = ToggleMaxW;
+            toggle.HorizontalAlignment = HorizontalAlignment.Stretch;
+            toggle.Margin = new Thickness(1, 0);
+            Grid.SetColumn(toggle, buttons.ColumnDefinitions.Count);
+            buttons.ColumnDefinitions.Add(new ColumnDefinition(1, GridUnitType.Star));
+            buttons.Children.Add(toggle);
+        }
+        // too narrow for three, ● gives way (it is also in the track's header in the timeline)
+        if (toggles.Length > 2)
+            buttons.SizeChanged += (_, e) =>
+            {
+                bool fits = e.NewSize.Width >= toggles.Length * MinToggleW;
+                toggles[^1].IsVisible = fits;
+                buttons.ColumnDefinitions[^1].Width = fits ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+            };
+        Grid.SetRow(buttons, g.RowDefinitions.Count); g.RowDefinitions.Add(new RowDefinition(TogglesRowH, GridUnitType.Pixel)); g.Children.Add(buttons);
         var meterBar = grBar;
         return (g, gr => { if (meterBar != null && meterBar.Parent is Control p) meterBar.Width = p.Bounds.Width * Math.Clamp(-gr / 24, 0, 1); });
     }
@@ -847,6 +1017,15 @@ public partial class MainWindow
             bar.Changed += v => router.Edit((p, x) => ProjectBuses.SetSend(p, x, id, v, v > 0 ? true : null) != null, $"send.{id}.level");
             var power = ListPower(() => S().On && S().Level > 0, () => router.Edit((p, x) => ProjectBuses.SetSend(p, x, id, on: !S().On) != null, $"send.{id}.on"));
             var line = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Height = CompactRowH };
+            line.SizeChanged += (_, e) => power.IsVisible = e.NewSize.Width >= RowPowerW;
+            // a right click: the send's menu (asked by the user, like an effect's)
+            line.Background = Brushes.Transparent;
+            line.PointerReleased += (_, e) =>
+            {
+                if (e.InitialPressMouseButton != MouseButton.Right || store == null) return;
+                e.Handled = true;
+                ShowSendMenu(router, id, line);
+            };
             line.Children.Add(power);
             Grid.SetColumn(bar, 1); line.Children.Add(bar);
             mx.Refresh.Add(() =>
@@ -935,24 +1114,22 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// Sets every strip's controls row and the compact lists' sections to the shown sections and their heights, in both
-    /// layouts: only row heights change, nothing is rebuilt (it runs on every move of a grip).
+    /// Sets every strip's controls row and the lists' sections to the shown sections and their heights: only row
+    /// heights change, nothing is rebuilt (it runs on every move of a grip).
     /// </summary>
     void ApplyMixerHeights()
     {
-        foreach (var layout in new[] { compactMixer, wideMixer })
+        var layout = mixerLayout;
+        foreach (var r in layout.TopRows) r.Height = new GridLength(StripTopH, GridUnitType.Pixel);
+        foreach (var (row, what, head) in layout.FxRows)
         {
-            foreach (var r in layout.TopRows) r.Height = new GridLength(StripTopH, GridUnitType.Pixel);
-            foreach (var (row, what, head) in layout.FxRows)
-            {
-                row.Height = new GridLength(mixerFx ? head ? ListHeadH : mixerFxH : 0, GridUnitType.Pixel);
-                what.IsVisible = mixerFx;
-            }
-            foreach (var (row, what, head) in layout.SendRows)
-            {
-                row.Height = new GridLength(SendsRow ? head ? ListHeadH : mixerSendsH : 0, GridUnitType.Pixel);
-                what.IsVisible = SendsRow;
-            }
+            row.Height = new GridLength(mixerFx ? head ? ListHeadH : mixerFxH : 0, GridUnitType.Pixel);
+            what.IsVisible = mixerFx;
+        }
+        foreach (var (row, what, head) in layout.SendRows)
+        {
+            row.Height = new GridLength(SendsRow ? head ? ListHeadH : mixerSendsH : 0, GridUnitType.Pixel);
+            what.IsVisible = SendsRow;
         }
     }
 
@@ -971,8 +1148,11 @@ public partial class MainWindow
     Grid ListHead(string title, string addTip, Action<Button> add)
     {
         var g = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Height = 20 };
-        g.Children.Add(new TextBlock { Text = title.ToUpperInvariant(), FontSize = 9, LetterSpacing = 0.8, FontWeight = FontWeight.SemiBold, Foreground = Palette.Faint,
-            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 0, 0) });
+        var text = new TextBlock { Text = title.ToUpperInvariant(), FontSize = 9, LetterSpacing = 0.8, FontWeight = FontWeight.SemiBold, Foreground = Palette.Faint,
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis };
+        ToolTip.SetTip(text, title);
+        g.Children.Add(text);
+        g.SizeChanged += (_, e) => text.IsVisible = e.NewSize.Width >= RowNameW;
         var plus = SlotHeadButton("\ue710", addTip);
         plus.Width = plus.Height = plus.MinHeight = 18;
         plus.Click += (_, _) => { if (!PressClosedMenuOf(plus)) add(plus); };
@@ -981,16 +1161,16 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// The power switch of a compact list's row (asked by the user: the ⏻ of a real switch, the same glyph as the wide
-    /// strip's ON/OFF): accent when on, grey when off.
+    /// The power switch of a list's row (asked by the user: the ⏻ of a real switch, the same glyph as an effect panel's
+    /// ON/OFF): accent when on, grey when off.
     /// </summary>
-    Button ListPower(Func<bool> on, Action toggle)
+    Button ListPower(Func<bool> on, Action toggle, List<Action>? refresh = null)
     {
         var glyph = new TextBlock { Classes = { "icon" }, Text = "", FontSize = 10, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
         var b = new Button { Classes = { "ghost", "slothead" }, Width = 16, Height = 16, MinHeight = 16, Padding = new Thickness(0), Focusable = false, Margin = new Thickness(0, 0, 3, 0),
             Cursor = new Cursor(StandardCursorType.Hand), Content = glyph, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
         b.Click += (_, _) => toggle();
-        mx.Refresh.Add(() =>
+        (refresh ?? mx.Refresh).Add(() =>
         {
             bool lit = on();
             glyph.Foreground = lit ? Palette.Accent : Palette.Faint;
@@ -1000,32 +1180,70 @@ public partial class MainWindow
     }
 
     /// <summary>A row of the compact effects list: its power switch and its name, on a block that lights under the pointer.</summary>
-    Border ListRow(string name, Func<bool> on, Action toggle)
+    Border ListRow(string name, string type, Func<bool> on, Action toggle, Func<string> brief)
     {
+        // its icon stays at any width (asked by the user); the name and what it is set to come in as the row widens
+        var icon = FxIcon.Create(type, 11);
+        icon.VerticalAlignment = VerticalAlignment.Center;
+        icon.Margin = new Thickness(0, 0, 5, 0);
         var text = new TextBlock { Text = name, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
-        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
-        g.Children.Add(ListPower(on, toggle));
-        Grid.SetColumn(text, 1); g.Children.Add(text);
-        var row = new Border { Height = CompactRowH, CornerRadius = new CornerRadius(3), Padding = new Thickness(1, 0, 4, 0), Child = g, Background = Palette.Raised, ClipToBounds = true };
+        var detail = new TextBlock { FontSize = 10.5, Foreground = Palette.Faint, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 0, 0), IsVisible = false };
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto") };
+        var power = ListPower(on, toggle);
+        g.Children.Add(power);
+        Grid.SetColumn(icon, 1); g.Children.Add(icon);
+        Grid.SetColumn(text, 2); g.Children.Add(text);
+        Grid.SetColumn(detail, 3); g.Children.Add(detail);
+        var row = new Border { Height = CompactRowH, CornerRadius = new CornerRadius(3), Padding = new Thickness(1, 0, 3, 0), Child = g, Background = Palette.Raised, ClipToBounds = true };
         row.PointerEntered += (_, _) => row.Background = Palette.Hover;
         row.PointerExited += (_, _) => row.Background = Palette.Raised;
-        mx.Refresh.Add(() => text.Foreground = on() ? Palette.Fg : Palette.Faint);
+        row.SizeChanged += (_, e) =>
+        {
+            double w = e.NewSize.Width;
+            power.IsVisible = w >= RowPowerW;
+            text.IsVisible = w >= RowNameW;
+            detail.IsVisible = w >= RowBriefW;
+            detail.MaxWidth = Math.Floor(w * RowBriefShare);
+            // alone, the icon sits in the middle of the row
+            bool alone = !power.IsVisible;
+            Grid.SetColumnSpan(icon, alone ? 3 : 1);
+            icon.HorizontalAlignment = alone ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+            icon.Margin = new Thickness(0, 0, alone ? 0 : 5, 0);
+        };
+        mx.Refresh.Add(() =>
+        {
+            bool lit = on();
+            text.Foreground = lit ? Palette.Fg : Palette.Faint;
+            FxIcon.SetColor(icon, lit ? Palette.Accent : Palette.Faint);
+            detail.Text = brief();
+        });
         return row;
     }
 
-    void WideFx(StackPanel fx, LiveTrack t)
+    /// <summary>What a slot is set to, in a few words (a list row's detail).</summary>
+    string SlotBrief(InsertSlot s)
     {
-        // the mixer header's "Efectos" shows or hides them
-        var slots = new StackPanel { Spacing = fx.Spacing };
-        SlotPanels(slots, SlotsOf(t));
-        mx.Refresh.Add(() => slots.IsVisible = mixerFx);
-        fx.Children.Add(slots);
-
-        // where it goes (a track in a folder goes through the folder) and its sends, one per bus
-        var router = RouterOf(t);
-        if (t.Track.FolderId == null) fx.Children.Add(OutputRow(router));
-        SendPanels(fx, router);
-        TransposePanel(fx, t);
+        switch (s.Type)
+        {
+            case InsertSlot.SatKind when s.Sat is { } x:
+                return $"{Loc.T(x.Mode == "tape" ? "insp.sat.tape" : "insp.sat.tube")} · {x.Amount * 100:0}%";
+            case InsertSlot.CompKind when s.Comp is { } c:
+                return PresetLabel(c.Preset);
+            case InsertSlot.GateKind when s.Gate is { } x:
+                return $"{Loc.T("gate.mode." + x.Mode)} · {x.Threshold:0} dB";
+            case InsertSlot.ReverbKind when s.Reverb is { } r:
+                string p = ReverbBus.PresetOf(ToParams(r));
+                return $"{(p == "" ? Loc.T("mix.custom.f") : BusPresetName("reverb", p))} · {r.Decay:0.0}s";
+            case InsertSlot.DelayKind when s.Delay is { } d:
+                string time = !d.Sync ? $"{Math.Round(d.TimeMs):0} ms"
+                    : Array.Find(DelayBus.Divisions, x => x.Id == d.Division) is { } div ? Loc.Or("mix.div." + div.Id, div.Label) : d.Division;
+                return $"{time} · {d.Feedback * 100:0}%";
+            case InsertSlot.EqKind when s.Eq is { } e:
+                return EqEditor.PresetIndex(e) is var i and >= 0 ? EqPresetName(TrackEq.Presets[i]) : Loc.T("mix.custom.m");
+            default:
+                return "";
+        }
     }
 
     /// <summary>
@@ -1034,6 +1252,8 @@ public partial class MainWindow
     /// </summary>
     sealed class SlotOwner
     {
+        /// <summary>The track's or the bus's id: whose VST3 effects these are (<see cref="LiveVst"/>).</summary>
+        public required string OwnerId { get; init; }
         /// <summary>The slots as they are now (the channel or the bus object changes with every undo).</summary>
         public required Func<List<InsertSlot>> Slots { get; init; }
         /// <summary>An edit of the slots: one undo step per key, heard at once, saved.</summary>
@@ -1050,47 +1270,25 @@ public partial class MainWindow
     /// <summary>A track's slots: its channel's, the compressor measured against its take.</summary>
     SlotOwner SlotsOf(LiveTrack t) => new()
     {
+        OwnerId = t.Track.Id,
         Slots = () => t.Channel.Slots,
         Edit = (change, key) => EditTrack(t, x => change(x.Channel.Slots), key),
         Recalculate = c => { if (t.Envelope != null) RecalculateInspectorComp(t, c); },
     };
 
-    /// <summary>The insert slots' panels, in the order the sound goes through them, and "+ Efecto" under them.</summary>
-    void SlotPanels(StackPanel fx, SlotOwner o)
-    {
-        // a repeated kind is numbered (EQ 2) and the reduction meter goes on the first compressor, which shows the
-        // whole chain's
-        var slots = o.Slots();
-        bool grShown = false;
-        var drag = new SlotDrag(fx.Spacing);
-        drag.Moved += (id, anchor, after) => SlotsEdit(o, x => ChannelInserts.MoveNextTo(x, id, anchor, after), "move");
-        drag.Clicked += id => ToggleSlotFolded(o, id);
-        for (int i = 0; i < slots.Count; i++)
-        {
-            var slot = slots[i];
-            if (!slot.Known) continue;
-            int nth = 1;
-            for (int k = 0; k < i; k++) if (slots[k].Type == slot.Type) nth++;
-            bool gr = slot.Type == InsertSlot.CompKind && !grShown;
-            grShown |= gr;
-            SlotPanel(fx, o, slot, nth, gr, drag);
-        }
-        fx.Children.Add(AddSlotButton(o));
-    }
-
-    /// <summary>One slot's panel by its kind; <paramref name="gr"/> = it carries the chain's reduction meter. Without
-    /// <paramref name="drag"/> it is a panel on its own (<see cref="ShowSlotWindow"/>): never folded.</summary>
-    void SlotPanel(StackPanel fx, SlotOwner o, InsertSlot slot, int nth, bool gr, SlotDrag? drag)
+    /// <summary>One slot's panel by its kind, for its window (<see cref="ShowSlotWindow"/>).</summary>
+    void SlotPanel(StackPanel fx, SlotOwner o, InsertSlot slot, int nth)
     {
         var menu = SlotMenuButton(o, slot.Id);
         switch (slot.Type)
         {
-            case InsertSlot.SatKind: SatPanel(fx, o, slot.Id, nth, menu, drag); break;
-            case InsertSlot.CompKind: CompPanel(fx, o, slot.Id, nth, menu, gr, drag); break;
-            case InsertSlot.ReverbKind: ReverbSlotPanel(fx, o, slot.Id, nth, menu, drag); break;
-            case InsertSlot.DelayKind: DelaySlotPanel(fx, o, slot.Id, nth, menu, drag); break;
-            case InsertSlot.GateKind: GatePanel(fx, o, slot.Id, nth, menu, drag); break;
-            default: EqPanel(fx, o, slot.Id, nth, menu, drag); break;
+            case InsertSlot.SatKind: SatPanel(fx, o, slot.Id, nth, menu); break;
+            case InsertSlot.CompKind: CompPanel(fx, o, slot.Id, nth, menu); break;
+            case InsertSlot.ReverbKind: ReverbSlotPanel(fx, o, slot.Id, nth, menu); break;
+            case InsertSlot.DelayKind: DelaySlotPanel(fx, o, slot.Id, nth, menu); break;
+            case InsertSlot.GateKind: GatePanel(fx, o, slot.Id, nth, menu); break;
+            case InsertSlot.VstKind: VstPanel(fx, o, slot.Id, menu); break;
+            default: EqPanel(fx, o, slot.Id, nth, menu); break;
         }
     }
 
@@ -1128,7 +1326,7 @@ public partial class MainWindow
         return Task.CompletedTask;
     }
 
-    /// <summary>An edit of one compressor slot of the wide strip, found by id; its preset is measured again unless it is manual.</summary>
+    /// <summary>An edit of one compressor slot, found by id; its preset is measured again unless it is manual.</summary>
     void StripComp(SlotOwner o, string id, Action<CompSettings> edit, string key) => o.Edit(slots =>
     {
         if (slots.Find(s => s.Id == id)?.Comp is not { } c) return;
@@ -1138,12 +1336,11 @@ public partial class MainWindow
 
     int slotEdits;
 
-    void SatPanel(StackPanel fx, SlotOwner o, string id, int nth, Control menu, SlotDrag? drag)
+    void SatPanel(StackPanel fx, SlotOwner o, string id, int nth, Control menu)
     {
         SatSettings S() => o.Slot(id)?.Sat ?? GoneSat;
         var sat = FxPanel(fx, SlotTitle("Sat", nth), FxIcon.Sat, () => S().On, () => SlotEdit(o, id, s => s.On = !s.On, "sat.on"),
-            on => Loc.T(on ? "insp.power.sat.off" : "insp.power.sat.on"), menu, drag, id, o,
-            () => $"{Loc.T(S().Mode == "tape" ? "insp.sat.tape" : "insp.sat.tube")} · {S().Amount * 100:0}%");
+            on => Loc.T(on ? "insp.power.sat.off" : "insp.power.sat.on"), menu);
         var satKnob = FxKnob(sat, "vida", 0.3, () => S().Amount, v => SlotEdit(o, id, s => { s.Sat!.Amount = v; s.Sat.On = true; }, "sat.amount"),
             () => Loc.T("mix.sat.knob.tip"));
         var satSide = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
@@ -1165,12 +1362,11 @@ public partial class MainWindow
         sat.Body.Children.Add(Row(satKnob, satSide));
     }
 
-    void GatePanel(StackPanel fx, SlotOwner o, string id, int nth, Control menu, SlotDrag? drag)
+    void GatePanel(StackPanel fx, SlotOwner o, string id, int nth, Control menu)
     {
         GateSettings G() => o.Slot(id)?.Gate ?? GoneGate;
         var gate = FxPanel(fx, SlotTitle(Loc.T("fx.gate"), nth), FxIcon.Gate, () => G().On, () => SlotEdit(o, id, s => s.On = !s.On, "gate.on"),
-            on => Loc.T(on ? "insp.power.gate.off" : "insp.power.gate.on"), menu, drag, id, o,
-            () => $"{Loc.T("gate.mode." + G().Mode)} · {G().Threshold:0} dB");
+            on => Loc.T(on ? "insp.power.gate.off" : "insp.power.gate.on"), menu);
         var knob = FxKnob(gate, Loc.T("mix.gate.knob"), GateKnob(GateParams.DefaultThresholdDb), () => GateKnob(G().Threshold),
             v => SlotEdit(o, id, s => { s.Gate!.Threshold = GateDb(v); s.Gate.On = true; }, "gate.threshold"), () => Loc.T("mix.gate.knob.tip"));
         var side = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
@@ -1189,7 +1385,7 @@ public partial class MainWindow
         gate.Body.Children.Add(Row(knob, side));
     }
 
-    void CompPanel(StackPanel fx, SlotOwner o, string id, int nth, Control menu, bool meter, SlotDrag? drag)
+    void CompPanel(StackPanel fx, SlotOwner o, string id, int nth, Control menu)
     {
         CompSettings C() => o.Slot(id)?.Comp ?? GoneComp;
         var lim = new Button { Content = "LIM", Classes = { "chip", "mono" }, FontSize = 10, FontWeight = FontWeight.Bold, Height = 24, MinHeight = 24, Padding = new Thickness(5, 0), CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1) };
@@ -1205,7 +1401,7 @@ public partial class MainWindow
         });
         var head = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Children = { lim, menu } };
         var comp = FxPanel(fx, SlotTitle("Comp", nth), FxIcon.Comp, () => C().On, () => StripComp(o, id, c => c.On = !c.On, "on"),
-            on => Loc.T(on ? "insp.power.comp.off" : "insp.power.comp.on"), head, drag, id, o, () => PresetLabel(C().Preset));
+            on => Loc.T(on ? "insp.power.comp.off" : "insp.power.comp.on"), head);
         var compKnob = FxKnob(comp, "cantidad", 0.5, () => C().Amount, v => StripComp(o, id, c => { c.Amount = v; c.On = true; }, "amount"),
             () => C().Preset == "custom" ? Loc.T("mix.comp.knob.manual") : Loc.T("mix.comp.knob.tip"));
         mx.Refresh.Add(() => { bool custom = C().Preset == "custom"; compKnob.Opacity = custom ? 0.4 : 1; compKnob.IsHitTestVisible = !custom; });
@@ -1232,38 +1428,13 @@ public partial class MainWindow
         });
         compSide.Children.Add(preset); compSide.Children.Add(compLabel);
         comp.Body.Children.Add(Row(compKnob, compSide));
-        if (!meter) return;
-        // gain reduction: 0..12 dB with ticks every 3 dB; label and readout on one line, the bar under them, so it fits any width
-        var grRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), RowDefinitions = new RowDefinitions("Auto,Auto"), Margin = new Thickness(0, 8, 0, 0) };
-        ToolTip.SetTip(grRow, Loc.T("mix.gr.tip"));
-        grRow.Children.Add(new TextBlock { Text = Loc.T("mix.gr"), FontSize = 9, LetterSpacing = 0.8, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 4) });
-        var grFill = new Border { Background = Palette.Accent, HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
-        var grTrack = new Grid { Height = 10, ClipToBounds = true, VerticalAlignment = VerticalAlignment.Center };
-        grTrack.Children.Add(new Border { Background = Palette.Line, CornerRadius = new CornerRadius(2) });
-        grTrack.Children.Add(grFill);
-        foreach (double x in new[] { 0.25, 0.5, 0.75 })
-        {
-            var tick = new Border { Width = 1, Background = Palette.Alpha(Palette.AppColor, 0.7), HorizontalAlignment = HorizontalAlignment.Left };
-            grTrack.SizeChanged += (_, e) => tick.Margin = new Thickness(Math.Round(e.NewSize.Width * x), 0, 0, 0);
-            grTrack.Children.Add(tick);
-        }
-        Grid.SetRow(grTrack, 1); Grid.SetColumnSpan(grTrack, 2); grRow.Children.Add(grTrack);
-        var grText = new TextBlock { Classes = { "mono" }, FontSize = 10, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 4) };
-        Grid.SetColumn(grText, 1); grRow.Children.Add(grText);
-        comp.Body.Children.Add(grRow);
-        wideGr = gr =>
-        {
-            grFill.Width = grTrack.Bounds.Width * Math.Clamp(-gr / 12, 0, 1);
-            grText.Text = o.Slots().Any(s => s.Type == InsertSlot.CompKind && s.On) ? $"{(gr > -0.05 ? 0 : gr):0.0} dB" : "—";
-        };
     }
 
-    void EqPanel(StackPanel fx, SlotOwner o, string id, int nth, Control menu, SlotDrag? drag)
+    void EqPanel(StackPanel fx, SlotOwner o, string id, int nth, Control menu)
     {
         EqSettings E() => o.Slot(id)?.Eq ?? GoneEq;
         var eq = FxPanel(fx, SlotTitle("EQ", nth), FxIcon.Eq, () => E().On, () => SlotEdit(o, id, s => s.On = !s.On, "eq.on"),
-            on => Loc.T(on ? "insp.power.eq.off" : "insp.power.eq.on"), menu, drag, id, o,
-            () => EqEditor.PresetIndex(E()) is var p and >= 0 ? EqPresetName(TrackEq.Presets[p]) : Loc.T("mix.custom.m"));
+            on => Loc.T(on ? "insp.power.eq.off" : "insp.power.eq.on"), menu);
         // a summary; a click opens its bands (the first EQ is also the one in the Canal tab)
         var graph = new EqGraph(interactive: false, height: 54) { Cursor = new Cursor(StandardCursorType.Hand) };
         ToolTip.SetTip(graph, Loc.T("mix.eq.open.tip"));
@@ -1308,7 +1479,7 @@ public partial class MainWindow
         flyout.ShowAt(anchor);
     }
 
-    /// <summary>The ⋯ in a slot's title bar: move it earlier or later in the chain, repeat it, remove it.</summary>
+    /// <summary>The ⋯ in a slot's title bar: its menu (<see cref="ShowSlotMenu"/>).</summary>
     Button SlotMenuButton(LiveTrack t, string id) => SlotMenuButton(SlotsOf(t), id);
 
     Button SlotMenuButton(SlotOwner o, string id)
@@ -1318,24 +1489,45 @@ public partial class MainWindow
         ToolTip.SetTip(b, Loc.T("mix.slot.menu.tip"));
         b.Click += (_, _) =>
         {
-            if (PressClosedMenuOf(b)) return;
-            var slots = o.Slots();
-            int i = slots.FindIndex(s => s.Id == id);
-            if (i < 0) return;
-            OpenAnchoredMenu(Popup(
-            [
-                MenuAction(Loc.T("mix.slot.up"), () => SlotsEdit(o, x => ChannelInserts.Move(x, id, -1), "move"), enabled: i > 0, icon: "",
-                    tip: Loc.T("mix.slot.up.tip")),
-                MenuAction(Loc.T("mix.slot.down"), () => SlotsEdit(o, x => ChannelInserts.Move(x, id, 1), "move"), enabled: i < slots.Count - 1, icon: "",
-                    tip: Loc.T("mix.slot.down.tip")),
-                MenuAction(Loc.T("mix.slot.duplicate"), () => SlotsEdit(o, x => ChannelInserts.Duplicate(x, id), "duplicate"), icon: "",
-                    tip: Loc.T("mix.slot.duplicate.tip")),
-                new Separator(),
-                MenuAction(Loc.T("mix.slot.remove"), () => SlotsEdit(o, x => ChannelInserts.Remove(x, id), "remove"), danger: true, icon: "",
-                    tip: Loc.T("mix.slot.remove.tip")),
-            ], 220), b);
+            if (!PressClosedMenuOf(b)) ShowSlotMenu(o, id, b, null);
         };
         return b;
+    }
+
+    /// <summary>
+    /// A slot's actions, the same from its ⋯ and from a right click on it in the mixer's list or the inspector (asked by
+    /// the user): open it (a loaded VST3, its own window; another effect from the mixer, its panel in a window over
+    /// <paramref name="panelAnchor"/>), turn it on or off, turn the rest of the chain off, move it, repeat it, remove it.
+    /// </summary>
+    void ShowSlotMenu(SlotOwner o, string id, Control anchor, Control? panelAnchor)
+    {
+        var slots = o.Slots();
+        int i = slots.FindIndex(s => s.Id == id);
+        if (i < 0) return;
+        var slot = slots[i];
+        bool enabled = store is { ReadOnly: false } && !restoring;
+        var items = new List<object>();
+        if (slot.Type == InsertSlot.VstKind)
+            items.Add(MenuAction(Loc.T("mix.slot.openPlugin"), () => { OpenEffectWindow(o.OwnerId, id); return Task.CompletedTask; },
+                enabled: EffectStateOf(o.OwnerId, id) == EffectState.Ready, icon: ""));
+        else if (panelAnchor != null)
+            items.Add(MenuAction(Loc.T("mix.slot.open"), () => { ShowSlotWindow(o, id, panelAnchor); return Task.CompletedTask; }, icon: ""));
+        items.Add(MenuAction(Loc.T(slot.On ? "mix.slot.turnOff" : "mix.slot.turnOn"), () => { SlotEdit(o, id, s => s.On = !s.On, "on"); return Task.CompletedTask; },
+            enabled: enabled, icon: ""));
+        // to hear it alone in the chain: one undo step, like any edit of the list
+        items.Add(MenuAction(Loc.T("mix.slot.others"), () => SlotsEdit(o, x => { foreach (var s in x) if (s.Id != id && s.Known) s.On = false; }, "others"),
+            enabled: enabled && slots.Exists(s => s.Id != id && s.Known && s.On), icon: "", tip: Loc.T("mix.slot.others.tip")));
+        items.Add(new Separator());
+        items.Add(MenuAction(Loc.T("mix.slot.up"), () => SlotsEdit(o, x => ChannelInserts.Move(x, id, -1), "move"), enabled: enabled && i > 0, icon: "",
+            tip: Loc.T("mix.slot.up.tip")));
+        items.Add(MenuAction(Loc.T("mix.slot.down"), () => SlotsEdit(o, x => ChannelInserts.Move(x, id, 1), "move"), enabled: enabled && i < slots.Count - 1, icon: "",
+            tip: Loc.T("mix.slot.down.tip")));
+        items.Add(MenuAction(Loc.T("mix.slot.duplicate"), () => SlotsEdit(o, x => ChannelInserts.Duplicate(x, id), "duplicate"), enabled: enabled, icon: "",
+            tip: Loc.T("mix.slot.duplicate.tip")));
+        items.Add(new Separator());
+        items.Add(MenuAction(Loc.T("mix.slot.remove"), () => SlotsEdit(o, x => ChannelInserts.Remove(x, id), "remove"), enabled: enabled, danger: true, icon: "",
+            tip: Loc.T("mix.slot.remove.tip")));
+        OpenAnchoredMenu(Popup(items, 220), anchor);
     }
 
     /// <summary>"+ Efecto" under the slots: adds one at the end of the chain, already on.</summary>
@@ -1353,9 +1545,15 @@ public partial class MainWindow
         return b;
     }
 
-    /// <summary>The kinds of effect a chain can take: one more at its end, already on.</summary>
+    /// <summary>
+    /// The kinds of effect a chain can take: one more at its end, already on. Two entries that open as the pointer goes
+    /// over them (asked by the user: all at once the list was too long), NATIVOS (the built-in ones) and VST3 (the ones
+    /// found, by maker when there are many), then look for plugins again and manage them.
+    /// </summary>
     void ShowAddSlotMenu(SlotOwner o, Control b)
     {
+        // the first time, it looks for plugins on its own
+        EnsurePlugins();
         MenuItem Kind(string kind, string name, string hint)
         {
             var icon = FxIcon.Create(kind, 12);
@@ -1383,26 +1581,23 @@ public partial class MainWindow
         kinds.Add(Kind(InsertSlot.CompKind, Loc.T("insp.section.comp"), Loc.T("mix.slot.add.comp")));
         kinds.Add(Kind(InsertSlot.EqKind, "EQ", Loc.T("mix.slot.add.eq")));
         kinds.Add(Kind(InsertSlot.GateKind, Loc.T("fx.gate"), Loc.T("mix.slot.add.gate")));
-        OpenAnchoredMenu(Popup(kinds, 200), b);
+        var items = new List<object> { AddSlotGroup(Loc.T("vst.fx.group.native"), FxIcon.Sat, kinds) };
+        items.AddRange(VstEffectItems(o));
+        OpenAnchoredMenu(Popup(items, 220), b);
     }
 
     /// <summary>
     /// Port of FxPanel: power, icon and name over the effect's controls, which grey out while it is off. Narrower than
-    /// <see cref="FxNarrowW"/> the power button keeps only its glyph and the icon goes, so the name fits. A slot in a
-    /// chain (with its <paramref name="owner"/>) folds to its title row (asked by the user): a click on the bar or its
-    /// arrow folds or unfolds it, and folded it shows a <paramref name="summary"/> and a button that opens the whole
-    /// panel in a window of its own (<see cref="ShowSlotWindow"/>).
+    /// <see cref="FxNarrowW"/> the power button keeps only its glyph and the icon goes, so the name fits.
     /// </summary>
-    (Border Box, StackPanel Body) FxPanel(StackPanel host, string title, string icon, Func<bool> on, Action? toggle,Func<bool, string> tip, Control? extra = null,
-        SlotDrag? drag = null, string? slotId = null, SlotOwner? owner = null, Func<string>? summary = null)
+    (Border Box, StackPanel Body) FxPanel(StackPanel host, string title, string icon, Func<bool> on, Action? toggle, Func<bool, string> tip, Control? extra = null)
     {
         var glyph = new TextBlock { Classes = { "icon" }, Text = "", FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
         var state = new TextBlock { FontSize = 10, FontWeight = FontWeight.Bold, VerticalAlignment = VerticalAlignment.Center };
-        // a hand over it, not the bar's drag cursor, and off it lights up in the accent under the pointer (asked by the
-        // user, like the row's other buttons; class slotpower in App.axaml)
+        // a hand over it, and off it lights up in the accent under the pointer (asked by the user, like the row's other
+        // buttons; class slotpower in App.axaml)
         var power = new Button { Classes = { "chip", "slotpower" }, Height = 24, MinHeight = 24, Padding = new Thickness(6, 0), CornerRadius = new CornerRadius(4),
             Cursor = new Cursor(StandardCursorType.Hand), Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Children = { glyph, state } } };
-        // no toggle: an effect that is on by its amount alone (Transponer); the panel still lights up with it
         power.Click += (_, _) => toggle?.Invoke();
         bool hot = false;
         void PaintPower() => glyph.Foreground = state.Foreground = on() ? Palette.App : hot ? Palette.Accent : Palette.Faint;
@@ -1413,48 +1608,24 @@ public partial class MainWindow
         iconText.VerticalAlignment = VerticalAlignment.Center; iconText.Margin = new Thickness(toggle == null ? 0 : 8, 0, 0, 0);
         var name = new TextBlock { Text = title.ToUpperInvariant(), FontSize = 10, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.8, VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(6, 0, 4, 0) };
-        var brief = new TextBlock { FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, IsVisible = false };
-        // the name takes the free width (and trims); folded, the summary does and the name keeps its own size
-        var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto,Auto,Auto,Auto"), Height = 32, Margin = new Thickness(6, 0) };
+        var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto"), Height = 32, Margin = new Thickness(6, 0) };
         head.Children.Add(power);
         Grid.SetColumn(iconText, 1); head.Children.Add(iconText);
         Grid.SetColumn(name, 2); head.Children.Add(name);
-        Grid.SetColumn(brief, 3); head.Children.Add(brief);
-        if (extra != null) { extra.VerticalAlignment = VerticalAlignment.Center; Grid.SetColumn(extra, 4); head.Children.Add(extra); }
+        if (extra != null) { extra.VerticalAlignment = VerticalAlignment.Center; Grid.SetColumn(extra, 3); head.Children.Add(extra); }
         var body = new StackPanel { Margin = new Thickness(8) };
         var stack = new StackPanel();
         var bar = new Border { Child = head, BorderThickness = new Thickness(0, 0, 0, 1), CornerRadius = new CornerRadius(5, 5, 0, 0) };
         stack.Children.Add(bar);
         stack.Children.Add(body);
         var box = new Border { CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1), Child = stack, ClipToBounds = true };
-        bool foldable = drag != null && slotId != null && owner != null;
-        Button? window = null, fold = null;
-        if (foldable)
+        box.SizeChanged += (_, e) =>
         {
-            window = SlotHeadButton("", Loc.T("mix.slot.window.tip"));
-            window.Click += (_, _) => ShowSlotWindow(owner!, slotId!, box);
-            Grid.SetColumn(window, 5); head.Children.Add(window);
-            fold = SlotHeadButton("", "");
-            fold.Click += (_, _) => ToggleSlotFolded(owner!, slotId!);
-            Grid.SetColumn(fold, 6); head.Children.Add(fold);
-        }
-        bool narrow = false, folded = false;
-        void Shape()
-        {
-            state.IsVisible = !narrow && !folded;
+            bool narrow = e.NewSize.Width < FxNarrowW;
+            state.IsVisible = !narrow;
             iconText.IsVisible = !narrow;
             head.Margin = new Thickness(narrow ? 4 : 6, 0);
             name.Margin = new Thickness(narrow ? 4 : 6, 0, narrow ? 2 : 4, 0);
-            head.ColumnDefinitions[2].Width = folded ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
-            head.ColumnDefinitions[3].Width = folded ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
-            name.MaxWidth = folded ? FoldedNameW : double.PositiveInfinity;
-        }
-        box.SizeChanged += (_, e) =>
-        {
-            bool n = e.NewSize.Width < FxNarrowW;
-            if (n == narrow) return;
-            narrow = n;
-            Shape();
         };
         mx.Refresh.Add(() =>
         {
@@ -1468,41 +1639,16 @@ public partial class MainWindow
             FxIcon.SetColor(iconText, lit ? Palette.Accent : Palette.Faint);
             name.Foreground = lit ? Palette.Fg : Palette.Faint;
             body.Opacity = lit ? 1 : 0.4;
-            // a panel a step above the strip's card (asked by the user: each effect reads as its own block), its title
-            // bar one more step up; off, both sink back toward the card
+            // a panel a step above the card (asked by the user: each effect reads as its own block), its title bar one
+            // more step up; off, both sink back toward the card
             box.Background = Palette.Alpha(Palette.HoverColor, lit ? 0.45 : 0.18);
             box.BorderBrush = lit ? Palette.Line : Palette.Alpha(Palette.LineColor, 0.6);
             bar.Background = Palette.Alpha(Palette.HoverColor, lit ? 0.6 : 0.2);
             bar.BorderBrush = box.BorderBrush;
-            if (!foldable) return;
-            // folded: just the title row, as small as it goes, with what it is set to beside the name
-            folded = owner!.Slot(slotId!)?.Collapsed == true;
-            body.IsVisible = !folded;
-            brief.IsVisible = folded;
-            brief.Text = folded ? summary?.Invoke() ?? "" : "";
-            brief.Foreground = lit ? Palette.Dim : Palette.Faint;
-            ToolTip.SetTip(brief, folded ? brief.Text : null);
-            if (extra != null) extra.IsVisible = !folded;
-            window!.IsVisible = folded;
-            ((TextBlock)fold!.Content!).Text = folded ? "" : "";
-            ToolTip.SetTip(fold, Loc.T(folded ? "mix.slot.unfold.tip" : "mix.slot.fold.tip"));
-            head.Height = folded ? 26 : 32;
-            bar.BorderThickness = new Thickness(0, 0, 0, folded ? 0 : 1);
-            bar.CornerRadius = folded ? new CornerRadius(5) : new CornerRadius(5, 5, 0, 0);
-            Shape();
         });
-        // a slot's panel is dragged by its title bar to change the order; in a chain a click on it folds or unfolds it
-        if (drag != null && slotId != null)
-        {
-            ToolTip.SetTip(bar, Loc.T(foldable ? "mix.slot.bar.tip" : "mix.slot.drag.tip"));
-            host.Children.Add(drag.Add(box, slotId, bar));
-        }
-        else host.Children.Add(box);
+        host.Children.Add(box);
         return (box, body);
     }
-
-    /// <summary>The widest a folded slot's name gets (px): the rest of the row is its summary.</summary>
-    const double FoldedNameW = 90;
 
     /// <summary>A small icon button of a slot's title row (open in a window, fold): a hand over it, not the bar's drag
     /// cursor, and it lights up in the accent (asked by the user; class <c>slothead</c> in App.axaml).</summary>
@@ -1515,22 +1661,13 @@ public partial class MainWindow
         return b;
     }
 
-    /// <summary>Folds or unfolds a slot in the mixer: a view choice, saved with the project but not an undo step.</summary>
-    void ToggleSlotFolded(SlotOwner o, string id)
-    {
-        if (store is not { ReadOnly: false } || restoring || o.Slot(id) is not { } s) return;
-        s.Collapsed = !s.Collapsed;
-        MarkDirty();
-        RefreshMixer();
-    }
-
     /// <summary>The slot shown in a window of its own, and its panel's refreshes (run with the mixer's while it is open).</summary>
     Flyout? slotWindow;
     List<Action>? slotWindowRefresh;
 
     /// <summary>
-    /// One slot's whole panel in a small window over the mixer (asked by the user: a folded slot opens on its own without
-    /// unfolding the chain). It is built like the strip's, into a layout of its own, and edits the same slot.
+    /// One slot's whole panel in a small window over the mixer (a click on its row): built into a layout of its own,
+    /// it edits the same slot and refreshes with the mixer while it is open.
     /// </summary>
     void ShowSlotWindow(SlotOwner o, string id, Control anchor)
     {
@@ -1543,8 +1680,8 @@ public partial class MainWindow
         var own = new MixerLayout();
         var host = new StackPanel { Width = 300 };
         mx = own;
-        try { SlotPanel(host, o, slots[i], nth, false, null); }
-        finally { mx = saved; wideGr = null; }
+        try { SlotPanel(host, o, slots[i], nth); }
+        finally { mx = saved; }
         bool was = syncing;
         syncing = true;
         try { foreach (var r in own.Refresh) r(); }
@@ -1693,7 +1830,7 @@ public partial class MainWindow
         return col;
     }
 
-    Control Master(bool wide)
+    Control Master()
     {
         var box = StripCard(MasterW);
         // the head's fixed row (StripHeadH): the button, then LIM and MONO side by side
@@ -1726,7 +1863,7 @@ public partial class MainWindow
             Children = { mx.Cor, new TextBlock { Text = "COR", FontSize = 8, LetterSpacing = 0.8, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center } } };
         ToolTip.SetTip(cor, Loc.T("mix.master.cor.tip"));
         var output = new StackPanel { Children = { lufs, cor } };
-        box.Child = StripLayout(wide, head, null, mx.Master, output);
+        box.Child = StripLayout(head, null, mx.Master, output);
         return box;
     }
 }

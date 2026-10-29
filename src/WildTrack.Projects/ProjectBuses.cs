@@ -94,6 +94,22 @@ public static class ProjectBuses
         return true;
     }
 
+    /// <summary>
+    /// A bus's color and icon (null = none: no color, the icon of its first reverb or delay), like a track's. Unknown
+    /// values are refused, so the strip never shows a color or icon that isn't there. False if nothing changed.
+    /// </summary>
+    public static bool SetLook(Project p, string id, string? color, string? icon)
+    {
+        if (Find(p, id) is not { } b) return false;
+        string? c = Track.NormalizeColor(color);
+        string? i = string.IsNullOrWhiteSpace(icon) || icon.Length > 64 ? null : icon.Trim();
+        if ((color != null && c == null) || (icon != null && i == null)) throw new ArgumentException("color #rrggbb o ícono inválido.");
+        if (b.Color == c && b.Icon == i) return false;
+        b.Color = c;
+        b.Icon = i;
+        return true;
+    }
+
     /// <summary>A bus by id or by its number in the list (1 = the first), or null.</summary>
     public static Bus? Find(Project p, string idOrNumber)
     {
@@ -150,9 +166,12 @@ public static class ProjectBuses
         return s;
     }
 
-    /// <summary>The buses <paramref name="r"/> shows a send to, in the buses' order: every one it can feed but those taken out (<see cref="Send.Hidden"/>).</summary>
+    /// <summary>
+    /// The buses <paramref name="r"/> shows a send to, in the buses' order: the ones added to its list (asked by the user:
+    /// a new track or bus brings none, they are added by hand), not those taken out (<see cref="Send.Hidden"/>).
+    /// </summary>
     public static List<Bus> Shown(Project p, IRouted r) =>
-        [.. p.Settings.Buses.Where(b => CanFeed(p, r, b.Id) && r.Sends.Find(s => s.BusId == b.Id)?.Hidden != true)];
+        [.. p.Settings.Buses.Where(b => CanFeed(p, r, b.Id) && r.Sends.Find(s => s.BusId == b.Id) is { Hidden: false })];
 
     /// <summary>
     /// Takes a bus out of <paramref name="r"/>'s list (<paramref name="shown"/> false: the send goes off and hidden, its
@@ -161,9 +180,8 @@ public static class ProjectBuses
     public static bool ShowSend(Project p, IRouted r, string busId, bool shown)
     {
         if (!CanFeed(p, r, busId)) return false;
-        var s = r.Sends.Find(x => x.BusId == busId);
-        if ((s?.Hidden ?? false) != shown) return false;
-        s = SetSend(p, r, busId, on: shown)!;
+        if (r.Sends.Find(x => x.BusId == busId) is { Hidden: false } == shown) return false;
+        var s = SetSend(p, r, busId, on: shown)!;
         s.Hidden = !shown;
         return true;
     }

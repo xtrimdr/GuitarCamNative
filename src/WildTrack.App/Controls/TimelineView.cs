@@ -103,10 +103,75 @@ public sealed partial class TimelineView : Control
     }
 
     /// <summary>Left edge of the effect knobs' row (past the handle column) and how far it stays from the meters.</summary>
-    double FxLeft(int i) => 48 + Indent(i);
-    double FxCellW(int i) => (HeaderRight - FxMeterGap - FxLeft(i)) / Math.Max(1, KnobCount(i));
+    double FxLeft(int i) => KnobsLeft + Indent(i);
+    double FxCellW(int i) => KnobCellW(FxLeft(i), KnobCount(i), FxFit(i));
+    /// <summary>The knobs' diameter the lane's height allows under the header's fixed part, up to <see cref="FxKnobMax"/>.</summary>
+    double FxFit(int i) => Math.Min(FxKnobMax, LaneH(i) - BaseHeaderH - FxPadTop - FxLabelH - FxPadBottom);
+
+    /// <summary>
+    /// Where the send knobs start, under the track's badge (a folder's under its fold arrow): they line up from the left
+    /// (asked by the user), each in a cell as wide as its label needs (<see cref="KnobCellMin"/>) or its knob, instead
+    /// of spreading over the header.
+    /// </summary>
+    const double KnobsLeft = 25, KnobCellMin = 72;
+    double KnobCellW(double left, int n, double fit) => Math.Min((HeaderRight - FxMeterGap - left) / Math.Max(1, n), Math.Max(KnobCellMin, fit + 16));
 
     SendKnob[] SendsOf(LiveTrack t) => sendsShown ? SendKnobs?.Invoke(t) ?? [] : [];
+
+    /// <summary>A folder's send knobs, like a track's (asked by the user): one per send in its list. Set by the window,
+    /// which keeps the arrays until something is edited: it is asked while drawing and must not allocate.</summary>
+    public Func<Folder, SendKnob[]>? FolderSendKnobs { get; set; }
+    /// <summary>The level and ON of a folder's send to a bus (off and 0 without one). Set by the window; it must not allocate.</summary>
+    public Func<Folder, string, (bool On, double Level)>? FolderSendState { get; set; }
+    /// <summary>A folder's send knob edit: folder, bus, toggle on/off, new level (a level above 0 also turns it on).</summary>
+    public event Action<Folder, string, bool, double?>? FolderSendRequested;
+    /// <summary>The folder whose knob the "fx" gesture turns; null while it turns a track's.</summary>
+    Folder? fxFolder;
+
+    SendKnob[] SendsOf(Folder f) => sendsShown && !f.Separator ? FolderSendKnobs?.Invoke(f) ?? [] : [];
+
+    /// <summary>A folder's title line when it has knobs under it (its buttons end at 29 px).</summary>
+    const double FolderTitleH = 30;
+    /// <summary>The folder's knobs at its usual height: big enough to carry the value inside.</summary>
+    const double FolderKnobD = 36;
+    const double FolderKnobsH = FxPadTop + FolderKnobD + FxLabelH + FxPadBottom;
+    /// <summary>The knobs' diameter as the row's height allows (it can be resized), up to <see cref="FxKnobMax"/>.</summary>
+    double FolderKnobFit(Folder f) => Math.Min(FxKnobMax, FolderRowH(f) - FolderTitleH - FxPadTop - FxLabelH - FxPadBottom);
+    double FolderCellW(Folder f) => KnobCellW(KnobsLeft, SendsOf(f).Length, FolderKnobFit(f));
+    /// <summary>The folder's knobs' diameter: what its row's height and its cells allow, 0 when even
+    /// <see cref="FxKnobMin"/> doesn't fit (a row made short shows only its title).</summary>
+    double FolderKnobDiameter(Folder f)
+    {
+        if (SendsOf(f).Length == 0) return 0;
+        double d = Math.Floor(Math.Min(FolderKnobFit(f), FolderCellW(f) - 10));
+        return d >= FxKnobMin ? d : 0;
+    }
+    Rect FolderKnobRect(Folder f, int k, double d) =>
+        new(KnobsLeft + FolderCellW(f) * k, FolderY(f) + FolderTitleH + FxPadTop, d, d);
+    Rect FolderLabelRect(Folder f, int k, double d) =>
+        new(KnobsLeft + FolderCellW(f) * k + d / 2 - FolderCellW(f) / 2, FolderY(f) + FolderTitleH + FxPadTop + d + 2, FolderCellW(f), FxLabelH - 2);
+
+    /// <summary>The folder knob under the point: its place in the folder's sends, and whether it is the dial or its label.</summary>
+    (int Knob, bool Dial)? FolderFxHit(Folder f, Point p)
+    {
+        double d = FolderKnobDiameter(f);
+        if (d == 0 || p.X >= HeaderW) return null;
+        int n = SendsOf(f).Length;
+        for (int k = 0; k < n; k++)
+        {
+            if (FolderKnobRect(f, k, d).Inflate(4).Contains(p)) return (k, true);
+            if (FolderLabelRect(f, k, d).Contains(p)) return (k, false);
+        }
+        return null;
+    }
+
+    (bool On, double Amount) FolderFxState(Folder f, int k)
+    {
+        var sends = SendsOf(f);
+        return k < sends.Length && FolderSendState?.Invoke(f, sends[k].BusId) is var (on, level) ? (on && level > 0, level) : (false, 0);
+    }
+
+    string FolderKnobBus(Folder f, int k) => SendsOf(f) is var s && k < s.Length ? s[k].BusId : "";
 
     /// <summary>How many knobs track <paramref name="i"/>'s header shows: one per send in its list.</summary>
     int KnobCount(int i) => SendsOf(tracks[i]).Length;
@@ -119,11 +184,12 @@ public sealed partial class TimelineView : Control
     double FxKnobD(int i)
     {
         if (KnobCount(i) == 0) return 0;
-        double d = Math.Floor(Math.Min(FxKnobMax, Math.Min(FxCellW(i) - 10, LaneH(i) - BaseHeaderH - FxPadTop - FxLabelH - FxPadBottom)));
+        double d = Math.Floor(Math.Min(FxFit(i), FxCellW(i) - 10));
         return d >= FxKnobMin ? d : 0;
     }
-    Rect FxKnobRect(int i, int k, double d) => new(FxLeft(i) + FxCellW(i) * (k + 0.5) - d / 2, LaneY(i) + BaseHeaderH + FxPadTop, d, d);
-    Rect FxLabelRect(int i, int k, double d) => new(FxLeft(i) + FxCellW(i) * k, LaneY(i) + BaseHeaderH + FxPadTop + d + 2, FxCellW(i), FxLabelH - 2);
+    Rect FxKnobRect(int i, int k, double d) => new(FxLeft(i) + FxCellW(i) * k, LaneY(i) + BaseHeaderH + FxPadTop, d, d);
+    /// <summary>A knob's label: a cell's width centered under its knob.</summary>
+    Rect FxLabelRect(int i, int k, double d) => new(FxLeft(i) + FxCellW(i) * k + d / 2 - FxCellW(i) / 2, LaneY(i) + BaseHeaderH + FxPadTop + d + 2, FxCellW(i), FxLabelH - 2);
     /// <summary>The knob under the point: its place in the track's sends, and whether it is the dial or its label.</summary>
     (int Knob, bool Dial)? FxHit(int i, Point p)
     {
@@ -148,7 +214,7 @@ public sealed partial class TimelineView : Control
     IReadOnlyList<LiveTrack> tracks = [];
     double pps = 10; // pixels per second
     double scrollX;
-    double laneH = 64;
+    double laneH = Track.DefaultHeight;
     const double ShowThumbsAt = 52; // SHOW_THUMBS_AT: lower lanes have no room for the filmstrip
     double scrollY;
     string snapMode = "1/4";
@@ -693,12 +759,24 @@ public sealed partial class TimelineView : Control
         : t.HeightScale is { } k ? Math.Clamp(Math.Round(laneH * k / 2) * 2, Track.MinHeight, Track.MaxHeight) : laneH;
     /// <summary>Lane height of track <paramref name="i"/>; the extra rows under the tracks use the shared one.</summary>
     double LaneH(int i) => i >= 0 && i < tracks.Count ? RowH(tracks[i].Track) : laneH;
-    /// <summary>A folder's row height. Open: its own (<see cref="Folder.Height"/>) or <see cref="FolderH"/>. Folded: the
-    /// shared lane height times its <see cref="Folder.HeightScale"/>, so its mini map follows the vertical zoom.</summary>
+    /// <summary>A folder's row height, following the vertical zoom like the tracks. Its usual one, the same open or folded
+    /// (<see cref="FolderBaseH"/>), unless the user resized it: open, its own px (<see cref="Folder.Height"/>); folded,
+    /// a multiple of the tracks' shared height (<see cref="Folder.HeightScale"/>).</summary>
     double FolderRowH(Folder f) => f.Separator ? (f.HiddenInTimeline ? 0 : SeparatorH)
         : heightDrag is { } d && d.Id == f.Id ? d.H
-        : f.Collapsed ? Math.Clamp(Math.Round(laneH * (f.HeightScale ?? 1) / 2) * 2, Folder.MinHeight, Track.MaxHeight)
-        : f.Height ?? FolderH;
+        : f.Collapsed ? f.HeightScale is { } k ? Math.Clamp(Math.Round(laneH * k / 2) * 2, Folder.MinHeight, Track.MaxHeight)
+            : FolderZoomed(FolderBaseH(f), FolderBaseH(f), Track.MaxHeight)
+        : f.Height is { } own ? FolderZoomed(own, Folder.MinHeight, Folder.MaxHeight)
+        : FolderZoomed(FolderBaseH(f), FolderBaseH(f), Folder.MaxHeight);
+
+    /// <summary>A folder height in px at <see cref="Track.DefaultHeight"/>, at the current vertical zoom. Its usual height
+    /// never goes below itself: zoomed out, its send knobs would no longer fit and hide.</summary>
+    double FolderZoomed(double h, double min, double max) => Math.Clamp(Math.Round(h * laneH / Track.DefaultHeight / 2) * 2, min, max);
+    /// <summary>A folder height on screen back to px at <see cref="Track.DefaultHeight"/> (how <see cref="Folder.Height"/> keeps it).</summary>
+    public double FolderUnzoomed(double h) => h * Track.DefaultHeight / laneH;
+
+    /// <summary>A folder's usual row height: its title line, and under it its send knobs when it shows any.</summary>
+    double FolderBaseH(Folder f) => SendsOf(f).Length > 0 ? FolderTitleH + FolderKnobsH : FolderH;
     /// <summary>The row whose bottom edge is being dragged and its height so far (applied on release).</summary>
     (string Id, double H)? heightDrag;
     /// <summary>Px above and below a row's bottom edge (in the header) that grab it to change that row's height.</summary>
@@ -724,8 +802,9 @@ public sealed partial class TimelineView : Control
 
     // --- rows and folders (native only) ----------------------------------------------------------
 
-    /// <summary>Height of a folder's own row when open: like a track's, so its fader shows under the name.</summary>
-    public const double FolderH = 64;
+    /// <summary>Height of a folder's own row when open: one line, a title over its tracks (asked by the user: at a track's
+    /// height it was an empty block that weighed more than its children). The smallest a folder row can be.</summary>
+    public const double FolderH = Folder.MinHeight;
     /// <summary>Height of a separator's row (a hidden one takes none: it keeps its place in the order, out of sight).</summary>
     public const double SeparatorH = 22;
     IReadOnlyList<Folder> folders = [];
@@ -750,7 +829,8 @@ public sealed partial class TimelineView : Control
     }
 
     public Folder? FolderOf(LiveTrack t) => t.Track.FolderId is { } id ? folderById.GetValueOrDefault(id) : null;
-    public static Color FolderColor(Folder f) => f.Color != null && Color.TryParse(f.Color, out var c) ? c : Palette.AccentColor;
+    /// <summary>Its color, or a neutral gray without one (asked by the user: in the accent its frame looked selected).</summary>
+    public static Color FolderColor(Folder f) => f.Color != null && Color.TryParse(f.Color, out var c) ? c : Palette.DimColor;
 
     /// <summary>Folders and tracks in order, as <see cref="TrackFolders.Sequence"/> keeps them.</summary>
     List<object> Seq() => TrackFolders.Sequence(tracks.Select(t => t.Track).ToList(), folders);
@@ -798,8 +878,20 @@ public sealed partial class TimelineView : Control
             if (x is Folder f) rows.Add(new Row(-1, f, targetTop[f.Id], FolderRowH(f)));
             else if (x is Track t && targetTop.TryGetValue(t.Id, out double top) && index.TryGetValue(t.Id, out int i)) rows.Add(new Row(i, null, top, RowH(t)));
         }
+        overSeparator.Clear();
+        for (int k = 0; k + 1 < rows.Count; k++)
+            if (rows[k + 1].Folder is { Separator: true, HiddenInTimeline: false }) overSeparator.Add(RowIdOf(rows[k]));
         ClampScroll();
     }
+
+    /// <summary>Rows right above a shown separator: they leave out their bottom line, which the separator already draws.</summary>
+    readonly HashSet<string> overSeparator = [];
+
+    /// <summary>
+    /// Whether a row leaves out its bottom line for the separator under it (asked by the user: both lines together were
+    /// redundant). Not while a reorder moves rows around, when they pass over each other.
+    /// </summary>
+    bool OverSeparator(string id) => !(gesture == "reorder" && moved) && overSeparator.Contains(id);
 
     /// <summary>The dragged item: the carried tracks, or a folder with its children.</summary>
     List<object> Dragged(List<object> seq) => dragFolder is { } df
@@ -1146,8 +1238,6 @@ public sealed partial class TimelineView : Control
             ctx.DrawText(Loc.T("timeline.empty.title"), 12.5, Palette.Dim, new Point(HeaderW + 24, RulerH + 66), Palette.UiBold);
             ctx.DrawText(Loc.T("timeline.empty.a"), 12,
                 Palette.Faint, new Point(HeaderW + 24, RulerH + 90));
-            ctx.DrawText(Loc.T("timeline.empty.b"), 12,
-                Palette.Faint, new Point(HeaderW + 24, RulerH + 108));
         }
         if (dragged != null && preview != null && overIndex >= 0 && overIndex != fromIndex && !swapping)
             DrawGhost(ctx, W, H);
@@ -1284,9 +1374,10 @@ public sealed partial class TimelineView : Control
     const double MiniWaveAt = 6;
 
     /// <summary>
-    /// A folder's lane, tinted with its color. Open, its children show below it and the lane stays empty (asked by the
-    /// user: a block per clip there only repeated them). Folded, it is a mini map: one strip per child track, in order,
-    /// with its clips in the track's color and their wave once the strip is tall enough; the row follows the vertical zoom.
+    /// A folder's lane, tinted with its color. Open, its children show below it, so the lane only sums up where they have
+    /// clips (<see cref="DrawFolderSummary"/>; a block per clip there only repeated them). Folded, it is a mini map: one
+    /// strip per child track, in order, with its clips in the track's color and their wave once the strip is tall enough;
+    /// the row follows the vertical zoom.
     /// </summary>
     void DrawFolderLane(DrawingContext ctx, Folder f, double W)
     {
@@ -1294,9 +1385,9 @@ public sealed partial class TimelineView : Control
         if (fh <= 0 || y + fh < RulerH || y > Bounds.Height) return;
         if (f.Separator)
         {
-            // a separator: a line across the lanes, at the middle of its row
+            // a separator: a glowing line across the lanes, at the middle of its row
             if (f.Id == liftedId) ctx.FillRectangle(Palette.App, new Rect(HeaderW, y, Math.Max(0, W - HeaderW), fh));
-            ctx.DrawLine(Palette.Pen(Palette.Alpha(FolderColor(f), 0.45)), new Point(HeaderW, Math.Round(y + fh / 2) + 0.5), new Point(W, Math.Round(y + fh / 2) + 0.5));
+            DrawSeparatorLine(ctx, SeparatorColor(f), HeaderW, W, Math.Round(y + fh / 2) + 0.5);
             return;
         }
         var c = FolderColor(f);
@@ -1305,7 +1396,70 @@ public sealed partial class TimelineView : Control
         ctx.FillRectangle(Palette.Alpha(c, 0.07), row);
         // a lifted folder travels folded, so it shows its mini map while dragged too
         if (f.Collapsed || f.Id == liftedId) DrawMiniMap(ctx, f, y, fh, W);
-        ctx.DrawLine(Palette.Pen(Palette.Line), new Point(HeaderW, y + fh - 0.5), new Point(W, y + fh - 0.5));
+        else DrawFolderSummary(ctx, f, y, fh, W, c);
+        if (!OverSeparator(f.Id)) ctx.DrawLine(Palette.Pen(Palette.Line), new Point(HeaderW, y + fh - 0.5), new Point(W, y + fh - 0.5));
+    }
+
+    /// <summary>Accent over a selected track's header and lane, so it reads as chosen and not as a hover (asked by the user).</summary>
+    const double SelectedTint = 0.06;
+
+    /// <summary>
+    /// The selected row's mark: a rounded accent pill at the left of its header, like Windows' selection indicator
+    /// (asked by the user). Inside the card's edge and the folder frame, which covered the old 2 px bar at x = 0.
+    /// </summary>
+    static void DrawSelectedPill(DrawingContext ctx, double y, double h)
+    {
+        double inset = Math.Min(6, h / 4);
+        ctx.DrawRectangle(Palette.Accent, null, new Rect(3, y + inset, 3, Math.Max(4, h - 2 * inset)), 1.5, 1.5);
+    }
+
+    /// <summary>Lane columns covered by a child's clip, reused by <see cref="DrawFolderSummary"/> so it allocates nothing per frame.</summary>
+    bool[] covered = [];
+
+    /// <summary>
+    /// The open folder's lane: one bar in its color per stretch where any of its tracks has a clip, merged across tracks
+    /// (asked by the user), so the material shows at a glance even when the tracks are scrolled away.
+    /// </summary>
+    void DrawFolderSummary(DrawingContext ctx, Folder f, double y, double fh, double W, Color c)
+    {
+        int cols = (int)Math.Ceiling(W - HeaderW);
+        if (cols <= 0) return;
+        if (covered.Length < cols) covered = new bool[cols];
+        Array.Clear(covered, 0, cols);
+        foreach (var t in tracks)
+        {
+            if (t.Track.FolderId != f.Id) continue;
+            foreach (var clip in t.Clips)
+            {
+                var w = Window(clip);
+                Cover(X(w.Start), X(w.End), cols);
+            }
+            if (t.Track.MidiClips is { } midi)
+                foreach (var m in midi)
+                {
+                    var (start, end) = MidiSpan(m);
+                    Cover(X(start), X(end), cols);
+                }
+        }
+        var fill = Palette.Alpha(c, 0.16);
+        var pen = Palette.Pen(Palette.Alpha(c, 0.4));
+        // a band as tall as a folder without knobs needs, centered in a taller row
+        double h = Math.Max(2, Math.Min(FolderH, fh) - 14), top = y + (fh - h) / 2;
+        for (int i = 0; i < cols; i++)
+        {
+            if (!covered[i]) continue;
+            int from = i;
+            while (i < cols && covered[i]) i++;
+            ctx.DrawRectangle(fill, pen, new Rect(HeaderW + from + 0.5, top + 0.5, Math.Max(1, i - from - 1), h - 1), 3, 3);
+        }
+    }
+
+    void Cover(double x0, double x1, int cols)
+    {
+        int a = Math.Max(0, (int)Math.Floor(x0 - HeaderW)), b = Math.Min(cols, (int)Math.Ceiling(x1 - HeaderW));
+        // at least a column, so a clip shorter than a pixel still shows
+        if (b <= a && a < cols && x1 >= HeaderW) b = a + 1;
+        for (int i = a; i < b; i++) covered[i] = true;
     }
 
     /// <summary>The folded folder's mini map (<see cref="DrawFolderLane"/>): a strip per child track over the row's height.</summary>
@@ -1369,7 +1523,7 @@ public sealed partial class TimelineView : Control
         bool sel = f.Id == SelectedFolderId;
         ctx.FillRectangle(sel ? Palette.Raised : Palette.Panel, row);
         ctx.FillRectangle(Palette.Alpha(c, sel ? 0.18 : 0.12), row);
-        if (sel) ctx.FillRectangle(Palette.Accent, new Rect(0, y, 2, fh));
+        if (sel) DrawSelectedPill(ctx, y, fh);
         for (int k = 0; k < 3; k++)
         {
             ctx.FillRectangle(Palette.Faint, new Rect(8, y + 12 + k * 5, 2, 2));
@@ -1392,14 +1546,46 @@ public sealed partial class TimelineView : Control
         }
         if (lastPointer.Y >= y && lastPointer.Y < y + fh && lastPointer.X < HeaderW)
             DrawTrash(ctx, FolderRemoveRect(f), Hot(FolderRemoveRect(f)));
-        ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, y + fh - 0.5), new Point(HeaderW, y + fh - 0.5));
+        DrawFolderKnobs(ctx, f);
+        if (!OverSeparator(f.Id)) ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, y + fh - 0.5), new Point(HeaderW, y + fh - 0.5));
     }
 
-    /// <summary>A separator's header: its handle, its name in its color and a line to the right edge.</summary>
+    /// <summary>
+    /// A separator's color: its own, or the accent (asked by the user: the line glows from the chosen accent). Folders
+    /// stay gray without one (<see cref="FolderColor"/>), since in the accent their frame looked selected.
+    /// </summary>
+    public static Color SeparatorColor(Folder f) => f.Color != null && Color.TryParse(f.Color, out var c) ? c : Palette.AccentColor;
+
+    /// <summary>Px the separator's glow reaches to each side of its line, in <see cref="GlowSteps"/> stacked bands of
+    /// <see cref="GlowAlpha"/> (the mixer's separator strip glows the same way).</summary>
+    public const double GlowReach = 6;
+    public const int GlowSteps = 4;
+    public const double GlowAlpha = 0.05;
+    /// <summary>Opacity of the separator's line itself, over its glow.</summary>
+    public const double SeparatorLineAlpha = 0.75;
+
+    /// <summary>
+    /// A separator's line with a soft glow (asked by the user, so the break between groups reads at a glance): stacked
+    /// faint bands centered on the line, denser at its middle, instead of a gradient brush that would be new per frame.
+    /// </summary>
+    static void DrawSeparatorLine(DrawingContext ctx, Color c, double x0, double x1, double mid)
+    {
+        if (x1 <= x0) return;
+        var glow = Palette.Alpha(c, GlowAlpha);
+        for (int k = 1; k <= GlowSteps; k++)
+        {
+            double h = GlowReach * k / GlowSteps;
+            ctx.FillRectangle(glow, new Rect(x0, mid - h, x1 - x0, 2 * h));
+        }
+        ctx.DrawLine(Palette.Pen(Palette.Alpha(c, SeparatorLineAlpha)), new Point(x0, mid), new Point(x1, mid));
+    }
+
+    /// <summary>A separator's header: its handle, its name in its color and its line to the right edge, over the window's
+    /// background, so it reads as a gap between the groups and not as one more row.</summary>
     void DrawSeparatorHeader(DrawingContext ctx, Folder f, double y, double fh)
     {
-        var c = FolderColor(f);
-        ctx.FillRectangle(Palette.Panel, new Rect(0, y, HeaderW, fh));
+        var c = SeparatorColor(f);
+        ctx.FillRectangle(Palette.App, new Rect(0, y, HeaderW, fh));
         for (int k = 0; k < 2; k++)
         {
             ctx.FillRectangle(Palette.Faint, new Rect(8, y + fh / 2 - 3 + k * 5, 2, 2));
@@ -1415,7 +1601,7 @@ public sealed partial class TimelineView : Control
             ctx.DrawText(f.Name, 10.5, Palette.Alpha(c, 1), new Point(x, y + (fh - name.Height) / 2), Palette.UiBold, maxW);
             x += Math.Min(name.Width, maxW) + 8;
         }
-        ctx.DrawLine(Palette.Pen(Palette.Alpha(c, 0.45)), new Point(x, mid), new Point(HeaderW, mid));
+        DrawSeparatorLine(ctx, c, x, HeaderW, mid);
     }
 
     /// <summary>The folder the dragged track would land in, or the folder a track is in.</summary>
@@ -1457,8 +1643,9 @@ public sealed partial class TimelineView : Control
                 if (y > -1e8) bottom = Math.Max(bottom, y + LaneH(i));
             }
             if (bottom < RulerH || top > Bounds.Height) continue;
-            var pen = Palette.Pen(Palette.Alpha(FolderColor(f), 0.8));
-            ctx.DrawRectangle(null, pen, new Rect(0.5, top + 0.5, Math.Max(0, W - 1), Math.Max(0, bottom - top - 1)), 5, 5);
+            var pen = Palette.Pen(Palette.Alpha(FolderColor(f), 0.45));
+            // one px in: the card's edge ("card-edge") is drawn over the timeline's outer pixel and hid the sides
+            ctx.DrawRectangle(null, pen, new Rect(1.5, top + 0.5, Math.Max(0, W - 3), Math.Max(0, bottom - top - 1)), 5, 5);
         }
     }
 
@@ -1483,7 +1670,7 @@ public sealed partial class TimelineView : Control
                     if (ry >= top) bottom = Math.Max(bottom, ry + r.H);
                 }
             var c = FolderColor(into);
-            ctx.DrawRectangle(null, Palette.Pen(Palette.Alpha(c, 1), 2), new Rect(1, top + 1, Math.Max(0, W - 2), bottom - top - 2), 6, 6);
+            ctx.DrawRectangle(null, Palette.Pen(Palette.Alpha(c, 1), 2), new Rect(2, top + 1, Math.Max(0, W - 4), bottom - top - 2), 6, 6);
         }
         string? text = into != null && into != from ? Loc.T("tl.drop.into", into.Name) : into == null && from != null ? Loc.T("tl.drop.out", from.Name) : null;
         if (text == null) return;
@@ -1658,7 +1845,11 @@ public sealed partial class TimelineView : Control
         bool sel = i == Selected;
         // the lifted lane is opaque so the lanes it passes over don't show through
         if (t.Track.Id == liftedId || liftedAlso.Contains(t.Track.Id)) ctx.FillRectangle(Palette.App, new Rect(HeaderW, y, W - HeaderW, lh));
-        if (Picked(i)) ctx.FillRectangle(Palette.Alpha(Palette.RaisedColor, 0.6), new Rect(HeaderW, y, W - HeaderW, lh));
+        if (Picked(i))
+        {
+            ctx.FillRectangle(Palette.Alpha(Palette.RaisedColor, 0.6), new Rect(HeaderW, y, W - HeaderW, lh));
+            ctx.FillRectangle(Palette.Alpha(Palette.AccentColor, SelectedTint), new Rect(HeaderW, y, W - HeaderW, lh));
+        }
         if (armed.Contains(i) && !Recording) ctx.FillRectangle(Palette.Alpha(Palette.RecColor, 0.06), new Rect(HeaderW, y, W - HeaderW, lh));
         var majorPen = Palette.Pen(Palette.Alpha(Palette.LineColor, 0.55));
         var minorPen = Palette.Pen(Palette.Alpha(Palette.LineColor, 0.22));
@@ -1669,7 +1860,7 @@ public sealed partial class TimelineView : Control
         DrawJoins(ctx, i, W);
         if (Range is { } r && rangeTracks.Contains(t.Track.Id)) DrawRange(ctx, y, lh, W, r.Start, r.End);
         DrawSplitHover(ctx, i, y, lh);
-        ctx.DrawLine(Palette.Pen(Palette.Line), new Point(HeaderW, y + lh - 0.5), new Point(W, y + lh - 0.5));
+        if (!OverSeparator(t.Track.Id)) ctx.DrawLine(Palette.Pen(Palette.Line), new Point(HeaderW, y + lh - 0.5), new Point(W, y + lh - 0.5));
     }
 
     void DrawClip(DrawingContext ctx, LiveTrack t, LiveClip c, double y, bool sel, double W)
@@ -2179,11 +2370,12 @@ public sealed partial class TimelineView : Control
         if (y + lh < RulerH || y > Bounds.Height) return;
         bool sel = Picked(i);
         ctx.FillRectangle(sel ? Palette.Raised : Palette.Panel, new Rect(0, y, HeaderW, lh));
+        if (sel) ctx.FillRectangle(Palette.Alpha(Palette.AccentColor, SelectedTint), new Rect(0, y, HeaderW, lh));
         bool isArmed = armed.Contains(i);
         if (isArmed || RecordingInto(i)) ctx.FillRectangle(Palette.Alpha(Palette.RecColor, 0.10), new Rect(0, y, HeaderW, lh));
         // a track in a folder is indented; the folder's color goes on the frame around the group (DrawFolderFrames)
         double ind = Indent(i);
-        if (sel) ctx.FillRectangle(Palette.Accent, new Rect(0, y, 2, lh));
+        if (sel) DrawSelectedPill(ctx, y, lh);
 
         for (int k = 0; k < 3; k++)
         {
@@ -2191,7 +2383,7 @@ public sealed partial class TimelineView : Control
             ctx.FillRectangle(Palette.Faint, new Rect(13 + ind, y + 13 + k * 5, 2, 2));
         }
         var badge = BadgeRect(i);
-        TrackIcons.DrawBadge(ctx, badge, t.Track, i + 1, false, Math.Round(badge.Height * 0.18));
+        TrackIcons.DrawBadge(ctx, badge, t.Track, i + 1, false, Math.Round(badge.Height * 0.18), showVideo);
         double nameX = 58 + ind + NameShift(i);
         bool chip = isArmed && !Recording && InputLabel != null;
         double nameW = NameW(i);
@@ -2228,7 +2420,7 @@ public sealed partial class TimelineView : Control
 
         if (!RecordingInto(i) && lastPointer.Y >= y && lastPointer.Y < y + lh)
             DrawTrash(ctx, RemoveRect(i), Hot(RemoveRect(i)));
-        ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, y + lh - 0.5), new Point(HeaderW, y + lh - 0.5));
+        if (!OverSeparator(t.Track.Id)) ctx.DrawLine(Palette.Pen(Palette.Line), new Point(0, y + lh - 0.5), new Point(HeaderW, y + lh - 0.5));
         DrawArm(ctx, ArmRect(i), isArmed || RecordingInto(i), Hot(ArmRect(i)));
         if (tracks[i].Track.IsMidi) DrawInstrumentChip(ctx, i);
 
@@ -2253,40 +2445,60 @@ public sealed partial class TimelineView : Control
         int knobs = kd > 0 ? KnobCount(i) : 0;
         var sendKnobs = knobs > 0 ? SendsOf(t) : [];
         for (int k = 0; k < knobs; k++)
-            {
-                var (on, amount) = FxState(t, k);
-                var kr = FxKnobRect(i, k, kd);
-                bool dragging = gesture == "fx" && fromIndex == i && fxRow == k;
-                bool hot = dragging || (gesture == null && kr.Inflate(4).Contains(lastPointer));
-                DrawFxKnob(ctx, kr, amount, on, hot);
-                // the amount sits inside a big knob; a small one shows it in place of its label while touched
-                string value = Hundreds[Math.Clamp((int)Math.Round(amount * 100), 0, 100)];
-                bool inside = kd >= 36;
-                if (inside)
-                {
-                    var vt = Palette.Text(value, kd >= 50 ? 12 : 10.5, on ? Palette.Fg : Palette.Faint, Palette.Mono);
-                    ctx.DrawText(vt, new Point(kr.Center.X - vt.Width / 2, kr.Center.Y - vt.Height / 2));
-                }
-                var lr = FxLabelRect(i, k, kd);
-                if (!inside && hot)
-                {
-                    var vt = Palette.Text(value, 10.5, Palette.Fg, Palette.Mono);
-                    ctx.DrawText(vt, new Point(lr.Center.X - vt.Width / 2, lr.Center.Y - vt.Height / 2));
-                    continue;
-                }
-                var brush = on ? Palette.Accent : Palette.Faint;
-                var label = Palette.Text(sendKnobs[k].Name, 10.5, on ? Palette.Fg : Palette.Faint, Palette.Ui);
-                // a narrow cell keeps only the icon
-                bool withText = 16 + label.Width <= lr.Width - 4;
-                double lx = lr.Center.X - (withText ? 16 + label.Width : 12) / 2;
-                FxIcon.Draw(ctx, sendKnobs[k].Icon, new Rect(lx, lr.Center.Y - 6, 12, 12), brush);
-                if (withText) ctx.DrawText(label, new Point(lx + 16, lr.Center.Y - label.Height / 2));
-            }
+        {
+            var (on, amount) = FxState(t, k);
+            var kr = FxKnobRect(i, k, kd);
+            bool dragging = gesture == "fx" && fxFolder == null && fromIndex == i && fxRow == k;
+            DrawSendKnob(ctx, kr, FxLabelRect(i, k, kd), sendKnobs[k], amount, on, dragging || (gesture == null && kr.Inflate(4).Contains(lastPointer)));
+        }
 
         DrawToggle(ctx, MuteRect(i), "M", ch.Muted, Palette.Brush("#f59e0b"), Hot(MuteRect(i)));
         DrawToggle(ctx, SoloRect(i), "S", ch.Solo, Palette.Accent, Hot(SoloRect(i)));
 
         if (!MetersOnLayer) DrawMeters(ctx, i);
+    }
+
+    /// <summary>A send knob of a track or a folder: the dial, the amount inside a big one, and under it the bus's icon
+    /// and name (a small one shows the amount there while touched).</summary>
+    void DrawSendKnob(DrawingContext ctx, Rect kr, Rect lr, SendKnob s, double amount, bool on, bool hot)
+    {
+        double kd = kr.Width;
+        DrawFxKnob(ctx, kr, amount, on, hot);
+        string value = Hundreds[Math.Clamp((int)Math.Round(amount * 100), 0, 100)];
+        bool inside = kd >= 36;
+        if (inside)
+        {
+            var vt = Palette.Text(value, kd >= 50 ? 12 : 10.5, on ? Palette.Fg : Palette.Faint, Palette.Mono);
+            ctx.DrawText(vt, new Point(kr.Center.X - vt.Width / 2, kr.Center.Y - vt.Height / 2));
+        }
+        if (!inside && hot)
+        {
+            var vt = Palette.Text(value, 10.5, Palette.Fg, Palette.Mono);
+            ctx.DrawText(vt, new Point(lr.Center.X - vt.Width / 2, lr.Center.Y - vt.Height / 2));
+            return;
+        }
+        var brush = on ? Palette.Accent : Palette.Faint;
+        var label = Palette.Text(s.Name, 10.5, on ? Palette.Fg : Palette.Faint, Palette.Ui);
+        // a narrow cell keeps only the icon
+        bool withText = 16 + label.Width <= lr.Width - 4;
+        double lx = lr.Center.X - (withText ? 16 + label.Width : 12) / 2;
+        FxIcon.Draw(ctx, s.Icon, new Rect(lx, lr.Center.Y - 6, 12, 12), brush);
+        if (withText) ctx.DrawText(label, new Point(lx + 16, lr.Center.Y - label.Height / 2));
+    }
+
+    /// <summary>A folder's send knobs, in a row under its title, laid out like a track's.</summary>
+    void DrawFolderKnobs(DrawingContext ctx, Folder f)
+    {
+        double d = FolderKnobDiameter(f);
+        if (d == 0) return;
+        var sends = SendsOf(f);
+        for (int k = 0; k < sends.Length; k++)
+        {
+            var (on, amount) = FolderFxState(f, k);
+            var kr = FolderKnobRect(f, k, d);
+            bool dragging = gesture == "fx" && fxFolder == f && fxRow == k;
+            DrawSendKnob(ctx, kr, FolderLabelRect(f, k, d), sends[k], amount, on, dragging || (gesture == null && kr.Inflate(4).Contains(lastPointer)));
+        }
     }
 
     /// <summary>An effect knob, drawn like the mixer's big <see cref="Knob"/>: a cap, a 270° track lit from zero to the
@@ -2567,6 +2779,7 @@ public sealed partial class TimelineView : Control
         }
         else if (p.X < HeaderW && FxHit(i, p) is { } hit)
         {
+            fxFolder = null;
             fxRow = hit.Knob;
             string fx = KnobKey(tracks[i], hit.Knob);
             if (!hit.Dial) EffectRequested?.Invoke(tracks[i], fx, true, null);
@@ -2672,6 +2885,22 @@ public sealed partial class TimelineView : Control
         if (p.X >= HeaderW)
         {
             if (e.ClickCount == 2) FolderFoldRequested?.Invoke(f);
+            return;
+        }
+        // a send knob, like a track's: its label turns it on or off, a double click on the dial sets it to 0
+        if (FolderFxHit(f, p) is { } hit)
+        {
+            fxFolder = f;
+            fxRow = hit.Knob;
+            string bus = FolderKnobBus(f, hit.Knob);
+            if (!hit.Dial) FolderSendRequested?.Invoke(f, bus, true, null);
+            else if (e.ClickCount == 2) FolderSendRequested?.Invoke(f, bus, false, 0);
+            else
+            {
+                fxDragValue = FolderFxState(f, hit.Knob).Amount;
+                fxDragY = p.Y;
+                StartGesture("fx", e);
+            }
             return;
         }
         if (FoldRect(f).Contains(p)) FolderFoldRequested?.Invoke(f);
@@ -2844,7 +3073,7 @@ public sealed partial class TimelineView : Control
             SetHeaderWidth(originalHeaderW + lastPointer.X - down.X);
         else if (gesture == "row-height" && heightDrag is { } hd)
         {
-            // an open folder's row only holds its header; a folded one's mini map goes as tall as a track
+            // an open folder's row holds its title and knobs; a folded one's mini map goes as tall as a track
             bool folder = folderById.TryGetValue(hd.Id, out var hf);
             double h = Math.Clamp(Math.Round((heightFrom + lastPointer.Y - down.Y) / 2) * 2,
                 folder ? Folder.MinHeight : Track.MinHeight, folder && !hf!.Collapsed ? Folder.MaxHeight : Track.MaxHeight);
@@ -2862,7 +3091,9 @@ public sealed partial class TimelineView : Control
             if (dy != 0)
             {
                 fxDragValue = Math.Clamp(fxDragValue + dy / FxDragPx * ((modifiers & KeyModifiers.Shift) != 0 ? 0.2 : 1), 0, 1);
-                EffectRequested?.Invoke(tracks[fromIndex], KnobKey(tracks[fromIndex], fxRow), false, Math.Round(fxDragValue * 1000) / 1000);
+                double value = Math.Round(fxDragValue * 1000) / 1000;
+                if (fxFolder != null) FolderSendRequested?.Invoke(fxFolder, FolderKnobBus(fxFolder, fxRow), false, value);
+                else EffectRequested?.Invoke(tracks[fromIndex], KnobKey(tracks[fromIndex], fxRow), false, value);
             }
         }
         else if (gesture == "pan-knob")
@@ -3071,6 +3302,8 @@ public sealed partial class TimelineView : Control
         {
             if (lastPointer.X < 20 || (lastPointer.X < HeaderW && (FoldRect(fo).Contains(lastPointer) || FolderIconRect(fo).Contains(lastPointer))))
                 cursor = StandardCursorType.Hand;
+            else if (FolderFxHit(fo, lastPointer) is { } fx)
+                cursor = fx.Dial ? StandardCursorType.SizeNorthSouth : StandardCursorType.Hand;
         }
         else if (MidiCursor(i, lastPointer) is { } midiCursor) cursor = midiCursor;
         else if (i >= 0 && i < tracks.Count)
@@ -3113,6 +3346,11 @@ public sealed partial class TimelineView : Control
             // Transponer: a semitone per notch
             double amount = FxState(tracks[i], fx.Knob).Amount + Math.Sign(e.Delta.Y) * ((e.KeyModifiers & KeyModifiers.Shift) != 0 ? 0.004 : 0.02);
             EffectRequested?.Invoke(tracks[i], KnobKey(tracks[i], fx.Knob), false, Math.Round(Math.Clamp(amount, 0, 1) * 1000) / 1000);
+        }
+        else if (p.Y >= RulerH && HitRow(p.Y)?.Folder is { } fo && FolderFxHit(fo, p) is { Dial: true } ffx)
+        {
+            double amount = FolderFxState(fo, ffx.Knob).Amount + Math.Sign(e.Delta.Y) * ((e.KeyModifiers & KeyModifiers.Shift) != 0 ? 0.004 : 0.02);
+            FolderSendRequested?.Invoke(fo, FolderKnobBus(fo, ffx.Knob), false, Math.Round(Math.Clamp(amount, 0, 1) * 1000) / 1000);
         }
         // plain wheel: up and down; the modifiers for zoom, sideways and track height are the user's (Shortcuts.Wheel:
         // Shift, Ctrl and Alt by default), and so is each one's direction (Shortcuts.WheelSign); a sideways wheel or

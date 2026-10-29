@@ -24,8 +24,8 @@ _Ideas y mejoras para la nativa._
   usa tal cual) y importar el audio de un video
 - [ ] Transponer: probar si conviene un modo "fino" en cents. Límite conocido: dos armónicos a menos de ~7 Hz (la 3ª
   de un acorde grave) mantienen su batido original
-- [x] Efectos en slots por canal, etapa 1 con los efectos internos (hecho, ver [HECHO.md](HECHO.md)). Queda para la
-  etapa 2: compensar la latencia de los slots (hoy todos dan 0) y el estado guardable de un plugin
+- [x] Efectos en slots por canal, con los internos y los VST3, su latencia compensada y el estado del plugin guardado
+  (hecho, ver [HECHO.md](HECHO.md))
 - [x] Mejorar el mixer: medidores completos, envíos pre/post y buses unificados (bus = FX: salida y envíos de pistas,
   carpetas y buses; las carpetas solo agrupan) (hecho, ver [HECHO.md](HECHO.md))
 - [ ] **Perillas configurables** (pedido del usuario 2026-10-26, cambio grande: decidirlo antes de hacerlo). Los envíos
@@ -40,10 +40,22 @@ _Ideas y mejoras para la nativa._
 - …y más: ir sumando acá
 
 #### 2. Soporte de plugins VST
-- [x] Instrumentos VST3 en las pistas MIDI (hecho, ver [HECHO.md](HECHO.md)). Falta:
-  - [ ] **Efectos VST3** en los slots de pistas y buses (amps, pedales, reverbs de terceros), como un tipo de slot más,
-    mezclado con los internos. El puente ya pasa audio de entrada (`Slot.in`); en vivo un efecto suma un bloque de
-    demora que hay que compensar en las otras pistas y en el click (PDC), como el limitador.
+- [x] Instrumentos VST3 en las pistas MIDI y efectos VST3 en los slots de pistas y buses, con compensación de latencia
+  (hecho, ver [HECHO.md](HECHO.md)). Falta:
+  - [ ] Probar los efectos con una interfaz ASIO y un proyecto de verdad: que la PDC no se oiga al agregar o sacar un
+    efecto mientras suena, la carga con varios plugins, y un amp sim (Neural DSP, TONE3000) en una toma de guitarra.
+  - [ ] Las 2 a 4 **perillas** por efecto VST3 que elige el usuario de sus parámetros (charlado el 2026-10-26): hace
+    falta que el puente liste y mueva parámetros (`IEditController`), y sirve para las perillas configurables.
+  - [ ] **Monitorear a través de la cadena**: hoy el monitoreo por software es la entrada cruda; para grabar una guitarra
+    directa escuchando un amp sim, la pista armada tendría que pasar su entrada por sus slots (con la latencia de un
+    bloque más la del plugin, sin PDC para ella).
+  - [ ] La imagen y el cabezal no se atrasan con la PDC: con un plugin de mucha latencia el video se adelanta a lo que
+    se oye. Correr `PositionSec` lo que atrasa el master mientras suena.
+  - [ ] Clear (Supertone) informa 9406 muestras de latencia pero atrasa 1470 (medido con `wtlab vst efecto`): la PDC
+    usa lo que dice el plugin. Ver si otro momento para preguntarla (después de procesar) le da el número bueno.
+  - [ ] Un efecto apagado sigue procesando (así prenderlo no corta): ver si conviene pausarlo para ahorrar CPU.
+  - [ ] La cola de una reverb VST3 en la exportación: la duración sale de los clips, sin contar cuánto suena el plugin
+    después (`--cola` lo mide en el master; probarlo con Supermassive).
   - [ ] EZdrummer 3 abre pero no suena por el puente (procesa y devuelve silencio, también en tiempo real y después de
     esperar): probar si carga su kit al abrir su ventana o si le falta la autorización de Toontrack.
   - [ ] Que un instrumento retome las notas largas cuando el cabezal cae en su medio (hoy no se redisparan), y que el
@@ -205,10 +217,15 @@ de video y normalización ya están anotados arriba; el análisis amplía su alc
 ## Notas
 
 - Lo que quedó del nombre viejo (2026-10-29, ver HECHO): la carpeta `D:\Programacion\GuitarCamNative` (la memoria
-  de Claude va por esa ruta: moverla también), el slug de SignPath del workflow (en SignPath, revisar si guarda la
-  URL del repo, que ahora es `xtrimdr/WildTrack`; no crear nunca otro repo `GuitarCamNative`, rompe la redirección) y el archivo `guitarcam.json` de cada proyecto (renombrarlo pide migrar al abrir y
+  de Claude va por esa ruta: moverla también; no crear nunca otro repo `GuitarCamNative` en GitHub, rompe la
+  redirección) y el archivo `guitarcam.json` de cada proyecto (renombrarlo pide migrar al abrir y
   que las versiones viejas no lo vean). Antes de publicar con el nombre nuevo, buscarlo en las oficinas de marcas
   (USPTO, INPI). El botón de descarga del README apunta a `WildTrack-Setup.exe`: anda recién con el próximo release.
+- Firma del instalador: falta pedirla a SignPath Foundation (gratis para código abierto; el README ya tiene la
+  política de firma que piden). Hasta entonces el workflow arma el instalador sin firmar y Windows SmartScreen avisa
+  al instalarlo. Con la cuenta: proyecto `WildTrack` (el slug por defecto del workflow) con el repo
+  `xtrimdr/WildTrack`, política `release-signing`, el secreto `SIGNPATH_API_TOKEN` y la variable
+  `SIGNPATH_ORGANIZATION_ID` en GitHub; la firma se prende sola.
 - `AudioGapLog` es un diagnóstico provisorio: sacarlo (o dejarlo detrás de una opción) cuando el audio esté confirmado.
 
 - Puntitos en la preview (resuelto): con la ventana permitiendo transparencia, algunos píxeles oscuros

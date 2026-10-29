@@ -20,8 +20,8 @@ namespace WildTrack.App;
 /// <see cref="NoteSynth"/>'s test tone.
 /// <para>
 /// While it is on screen the piano roll follows the timeline (asked by the user, <see cref="FollowPiano"/>): a click on
-/// a MIDI clip shows that one, a click elsewhere on another MIDI track shows that track whole, and a click inside
-/// another clip in the roll picks it there.
+/// a MIDI clip shows that one, a click elsewhere on another MIDI track shows that track whole, no MIDI track selected
+/// leaves it empty, and a click inside another clip in the roll picks it there.
 /// </para>
 /// </summary>
 public partial class MainWindow
@@ -371,13 +371,14 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// The piano roll in the mixer's place (Mixer, Mastering and Piano roll share it). With a MIDI track selected that
-    /// it doesn't show yet, it opens on that track whole.
+    /// The piano roll in the mixer's place (Mixer, Mastering and Piano roll share it). It shows the selected track
+    /// (asked by the user): a MIDI track it doesn't show yet opens whole, and with no MIDI track selected it is empty.
     /// </summary>
     void ShowPiano()
     {
         var frame = PianoRollView.Frame.Keep;
-        if (sel?.Track.IsMidi == true && sel.Track.Id != PianoTrack()?.Track.Id)
+        if (sel?.Track.IsMidi != true) pianoClipId = null;
+        else if (sel.Track.Id != PianoTrack()?.Track.Id)
         {
             pianoClipId = PianoClipFor(sel.Track);
             frame = PianoRollView.Frame.Track;
@@ -387,6 +388,9 @@ public partial class MainWindow
 
     void OpenInPiano(string clipId)
     {
+        // its track becomes the selected one, so the roll keeps showing it
+        if (store != null && MidiEditing.TryFind(store.Project, clipId) != null && Timeline.SelectedMidiId != clipId)
+            Timeline.SelectMidiClip(TrackIndex(MidiEditing.Find(store.Project, clipId).Track.Id), clipId);
         pianoClipId = clipId;
         OpenPianoView(PianoRollView.Frame.Clip);
     }
@@ -405,11 +409,19 @@ public partial class MainWindow
     /// <summary>
     /// The piano roll follows the timeline's selection while it is on screen (asked by the user): a MIDI clip clicked
     /// is shown (scrolled into sight if it is on the same track, else with its track whole); a click elsewhere on another
-    /// MIDI track (its header, an empty stretch) shows that track whole, on the clip under the playhead.
+    /// MIDI track (its header, an empty stretch) shows that track whole, on the clip under the playhead; no track, or
+    /// an audio one, leaves it empty.
     /// </summary>
     void FollowPiano(int i)
     {
-        if (!PianoShown || store == null || i < 0 || i >= tracks.Count || !tracks[i].Track.IsMidi) return;
+        if (!PianoShown || store == null) return;
+        if (i < 0 || i >= tracks.Count || !tracks[i].Track.IsMidi)
+        {
+            if (pianoClipId == null) return;
+            pianoClipId = null;
+            RefreshPiano();
+            return;
+        }
         var track = tracks[i].Track;
         bool sameTrack = PianoTrack()?.Track.Id == track.Id;
         if (Timeline.SelectedMidiId is { } id && track.MidiClips?.Any(c => c.Id == id) == true)

@@ -262,7 +262,10 @@ public static partial class ProjectLibrary
         };
     }
 
-    /// <summary>A new project in the projects folder (or in <paramref name="dir"/>, an empty folder the user picked).</summary>
+    /// <summary>
+    /// A new project in the projects folder (or in <paramref name="dir"/>, an empty folder the user picked). Without a
+    /// template it has no buses (so no sends); with one, the template's.
+    /// </summary>
     /// <param name="mode">video | audio (native only): the project's mode, from the manager's "Video / Solo audio".</param>
     public static string Create(string name, ProjectTemplate? template, string? dir = null, string mode = "video")
     {
@@ -277,10 +280,13 @@ public static partial class ProjectLibrary
         {
             dir = Path.GetFullPath(dir);
             if (Directory.Exists(dir) && Directory.EnumerateFileSystemEntries(dir).Any())
-                throw new IOException(Texts.T("err.lib.notEmpty", "Esa carpeta no está vacía. Elegí una carpeta vacía para crear el proyecto."));
+                throw new IOException(Texts.T("err.lib.notEmpty", "La carpeta no está vacía. Elegí una vacía para crear el proyecto."));
         }
         var p = new Project { Name = name };
-        template?.ApplyTo(p);
+        // an empty project starts without buses, so no track shows sends (asked by the user, 2026-10-29); a template
+        // brings its own, or the default Reverb and Delay when it has none saved
+        if (template == null) p.Settings.Buses = [];
+        else template.ApplyTo(p);
         p.Settings.SetMode(mode);
         p.AddLog("session-created");
         using var store = ProjectStore.Create(dir, p);

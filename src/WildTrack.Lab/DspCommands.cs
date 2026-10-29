@@ -635,6 +635,7 @@ static class DspCommands
         allOk &= TransposeCommands.Check();
         allOk &= InsertCommands.Check();
         allOk &= GateChecks.Check();
+        allOk &= PdcChecks.Check();
         allOk &= RangeChecks.Check();
         allOk &= BusCommands.Check();
         allOk &= MeterChecks.Check();

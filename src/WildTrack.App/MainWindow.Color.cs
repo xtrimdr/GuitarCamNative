@@ -92,7 +92,7 @@ public partial class MainWindow
         projectBarExpanded.Children.Add(top);
         projectBarExpanded.Children.Add(projectBarBody);
         projectBarWidth = SavedSidebarWidth("projectBarWidth");
-        projectBarGrip = SidebarGrip(false, () => projectBarWidth, () => InspectorBar.Width, SetProjectBarWidth, "projectBarWidth");
+        projectBarGrip = SidebarGrip(false, () => projectBarWidth, () => ShownWidth(InspectorBar), SetProjectBarWidth, "projectBarWidth");
         ProjectBar.Child = new Panel { Children = { projectBarExpanded, projectBarCollapsed, projectBarGrip } };
 
         BuildColorPanel();

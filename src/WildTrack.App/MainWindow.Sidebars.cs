@@ -38,6 +38,43 @@ public partial class MainWindow
 
     void SetProjectBarWidth(double w) { projectBarWidth = w; ProjectBar.Width = w; }
 
+    /// <summary>What a sidebar takes from the window: nothing while it is hidden.</summary>
+    static double ShownWidth(Control bar) => bar.IsVisible ? bar.Width : 0;
+
+    /// <summary>
+    /// The title bar's two panel buttons (asked by the user): each hides its sidebar entirely, rail and all, and shows it
+    /// back as it was (open or folded). Saved in config.json ("sidebarHidden", "projectBarHidden") like the folded state.
+    /// </summary>
+    void InitSidebarToggles()
+    {
+        LeftPanelButton.Click += (_, _) => SetInspectorHidden(InspectorBar.IsVisible);
+        RightPanelButton.Click += (_, _) => SetProjectBarHidden(ProjectBar.IsVisible);
+        SetInspectorHidden(AppConfig.Get("sidebarHidden") == "1", save: false);
+        SetProjectBarHidden(AppConfig.Get("projectBarHidden") == "1", save: false);
+    }
+
+    void SetInspectorHidden(bool hidden, bool save = true)
+    {
+        InspectorBar.IsVisible = !hidden;
+        LeftPanelFill.IsVisible = !hidden;
+        SetPanelTip(LeftPanelButton, Loc.T(hidden ? "panel.left.show" : "panel.left.hide"));
+        if (save) SaveViewPref("sidebarHidden", hidden ? "1" : "2");
+    }
+
+    void SetProjectBarHidden(bool hidden, bool save = true)
+    {
+        ProjectBar.IsVisible = !hidden;
+        RightPanelFill.IsVisible = !hidden;
+        SetPanelTip(RightPanelButton, Loc.T(hidden ? "panel.right.show" : "panel.right.hide"));
+        if (save) SaveViewPref("projectBarHidden", hidden ? "1" : "2");
+    }
+
+    static void SetPanelTip(Button b, string tip)
+    {
+        ToolTip.SetTip(b, tip);
+        Avalonia.Automation.AutomationProperties.SetName(b, tip);
+    }
+
     /// <summary>The grip over a bar's inner edge (right for the inspector, left for the project bar).</summary>
     Border SidebarGrip(bool rightEdge, Func<double> get, Func<double> other, Action<double> set, string key) =>
         SizeGrip(rightEdge, rightEdge, get, w => ClampSidebar(w, other()), set, SidebarWidth, key, "splitter.sidebar");

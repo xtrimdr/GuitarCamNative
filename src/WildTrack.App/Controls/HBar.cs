@@ -67,9 +67,9 @@ public sealed class HBar : Control
         else if (x > 1) ctx.DrawRectangle(fill, null, new Rect(1, 1, x - 1, h - 2), 2, 2);
         var fg = Lit ? Palette.Fg : Palette.Faint;
         double right = w - 4;
-        if (Readout.Length > 0)
+        // a bar too narrow for its readout keeps only its fill
+        if (Readout.Length > 0 && Palette.Text(Readout, 10, Palette.Dim, Palette.Mono) is var r && r.Width + 8 <= w)
         {
-            var r = Palette.Text(Readout, 10, Palette.Dim, Palette.Mono);
             right -= r.Width;
             ctx.DrawText(r, new Point(right, (h - r.Height) / 2));
             right -= 4;
@@ -105,7 +105,14 @@ public sealed class HBar : Control
         Changed?.Invoke(Snap(dragValue));
     }
 
-    protected override void OnPointerReleased(PointerReleasedEventArgs e) { pointer?.Capture(null); pointer = null; e.Handled = true; }
+    // only the release of its own drag: a right click goes on to whatever holds the bar (a send's menu)
+    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    {
+        if (pointer == null) return;
+        pointer.Capture(null);
+        pointer = null;
+        e.Handled = true;
+    }
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e) => pointer = null;
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)

@@ -19,10 +19,13 @@ public static class ChannelDsp
     public const double BusRmsDb = -24;
 
     /// <param name="rmsDb">The take's level, which the Vida drive is measured against (-24 without audio).</param>
-    public static InsertSpec[] Specs(Channel ch, double rmsDb) => Specs(ch.Slots, rmsDb);
+    /// <param name="live">Live: the running process of each VST3 slot (null while it loads); without it (the export,
+    /// wtlab), each VST3 slot opens its own.</param>
+    public static InsertSpec[] Specs(Channel ch, double rmsDb, double bpm = 120, Func<InsertSlot, VstBridge?>? live = null, bool bypass = false) =>
+        Specs(ch.Slots, rmsDb, bpm, live, bypass);
 
     /// <summary>A bus's slots; its delays follow <paramref name="bpm"/>.</summary>
-    public static InsertSpec[] BusSpecs(Bus b, double bpm) => Specs(b.Inserts, BusRmsDb, bpm);
+    public static InsertSpec[] BusSpecs(Bus b, double bpm, Func<InsertSlot, VstBridge?>? live = null, bool bypass = false) => Specs(b.Inserts, BusRmsDb, bpm, live, bypass);
 
     /// <summary>
     /// The ids of the mix's nodes in the order they run: every folder (nothing feeds a folder but its tracks), then the
@@ -61,13 +64,13 @@ public static class ChannelDsp
             Name = t.Name,
             Clips = clips,
             Notes = Notes(t, p.Settings.Bpm, MidiSampleRate),
-            Instrument = t.Instrument is { } i ? new VstInstance(i.Path, i.ClassId, i.Name, i.State) : null,
+            Instrument = t.Instrument is { } i ? Instance(i) : null,
             Tempo = p.Settings.Bpm,
             Volume = ch.Volume,
             Pan = ch.Pan,
             Muted = ch.Muted,
             Solo = ch.Solo,
-            Inserts = Specs(ch, rmsDb),
+            Inserts = Specs(ch, rmsDb, p.Settings.Bpm),
             Output = IndexOf(nodes, TrackOutput(t)),
             Sends = Sends(nodes, ch),
         };
@@ -125,12 +128,16 @@ public static class ChannelDsp
         return new MixBusSpec { Bpm = p.Settings.Bpm, Master = p.Settings.Master.ToParams(), Nodes = list };
     }
 
-    public static ReverbParams Reverb(ReverbSettings r) => new(r.Decay, r.PreDelayMs, r.Tone, r.LowCut, r.Width, r.ReturnGain, r.Muted);
+    public static ReverbParams Reverb(ReverbSettings r, bool bypass = false) => new(r.Decay, r.PreDelayMs, r.Tone, r.LowCut, r.Width, r.ReturnGain, r.Muted || bypass);
 
-    public static DelayParams Delay(DelaySettings d) =>
-        new(DelayParams.ParseMode(d.Mode), d.Sync, d.Division, d.TimeMs, d.Feedback, d.Tone, d.LowCut, d.Width, d.Duck, d.ReturnGain, d.Muted);
+    public static DelayParams Delay(DelaySettings d, bool bypass = false) =>
+        new(DelayParams.ParseMode(d.Mode), d.Sync, d.Division, d.TimeMs, d.Feedback, d.Tone, d.LowCut, d.Width, d.Duck, d.ReturnGain, d.Muted || bypass);
 
-    public static InsertSpec[] Specs(IReadOnlyList<InsertSlot> slots, double rmsDb, double bpm = 120)
+    /// <summary>
+    /// The slots as the engine takes them. <paramref name="bypass"/> hands every one over off, as its own power switch
+    /// would (the mixer's FX switch: same path, same fades, nothing reset), without touching the project.
+    /// </summary>
+    public static InsertSpec[] Specs(IReadOnlyList<InsertSlot> slots, double rmsDb, double bpm = 120, Func<InsertSlot, VstBridge?>? live = null, bool bypass = false)
     {
         var list = new List<InsertSpec>(slots.Count);
         foreach (var s in slots)
@@ -139,24 +146,31 @@ public static class ChannelDsp
             s.Normalize();
             list.Add(s.Type switch
             {
-                InsertSlot.SatKind => new InsertSpec(s.Id, s.Type) { Sat = Sat(s.Sat!, rmsDb) },
-                InsertSlot.CompKind => new InsertSpec(s.Id, s.Type) { Comp = Comp(s.Comp!) },
-                InsertSlot.ReverbKind => new InsertSpec(s.Id, s.Type) { Reverb = Reverb(s.Reverb!) },
-                InsertSlot.DelayKind => new InsertSpec(s.Id, s.Type) { Delay = Delay(s.Delay!), Bpm = bpm },
-                InsertSlot.GateKind => new InsertSpec(s.Id, s.Type) { Gate = Gate(s.Gate!) },
-                _ => new InsertSpec(s.Id, s.Type) { EqOn = s.Eq!.On, EqBands = EqBands(s.Eq) },
+                InsertSlot.SatKind => new InsertSpec(s.Id, s.Type) { Sat = Sat(s.Sat!, rmsDb, bypass) },
+                InsertSlot.CompKind => new InsertSpec(s.Id, s.Type) { Comp = Comp(s.Comp!, bypass) },
+                InsertSlot.ReverbKind => new InsertSpec(s.Id, s.Type) { Reverb = Reverb(s.Reverb!, bypass) },
+                InsertSlot.DelayKind => new InsertSpec(s.Id, s.Type) { Delay = Delay(s.Delay!, bypass), Bpm = bpm },
+                InsertSlot.GateKind => new InsertSpec(s.Id, s.Type) { Gate = Gate(s.Gate!, bypass) },
+                InsertSlot.VstKind => new InsertSpec(s.Id, s.Type) { Vst = Vst(s.Vst!, live == null ? null : live(s), live == null, bypass), Bpm = bpm },
+                _ => new InsertSpec(s.Id, s.Type) { EqOn = s.Eq!.On && !bypass, EqBands = EqBands(s.Eq) },
             });
         }
         return [.. list];
     }
 
-    public static GateParams Gate(GateSettings g) => new(g.On, GateParams.ParseMode(g.Mode), g.Threshold);
+    /// <summary>A VST3 slot as the engine takes it: live with the window's process, or offline (it opens its own).</summary>
+    public static VstSlotSpec Vst(VstSlotSettings v, VstBridge? live, bool offline, bool bypass = false) =>
+        new(Instance(v.Plugin), v.On && !bypass) { Live = live, Offline = offline };
 
-    public static SatParams Sat(SatSettings s, double rmsDb) =>
-        SatParams.From(s.On, s.Mode == "tape" ? SatMode.Tape : SatMode.Tube, s.Amount, rmsDb);
+    public static VstInstance Instance(PluginRef p) => new(p.Path, p.ClassId, p.Name, p.State);
 
-    public static CompState Comp(CompSettings c) => new(
-        c.On,
+    public static GateParams Gate(GateSettings g, bool bypass = false) => new(g.On && !bypass, GateParams.ParseMode(g.Mode), g.Threshold);
+
+    public static SatParams Sat(SatSettings s, double rmsDb, bool bypass = false) =>
+        SatParams.From(s.On && !bypass, s.Mode == "tape" ? SatMode.Tape : SatMode.Tube, s.Amount, rmsDb);
+
+    public static CompState Comp(CompSettings c, bool bypass = false) => new(
+        c.On && !bypass,
         c.Preset,
         c.Amount,
         c.Limit,

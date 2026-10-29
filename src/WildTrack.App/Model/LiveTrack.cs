@@ -388,7 +388,10 @@ public sealed class LiveTrack
     /// <summary>Takes the track's notes again at <paramref name="tempo"/> (after an edit or a tempo change). UI thread.</summary>
     public void SetMidi(double tempo)
     {
+        // a VST3 effect follows the tempo (its synced delays and LFOs)
+        bool retempo = tempo != bpm && Channel.Slots.Exists(s => s.Type == InsertSlot.VstKind);
         bpm = tempo;
+        if (retempo) ApplyInserts();
         Keys.Transpose = Track.Transpose;
         notes = ChannelDsp.Notes(Track, tempo, sampleRate);
         MidiEndSec = Track.MidiClips is { Count: > 0 } mc ? mc.Max(c => c.EndSec(tempo)) : 0;
@@ -529,7 +532,7 @@ public sealed class LiveTrack
     /// </summary>
     public void ApplySends()
     {
-        var next = PlaybackEngine.SendsTo(Nodes, Channel);
+        var next = PlaybackEngine.SendsTo(Nodes, Channel, Chain.Sends);
         if (next.Length > 0 || Chain.Sends.Length > 0) Chain.Sends = next;
     }
 
@@ -539,7 +542,7 @@ public sealed class LiveTrack
     public void ApplyInserts()
     {
         Channel.AdoptSpares();
-        Chain.SetInserts(ChannelDsp.Specs(Channel, RmsDb), fade: started);
+        Chain.SetInserts(ChannelDsp.Specs(Channel, RmsDb, bpm, LiveVst.Of(Track.Id), PlaybackEngine.FxBypass), fade: started);
     }
 
     /// <summary>False only while the constructor sets the chain up, before the audio thread can run it.</summary>
@@ -644,7 +647,7 @@ public sealed class LiveTrack
         {
             var bus = sends[k].To;
             if (bus == null) continue;
-            Chain.AddSend(n, sends[k].Level, sends[k].Pre, bus.BufferL(sendOffset + n).Slice(sendOffset),
+            Chain.AddSend(n, sends[k], bus.BufferL(sendOffset + n).Slice(sendOffset),
                 bus.BufferR(sendOffset + n).Slice(sendOffset));
         }
     }

@@ -18,7 +18,11 @@ namespace WildTrack.App;
 public partial class MainWindow
 {
     readonly List<Action> inspectorRefresh = [];
+    /// <summary>The channel's sections (Mezcla, effects, sends, Transponer): shown for an empty track too.</summary>
     readonly StackPanel takeSections = new() { Spacing = 0 };
+    /// <summary>The selected clip's sections (Sincronización, Clip, Encuadre) and their refreshes: only with a clip.</summary>
+    readonly StackPanel clipSections = new() { Spacing = 0 };
+    readonly List<Action> clipRefresh = [];
     readonly StackPanel emptySections = new() { Spacing = 8 };
     readonly StackPanel noSelection = new() { Margin = new Thickness(10, 32), Spacing = 4 };
     readonly TextBlock noSelectionHint = new() { FontSize = 12, Foreground = Palette.Faint, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap };
@@ -49,9 +53,19 @@ public partial class MainWindow
     LiveTrack? spectrumTrack;
     long spectrumFrom;
 
+    /// <summary>
+    /// The effect and send cards (<see cref="Section"/> with <c>card</c>): they start folded (asked by the user, so a
+    /// chain or a list of sends doesn't fill the tab), so the saved list keeps the ones opened, as "open:" + title.
+    /// </summary>
+    readonly HashSet<string> cardSections = [];
+    const string OpenPrefix = "open:";
+
+    bool IsCollapsed(string title) => cardSections.Contains(title) ? !collapsedSections.Contains(OpenPrefix + title) : collapsedSections.Contains(title);
+
     void SetSectionCollapsed(string title, bool hide)
     {
-        if (hide) collapsedSections.Add(title); else collapsedSections.Remove(title);
+        if (cardSections.Contains(title)) { if (hide) collapsedSections.Remove(OpenPrefix + title); else collapsedSections.Add(OpenPrefix + title); }
+        else if (hide) collapsedSections.Add(title); else collapsedSections.Remove(title);
         if (inspectorSections.TryGetValue(title, out var section))
         {
             section.Body.IsVisible = !hide;
@@ -74,7 +88,7 @@ public partial class MainWindow
     void UpdateCollapseButton()
     {
         if (collapseAll == null) return;
-        bool all = inspectorSections.Keys.All(collapsedSections.Contains);
+        bool all = inspectorSections.Keys.All(IsCollapsed);
         ToolTip.SetTip(collapseAll, all ? Loc.T("insp.sections.show") : Loc.T("insp.sections.hide"));
         collapseAllIcon.Data = (Geometry)Application.Current!.FindResource(all ? "ExpandAllIcon" : "CollapseAllIcon")!;
     }
@@ -113,7 +127,7 @@ public partial class MainWindow
         }
         InitInspectorRail();
         inspectorWidth = SavedSidebarWidth("sidebarWidth");
-        inspectorGrip = SidebarGrip(true, () => inspectorWidth, () => ProjectBar.Width, SetInspectorWidth, "sidebarWidth");
+        inspectorGrip = SidebarGrip(true, () => inspectorWidth, () => ShownWidth(ProjectBar), SetInspectorWidth, "sidebarWidth");
         InspectorBar.Child = new Panel { Children = { inspectorExpanded, inspectorCollapsed, inspectorGrip } };
         SetInspectorCollapsed(AppConfig.Get("sidebarCollapsed") == "1", save: false);
     }
@@ -148,6 +162,7 @@ public partial class MainWindow
     LiveClip? SelectedInspectorClip => sel?.Clips.FirstOrDefault(c => c.Clip.Id == Timeline.SelectedClipId)
         ?? sel?.ShownClip ?? sel?.Clips.FirstOrDefault();
 
+    static string LifeLabel(double v) => Loc.T(v < .2 ? "insp.life.0" : v < .45 ? "insp.life.1" : v < .7 ? "insp.life.2" : v < .9 ? "insp.life.3" : "insp.life.4");
     static string AmountLabel(double a) => Loc.T(a < .2 ? "insp.amount.0" : a < .45 ? "insp.amount.1" : a < .7 ? "insp.amount.2" : a < .9 ? "insp.amount.3" : "insp.amount.4");
     static string Db(double v) => $"{v:+0.0;-0.0;0.0} dB";
     static string Ms(double v) => $"{v:+0.###############;-0.###############;0} ms";
@@ -169,20 +184,35 @@ public partial class MainWindow
     /// <summary>"EQ 2" → "EQ": a repeated slot's section, without its number.</summary>
     static string BaseTitle(string id) => id.LastIndexOf(' ') is int sp && sp > 0 && int.TryParse(id[(sp + 1)..], out _) ? id[..sp] : id;
 
+    /// <param name="card">An effect or send card in a tray: compact, its own rounded box, folded until opened.</param>
     StackPanel Section(string title, string icon, Func<bool>? on = null, Action<bool>? power = null, Control? action = null,
-        StackPanel? host = null, List<Action>? refresh = null)
+        StackPanel? host = null, List<Action>? refresh = null, bool card = false)
     {
         var refreshes = refresh ?? inspectorRefresh;
-        var content = new StackPanel { Spacing = 14, Margin = new Thickness(16, 2, 16, 16) };
+        // the cards are tighter than the flat sections (asked by the user: a few effects and sends filled the tab)
+        var content = card ? new StackPanel { Spacing = 10, Margin = new Thickness(12, 0, 12, 12) }
+            : new StackPanel { Spacing = 12, Margin = new Thickness(16, 0, 16, 14) };
         var outer = new StackPanel();
         var border = new Border { Classes = { "section" }, Child = outer, Background = Palette.Panel,
             BorderThickness = new Thickness(0, 0, 0, 1), CornerRadius = new CornerRadius(0),
             Padding = new Thickness(0), Margin = new Thickness(-14, 0) };
         var header = new SectionHeader(SectionTitle(title), icon);
+        if (card)
+        {
+            cardSections.Add(title);
+            InspectorTray.Card(border);
+            header.Padding = new Thickness(10, 5);
+            header.MinHeight = 36;
+        }
+        else
+        {
+            header.Padding = new Thickness(16, 10);
+            header.MinHeight = 44;
+        }
         var sectionIcon = header.Icon;
         inspectorSections[title] = (content, action, header);
         sectionLooks[title] = (icon, on);
-        header.Toggled += () => { SetSectionCollapsed(title, !collapsedSections.Contains(title)); SaveCollapsedSections(); };
+        header.Toggled += () => { SetSectionCollapsed(title, !IsCollapsed(title)); SaveCollapsedSections(); };
         ToggleButton? powerButton = null;
         if (on != null && power != null)
         {
@@ -206,7 +236,7 @@ public partial class MainWindow
         outer.Children.Add(header); outer.Children.Add(content);
         (host ?? takeSections).Children.Add(border);
         refreshes.Add(() => { bool enabled = on == null || on(); content.Opacity = enabled ? 1 : 0.4; FxIcon.SetColor(sectionIcon, enabled ? Palette.Accent : Palette.Faint); });
-        SetSectionCollapsed(title, collapsedSections.Contains(title));
+        SetSectionCollapsed(title, IsCollapsed(title));
         return content;
     }
     /// <summary>CompControl.tsx's amount row: the big knob, then the uppercase label, the value in words and a mono detail.</summary>
@@ -225,17 +255,18 @@ public partial class MainWindow
 
     /// <summary>A 0–1 effect amount on the big knob instead of a slider (asked by the user, like the compressor's).</summary>
     void EffectKnob(StackPanel host, string label, double reset, Func<double> get, Action<double> set,
-        Func<double, string> value, Func<double, string> detail, string hint, List<Action>? refresh = null)
+        Func<double, string> value, Func<double, string> detail, string hint, List<Action>? refresh = null, bool hintInTip = false)
     {
         var (knob, valueText, detailText) = KnobRow(host, label);
         knob.ResetValue = reset;
         knob.Changed += v => { if (!syncing) set(v); };
-        host.Children.Add(Help(hint));
+        if (!hintInTip) host.Children.Add(Help(hint));
         (refresh ?? inspectorRefresh).Add(() =>
         {
             double v = get();
             knob.Set(v); valueText.Text = value(v); detailText.Text = detail(v);
-            ToolTip.SetTip(knob, Loc.T("insp.knob.tip", label, value(v), value(reset)));
+            string tip = Loc.T("insp.knob.tip", label, value(v), value(reset));
+            ToolTip.SetTip(knob, hintInTip ? tip + "\n" + hint : tip);
         });
     }
 
@@ -303,8 +334,10 @@ public partial class MainWindow
             HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
         collapseAll.Click += (_, _) =>
         {
-            bool hide = !inspectorSections.Keys.All(collapsedSections.Contains);
+            bool hide = !inspectorSections.Keys.All(IsCollapsed);
             foreach (string title in inspectorSections.Keys) SetSectionCollapsed(title, hide);
+            SetTrayCollapsed(chainTray, ChainTrayId, hide);
+            SetTrayCollapsed(sendsTray, SendsTrayId, hide);
             SaveCollapsedSections();
         };
         Grid.SetColumn(collapseAll, 2); header.Children.Add(collapseAll);
@@ -316,7 +349,7 @@ public partial class MainWindow
         Inspector.Children.Add(noSelection);
         takeHead.Child = new StackPanel { Children = { header, takeInfo, takeFacts } };
         Inspector.Children.Add(takeHead);
-        var recordHint = new TextBlock { FontSize = 12, Foreground = Palette.Dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
+        var recordHint = new TextBlock { FontSize = 12, Foreground = Palette.Dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 0) };
         recordHint.Inlines!.Add(new Avalonia.Controls.Documents.Run(Loc.T("insp.empty.a")));
         recordHint.Inlines.Add(new Avalonia.Controls.Documents.Run("R") { FontFamily = Palette.Mono.FontFamily, Foreground = Palette.Fg });
         recordHint.Inlines.Add(new Avalonia.Controls.Documents.Run(Loc.T("insp.empty.b")));
@@ -324,7 +357,8 @@ public partial class MainWindow
         emptySections.Children.Add(new TextBlock { Text = Loc.T("insp.empty.c"), FontSize = 12, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap });
         var removeEmpty = RemoveButton(Loc.T("insp.removeTrack")); removeEmpty.Margin = new Thickness(0, 12, 0, 0);
         removeEmpty.Click += async (_, _) => await DeleteTimelineSelection(); emptySections.Children.Add(removeEmpty);
-        Inspector.Children.Add(emptySections); Inspector.Children.Add(takeSections);
+        // an empty track shows its channel too, with how to fill it and its remove button below
+        Inspector.Children.Add(takeSections); Inspector.Children.Add(clipSections); Inspector.Children.Add(emptySections);
         var mix = Section("Mezcla", "\uE9E9", action: InspectorIcon("\uE74F", Loc.T("insp.mute.tip"), () => Edit(t => t.Channel.Muted = !t.Channel.Muted, "mute")));
         Slider(mix, Loc.T("insp.volume"), 0, 1.5, 0.01, 1, () => sel!.Channel.Volume, v => Edit(t => t.Channel.Volume = v, "volume"), v => $"{v * 100:0}%");
         Slider(mix, Loc.T("insp.pan"), -1, 1, 0.05, 0, () => sel!.Channel.Pan, v => Edit(t => t.Channel.Pan = Math.Abs(v) < 0.04 ? 0 : v, "pan"), v => v == 0 ? "C" : $"{(v < 0 ? "L" : "R")} {Math.Abs(v) * 100:0}");
@@ -335,17 +369,22 @@ public partial class MainWindow
         inspectorRefresh.Add(() => inVideo.IsChecked = sel!.Track.Video);
         mix.Children.Add(inVideo);
         videoOnly.Add(inVideo);
-        // the insert slots, in their order (RebuildInspectorChain)
-        takeSections.Children.Add(inspectorChain);
-        // where the track goes and its sends, one section per bus (RebuildInspectorSends); every send can be taken
-        // before the fader: its PRE chip, in the section's header
-        takeSections.Children.Add(inspectorSends);
+        // the insert slots, in their order (RebuildInspectorChain), and where the track goes and its sends, one section
+        // per bus (RebuildInspectorSends; every send can be taken before the fader: its PRE chip, in the section's
+        // header): each in a tray of its own, so the effects and the sends never read as one list (asked by the user)
+        chainTray = new InspectorTray(Loc.T("mix.list.fx"), Loc.T("insp.tray.fx.empty"), inspectorChain);
+        sendsTray = new InspectorTray(Loc.T("insp.tray.sends"), Loc.T("insp.tray.sends.empty"), inspectorSends);
+        foreach (var (tray, id) in new[] { (chainTray, ChainTrayId), (sendsTray, SendsTrayId) })
+        {
+            tray.SetCollapsed(collapsedSections.Contains(id));
+            tray.Toggled += () => SetTrayCollapsed(tray, id, !tray.Collapsed);
+            takeSections.Children.Add(tray);
+        }
         // native only: the track's pitch, same length (MainWindow.Transpose.cs). A card of its own beside the other
         // effects (asked by the user); it reads as off (dimmed) while the track plays at its original pitch.
         var transpose = Section("Transponer", FxIcon.Transpose, () => sel!.Track.Transpose != 0);
         Slider(transpose, Loc.T("insp.transpose.semis"), -PitchShifter.MaxSemitones, PitchShifter.MaxSemitones, 1, 0,
             () => sel!.Track.Transpose, SetTranspose, TransposeText, Loc.T("insp.transpose.tip"));
-        transpose.Children.Add(Help(Loc.T("insp.transpose.hint")));
         InitTranspose(transpose);
         InitClipInspector();
         InitMidiInspector();
@@ -368,7 +407,7 @@ public partial class MainWindow
         chainRefresh.Clear();
         inspectorChain.Children.Clear();
         eqEditor = null;
-        var drag = new SlotDrag(0);
+        var drag = new SlotDrag(InspectorTray.Gap);
         drag.Moved += (id, anchor, after) => SlotsEdit(t, x => ChannelInserts.MoveNextTo(x.Channel, id, anchor, after), "move");
         var slots = t.Channel.Slots;
         for (int i = 0; i < slots.Count; i++)
@@ -383,31 +422,54 @@ public partial class MainWindow
                 case InsertSlot.SatKind: SatSection(t, id, nth, drag); break;
                 case InsertSlot.CompKind: CompSection(t, id, nth, drag); break;
                 case InsertSlot.GateKind: GateSection(t, id, nth, drag); break;
+                case InsertSlot.VstKind: VstSection(t, id, drag); break;
                 default: EqSection(t, id, nth, drag); break;
             }
         }
-        var add = AddSlotButton(t);
-        add.Margin = new Thickness(0, 12, 0, 12);
-        inspectorChain.Children.Add(add);
+        chainTray.Set(chainSections.Count, AddSlotButton(t));
         UpdateCollapseButton();
     }
 
     readonly StackPanel inspectorChain = new();
+    /// <summary>The Canal tab's areas for the effect slots and for the output and sends.</summary>
+    InspectorTray chainTray = null!, sendsTray = null!;
+    /// <summary>The trays' ids among the folded sections (never a section's title).</summary>
+    const string ChainTrayId = "tray:fx", SendsTrayId = "tray:sends";
+
+    void SetTrayCollapsed(InspectorTray tray, string id, bool hide)
+    {
+        if (tray.Collapsed == hide) return;
+        if (hide) collapsedSections.Add(id); else collapsedSections.Remove(id);
+        tray.SetCollapsed(hide);
+        SaveCollapsedSections();
+    }
     readonly List<Action> chainRefresh = [];
     readonly List<string> chainSections = [];
     string inspectorChainKey = "";
 
-    /// <summary>A slot's section: numbered when its kind repeats, dragged by its grip, with the slot's ⋯ menu.</summary>
-    StackPanel SlotSection(LiveTrack t, string id, string baseTitle, int nth, string icon, Func<bool> on, Action<bool> power, SlotDrag drag, Control? action = null)
+    /// <summary>
+    /// A slot's section: numbered when its kind repeats, dragged by its grip, with the slot's ⋯ menu and, folded, its
+    /// <paramref name="summary"/> beside the title (how much, which style).
+    /// </summary>
+    StackPanel SlotSection(LiveTrack t, string id, string baseTitle, int nth, string icon, Func<bool> on, Action<bool> power, SlotDrag drag,
+        Control? action = null, Func<string>? summary = null)
     {
         string title = nth > 1 ? $"{baseTitle} {nth}" : baseTitle;
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
         if (action != null) actions.Children.Add(action);
         actions.Children.Add(SlotMenuButton(t, id));
-        var content = Section(title, icon, on, power, actions, inspectorChain, chainRefresh);
+        var content = Section(title, icon, on, power, actions, inspectorChain, chainRefresh, card: true);
         chainSections.Add(title);
-        var card = (Control)content.Parent!.Parent!;
+        var card = (Border)content.Parent!.Parent!;
         var header = inspectorSections[title].Header;
+        // a right click on its title: the same menu as its ⋯ (asked by the user)
+        header.PointerReleased += (_, e) =>
+        {
+            if (e.InitialPressMouseButton != Avalonia.Input.MouseButton.Right || store == null) return;
+            e.Handled = true;
+            ShowSlotMenu(SlotsOf(t), id, header, null);
+        };
+        if (summary != null) chainRefresh.Add(() => header.SetSummary(summary()));
         // its ⋯ stays at hand when the section is folded (moving or removing a folded slot is the common case)
         inspectorSections[title] = (content, null, header);
         actions.IsVisible = true;
@@ -423,7 +485,8 @@ public partial class MainWindow
     {
         SatSettings S() => t.Channel.Slot(id)?.Sat ?? GoneSat;
         void SatEdit(Action<SatSettings> edit, string key) => SlotEdit(t, id, s => edit(s.Sat!), key);
-        var sat = SlotSection(t, id, "Saturación", nth, FxIcon.Sat, () => S().On, on => SatEdit(s => s.On = on, "sat.on"), drag);
+        var sat = SlotSection(t, id, "Saturación", nth, FxIcon.Sat, () => S().On, on => SatEdit(s => s.On = on, "sat.on"), drag,
+            summary: () => $"{S().Amount * 100:0}% · {LifeLabel(S().Amount)}");
         var modes = new StackPanel { Orientation = Orientation.Horizontal };
         sat.Children.Add(new Border { Classes = { "seg" }, HorizontalAlignment = HorizontalAlignment.Left, Child = modes });
         foreach (var (mode, text) in new[] { ("tube", Loc.T("insp.sat.tube")), ("tape", Loc.T("insp.sat.tape")) })
@@ -433,7 +496,7 @@ public partial class MainWindow
             chainRefresh.Add(() => b.IsChecked = S().Mode == mode); modes.Children.Add(b);
         }
         EffectKnob(sat, Loc.T("insp.sat.life"), 0.3, () => S().Amount, v => SatEdit(s => { s.Amount = v; s.On = true; }, "sat.amount"),
-            v => Loc.T(v < .2 ? "insp.life.0" : v < .45 ? "insp.life.1" : v < .7 ? "insp.life.2" : v < .9 ? "insp.life.3" : "insp.life.4"), v => $"{v * 100:0}%",
+            LifeLabel, v => $"{v * 100:0}%",
             Loc.T("insp.sat.hint"), chainRefresh);
         var satHint = Help(""); sat.Children.Add(satHint);
         chainRefresh.Add(() => satHint.Text = S().Mode == "tape" ? Loc.T("insp.sat.tape.hint") : Loc.T("insp.sat.tube.hint"));
@@ -443,7 +506,8 @@ public partial class MainWindow
     {
         GateSettings G() => t.Channel.Slot(id)?.Gate ?? GoneGate;
         void GateEdit(Action<GateSettings> edit, string key) => SlotEdit(t, id, s => edit(s.Gate!), key);
-        var gate = SlotSection(t, id, Loc.T("fx.gate"), nth, FxIcon.Gate, () => G().On, on => GateEdit(g => g.On = on, "gate.on"), drag);
+        var gate = SlotSection(t, id, Loc.T("fx.gate"), nth, FxIcon.Gate, () => G().On, on => GateEdit(g => g.On = on, "gate.on"), drag,
+            summary: () => $"{G().Threshold:0.#} dB");
         var modes = new StackPanel { Orientation = Orientation.Horizontal };
         gate.Children.Add(new Border { Classes = { "seg" }, HorizontalAlignment = HorizontalAlignment.Left, Child = modes });
         foreach (string mode in GateModes)
@@ -482,8 +546,11 @@ public partial class MainWindow
             s.Comp = new CompSettings { On = on, Preset = preset };
             RecalculateInspectorComp(t, s.Comp);
         }, "comp.reset"));
-        var comp = SlotSection(t, id, "Compresor", nth, FxIcon.Comp, () => C().On, on => CompEdit(c => c.On = on, "on", recalculate: true), drag, reset);
-        comp.Children.Add(Help(Loc.T("insp.comp.what")));
+        var comp = SlotSection(t, id, "Compresor", nth, FxIcon.Comp, () => C().On, on => CompEdit(c => c.On = on, "on", recalculate: true), drag, reset,
+            () => C().Preset switch
+            {
+                "rhythm" => Loc.T("insp.comp.rhythm"), "arpeggio" => Loc.T("insp.comp.arpeggio"), "lead" => Loc.T("insp.comp.lead"), _ => Loc.T("insp.comp.manual"),
+            } + (C().Preset == "custom" ? "" : " · " + AmountLabel(C().Amount)));
         var presets = new UniformGrid { Columns = 3 };
         foreach (var (preset, label) in new[] { ("rhythm", Loc.T("insp.comp.rhythm")), ("arpeggio", Loc.T("insp.comp.arpeggio")), ("lead", Loc.T("insp.comp.lead")) })
         {
@@ -548,31 +615,35 @@ public partial class MainWindow
         Media? M() => SelectedInspectorClip!.Media;
         double Dur() => SelectedInspectorClip!.LengthSec;
         double Len() { var w = ClipEditing.Window(C(), M(), Dur()); return Math.Max(.01, w.End - w.Start); }
-        var sync = Section("Sincronización", "\uE823");
+        // the clip's sections go apart from the channel's, refreshed only while there is a clip
+        StackPanel ClipSection(string title, string icon, Control? action = null) => Section(title, icon, action: action, host: clipSections, refresh: clipRefresh);
+        InspectorSlider ClipSlider(StackPanel host, string label, double min, double max, double step, double reset, Func<double> get, Action<double> set,
+            Func<double, string> format, string? hint = null, Func<double>? maximum = null) => Slider(host, label, min, max, step, reset, get, set, format, hint, maximum, clipRefresh);
+        var sync = ClipSection("Sincronización", "\uE823");
         void SetSync(double v) => ClipEdit((c, m) => InspectorEditing.SetSync(c, m, v), "sync");
         // ±1 s instead of the web's ±250 ms (user request): some interfaces and cameras lag more than that
         const double SyncRangeMs = 1000;
-        var offset = Slider(sync, Loc.T("insp.sync.offset"), -SyncRangeMs, SyncRangeMs, 1, 0, () => C().EffectiveSyncMs(M()), SetSync, Ms,
+        var offset = ClipSlider(sync, Loc.T("insp.sync.offset"), -SyncRangeMs, SyncRangeMs, 1, 0, () => C().EffectiveSyncMs(M()), SetSync, Ms,
             Loc.T("insp.sync.offset.hint"));
         foreach (int delta in new[] { -5, 5 })
         {
             var b = new Button { Content = delta < 0 ? "−5" : "+5", Classes = { "chip", "mono" }, FontSize = 10.5, Padding = new Thickness(4, 0), MinHeight = 22 };
             b.Click += (_, _) => SetSync(C().EffectiveSyncMs(M()) + delta); offset.Trailing.Children.Add(b);
         }
-        var cameraLatency = Slider(sync, Loc.T("insp.sync.camera"), -SyncRangeMs, SyncRangeMs, 5, 80, () => C().EffectiveVideoOffsetMs(M()), v => ClipEdit((c, _) => c.VideoOffsetMs = v, "video-offset"), Ms,
+        var cameraLatency = ClipSlider(sync, Loc.T("insp.sync.camera"), -SyncRangeMs, SyncRangeMs, 5, 80, () => C().EffectiveVideoOffsetMs(M()), v => ClipEdit((c, _) => c.VideoOffsetMs = v, "video-offset"), Ms,
             Loc.T("insp.sync.camera.hint"));
         videoOnly.Add(cameraLatency);
         var resetClip = InspectorIcon("\uE777", Loc.T("insp.clip.reset"), () => ClipEdit((c, _) => ClipEditing.Reset(store!.Project, c.Id), "reset"));
-        var clip = Section("Clip", "\uE8C6", action: resetClip);
-        Slider(clip, Loc.T("insp.clip.gain"), WildTrack.Projects.Clip.MinGainDb, WildTrack.Projects.Clip.MaxGainDb, .5, 0, () => C().GainDb, v => ClipEdit((c, _) => c.GainDb = v, "gain"), Db,
+        var clip = ClipSection("Clip", "\uE8C6", resetClip);
+        ClipSlider(clip, Loc.T("insp.clip.gain"), WildTrack.Projects.Clip.MinGainDb, WildTrack.Projects.Clip.MaxGainDb, .5, 0, () => C().GainDb, v => ClipEdit((c, _) => c.GainDb = v, "gain"), Db,
             Loc.T("insp.clip.gain.hint"));
-        Slider(clip, Loc.T("insp.clip.trimStart"), 0, 10, .01, 0, () => C().TrimStartSec, v => ClipEdit((c, _) => c.TrimStartSec = v, "trim-start"), Sec,
+        ClipSlider(clip, Loc.T("insp.clip.trimStart"), 0, 10, .01, 0, () => C().TrimStartSec, v => ClipEdit((c, _) => c.TrimStartSec = v, "trim-start"), Sec,
             Loc.T("insp.clip.trimStart.hint"), () => Math.Max(.01, Dur() - C().TrimEndSec - ClipEnvelope.MinClipSec));
-        Slider(clip, Loc.T("insp.clip.trimEnd"), 0, 10, .01, 0, () => C().TrimEndSec, v => ClipEdit((c, _) => c.TrimEndSec = v, "trim-end"), Sec,
+        ClipSlider(clip, Loc.T("insp.clip.trimEnd"), 0, 10, .01, 0, () => C().TrimEndSec, v => ClipEdit((c, _) => c.TrimEndSec = v, "trim-end"), Sec,
             maximum: () => Math.Max(.01, Dur() - C().TrimStartSec - ClipEnvelope.MinClipSec));
         ClipEnvelope.FadePair Audio() => ClipEnvelope.FitFades(C().FadeInSec, C().FadeOutSec, Len());
-        Slider(clip, Loc.T("insp.clip.fadeIn"), 0, 10, .01, 0, () => Audio().FadeIn, v => ClipEdit((c, _) => c.FadeInSec = v, "fade-in"), Sec, maximum: Len);
-        Slider(clip, Loc.T("insp.clip.fadeOut"), 0, 10, .01, 0, () => Audio().FadeOut, v => ClipEdit((c, _) => c.FadeOutSec = v, "fade-out"), Sec, maximum: Len);
+        ClipSlider(clip, Loc.T("insp.clip.fadeIn"), 0, 10, .01, 0, () => Audio().FadeIn, v => ClipEdit((c, _) => c.FadeInSec = v, "fade-in"), Sec, maximum: Len);
+        ClipSlider(clip, Loc.T("insp.clip.fadeOut"), 0, 10, .01, 0, () => Audio().FadeOut, v => ClipEdit((c, _) => c.FadeOutSec = v, "fade-out"), Sec, maximum: Len);
         var link = new CheckBox { Content = Loc.T("insp.clip.linkFades"), FontSize = 12 };
         ToolTip.SetTip(link, Loc.T("insp.clip.linkFades.tip"));
         link.IsCheckedChanged += (_, _) =>
@@ -585,22 +656,21 @@ public partial class MainWindow
         videoOnly.Add(link);
         var video = new StackPanel { Spacing = 10 }; clip.Children.Add(video);
         ClipEnvelope.FadePair Video() => ClipEnvelope.FitFades(C().VideoFadeInSec, C().VideoFadeOutSec, Len());
-        Slider(video, Loc.T("insp.clip.vFadeIn"), 0, 10, .01, 0, () => Video().FadeIn, v => ClipEdit((c, _) => c.VideoFadeInSec = v, "video-fade-in"), Sec, maximum: Len);
-        Slider(video, Loc.T("insp.clip.vFadeOut"), 0, 10, .01, 0, () => Video().FadeOut, v => ClipEdit((c, _) => c.VideoFadeOutSec = v, "video-fade-out"), Sec, maximum: Len);
-        inspectorRefresh.Add(() => { link.IsChecked = C().LinkVideoFades; video.IsVisible = !AudioOnly && !C().LinkVideoFades;
+        ClipSlider(video, Loc.T("insp.clip.vFadeIn"), 0, 10, .01, 0, () => Video().FadeIn, v => ClipEdit((c, _) => c.VideoFadeInSec = v, "video-fade-in"), Sec, maximum: Len);
+        ClipSlider(video, Loc.T("insp.clip.vFadeOut"), 0, 10, .01, 0, () => Video().FadeOut, v => ClipEdit((c, _) => c.VideoFadeOutSec = v, "video-fade-out"), Sec, maximum: Len);
+        clipRefresh.Add(() => { link.IsChecked = C().LinkVideoFades; video.IsVisible = !AudioOnly && !C().LinkVideoFades;
             resetClip.IsEnabled = C().GainDb != 0 || C().GainCurve.Count > 0 || C().TrimStartSec > 0 || C().TrimEndSec > 0 || C().FadeInSec > 0 || C().FadeOutSec > 0 || !C().LinkVideoFades && (C().VideoFadeInSec > 0 || C().VideoFadeOutSec > 0); });
-        clip.Children.Add(Help(Loc.T("insp.clip.hint")));
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         var mirror = InspectorIcon("\uE8AB", Loc.T("insp.frame.mirror"), () => ClipEdit((c, _) => c.Framing.Mirror = !c.Framing.Mirror, "mirror"));
         actions.Children.Add(mirror); actions.Children.Add(InspectorIcon("\uE777", Loc.T("insp.frame.reset"), () => ClipEdit((c, _) => InspectorEditing.ResetFrame(c), "framing")));
-        var frame = Section("Encuadre", "\uE7A8", action: actions);
+        var frame = ClipSection("Encuadre", "\uE7A8", actions);
         videoOnly.Add((Control)frame.Parent!.Parent!); // the whole card
-        inspectorRefresh.Add(() => mirror.Foreground = C().Framing.Mirror ? Palette.Accent : Palette.Dim);
-        Slider(frame, Loc.T("insp.frame.zoom"), 1, 2.5, .01, 1, () => C().Framing.Zoom, v => ClipEdit((c, _) => InspectorEditing.Frame(c, zoom: v), "framing"), v => $"{v:0.00}×");
+        clipRefresh.Add(() => mirror.Foreground = C().Framing.Mirror ? Palette.Accent : Palette.Dim);
+        ClipSlider(frame, Loc.T("insp.frame.zoom"), 1, 2.5, .01, 1, () => C().Framing.Zoom, v => ClipEdit((c, _) => InspectorEditing.Frame(c, zoom: v), "framing"), v => $"{v:0.00}×");
         frame.Children.Add(Help(Loc.T("insp.frame.hint")));
         var remove = RemoveButton(Loc.T("insp.removeClip")); remove.Margin = new Thickness(0, 16, 0, 0);
-        remove.Click += async (_, _) => await DeleteTimelineSelection(); takeSections.Children.Add(remove);
-        takeSections.Children.Add(Help(Loc.T("insp.removeClip.hint")));
+        remove.Click += async (_, _) => await DeleteTimelineSelection(); clipSections.Children.Add(remove);
+        clipSections.Children.Add(Help(Loc.T("insp.removeClip.hint")));
     }
 
     /// <summary>The web's full-width "Quitar pista" / "Quitar del timeline" button with its MinusCircle icon.</summary>
@@ -615,7 +685,7 @@ public partial class MainWindow
     void ShowTrack(LiveTrack? t)
     {
         sel = t;
-        Inspector.IsEnabled = (t != null || SelectedFolder != null) && !restoring && store?.ReadOnly != true;
+        Inspector.IsEnabled = (t != null || SelectedFolder != null || SelectedBus != null) && !restoring && store?.ReadOnly != true;
         inspectorTrack = t?.Track.Id;
         grShown = 0; RefreshInspectorText();
     }
@@ -627,12 +697,15 @@ public partial class MainWindow
             takeName.Text = sel?.Track.Name ?? "";
             var c = SelectedInspectorClip;
             var folder = sel == null ? SelectedFolder : null;
-            noSelection.IsVisible = sel == null && folder == null;
+            var bus = sel == null && folder == null ? SelectedBus : null;
+            noSelection.IsVisible = sel == null && folder == null && bus == null;
             folderPanel.IsVisible = folder != null;
             if (folder != null) foreach (var refresh in folderRefresh) refresh();
+            busPanel.IsVisible = bus != null;
+            if (bus != null) foreach (var refresh in busRefresh) refresh();
             noSelectionHint.Text = tracks.Any(t => t.Track.HasContent) ? Loc.T("insp.none.hint") : Loc.T("insp.none.empty");
             takeHead.IsVisible = sel != null;
-            takeBadge.Set(sel?.Track, sel == null ? 0 : tracks.IndexOf(sel) + 1, c != null);
+            takeBadge.Set(sel?.Track, sel == null ? 0 : tracks.IndexOf(sel) + 1, c != null, !AudioOnly);
             takeInfo.Text = sel == null ? "" : c == null ? Loc.T("insp.trackEmpty") : c.Offline ? Loc.T("clip.offline") : "";
             takeInfo.IsVisible = takeInfo.Text != "";
             takeFacts.IsVisible = c is { Offline: false };
@@ -653,14 +726,18 @@ public partial class MainWindow
                 RebuildInspectorSends(midi);
                 foreach (var refresh in sendRefresh) refresh();
             }
-            takeSections.IsVisible = c != null;
-            if (collapseAll != null) collapseAll.IsVisible = c != null;
-            if (sel != null && c != null)
+            // an empty audio track is still a channel: its mix, effects and sends show (only the clip's sections wait)
+            bool channel = sel is { Track.IsMidi: false };
+            takeSections.IsVisible = channel;
+            clipSections.IsVisible = channel && c != null;
+            if (collapseAll != null) collapseAll.IsVisible = channel;
+            if (channel)
             {
-                RebuildInspectorChain(sel);
+                RebuildInspectorChain(sel!);
                 PlaceInspectorSends(takeSections);
-                RebuildInspectorSends(sel);
+                RebuildInspectorSends(sel!);
                 foreach (var refresh in inspectorRefresh) refresh();
+                if (c != null) foreach (var refresh in clipRefresh) refresh();
                 foreach (var refresh in chainRefresh) refresh();
                 foreach (var refresh in sendRefresh) refresh();
             }

@@ -12,8 +12,8 @@ namespace WildTrack.App;
 
 /// <summary>
 /// The buses (native only, <see cref="ProjectBuses"/>) and where every track, folder and bus sends its sound: a strip per
-/// bus (name, mute, its insert slots with the same panels as a track's, where a reverb or a delay is one more slot, pan,
-/// output, its own sends, fader and meter), the Salida selector and the send panels every strip has, the
+/// bus, built and selected like a track's (badge with its color and icon, name, mute, its insert slots with the same
+/// panels as a track's, where a reverb or a delay is one more slot, pan, fader and meter), the Salida selector and the send panels every strip has, the
 /// Canal tab's output and send sections, and the PRE chip every send has (but a folder's: it has no fader). Every edit is
 /// an undo step (per control, like the strips), heard at once through <see cref="Audio.PlaybackEngine.SetBuses"/>.
 /// </summary>
@@ -43,6 +43,7 @@ public partial class MainWindow
     void RoutingChanged()
     {
         ApplyRouting(store!.Project, tracks);
+        SyncEffects();
         MarkDirty();
         UpdateUndoButtons();
         RefreshInspectorText();
@@ -107,6 +108,7 @@ public partial class MainWindow
         Bus B() => BusById(id) ?? bus;
         return new()
         {
+            OwnerId = id,
             Slots = () => B().Inserts,
             Edit = (change, key) => BusEdit(id, x => change(x.Inserts), key),
             Recalculate = c => RecalculateBusComp(id, c),
@@ -144,6 +146,19 @@ public partial class MainWindow
         if (sendKnobs.Count > tracks.Count * 2 + 8) sendKnobs.Clear();
         SendKnob[] knobs = store == null ? [] : [.. ProjectBuses.Shown(store.Project, t.Channel).Select(b => new SendKnob(b.Id, b.Name, BusIcon(b)))];
         sendKnobs[t] = (editStamp, knobs);
+        return knobs;
+    }
+
+    /// <summary>Each folder's send knobs for the timeline (<see cref="FolderSendKnobsOf"/>) and the edit they were made at.</summary>
+    readonly Dictionary<Folder, (int Stamp, SendKnob[] Knobs)> folderSendKnobs = [];
+
+    /// <summary>The sends a folder's row shows as knobs, like <see cref="SendKnobsOf"/> for a track.</summary>
+    SendKnob[] FolderSendKnobsOf(Folder f)
+    {
+        if (folderSendKnobs.TryGetValue(f, out var c) && c.Stamp == editStamp) return c.Knobs;
+        if (store == null || folderSendKnobs.Count > store.Project.Folders.Count * 2 + 8) folderSendKnobs.Clear();
+        SendKnob[] knobs = store == null ? [] : [.. ProjectBuses.Shown(store.Project, f).Select(b => new SendKnob(b.Id, b.Name, BusIcon(b)))];
+        folderSendKnobs[f] = (editStamp, knobs);
         return knobs;
     }
 
@@ -224,6 +239,40 @@ public partial class MainWindow
         return b;
     }
 
+    /// <summary>
+    /// A send's actions, from a right click on it in the mixer or the inspector (asked by the user, like an effect's):
+    /// turn it on or off, take it before or after the fader (not a folder's: it has no fader), go to its bus, take it
+    /// out of the list. Each one an undo step.
+    /// </summary>
+    void ShowSendMenu(Router r, string busId, Control anchor)
+    {
+        if (r.Get() is not { } x || BusById(busId) is not { } bus) return;
+        var (_, on, pre) = ProjectBuses.SendOf(x, busId);
+        bool enabled = store is { ReadOnly: false } && !restoring;
+        var items = new List<object>
+        {
+            MenuAction(Loc.T(on ? "send.menu.off" : "send.menu.on"), () =>
+            {
+                r.Edit((p, y) => ProjectBuses.SetSend(p, y, busId, on: !on) != null, $"send.{busId}.on");
+                return Task.CompletedTask;
+            }, enabled: enabled, icon: "\ue7e8"),
+        };
+        if (!r.Folder)
+            items.Add(MenuAction(Loc.T(pre ? "send.menu.post" : "send.menu.pre"), () =>
+            {
+                r.Edit((p, y) => ProjectBuses.SetSend(p, y, busId, pre: !pre) != null, $"send.{busId}.pre");
+                return Task.CompletedTask;
+            }, enabled: enabled, icon: "\ue8cb", tip: Loc.T(pre ? "send.menu.post.tip" : "send.menu.pre.tip")));
+        items.Add(MenuAction(Loc.T("send.menu.bus", bus.Name), () => { SelectBus(busId); return Task.CompletedTask; }, icon: "\ue8a7"));
+        items.Add(new Separator());
+        items.Add(MenuAction(Loc.T("send.menu.remove"), () =>
+        {
+            r.Edit((p, y) => ProjectBuses.ShowSend(p, y, busId, false), $"send.{busId}.shown");
+            return Task.CompletedTask;
+        }, enabled: enabled, danger: true, icon: "\ue74d", tip: Loc.T("send.hide.tip", bus.Name)));
+        OpenAnchoredMenu(Popup(items, 230), anchor);
+    }
+
     /// <summary>The × in a send's title row: takes that bus out of the list (off, its level kept for when it comes back).</summary>
     Button RemoveSendButton(Router r, string busId, string name)
     {
@@ -276,167 +325,77 @@ public partial class MainWindow
         return select;
     }
 
-    /// <summary>The output selector as a labeled row ("SALIDA" and its drop-down), for a strip's scrolling controls.</summary>
-    Control OutputRow(Router r)
-    {
-        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Margin = new Thickness(4, 0, 0, 0) };
-        row.Children.Add(new TextBlock { Text = Loc.T("route.output.upper"), FontSize = 10, LetterSpacing = 0.8, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 8, 0) });
-        var select = OutputSelect(r, mx.Refresh);
-        Grid.SetColumn(select, 1); row.Children.Add(select);
-        return row;
-    }
-
-    /// <summary>A send panel per bus in <paramref name="r"/>'s list, in the buses' order, and "+ Envío" to tick which.</summary>
-    void SendPanels(StackPanel fx, Router r)
-    {
-        var box = new StackPanel { Spacing = fx.Spacing };
-        foreach (var b in SendTargets(r)) SendPanel(box, r, b);
-        if (Targets(r).Count > 0) box.Children.Add(AddSendButton(r));
-        // the mixer header's "Envíos" shows or hides them
-        mx.Refresh.Add(() => box.IsVisible = mixerSends);
-        fx.Children.Add(box);
-    }
-
-    /// <summary>The send panel of a bus: knob and %, the bus's name and what it does, ON and PRE (none on a folder's).</summary>
-    void SendPanel(StackPanel fx, Router r, Bus bus)
-    {
-        string id = bus.Id;
-        (double Level, bool On, bool Pre) S() => r.Get() is { } x ? ProjectBuses.SendOf(x, id) : (0, true, false);
-        void Set(double? level = null, bool? on = null, bool? pre = null, string key = "level") =>
-            r.Edit((p, x) => ProjectBuses.SetSend(p, x, id, level, on, pre) != null, $"send.{id}.{key}");
-        var head = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
-        if (!r.Folder) head.Children.Add(PreChip(() => S().Pre, () => Set(pre: !S().Pre, key: "pre"), mx.Refresh));
-        head.Children.Add(RemoveSendButton(r, id, bus.Name));
-        var panel = FxPanel(fx, bus.Name, BusIcon(bus), () => S().On && S().Level > 0, () => Set(on: !S().On, key: "on"),
-            on => Loc.T(on ? "send.power.off" : "send.power.on", BusById(id)?.Name ?? bus.Name), head);
-        var knob = new Knob(34, Loc.T("send.knob.tip", bus.Name)) { Min = 0, Max = 1, ResetTo = 0 };
-        // turning it up turns the send on
-        knob.Changed += v => Set(level: v, on: v > 0 ? true : null);
-        var side = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        var pct = new TextBlock { Classes = { "mono" }, FontSize = 14, FontWeight = FontWeight.SemiBold };
-        var info = new TextBlock { FontSize = 11, Foreground = Palette.Dim, TextTrimming = TextTrimming.CharacterEllipsis };
-        ToolTip.SetTip(info, Loc.T("send.info.tip"));
-        side.Children.Add(pct); side.Children.Add(info);
-        mx.Refresh.Add(() =>
-        {
-            double level = S().Level;
-            knob.Value = level;
-            pct.Text = $"{level * 100:0}%";
-            info.Text = BusById(id) is { } b ? BusInfo(b) : "";
-        });
-        panel.Body.Children.Add(Row(knob, side));
-    }
-
     // --- bus strips ------------------------------------------------------------------------------------
 
     /// <summary>
-    /// A bus strip: its name (⋯ → Renombrar / Quitar bus), mute, pan and output, its slots' panels with "+ Efecto", its own
-    /// sends, fader and meter (peaks and RMS, like every strip).
+    /// A bus strip, built like a track's (asked by the user: one system for every channel): the same card, selection,
+    /// width and rows. Its badge, name and "BUS", its effects as a list, an empty sends section (a bus goes only to the
+    /// master), the pan bar and M over the fader, its dB at the foot. A click selects it (the inspector shows
+    /// it), a double click on its name renames it, its badge opens the color and icon picker, a right click its menu.
     /// </summary>
-    Control BusStrip(Bus bus, bool wide)
+    Control BusStrip(Bus bus, double width)
     {
         string id = bus.Id;
         Bus B() => BusById(id) ?? bus;
-        var box = StripCard(wide ? ReturnWideW : ReturnCompactW);
-        var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), Height = 28 };
-        var iconMark = FxIcon.Create(BusIcon(bus), 12);
-        FxIcon.SetColor(iconMark, Palette.Accent); iconMark.VerticalAlignment = VerticalAlignment.Center;
-        head.Children.Add(iconMark);
-        var name = new TextBlock { FontSize = 11, FontWeight = FontWeight.SemiBold, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center,
-            TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(4, 0, 6, 0) };
-        name.DoubleTapped += (_, _) => RenameBus(id, name);
-        Grid.SetColumn(name, 1); head.Children.Add(name);
-        var mute = StripToggle("M", Loc.T("mix.bus.mute"), 24, () => B().Muted, false, () => BusEdit(id, b => b.Muted = !b.Muted, "muted"));
-        mute.VerticalAlignment = VerticalAlignment.Center;
-        Grid.SetColumn(mute, 2); head.Children.Add(mute);
-        // the glyph keeps its own color: it has to show without hovering (asked by the user)
-        var menu = new Button { Classes = { "ghost" }, Width = 24, Height = 24, MinHeight = 24, Padding = new Thickness(0), Focusable = false, Margin = new Thickness(2, 0, 0, 0),
-            Content = new TextBlock { Classes = { "icon" }, Text = "", FontSize = 12, Foreground = Palette.Dim, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
-        ToolTip.SetTip(menu, Loc.T("mix.bus.menu.tip"));
-        menu.Click += (_, _) =>
+        var box = StripCard(width);
+        mx.Boxes.Add(box);
+        var top = StripCardLook(box, () => selBusId == id, () => false, () => TrackIcons.ColorOf(B().Color), () => SelectBus(id));
+        box.PointerReleased += (_, e) =>
         {
-            if (PressClosedMenuOf(menu)) return;
-            OpenAnchoredMenu(Popup(
-            [
-                MenuAction(Loc.T("mix.bus.rename"), () => { RenameBus(id, name); return Task.CompletedTask; }, icon: ""),
-                new Separator(),
-                MenuAction(Loc.T("mix.bus.remove"), () => { BusesEdit(p => ProjectBuses.Remove(p, id)); return Task.CompletedTask; }, danger: true, icon: "",
-                    tip: Loc.T("mix.bus.remove.tip")),
-            ], 220), menu);
+            if (e.Handled || e.InitialPressMouseButton != Avalonia.Input.MouseButton.Right || store == null || restoring) return;
+            e.Handled = true;
+            SelectBus(id);
+            OpenAnchoredMenu(BusMenu(id, box), box);
         };
-        Grid.SetColumn(menu, 3); head.Children.Add(menu);
-        mx.Refresh.Add(() => { name.Text = B().Name; ToolTip.SetTip(name, Loc.T("mix.bus.name.tip", B().Name)); });
+
+        var name = new TextBlock { FontSize = 11.5, FontWeight = FontWeight.Medium, TextTrimming = TextTrimming.CharacterEllipsis };
+        name.DoubleTapped += (_, _) => RenameBus(id, name);
+        mx.Refresh.Add(() =>
+        {
+            name.Text = B().Name;
+            name.Foreground = B().Muted ? Palette.Faint : Palette.Fg;
+            ToolTip.SetTip(name, Loc.T("mix.name.tip", B().Name));
+        });
+        var badge = new TrackBadge { Width = 22, Height = 22 };
+        ToolTip.SetTip(badge, Loc.T("look.bus.tip"));
+        badge.Clicked += () => ShowBusLook(id, badge);
+        mx.Refresh.Add(() => badge.SetBus(B().Color, B().Icon, BusIcon(B()), selBusId == id));
 
         var fader = new Fader();
         fader.Changed += v => BusEdit(id, b => b.Volume = v, "volume");
-        var db = new TextBlock { Classes = { "mono" }, FontSize = wide ? 11 : 10, Foreground = Palette.Dim };
+        var db = new TextBlock { Classes = { "mono" }, FontSize = 10, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center };
         mx.Refresh.Add(() => { fader.Value = B().Volume; db.Text = $"{Fader.Db(B().Volume)} dB"; });
         var meter = new MixerMeter();
-        mx.NodeMeters.Add((id, meter));
         var faders = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Children = { fader, meter } };
 
-        // the chain: its slots (each folds to one row) and "+ Efecto"; a bus goes to the master, so no output nor sends
-        var fx = new StackPanel { Spacing = 8, Margin = new Thickness(0, 0, 4, 6) };
-        wideGr = null;
-        SlotPanels(fx, SlotsOf(bus));
-        wideGr = null;
-        var chain = new ScrollViewer { Content = fx, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-        var panKnob = new Knob(24);
-        panKnob.Changed += v => BusEdit(id, b => b.Pan = Math.Abs(v) < 0.04 ? 0 : v, "pan");
-        var panText = new TextBlock { Classes = { "mono" }, FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
-        mx.Refresh.Add(() => { panKnob.Value = B().Pan; panKnob.Tip = Loc.T("tl.tip.pan", FmtPan(B().Pan)); panText.Text = FmtPan(B().Pan); });
-        box.Child = BusRack(wide, head, chain, panKnob, panText, faders, db);
+        var tag = new TextBlock { Text = Loc.T("mixer.busTag"), FontSize = 9, LetterSpacing = 0.8, Foreground = Palette.Faint };
+        ToolTip.SetTip(tag, Loc.T("mixer.busTag.tip"));
+        var head = StripHead(badge, name, tag);
+        // a bus goes to the master: its sends section stays empty
+        var (controls, gr) = CompactChain(SlotsOf(bus), null, () => B().Pan, v => BusEdit(id, b => b.Pan = v, "pan"),
+            StripToggle("M", Loc.T("mix.bus.mute"), 26, () => B().Muted, false, () => BusEdit(id, b => b.Muted = !b.Muted, "muted")));
+        mx.NodeMeters.Add((id, meter, gr));
+        var content = new Grid();
+        var layout = StripLayout(head, controls, faders, db);
+        NarrowParts(layout, faders, fader, meter, db);
+        content.Children.Add(layout);
+        content.Children.Add(top);
+        box.Child = content;
         return box;
     }
 
-    /// <summary>
-    /// A bus as a rack (asked by the user: a bus is mostly its chain of effects): the chain scrolls down the left, and
-    /// the fader with its meter stays on the right, on the rows every strip shares so its fader is level with the
-    /// tracks'. The pan goes where the strip has room: above the chain in a wide mixer (like a wide track's), over the
-    /// fader in a compact one (where the tracks keep their knobs).
-    /// </summary>
-    Grid BusRack(bool wide, Control head, Control chain, Knob panKnob, TextBlock panText, Control faders, Control foot)
+    /// <summary>A bus's menu (its right click): rename, color and icon, remove.</summary>
+    ContextMenu BusMenu(string id, Control anchor)
     {
-        var g = new Grid { Margin = new Thickness(8, 8, 8, 6), ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-        g.RowDefinitions.Add(new RowDefinition(StripHeadH, GridUnitType.Pixel));
-        var top = new RowDefinition(wide ? 0 : StripTopH, GridUnitType.Pixel);
-        if (!wide) mx.TopRows.Add(top);
-        g.RowDefinitions.Add(top);
-        g.RowDefinitions.Add(new RowDefinition(1, GridUnitType.Star));
-        g.RowDefinitions.Add(new RowDefinition(StripFootH, GridUnitType.Pixel));
-        void Put(Control c, int row, int col = 0, int span = 1, int rowSpan = 1)
-        {
-            Grid.SetRow(c, row); Grid.SetColumn(c, col); Grid.SetColumnSpan(c, span); Grid.SetRowSpan(c, rowSpan);
-            g.Children.Add(c);
-        }
-        head.VerticalAlignment = VerticalAlignment.Top;
-        Put(head, 0, 0, 2);
-        var left = new Grid { RowDefinitions = new RowDefinitions("Auto,*"), Margin = new Thickness(0, 0, 8, 0) };
-        if (wide)
-        {
-            var pan = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(4, 0, 0, 8) };
-            pan.Children.Add(new TextBlock { Text = Loc.T("mix.pan.upper"), FontSize = 10, LetterSpacing = 0.8, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center });
-            pan.Children.Add(panKnob); pan.Children.Add(panText);
-            left.Children.Add(pan);
-        }
-        else
-        {
-            var pan = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 8) };
-            pan.Children.Add(new TextBlock { Text = Loc.T("mix.pan.upper"), FontSize = 10, LetterSpacing = 0.8, Foreground = Palette.Faint, HorizontalAlignment = HorizontalAlignment.Center });
-            panKnob.HorizontalAlignment = HorizontalAlignment.Center;
-            panText.HorizontalAlignment = HorizontalAlignment.Center;
-            pan.Children.Add(panKnob); pan.Children.Add(panText);
-            Put(pan, 1, 1);
-        }
-        Grid.SetRow(chain, 1); left.Children.Add(chain);
-        Put(left, 1, 0, 1, 3);
-        faders.HorizontalAlignment = HorizontalAlignment.Center;
-        Put(faders, 2, 1);
-        foot.VerticalAlignment = VerticalAlignment.Bottom;
-        foot.HorizontalAlignment = HorizontalAlignment.Center;
-        Put(foot, 3, 1);
-        return g;
+        bool enabled = store is { ReadOnly: false };
+        return Popup(
+        [
+            MenuAction(Loc.T("mix.bus.rename"), () => { RenameBus(id, anchor); return Task.CompletedTask; }, enabled: enabled, icon: "\ue8ac"),
+            MenuAction(Loc.T("look.bus.menu"), () => { ShowBusLook(id, anchor); return Task.CompletedTask; }, enabled: enabled, icon: "\ue790"),
+            new Separator(),
+            MenuAction(Loc.T("mix.bus.remove"), () => { BusesEdit(p => ProjectBuses.Remove(p, id)); return Task.CompletedTask; }, enabled: enabled, danger: true, icon: "\ue74d",
+                tip: Loc.T("mix.bus.remove.tip")),
+        ], 220);
     }
 
     void RenameBus(string id, Control anchor)
@@ -445,13 +404,97 @@ public partial class MainWindow
         AskName(anchor, null, Loc.T("mix.bus.rename"), b.Name, Loc.T("folder.rename.ok"), n => BusEdit(id, x => x.Name = n.Trim(), "name"));
     }
 
+    // --- the selected bus ------------------------------------------------------------------------------
+
+    /// <summary>The bus selected in the mixer (then no track or folder is); null when none is.</summary>
+    string? selBusId;
+    /// <summary>Set while <see cref="SelectBus"/> clears the timeline's selection, so that doesn't clear the bus too.</summary>
+    bool selectingBus;
+
+    Bus? SelectedBus => selBusId is { } id ? BusById(id) : null;
+
+    /// <summary>
+    /// Selects a bus like a track (asked by the user): the timeline lets go of its track or folder and the inspector
+    /// shows the bus. Selecting anything else lets go of it (<see cref="BusSelectionLost"/>).
+    /// </summary>
+    void SelectBus(string id)
+    {
+        if (selBusId == id && sel == null && SelectedFolder == null) return;
+        selBusId = id;
+        selectingBus = true;
+        try { Timeline.Select(-1); }
+        finally { selectingBus = false; }
+    }
+
+    /// <summary>Called on every selection change of the timeline: a track or a folder chosen there lets go of the bus.</summary>
+    void BusSelectionLost()
+    {
+        if (!selectingBus) selBusId = null;
+    }
+
+    readonly StackPanel busPanel = new() { Spacing = 12, IsVisible = false };
+    readonly TextBox busName = new() { Classes = { "title" } };
+    readonly List<Action> busRefresh = [];
+
+    /// <summary>
+    /// The inspector of the selected bus, like a folder's: its badge (the color and icon picker) and name, what it
+    /// holds, its color and icon, where it goes, and "Quitar bus". Its effects are edited in its mixer strip.
+    /// </summary>
+    void InitBusInspector()
+    {
+        var badge = new TrackBadge { Width = 28, Height = 28, Radius = 5, VerticalAlignment = VerticalAlignment.Center };
+        ToolTip.SetTip(badge, Loc.T("look.bus.tip"));
+        badge.Clicked += () => { if (selBusId is { } id) ShowBusLook(id, badge); };
+        ToolTip.SetTip(busName, Loc.T("folder.name.tip"));
+        busName.Margin = new Thickness(4, 0, 0, 0);
+        busName.TextChanged += (_, _) =>
+        {
+            if (syncing || SelectedBus is not { } b) return;
+            string name = busName.Text?.Trim() ?? "";
+            if (name.Length > 0 && name != b.Name) BusEdit(b.Id, x => x.Name = name, "name");
+        };
+        var head = new Grid { ColumnDefinitions = new ColumnDefinitions("28,*") };
+        head.Children.Add(badge);
+        Grid.SetColumn(busName, 1); head.Children.Add(busName);
+        var info = new TextBlock { FontSize = 11, Foreground = Palette.Faint, Margin = new Thickness(36, -6, 0, 0) };
+        busPanel.Children.Add(head);
+        busPanel.Children.Add(info);
+
+        var card = new StackPanel { Spacing = 14 };
+        card.Children.Add(new TextBlock { Classes = { "label" }, Text = Loc.T("look.color").ToUpperInvariant() });
+        card.Children.Add(ColorChips(() => SelectedBus?.Color, hex => { if (selBusId is { } id) BusEdit(id, x => x.Color = hex, "color"); }, busRefresh, 16));
+        var icon = new Button { Classes = { "chip" }, Content = Loc.T("bus.icon"), MinHeight = 30, Padding = new Thickness(12, 0), HorizontalAlignment = HorizontalAlignment.Left };
+        ToolTip.SetTip(icon, Loc.T("look.bus.tip"));
+        icon.Click += (_, _) => { if (selBusId is { } id) ShowBusLook(id, icon); };
+        card.Children.Add(new TextBlock { Classes = { "label" }, Text = Loc.T("look.icon").ToUpperInvariant(), Margin = new Thickness(0, 4, 0, 0) });
+        card.Children.Add(icon);
+        card.Children.Add(Help(Loc.T("bus.route.hint")));
+        busPanel.Children.Add(new Border { Classes = { "section" }, Background = Palette.Panel, BorderThickness = new Thickness(0, 1), CornerRadius = new CornerRadius(0),
+            Margin = new Thickness(-14, 4, -14, 0), Padding = new Thickness(16, 14, 16, 16), Child = card });
+
+        var remove = RemoveButton(Loc.T("mix.bus.remove"));
+        ToolTip.SetTip(remove, Loc.T("mix.bus.remove.tip"));
+        remove.Click += (_, _) => { if (selBusId is { } id) BusesEdit(p => ProjectBuses.Remove(p, id)); };
+        busPanel.Children.Add(remove);
+
+        busRefresh.Add(() =>
+        {
+            if (SelectedBus is not { } b) return;
+            badge.SetBus(b.Color, b.Icon, BusIcon(b), true);
+            if (!busName.IsFocused || busName.Text?.Trim() != b.Name) busName.Text = b.Name;
+            info.Text = BusInfo(b);
+        });
+        Inspector.Children.Add(busPanel);
+    }
+
     /// <summary>Called from the mixer's tick: the folders' and buses' meters.</summary>
     void TickNodes()
     {
-        foreach (var (id, meter) in mx.NodeMeters)
+        foreach (var (id, meter, gr) in mx.NodeMeters)
         {
             if (engine.Node(id) is not { } r) continue;
             meter.Set(r.ShowL, r.ShowR, Math.Sqrt(r.Rms.MeanSqL), Math.Sqrt(r.Rms.MeanSqR));
+            gr?.Invoke(r.GrShow);
         }
     }
 
@@ -482,16 +525,12 @@ public partial class MainWindow
     static readonly ReverbSettings GoneReverb = new();
     static readonly DelaySettings GoneDelay = new();
 
-    void ReverbSlotPanel(StackPanel fx, SlotOwner o, string id, int nth, Control menu, SlotDrag? drag)
+    void ReverbSlotPanel(StackPanel fx, SlotOwner o, string id, int nth, Control menu)
     {
         ReverbSettings V() => o.Slot(id)?.Reverb ?? GoneReverb;
         void Set(Action<ReverbSettings> edit, string key) => SlotEdit(o, id, s => edit(s.Reverb!), "reverb." + key);
         var panel = FxPanel(fx, SlotTitle("Reverb", nth), FxIcon.Reverb, () => o.Slot(id)?.On == true, () => SlotEdit(o, id, s => s.On = !s.On, "reverb.on"),
-            on => Loc.T(on ? "mix.slot.reverb.off" : "mix.slot.reverb.on"), menu, drag, id, o, () =>
-            {
-                string p = ReverbBus.PresetOf(ToParams(V()));
-                return $"{(p == "" ? Loc.T("mix.custom.f") : BusPresetName("reverb", p))} · {V().Decay:0.0}s";
-            });
+            on => Loc.T(on ? "mix.slot.reverb.off" : "mix.slot.reverb.on"), menu);
         var defaults = new ReverbSettings();
         var presets = StripSelect([]);
         ToolTip.SetTip(presets, Loc.T("mix.reverb.presets.tip"));
@@ -528,19 +567,13 @@ public partial class MainWindow
         panel.Body.Children.Add(knobs);
     }
 
-    void DelaySlotPanel(StackPanel fx, SlotOwner o, string id, int nth, Control menu, SlotDrag? drag)
+    void DelaySlotPanel(StackPanel fx, SlotOwner o, string id, int nth, Control menu)
     {
         DelaySettings V() => o.Slot(id)?.Delay ?? GoneDelay;
         void Set(Action<DelaySettings> edit, string key) => SlotEdit(o, id, s => edit(s.Delay!), "delay." + key);
         double Bpm() => store?.Project.Settings.Bpm ?? 110;
         var panel = FxPanel(fx, SlotTitle("Delay", nth), FxIcon.Delay, () => o.Slot(id)?.On == true, () => SlotEdit(o, id, s => s.On = !s.On, "delay.on"),
-            on => Loc.T(on ? "mix.slot.delay.off" : "mix.slot.delay.on"), menu, drag, id, o, () =>
-            {
-                var d = V();
-                string time = !d.Sync ? $"{Math.Round(d.TimeMs):0} ms"
-                    : Array.Find(DelayBus.Divisions, x => x.Id == d.Division) is { } div ? Loc.Or("mix.div." + div.Id, div.Label) : d.Division;
-                return $"{time} · {d.Feedback * 100:0}%";
-            });
+            on => Loc.T(on ? "mix.slot.delay.off" : "mix.slot.delay.on"), menu);
         var defaults = new DelaySettings();
         var presets = StripSelect([]);
         ToolTip.SetTip(presets, Loc.T("mix.delay.presets.tip"));
@@ -619,8 +652,8 @@ public partial class MainWindow
     // --- the Canal tab's output and send sections -----------------------------------------------------
 
     /// <summary>
-    /// The Canal tab's routing: the track's output (or "through its folder") and a section per bus it can send to: level,
-    /// ON and PRE. Rebuilt only when the track, its folder or the buses (a name, a slot, the routing between them)
+    /// The Canal tab's routing: the track's output (or "through its folder") and a fixed row per bus in its list
+    /// (<see cref="InspectorSendRow"/>). Rebuilt only when the track, its folder or the buses (a name, a slot, the routing between them)
     /// change; every other edit just refreshes them.
     /// </summary>
     void RebuildInspectorSends(LiveTrack t)
@@ -631,13 +664,14 @@ public partial class MainWindow
             + string.Join("/", targets.Select(b => b.Id + ":" + b.Name + ":" + BusIcon(b))) + "|" + Targets(router).Count;
         if (key == inspectorSendsKey) return;
         inspectorSendsKey = key;
-        foreach (string title in sendSections) inspectorSections.Remove(title);
+        foreach (string title in sendSections) { inspectorSections.Remove(title); sectionLooks.Remove(title); }
         sendSections.Clear();
+        sendRows.Clear();
         sendRefresh.Clear();
         inspectorSends.Children.Clear();
 
         // where the track's output goes: its folder's, or its own choice
-        var output = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Margin = new Thickness(2, 4, 2, 12) };
+        var output = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Margin = new Thickness(8, 0, 2, 4) };
         output.Children.Add(new TextBlock { Classes = { "label" }, Text = Loc.T("route.output.upper"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
         if (t.Track.FolderId is { } folder)
         {
@@ -653,32 +687,76 @@ public partial class MainWindow
         }
         inspectorSends.Children.Add(output);
 
-        foreach (var bus in targets)
-        {
-            string id = bus.Id, title = "bus:" + id;
-            SendTitles[title] = bus.Name;
-            (double Level, bool On, bool Pre) S() => sel == null ? (0, true, false) : ProjectBuses.SendOf(sel.Channel, id);
-            void Set(double? level = null, bool? on = null, bool? pre = null, string k = "level") =>
-                Edit(x => ProjectBuses.SetSend(store!.Project, x.Channel, id, level, on, pre), $"send.{id}.{k}");
-            var pre = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2,
-                Children = { PreChip(() => S().Pre, () => Set(pre: !S().Pre, k: "pre"), sendRefresh), RemoveSendButton(router, id, bus.Name) } };
-            var section = Section(title, BusIcon(bus), () => S().On && S().Level > 0, on => Set(on: on, k: "on"), pre, inspectorSends, sendRefresh);
-            sendSections.Add(title);
-            EffectKnob(section, Loc.T("insp.send.level"), 0, () => S().Level, v => Set(level: v, on: v > 0 ? true : null), v => $"{v * 100:0}%", SendDb,
-                Loc.T("insp.send.hint", bus.Name), sendRefresh);
-        }
-        if (Targets(router).Count > 0)
-        {
-            var add = AddSendButton(router);
-            add.Margin = new Thickness(0, 4, 0, 0);
-            inspectorSends.Children.Add(add);
-        }
+        foreach (var bus in targets) inspectorSends.Children.Add(InspectorSendRow(router, bus));
+        sendsTray.Set(targets.Count, Targets(router).Count > 0 ? AddSendButton(router) : null);
         UpdateCollapseButton();
     }
 
     readonly StackPanel inspectorSends = new();
     readonly List<Action> sendRefresh = [];
     readonly List<string> sendSections = [];
+    /// <summary>The send rows by their stable id "bus:&lt;bus id&gt;", for the collapsed inspector's icons (<see cref="GoToSection"/>).</summary>
+    readonly Dictionary<string, Control> sendRows = [];
+
+    /// <summary>
+    /// A send in the Canal tab as one fixed row (asked by the user: small enough not to fold): its power, the bus's icon
+    /// and name, its level as a bar with its % (drag, wheel with Shift for fine, double click: 0; the dB in its tooltip),
+    /// PRE and ×. A right click opens its menu (<see cref="ShowSendMenu"/>). It also feeds the collapsed inspector's
+    /// icons, like a section.
+    /// </summary>
+    Border InspectorSendRow(Router router, Bus bus)
+    {
+        string id = bus.Id, title = "bus:" + id;
+        SendTitles[title] = bus.Name;
+        (double Level, bool On, bool Pre) S() => router.Get() is { } x ? ProjectBuses.SendOf(x, id) : (0, true, false);
+        void Set(double? level = null, bool? on = null, bool? pre = null, string k = "level") =>
+            router.Edit((p, x) => ProjectBuses.SetSend(p, x, id, level, on, pre) != null, $"send.{id}.{k}");
+        bool Lit() => S().On && S().Level > 0;
+        var power = ListPower(Lit, () => Set(on: !S().On, k: "on"), sendRefresh);
+        power.Width = power.Height = power.MinHeight = 22;
+        var icon = FxIcon.Create(BusIcon(bus), 12);
+        icon.VerticalAlignment = VerticalAlignment.Center;
+        icon.Margin = new Thickness(2, 0, 6, 0);
+        var name = new TextBlock { Text = bus.Name, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+        ToolTip.SetTip(name, Loc.T("insp.send.hint", bus.Name));
+        var bar = new HBar { ResetTo = 0, Height = 20, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 6, 0) };
+        bar.Changed += v => Set(level: v, on: v > 0 ? true : null);
+        var pre = PreChip(() => S().Pre, () => Set(pre: !S().Pre, k: "pre"), sendRefresh);
+        var remove = RemoveSendButton(router, id, bus.Name);
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,4*,5*,Auto,Auto") };
+        g.Children.Add(power);
+        Grid.SetColumn(icon, 1); g.Children.Add(icon);
+        Grid.SetColumn(name, 2); g.Children.Add(name);
+        Grid.SetColumn(bar, 3); g.Children.Add(bar);
+        Grid.SetColumn(pre, 4); g.Children.Add(pre);
+        Grid.SetColumn(remove, 5); g.Children.Add(remove);
+        var row = new Border { Child = g, Height = 36, Padding = new Thickness(4, 0, 4, 0), Margin = new Thickness(0, 0, 0, 6), CornerRadius = new CornerRadius(6),
+            BorderThickness = new Thickness(1) };
+        sendRefresh.Add(() =>
+        {
+            var (level, on, _) = S();
+            bool lit = on && level > 0;
+            bar.Value = level;
+            bar.Lit = on;
+            bar.Readout = $"{level * 100:0}%";
+            ToolTip.SetTip(bar, $"{Loc.T("mix.list.send.tip", bus.Name, $"{level * 100:0}")} · {SendDb(level)}");
+            FxIcon.SetColor(icon, lit ? Palette.Accent : Palette.Faint);
+            name.Foreground = lit ? Palette.Fg : Palette.Faint;
+            // like an effect's panel: a step above the inspector, sinking back while it is off
+            row.Background = Palette.Alpha(Palette.HoverColor, lit ? 0.45 : 0.18);
+            row.BorderBrush = lit ? Palette.Line : Palette.Alpha(Palette.LineColor, 0.6);
+        });
+        row.PointerReleased += (_, e) =>
+        {
+            if (e.InitialPressMouseButton != Avalonia.Input.MouseButton.Right || store == null) return;
+            e.Handled = true;
+            ShowSendMenu(router, id, row);
+        };
+        sectionLooks[title] = (BusIcon(bus), Lit);
+        sendSections.Add(title);
+        sendRows[title] = row;
+        return row;
+    }
     string inspectorSendsKey = "";
     /// <summary>The send sections' shown titles (the buses' names), by their stable id "bus:&lt;bus id&gt;".</summary>
     static readonly Dictionary<string, string> SendTitles = [];

@@ -21,7 +21,7 @@ encima de la ventana principal mientras esta carga detrás y se va con un fundid
 ## Estructura
 
 ```
-┌ barra de título propia (44) ─ logo · nombre · (PRUEBA) ···································· CPU │ GPU │ RAM │ DSP │ FFmpeg · 🔔 · tema · ⚙ · [_ □ ×] ┐
+┌ barra de título propia (44) ─ logo · nombre · (PRUEBA) ······················ CPU │ GPU │ RAM │ DSP │ FFmpeg · 🔔 · ◧ ◨ · diseño · tema · ⚙ · [_ □ ×] ┐
 ├ fila de herramientas (~40) ─ Video|Solo audio · chip del proyecto (guardado) ▾ │ guardar · deshacer/rehacer ···· [↖ ⌶│✂ ⌫│🎧 🔍 ✋] ···· [Exportar MP4] ┤
 ├ inspector (290↔) ┬─ preview (un panel por pista con video) ────────┬─ "En vivo" (256) ─┬─ proyecto (290↔, plegable a 44) ┤
 │ TOMA + secciones │                                                 │ cámara + entrada  │ pestañas Color / Historial     │
@@ -64,6 +64,12 @@ Ese es el diseño **Clásico**. Para el **Vertical**, ver el apartado que sigue.
 - Es la de la app (`ExtendClientAreaToDecorationsHint`): arrastrable, doble clic maximiza, los botones del sistema
   quedan a la derecha (margen 150). `TransparencyLevelHint="None"` no se toca: con transparencia, píxeles oscuros
   del video dejan ver lo que hay detrás.
+- La ventana abre donde quedó (`MainWindow.WindowPlace.cs`, `config.json` "window"): posición y tamaño normales y si
+  estaba maximizada. Si ese lugar ya no cae en ningún monitor, abre centrada en 1440×900.
+- **Pantalla completa** (F11, `MainWindow.FullScreen.cs`): tapa la barra de tareas y los botones del sistema; la barra
+  de título queda (sin el margen de 150) y no arrastra; doble clic o F11 otra vez vuelven a como estaba (maximizada o
+  no). No se recuerda entre sesiones: abre como estaba antes de la pantalla completa. La `TitleBar` de Avalonia va transparente y sin mouse
+  (`TitleBar:fullscreen`; su `IsVisible` lo pone ella por código): si no, asoma arriba como una franja del acento.
 - El logo es el ícono de la app y abre "Acerca de" (`Dialogs/AboutDialog`), con el mismo encabezado que el splash
   (`BrandArt`: logo grande, brillo y línea del acento del tema, versión en la esquina).
   Ahí dice si hay una versión nueva: 5 s después de abrir, `MainWindow.Updates.cs` le pregunta a GitHub por la última
@@ -75,8 +81,9 @@ Ese es el diseño **Clásico**. Para el **Vertical**, ver el apartado que sigue.
   (winget, `FfmpegSetup`, si está; se puede cerrar mientras instala y avisa con un toast), Abrir la página (gyan.dev),
   Ya lo instalé (relee el PATH y lo busca de nuevo) y el comando de winget para copiar.
 - El chip del proyecto abre un menú (`MainWindow.Versions.cs`): "Proyectos…" (el gestor) y "Volver a una versión
-  guardada", con las últimas 20 de `historial/` (`ProjectStore.Snapshots`). Volver guarda antes lo actual como otra
-  versión, recarga el proyecto y borra los pasos de deshacer. Sin proyecto abierto, va directo al gestor.
+  guardada", con las últimas 20 de `historial/` (`ProjectStore.Snapshots`, con su nombre si tienen; las mismas que
+  Historial → Versiones). Volver guarda antes lo actual como otra versión, recarga el proyecto y borra los pasos de
+  deshacer. Sin proyecto abierto, va directo al gestor.
 - El gestor (`Controls/ProjectsDialog.axaml.cs`) lleva el logo de la app en el encabezado. Empaqueta: el botón de paquete de cada fila abre "Para compartir" /
   "Respaldo completo" y pide dónde guardar el ZIP (`ProjectLibrary.Pack`; nunca dentro del mismo proyecto; el actual
   se guarda antes, `FlushCurrent`) y "Abrir paquete…" de la barra lo trae como proyecto nuevo, resaltado en la lista
@@ -91,6 +98,10 @@ Ese es el diseño **Clásico**. Para el **Vertical**, ver el apartado que sigue.
   `TestBuild` lo lee y la barra muestra, después del nombre, el badge "PRUEBA a1b2c3d + cambios" (`TestBuildChip`,
   fondo `Hover`, la hora en el tooltip) y el título de la ventana lo repite. Sin ese archivo no aparece nada.
 - CPU / GPU / RAM / DSP con la misma forma ("CPU 19% ▬"), con líneas `Border.tsep` entre los grupos.
+- Después de la campanita, dos botones **ocultan del todo** el panel del canal y el del proyecto (`LeftPanelButton`,
+  `RightPanelButton`, `MainWindow.Sidebars.cs`, pedido del usuario): una ventanita dibujada con el panel relleno
+  mientras se ve. Oculto no deja ni la columna de íconos; al volver, vuelve como estaba (abierto o plegado). Se
+  recuerda en `config.json` ("sidebarHidden", "projectBarHidden"). B / P, con el panel oculto, lo muestran.
 - Maximizada, Windows corre la ventana 8 px afuera de cada borde (por la barra propia). La grilla raíz lleva
   `Margin="{Binding $parent[Window].OffScreenMargin}"` para compensarlo; no lo saques o se cortan los costados y
   la barra de transporte.
@@ -149,24 +160,44 @@ Ese es el diseño **Clásico**. Para el **Vertical**, ver el apartado que sigue.
   que pliega o despliega **todas** las secciones.
 - Una tarjeta (`Border.section`) por bloque, con ícono + etiqueta en mayúscula y, si se puede apagar, un ON/OFF a la
   derecha. Apagada → controles al 40 % de opacidad, pero se pueden seguir tocando.
-- **Los efectos son la cadena de slots del canal** (`RebuildInspectorChain`, pedido del usuario): después de Mezcla,
-  una sección por slot en el orden en que suena (Saturación, Compresor, EQ, Puerta; un tipo repetido se numera, "EQ 2", y
-  recuerda su propio plegado), con el ⋯ del slot (`SlotMenuButton`) y una manija de puntos (`GripDots`) para
-  arrastrarla; al final, "+ Efecto". Se rearma solo cuando cambia la pista o la lista (sus refrescos van aparte, en
+- **Efectos y envíos tienen cada uno su área** (`Controls/InspectorTray`, pedido del usuario: se confundían en una
+  sola lista): una bandeja a todo el ancho, más oscura que el panel (`App`), con su título en mayúscula, cuántos tiene
+  (mono) y su "+" a la derecha arriba; adentro, sus secciones como tarjetas redondeadas (`InspectorTray.Card`), así
+  nunca se parecen a las secciones planas de alrededor (Mezcla, Transponer, Clip). Vacía, una línea lo dice. Se pliega
+  con un clic en su título como cualquier sección (pedido del usuario; se recuerda como `tray:fx` / `tray:sends`
+  entre las secciones plegadas) y el contador y el "+" siguen a mano; el botón de plegar todo también las pliega, y
+  un clic en un ícono de la columna plegada abre la bandeja de esa sección.
+- **Una pista vacía también muestra su canal** (pedido del usuario): Mezcla, efectos, envíos y Transponer están en
+  `takeSections`; lo del clip (Sincronización, Clip, Encuadre y "Quitar del timeline") va aparte, en `clipSections`
+  con sus refrescos en `clipRefresh`, y aparece solo con un clip. Debajo del canal vacío, cómo llenarlo y "Quitar
+  pista". Una pista MIDI sigue con su panel propio.
+- **Las tarjetas de efectos y envíos arrancan plegadas** (pedido del usuario: unos pocos llenaban el inspector):
+  `Section(..., card: true)` las hace tarjetas compactas (encabezado de 36, márgenes chicos) y se recuerdan las que
+  abriste (`"open:" + título` entre las plegadas). Plegada, al lado del título dicen lo suyo en mono
+  (`SectionHeader.SetSummary`): "30% · Con vida", "Rasgueo · Media", el umbral de la puerta, el nivel del envío. La
+  ayuda del envío va en el tooltip del knob. Las secciones planas (Mezcla, Transponer, Clip…) tienen encabezado de 44.
+- **Los efectos son la cadena de slots del canal** (`RebuildInspectorChain`, pedido del usuario): en la bandeja
+  EFECTOS, después de Mezcla, una sección por slot en el orden en que suena (un canal nuevo no trae ninguno; las
+  plantillas de fábrica traen Saturación, Compresor y EQ; un tipo
+  repetido se numera, "EQ 2", y recuerda su propio plegado; un efecto VST3 lleva el nombre del plugin, `VstSection`), con el ⋯ del slot (`SlotMenuButton`) y una manija de
+  puntos (`GripDots`) para arrastrarla; "+ Efecto" va en el título de la bandeja. Se rearma solo cuando cambia la pista o la lista (sus refrescos van aparte, en
   `chainRefresh`); el espectro en vivo va en el primer EQ. Transponer no es un slot y queda fijo.
-- **Salida y envíos** (`RebuildInspectorSends`, en `MainWindow.Buses.cs`): después de los slots, la fila SALIDA (Master
-  o un bus, `OutputSelect`; una pista en una carpeta dice "Por la carpeta …" y sale con ella) y una sección por bus de
-  su lista (`SendTargets`): knob del envío, ON, el chip **PRE** y una × que lo saca de la lista en la cabecera; debajo,
-  "+ Envío" (`AddSendButton`) para tildar a qué buses manda. El PRE (`PreChip`: prendido, el envío sale
+- **Salida y envíos** (`RebuildInspectorSends`, en `MainWindow.Buses.cs`): en su bandeja, después de la de efectos, la fila SALIDA (Master
+  o un bus, `OutputSelect`; una pista en una carpeta dice "Por la carpeta …" y sale con ella) y una fila fija por bus de
+  su lista (`InspectorSendRow`, pedido del usuario: chica, sin plegar): ⏻, ícono y nombre del bus, el nivel como barra
+  con su % (los dB en su tooltip), el chip **PRE** y una × que lo saca de la lista; clic derecho, su menú
+  (`ShowSendMenu`: prender o apagar, antes o después del fader, ir al bus, quitar). También son íconos de la columna
+  del inspector plegado (`sendRows`). En el
+  título de la bandeja, "+ Envío" (`AddSendButton`) para tildar a qué buses manda. El PRE (`PreChip`: prendido, el envío sale
   antes del fader, después de los efectos y el paneo; el mute igual lo calla). Se rearma solo cuando cambia la pista,
   su carpeta o los buses (nombres, efecto principal, ruteo; sus refrescos van en `sendRefresh`). Su id estable es
-  `bus:<id del bus>` y el título que muestra es el nombre del bus (`SendTitles`). Las secciones fijas de Reverb y Delay
-  ya no existen: un proyecto nuevo trae esos dos buses y aparecen acá como cualquier otro.
+  `bus:<id del bus>` y el nombre que muestra es el del bus (`SendTitles`). Las secciones fijas de Reverb y Delay
+  ya no existen: las plantillas traen esos dos buses (un proyecto vacío, ninguno) y aparecen acá como cualquier otro.
 - La cantidad principal de cada efecto va en el knob grande (`EffectKnob`: Vida, los envíos); los
   ajustes finos siguen en sliders.
 - Con su encabezado "Toma" se pliega a una columna de íconos de 44, como la barra del proyecto, y se recuerda.
   Plegada, debajo de los dos botones muestra el canal seleccionado (`MainWindow.InspectorRail.cs`, pedido del
-  usuario): un ícono por sección en el orden en que suena (Mezcla, los slots, los envíos a buses, Transponer), en acento si está prendida y tenue si no; un clic despliega el inspector, abre esa sección si estaba
+  usuario): un ícono por sección en el orden en que suena (Mezcla, los slots, los envíos a buses, Transponer), con una rayita entre esos grupos como las bandejas, en acento si está prendida y tenue si no; un clic despliega el inspector, abre esa sección si estaba
   plegada y la sube arriba de todo. Se rearma solo cuando cambia la lista de secciones (`Section` guarda su ícono y su
   ON en `sectionLooks`).
 - **Transponer** (`MainWindow.Transpose.cs`, pedido del usuario): su propia tarjeta, después de Delay, con el ícono
@@ -180,9 +211,8 @@ Ese es el diseño **Clásico**. Para el **Vertical**, ver el apartado que sigue.
   transpuesta. Mover el slider cancela lo que ya no se quiere. Todo cambio pasa por `SetTranspose(pista, semis)`
   (inspector, mixer y knob).
 - **El canal muestra que está transpuesto**: en el encabezado de pista del timeline, una etiqueta "♪ +2" después del
-  nombre (acento; gris mientras se calcula, con `TimelineView.TransposeProgress`); en la tira compacta del mixer, "+2"
-  debajo del nombre; en el encabezado alto, el knob Tono (ver la fila de knobs); en la amplia, un panel Transponer después de Delay con − valor + (doble clic en el valor vuelve
-  a 0). Mientras se calcula, `transposeClock` refresca esas marcas (`MixerLayout.Transpose`) cada 250 ms.
+  nombre (acento; gris mientras se calcula, con `TimelineView.TransposeProgress`); en la tira del mixer, "+2"
+  debajo del nombre; en el encabezado alto, el knob Tono (ver la fila de knobs). Mientras se calcula, `transposeClock` refresca esas marcas (`MixerLayout.Transpose`) cada 250 ms.
 - El espectro en vivo del EQ sale de un `SpectrumTap` colgado solo de la pista seleccionada mientras el EQ está a la
   vista: el hilo de audio copia a un anillo preasignado y la FFT corre en el `Tick` de la UI.
 
@@ -206,9 +236,24 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 - Pestañas Color / Biblioteca / Historial. Biblioteca (las tomas, usadas o no, importadas o grabadas; la papelera de
   cada fila sin usar, con confirmación en la fila; "Borrar no usadas"; y al escuchar una toma, un mini reproductor bajo
   su fila: onda para saltar con clic o arrastre (`Controls/TakeScrubber`), ±5 s, tiempo y parar, por la salida de
-  Windows con `TakePreview`, que hace los saltos con un fundido corto) e Historial (exportaciones y actividad; la pestaña por defecto) viven en `MainWindow.History.cs` y se arman
+  Windows con `TakePreview`, que hace los saltos con un fundido corto) e Historial (la pestaña por defecto) viven en `MainWindow.History.cs` y se arman
   solo mientras alguna está a la vista (`RefreshHistory`); lo que hacen con el proyecto y los archivos vive en
   `ProjectHistory` (Projects).
+- Historial es para volver atrás (pedido del usuario, 2026-10-29; antes mostraba la actividad, que se sigue anotando
+  en el proyecto y lee `wtlab proyecto historial`). Tres secciones, en `MainWindow.Steps.cs` salvo Exportaciones:
+  - **Pasos**: los pasos de deshacer de esta sesión con nombre ("Moviste «Toma 1»", "Volumen de «Bajo»: -3,0 dB"), el
+    más nuevo arriba, y abajo de todo cómo estaba al empezar (al abrir, al volver a una versión o al borrar canales sin
+    usar). Clic en un paso = ir ahí de una (`UndoManager.JumpTo`, por el mismo `RestoreEdit` que Ctrl+Z); el actual va
+    con el acento y los deshechos en gris hasta que una edición nueva los saca. Los nombres salen de comparar el antes
+    y el después (`EditSteps.Describe`, en Projects); una grabación trae el suyo (`EditTimeline(step:)`). La lista se
+    redibuja 400 ms después de la última edición (`ScheduleSteps`), nunca por cuadro mientras se arrastra un fader.
+  - **Versiones**: las de `historial/` (se leen fuera del hilo de la UI, `ReloadVersions`): las que se guardan solas,
+    las de "Guardar versión" (con nombre) y una por cada exportación, que guarda la mezcla con la que salió. Las que
+    tienen nombre o exportación no se borran solas (`historial/versiones.json`, `ProjectStore.SaveVersion`,
+    `RenameVersion`). Volver guarda antes lo actual como otra versión ("Antes de volver a…") y trae solo el tema: las
+    tomas grabadas después, las exportaciones y el nombre se quedan (`ProjectStore.Restore`).
+  - **Exportaciones**: cada una con su "Volver a la mezcla de esta exportación" si tiene versión (las de antes de
+    esto no); mandarla a la Papelera suelta su versión (`UnlinkExport`).
 - "Salió / volvió al timeline" se registra al guardar (`ProjectStore.Serialize` → `LogTimelineChanges`).
 
 ## Preview y monitor "En vivo"
@@ -236,7 +281,7 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   seleccionado, `Faint` si la pista no suena), sin el nombre adentro; sin archivo, gris con "Sin conexión…". Con
   video y carriles de 52 px o más, la tira de miniaturas (`Video/VideoThumbnails.cs`) con la onda abajo sobre
   un degradé (del color de la pista si tiene uno; si no, blanca). Arriba a la derecha, un badge dice si el medio es solo
-  audio (nota) o audio + video (cámara), con tooltip (`MediaBadge`). Pista seleccionada con barra de acento de 2 px a la izquierda del encabezado; playhead de acento con triángulo.
+  audio (nota) o audio + video (cámara), con tooltip (`MediaBadge`). Pista seleccionada (y carpeta) con una píldora de acento de 3 px a la izquierda del encabezado, por dentro del borde de la tarjeta y del recuadro de carpeta (`DrawSelectedPill`), y un tinte de acento del 6 % en encabezado y carril (`SelectedTint`), pedido del usuario: la barra de 2 px quedaba tapada y solo se veía un gris; playhead de acento con triángulo.
 - **Bordes de clip**: en cada lado dos manijas chicas como la de la columna (pestañita oscura con dos rayitas), una por
   mitad del clip (`DrawEdgeHandles`): la de arriba, donde termina el fade, mueve el fade; la de abajo, en el borde,
   recorta. El cursor lo dice (diagonal como la línea del fade, ↔ para recortar) y se ilumina la manija que vas a agarrar.
@@ -377,8 +422,10 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 - **"+ Nueva pista"** (pedido del usuario): fija al pie de la columna, justo encima de la barra de zoom (`AddRect`,
   `AddH` = 36 px, `DrawAddButton`); las filas pasan por debajo y el scroll deja lugar para ver la última entera.
 - **Alto por fila** (pedido del usuario): `Track.HeightScale` (múltiplo del alto general, así el slider sigue
-  escalándola) / `Folder.Height` en px para la carpeta abierta y `Folder.HeightScale` (múltiplo, como la pista) para la plegada
-  (null = el alto de siempre). Se
+  escalándola) / `Folder.Height` en px al alto general por defecto (`Track.DefaultHeight`) para la carpeta abierta y
+  `Folder.HeightScale` (múltiplo, como la pista) para la plegada (null = el alto de siempre; el de la carpeta, abierta
+  o plegada, es `FolderBaseH`). Las carpetas también siguen el zoom vertical (`FolderZoomed`, pedido del usuario), pero su alto de
+  siempre nunca baja de sí mismo: achicada, se le ocultarían los knobs de envío. Se
   cambia arrastrando el borde de abajo del encabezado (`RowEdgeAt`, gesto "row-height", el borde se ilumina) y un doble
   clic en el borde lo saca; el botón ↺ del pie (`ResetHeightsButton`) iguala todas. Es vista, como plegar: se guarda
   sin deshacer (`SetRowHeight`). Todo lo que dibuja o toca una fila usa su alto (`LaneH(i)`, `RowH`, `FolderRowH`),
@@ -394,8 +441,9 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   Comp o Tono): uno por envío. Los envíos son los buses de la lista de la pista (`TimelineView.SendKnobs`, que la ventana arma de nuevo
   solo después de una edición, `SendKnobsOf` y `editStamp`), con el nombre y el ícono del bus; se eligen con clic
   derecho en la pista → "Envíos a buses" (`SendChoices`). Configuración → Vista los muestra u oculta todos
-  (`TrackKnobs`, "timeline.hiddenKnobs" en `config.json`) y los de cada pista reparten el ancho (`TimelineView.SetKnobs`,
-  `KnobCount`). Transponer se toca en el inspector y en el panel de la tira amplia. El de Tono es bipolar: −12…+12 semitonos en 0…1, se ilumina desde arriba hacia
+  (`TrackKnobs`, "timeline.hiddenKnobs" en `config.json`) y los de cada pista **arrancan a la izquierda**, debajo de la
+  insignia (pedido del usuario), cada uno en una celda de 72 px o del ancho de su knob, y solo se angostan si no
+  entran (`KnobsLeft`, `KnobCellW`, `TimelineView.SetKnobs`, `KnobCount`). Transponer se toca en el inspector. El de Tono es bipolar: −12…+12 semitonos en 0…1, se ilumina desde arriba hacia
   el lado que va, muestra "+2" adentro, la ruedita mueve un semitono y su nombre no prende ni apaga nada. También
   en pistas vacías (`TimelineView.EffectRequested`). Son tan grandes como dejan el alto de la pista y el ancho
   de la columna (`FxKnobD`: de `FxKnobMin` = 20 a `FxKnobMax` = 64 px) y se achican con ella; si ni el mínimo entra, la
@@ -414,8 +462,10 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 
 ## Color e ícono de pista (`MainWindow.TrackLook.cs`)
 
-- Cada pista tiene una insignia (`TrackIcons.DrawBadge`, `Controls/TrackBadge`) con su ícono de instrumento (o su
-  número si no tiene) teñida con su color (o el acento), la misma en el encabezado, el inspector y el mixer.
+- Cada pista tiene una insignia (`TrackIcons.DrawBadge`, `Controls/TrackBadge`) con su ícono de instrumento teñida
+  con su color (o el acento), la misma en el encabezado, el inspector y el mixer. Sin ícono muestra el de su tipo
+  (trazos: onda = audio, teclas = MIDI, cámara = pista que sale en el video, solo en modo Video) y su número chiquito
+  abajo a la derecha.
   En el encabezado mide 28 con la columna al mínimo y crece con ella (`BadgeGrowth`) hasta 52, lo que entra al lado
   del nombre y el volumen sin tocar las filas de efectos; lo que crece corre a la derecha el nombre y el volumen.
   Los íconos son rellenos: Fluent Emoji High Contrast de base y lo que le falta de MDI, game-icons y Qlementine
@@ -428,12 +478,20 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 ## Carpetas de pistas (`MainWindow.Folders.cs`)
 
 - En el timeline, una fila propia (manija, flecha para plegar, ícono y nombre, y papelera: la carpeta solo agrupa, no
-  tiene M, S ni fader) de `FolderH` = 64 px abierta,
-  con el carril vacío (sus pistas ya se ven abajo); plegada toma la altura del zoom vertical y el carril es un **mini
+  tiene M, S ni fader) cuyo alto de siempre es el mismo abierta o plegada (`FolderBaseH`): `FolderH` = 34 px
+  (una línea, el título del grupo) o, si muestra envíos, el título (`FolderTitleH` = 30) y debajo **una perilla por
+  envío** como las de las pistas (`DrawFolderKnobs`, de `FolderKnobD` = 36 px a ese alto, en la misma columna que
+  las de las pistas de la raíz, `KnobsLeft`; crecen con la fila hasta `FxKnobMax` y se ocultan si no entran;
+  `FolderSendKnobs` / `FolderSendRequested`, ediciones por `FolderEdit`; la etiqueta prende o apaga, doble clic en la
+  perilla la pone en 0, la rueda la mueve; Configuración → Vista las oculta como las de las pistas). Abierta, el carril
+  es un **resumen** (`DrawFolderSummary`): una barra de su color por cada tramo donde alguna de sus pistas tiene clips,
+  unidos entre pistas (un bloque por clip solo las repetía); plegada, el carril es un **mini
   mapa** (`DrawMiniMap`): una franja por pista con sus clips en el color de la pista y la onda si la franja llega a
-  `MiniWaveAt` px. Si se le cambió la altura a mano (`Folder.Height`), manda esa. Sus pistas con el contenido del encabezado corrido `FolderIndent` = 24 px
-  (manija, insignia, nombre y sliders). La carpeta y sus pistas van dentro de un recuadro fino de su color
-  (`DrawFolderFrames`, encabezados y carriles); sin riel ni tinte en cada pista, que parecían seleccionadas.
+  `MiniWaveAt` px. Se redimensiona como una pista (ver "Alto por fila"). Sus pistas con el contenido del encabezado corrido `FolderIndent` = 24 px
+  (manija, insignia, nombre y sliders). La carpeta y sus pistas van dentro de un recuadro fino de su color al 45 %
+  (`DrawFolderFrames`, encabezados y carriles); sin riel ni tinte en cada pista, que parecían seleccionadas. Sin color
+  elegido, una carpeta va en gris neutro (`FolderColor`), no en el acento, que también parecía selección; un separador,
+  en el acento (`SeparatorColor`).
 - Una carpeta se selecciona como una pista (clic en su fila o en su canal del mixer; `TimelineView.SelectedFolderId`,
   y entonces no hay pista seleccionada): el inspector muestra la carpeta (`InitFolderInspector`: nombre, color,
   su salida y un slider de envío por bus, `RebuildFolderRouting`, nueva pista adentro y quitarla) y Supr actúa sobre ella. Su ícono abre el selector de color
@@ -455,7 +513,9 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 - **Quitar una carpeta** con pistas adentro pregunta (`MainWindow.RemoveFolder`): "Solo la carpeta" (las pistas
   quedan afuera) o "La carpeta y sus pistas" (`TrackFolders.Remove(…, withTracks)`); vacía se quita sin preguntar.
 - **Separadores** (`Folder.Separator`, pedido del usuario): una fila de `SeparatorH` = 22 px con la manija, el nombre en su
-  color y una línea a lo ancho (`DrawSeparatorHeader`); se arrastran como una carpeta (nunca entran pistas), doble clic
+  color y una línea a lo ancho con un brillo suave de su color (`DrawSeparatorLine`: bandas tenues apiladas; pedido del
+  usuario), sobre el fondo de la ventana para que se lea como un corte entre grupos (`DrawSeparatorHeader`). La fila de
+  arriba no dibuja su línea de abajo, que sería redundante (`OverSeparator`, salvo mientras se reordena); se arrastran como una carpeta (nunca entran pistas), doble clic
   renombra y el clic derecho abre su menú (`SeparatorMenu`: renombrar, color, mostrar u ocultar en el timeline,
   quitar; elegir un color cierra el selector). Oculto, no ocupa lugar pero conserva su lugar en el orden. Uno nuevo nace
   oculto en el timeline (pedido del usuario: son sobre todo para el mixer), salvo "Separador arriba" del menú de una
@@ -464,12 +524,12 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   (pedido del usuario). Plegar es vista (sin deshacer); el resto pasa por `FolderEdit` o `EditTimeline`.
 - En el mixer, cada carpeta es un grupo teñido con su nombre arriba (una franja de `FolderBandH` en todas las
   columnas, para que los faders queden parejos), un canal de carpeta primero y sus pistas, plegable aparte
-  (`Folder.MixerCollapsed`).
+  (`Folder.MixerCollapsed`). Deja `FolderGap` (6 px) de aire con el canal o separador de al lado (pedido del
+  usuario), no con el principio del mixer ni con el espacio libre; del lado derecho, también con el master.
 - **La carpeta solo contiene** (pedido del usuario): no tiene fader, paneo, M, S ni efectos. Sus pistas suman en su nodo
   (un `BusDspChain` sin slots, que deja la suma intacta) y van a su **Salida** (Master o un bus); desde esa suma tiene
-  sus **envíos** a buses (sin PRE: no hay fader). Su tira del mixer (`FolderStrip`, del ancho de la tira amplia más
-  angosta, `FolderStripW`) lleva ícono y "CARPETA", el medidor de la suma ("Suma" abajo) y, amplia, la fila SALIDA y un
-  panel de envío por bus (`SendPanels` con su `Router`); compacta, sus envíos como barras igual que las pistas (`CompactSends`, a la altura de los de
+  sus **envíos** a buses (sin PRE: no hay fader). Su tira del mixer (`FolderStrip`, del ancho del zoom como las demás, con su ícono que crece y "CARPETA" desde
+  `HeadNameW`) lleva ícono y "CARPETA", el medidor de la suma ("Suma" abajo), sus envíos como barras igual que las pistas (`CompactSends`, a la altura de los de
   ellas) y el selector de salida donde ellas tienen el paneo y M S ● (`CompactFolderControls`). Cada edición es un
   `FolderEdit` con su deshacer. Para procesar un grupo, se manda la carpeta a un bus y los efectos van en el bus.
 
@@ -501,14 +561,39 @@ salida, mute/solo y Transponer quedan. Un paso de deshacer; los compresores se v
 ## Mixer (`MainWindow.Mixer.cs`)
 
 - Ocupa el lugar del timeline (X o "Timeline / Mixer") con su propia altura (mínimo 250). Una tira por pista, también
-  las vacías; amplias o compactas ("Auto" según el ancho).
+  las vacías.
+- **Zoom del mixer** (pedido del usuario: un solo flujo, sin botones Compacto / Amplio / Auto, y una sola tira, la de
+  lista, en todos los anchos): todas las tiras de pista y bus tienen un ancho, `mixerStripW` (`config.json`
+  "mixerStripW", 120 de entrada), que va de `MinStripW` (42) a `WideMax` (150: más ancho no suma nada, pedido del
+  usuario). Se cambia con el gesto de zoom del timeline (Shift+rueda por defecto, el de `Shortcuts.Wheel`, con su
+  sentido) sobre el mixer, que deja quieta la tira que está bajo el mouse, o con la barra de la cabecera (escala
+  logarítmica, como la del timeline); solo cambia anchos, sin rearmar (`ZoomMixer`, `MixerLayout.Resize`). La rueda
+  sola y el gesto de costados lo desplazan a los costados (`OnMixerWheel`); sobre una perilla, fader o barra la rueda
+  es de ese control, y una lista que tiene más para mostrar se queda con la rueda sola. Las tiras de carpeta también
+  siguen el zoom; separadores y master no cambian de ancho.
+- **La tira se acomoda sola al angostarse** (pedido del usuario: el ícono del canal y los de los efectos quedan
+  siempre): la cabecera (`StripHead`) lleva el badge del canal al lado del nombre, de 20 a 28 px según el ancho, y
+  debajo de `HeadNameW` (84) el badge solo, centrado, sobre "VACÍA" / "BUS"; debajo de `NarrowW` (90) el medidor
+  saca la escala, el pico va en dB enteros, se van los dB del pie y se achican los márgenes; debajo de `TinyW` (64) el
+  fader pasa a su tapa angosta (`Fader.Slim`, igual de alta) (`NarrowParts`). Cada fila de efectos se arma por su
+  propio ancho: el ícono siempre (solo, centrado), el ⏻ desde `RowPowerW` (sin él, el clic abre el efecto, donde se
+  prende), el nombre desde `RowNameW` y lo que tiene puesto (`SlotBrief`: "Válvula · 40%", el preset, "1/4 · 35%")
+  desde `RowBriefW`, en a lo sumo `RowBriefShare` de la fila; los envíos sacan su ⏻ igual, los títulos de las listas
+  se van y queda el +, y M S ● se reparten el ancho hasta `MinToggleW`, donde ● deja su lugar (sigue en el encabezado
+  de la pista en el timeline).
+- **Una tira para todos los canales** (pedido del usuario): pistas y buses usan el mismo ancho (el del zoom), la misma
+  tarjeta y selección (`StripCardLook`: hover, seleccionada con borde y filo de acento, armada en rojo, su color en el
+  filo de arriba) y las mismas piezas: `StripHead`, `CompactChain` (efectos, envíos, paneo y sus botones) y los dB al
+  pie. Lo que un canal no tiene deja su sección vacía para que los faders queden parejos (un bus no tiene envíos; una
+  carpeta, efectos). Un tipo de canal nuevo se arma con estas piezas, no con su propio layout. Doble clic en el nombre
+  de una pista o un bus lo renombra. La salida de una pista se elige en el inspector.
 - Arriba, sobre el mixer y sobre Mastering (no en solo audio), la mini timeline (`Controls/MiniTimeline.cs`): toda la
   canción, el cabezal (clic o arrastre para moverlo) y una regla en compases o en minutos y segundos, con su propio
   switch de dos botones a la izquierda que es el mismo modo que el de la regla del timeline (`SetRulerMode`).
 - Las ediciones de canal pasan por `EditTrack`, las de las carpetas por `FolderEdit` y las de los buses por `BusEdit`
   (`BusesEdit` para agregar y quitar). Los desplegables son `SelectButton`, no `ComboBox`.
-- **A | B** (`MainWindow.MixCompare.cs`, `MixCompare`): segmentado en la barra del mixer, entre los M/S de limpiar y el
-  ancho de tiras. La mezcla que suena es la del proyecto; la otra espera en `ProjectSettings.Compare` (solo ajustes:
+- **A | B** (`MainWindow.MixCompare.cs`, `MixCompare`): segmentado en la barra del mixer, entre los M/S de limpiar y la
+  barra del ancho de los canales. La mezcla que suena es la del proyecto; la otra espera en `ProjectSettings.Compare` (solo ajustes:
   el canal de cada pista, salida y envíos de las carpetas, y volumen, paneo, slots, salida y envíos de los buses, por
   id). El primer clic en la otra letra la arma como copia de esta. Nunca agrega ni saca pistas, carpetas ni buses, y
   no toca mute, solo, nombres, lados ni el master (Mastering es su propia etapa). Se aplica como Deshacer aplica un
@@ -533,10 +618,8 @@ salida, mute/solo y Transponer quedan. Un paso de deshacer; los compresores se v
   rojo bajo cero y en amarillo bajo +0,3. Cabecera y pie tienen alto fijo: LIM y MONO van en una fila, LUFS y COR en dos líneas cortas.
 - Cada canal es una tarjeta (`StripCard`) y todos (pistas, carpetas, buses, master) se arman con `StripLayout`, que les da
   las mismas filas: así faders y medidores tienen siempre la misma altura. Lo que vaya en la cabecera o en los
-  controles tiene que entrar en su fila fija, no estirarla. Los paneles de efecto angostos se reacomodan
-  (`FxNarrowW`) en vez de recortar controles.
-- En las tiras amplias la cabecera (● M S) y el paneo quedan fijos y solo scrollean los efectos, cada uno en su
-  panel. La **tira compacta** va como la de una consola (pedido del usuario, `CompactChain`): la lista de EFECTOS
+  controles tiene que entrar en su fila fija, no estirarla.
+- La **tira** va como la de una consola (pedido del usuario, `CompactChain`): la lista de EFECTOS
   (un renglón por slot con su ⏻ de encendido; un clic abre sus controles en la ventanita, arrastrado cambia el
   orden, y el + suma uno, `ShowAddSlotMenu`; una rayita bajo el primer compresor muestra cuánto comprime), la de
   ENVÍOS (una barra por bus de su lista con su nombre, su % y su ⏻, `HBar`; el + elige los buses), el paneo como
@@ -544,25 +627,32 @@ salida, mute/solo y Transponer quedan. Un paso de deshacer; los compresores se v
   las tiras (pedido del usuario: todo parejo); una manija abajo de cada una (`ListBox`) las estira en todas a la vez
   (`SetListH`, "mixer.fxH" / "mixer.sendsH" en `config.json`; doble clic vuelve al de siempre). `StripTopH` sale de
   las secciones que se ven y su alto, y `ApplyMixerHeights` solo cambia las alturas de las filas registradas
-  (`MixerLayout.TopRows`, `FxRows`, `SendRows`), sin rearmar nada. `CompactW` 104, mixer de 440 por defecto.
+  (`MixerLayout.TopRows`, `FxRows`, `SendRows`), sin rearmar nada. Mixer de 440 de alto por defecto.
 - La cabecera del mixer tiene el título con presencia (ícono de mixer en acento y "Mixer") y **Efectos** y **Envíos**
-  (`SectionSwitch`, pedido del usuario): muestran u ocultan esas secciones en todas las tiras, compactas y amplias
-  (`mixerFx`, `mixerSends`, guardados en `config.json` "mixer.fx" / "mixer.sends").
-- El **fader** (`Controls/Fader.cs`) tiene la tapa de una consola (pedido del usuario: grande y fácil de agarrar, 30 × 40):
+  (`SectionSwitch`, pedido del usuario): muestran u ocultan esas secciones en todas las tiras
+  (`mixerFx`, `mixerSends`, guardados en `config.json` "mixer.fx" / "mixer.sends"). A la derecha, antes de los M / S
+  que limpian mutes y solos, **FX** (`FxBypassButton`, pedido del usuario): pone en bypass todos los efectos de pistas
+  y buses, o los vuelve a activar. Solo lo que se oye, como MONO (`PlaybackEngine.FxBypass`, no se guarda): los slots
+  van al motor apagados por el mismo camino que su ⏻ (`ChannelDsp.Specs(..., bypass)`), sin tocar el proyecto ni la
+  exportación. Prendido se pinta ámbar, como un mute, y las listas de efectos de las tiras se atenúan.
+- El **fader** (`Controls/Fader.cs`) tiene la tapa de una consola (pedido del usuario: grande y fácil de agarrar, 30 × 40; 18 × 40 en las tiras más angostas):
   cuerpo gris sombreado, ranuras, una línea blanca en el nivel y una sombra abajo; la ranura oscura se ilumina en
   acento hasta el nivel. La escala en dB va en el medidor.
-- **Slots de efectos** (tira amplia, `WideFx` → `SlotPanels`, que recibe un `SlotOwner`: el canal de una pista o un bus): un panel por slot en el orden en que suena (`SatPanel`,
-  `CompPanel`, `EqPanel`, `GatePanel`; un tipo repetido se numera, "EQ 2"). El ⋯ del título (`SlotMenuButton`) sube, baja, duplica o
-  saca el slot; también se arrastra de su barra de título (`Controls/SlotDrag.cs`, animado como el reordenar pistas
-  del timeline: los demás se corren para hacerle lugar, al soltar se acomoda y recién ahí cambia el orden). "+ Efecto" (`AddSlotButton`) agrega uno al final, ya prendido. El gráfico de cada EQ abre sus bandas en
-  un flyout (`ShowSlotEq`). Cada slot se **pliega** (pedido del usuario, `InsertSlot.Collapsed`, guardado en el proyecto
-  pero sin paso de deshacer): un clic en su barra o en la flechita lo deja en una fila de 26 px con un resumen de lo
-  que tiene puesto ("Válvula · 30%", "Sala · 2,1 s", "1/8 · 35%") y un botón que abre el panel entero en una ventanita
-  sobre el mixer, sin desplegarlo (`ShowSlotWindow`: el mismo panel, armado en un `MixerLayout` aparte y refrescado
-  con el mixer mientras está abierto). La barra "Comprime" va en el primer compresor y muestra lo de toda la cadena. La tira
-  compacta y las perillas del timeline son un atajo al primer slot de cada tipo; si no hay ninguno, prenderlo ahí lo
-  vuelve a poner en su lugar de siempre (`Channel.AdoptSpares`). Cada cambio de la lista es un paso de deshacer
-  y reconstruye las tiras (la clave de `RefreshMixer` lleva los ids de los slots).
+- **Slots de efectos** (`SlotOwner`: el canal de una pista o un bus): en la tira, su lista; un clic en un renglón de un
+  VST3 cargado abre la ventana del plugin (pedido del usuario: sin un paso en el medio, `OpenEffectWindow`); en los
+  demás, o en un VST3 que todavía carga o falló, abre el panel del slot en una ventanita sobre el mixer (`ShowSlotWindow` → `SlotPanel`: `SatPanel`, `CompPanel`,
+  `EqPanel`, `GatePanel`, `VstPanel`, `ReverbSlotPanel`, `DelaySlotPanel`, armado en un `MixerLayout` aparte y
+  refrescado con el mixer mientras está abierto; un tipo repetido se numera, "EQ 2", y un VST3 lleva el nombre del
+  plugin). Su menú (`ShowSlotMenu`, pedido del usuario) sale del ⋯ del título (`SlotMenuButton`) y del clic derecho
+  en su renglón del mixer o en el título de su sección del inspector: Abrir (el plugin de un VST3 cargado; el panel,
+  desde el mixer), Prender / Apagar, Apagar los demás (deja sonando solo ese en la cadena), Subir, Bajar, Duplicar y
+  Eliminar, cada uno un paso de deshacer. El gráfico de cada EQ abre sus
+  bandas en un flyout (`ShowSlotEq`). Los paneles angostos se reacomodan (`FxNarrowW`) en vez de recortar controles.
+  La rayita bajo el primer compresor de la lista muestra lo que comprime toda la cadena. La lista y las perillas del
+  timeline son un atajo al primer slot de cada tipo; si no hay ninguno, prenderlo ahí lo vuelve a poner en su lugar de
+  siempre (`Channel.AdoptSpares`). Cada cambio de la lista es un paso de deshacer y reconstruye las tiras (la clave de
+  `RefreshMixer` lleva los ids de los slots). `InsertSlot.Collapsed` (plegado de las tiras amplias que ya no están)
+  se conserva en el archivo.
 - **Mastering** (`MainWindow.Master.cs`): la tercera vista del selector Timeline · Mixer · Mastering (la X sigue
   alternando timeline / mixer). Usa el lugar del mixer (`MixerHost`, con su altura y su lugar en solo audio): esconde
   la cabecera y las tiras y muestra la cadena. El botón "Master" del canal master (en acento con el master prendido)
@@ -607,30 +697,32 @@ salida, mute/solo y Transponer quedan. Un paso de deshacer; los compresores se v
   `MakeMixerRoom`, `FinishMixerDrag`); el mixer scrollea cerca de los bordes. Apretar en el fondo vacío del mixer
   deselecciona todo. Pistas, carpetas y separadores se mueven en el mismo orden del timeline (`TrackFolders`, un
   `EditTimeline` con su deshacer), así que el timeline lo sigue y al revés; los buses se ordenan entre los buses de
-  cualquiera de los dos lados. Los **separadores** se ven como una tira angosta (`SeparatorStrip`, `SeparatorW`) con su
+  cualquiera de los dos lados. Los **separadores** se ven como una tira angosta (`SeparatorStrip`, `SeparatorW`; la línea con el mismo brillo que en el timeline) con su
   nombre escrito hacia arriba y un ojo arriba que los muestra u oculta en el timeline; un clic abre su menú. "Separador" en
   la cabecera del mixer agrega uno al final (`AddSeparatorButton`).
 - **Paneo**: un solo desplegable (`BuildPanMenu`) con la apertura arriba (30 % por defecto) y las plantillas con su
   descripción; elegir una la aplica y cierra el menú.
 - **Buses** (`MainWindow.Buses.cs`, `ProjectSettings.Buses`, pedido del usuario): un solo concepto para bus y FX. A la
-  derecha, una tira por bus (`BusStrip`), armada como un rack (`BusRack`, pedido del usuario: un bus es sobre todo su
-  cadena): arriba ícono y nombre (doble clic o ⋯ → Renombrar; ⋯ → Quitar bus, sin preguntar y en un paso de
-  deshacer: se van los envíos que le llegaban y lo que salía a él pasa al Master) y M; a la derecha, fijos, fader,
-  medidor y dB, a la altura de los de las pistas; a la izquierda, scrolleando, sus slots (plegables) con los
-  mismos paneles, ⋯, arrastre y "+ Efecto" que una pista (`SlotPanels` con un
-  `SlotOwner` de bus, donde "+ Efecto" también ofrece Reverb y Delay). Sin SALIDA ni envíos: por ahora un bus sale
-  solo al Master (decisión del usuario, `ProjectBuses.CanFeed`). El paneo va
-  arriba de la cadena en el mixer amplio y arriba del fader en el compacto. No hay columna "+ Bus" (pedido del usuario): clic derecho en el mixer, también en su fondo vacío (`InitMixerMenu`) → "Nuevo bus / canal FX"
-  agrega uno vacío (`ProjectBuses.Add`), y el efecto se le suma con "+ Efecto"; el mismo menú tiene "Nuevo separador". El
-  ⋯ de la tira lleva su color propio, así se ve sin pasar el mouse. Los paneles de reverb y delay
-  en slot (`ReverbSlotPanel`, `DelaySlotPanel`) tienen sus presets y perillas; un slot apagado deja pasar lo que le
-  llega. Los selectores de salida y los paneles de envío de pistas y carpetas ofrecen los buses (`Targets`,
-  `ProjectBuses.CanFeed`), y la clave de `RefreshMixer` lleva el ruteo de los buses para rearmar las tiras cuando cambia.
-- **Salida y envíos en las tiras** (`Router`: pista, carpeta o bus, con `OutputSelect`, `OutputRow`, `SendPanels`): la
-  tira amplia de una pista suma, después de sus slots, la fila SALIDA (si no está en una carpeta) y un panel de envío
-  por bus de su lista (knob y %, el nombre del bus, qué hace, ON, **PRE** y × para sacarlo) con "+ Envío" debajo. Cada
-  pista elige sus buses (`Send.Hidden`, `ProjectBuses.Shown` / `ShowSend`): sacar uno lo apaga y guarda su nivel;
-  una pista o un bus nuevos traen todos. La clave de `RefreshMixer` lleva los envíos sacados para rearmar las tiras.
+  derecha, una tira por bus (`BusStrip`) armada como la de una pista (ver "Una tira para todos los canales"): su badge,
+  nombre y "BUS", su lista de EFECTOS (donde "+" también ofrece Reverb y Delay), la sección de envíos vacía, paneo y M,
+  y al pie sus dB. La rayita bajo su primer compresor muestra lo que comprime (`MixerLayout.NodeMeters`). Un clic lo
+  **selecciona** como a una pista (`SelectBus`, `selBusId`: el timeline suelta su pista o carpeta y elegir otra cosa
+  suelta el bus) y el inspector muestra su panel (`InitBusInspector`: badge y nombre, qué tiene, color, ícono y
+  "Quitar bus"). Tiene **color e ícono** como una pista (`Bus.Color`, `Bus.Icon`; el mismo selector, `ShowLook` /
+  `ShowBusLook`, desde su badge, el inspector o el menú); sin ícono muestra el de su primera reverb o delay. Clic
+  derecho: Renombrar, Color e ícono…, Quitar bus (sin preguntar y en un paso de deshacer: se van los envíos que le
+  llegaban y lo que salía a él pasa al Master). Sin SALIDA ni envíos: por ahora un bus sale solo al Master (decisión
+  del usuario, `ProjectBuses.CanFeed`). No hay columna "+ Bus" (pedido del usuario): clic derecho en el mixer, también
+  en su fondo vacío (`InitMixerMenu`) → "Nuevo bus / canal FX" agrega uno vacío (`ProjectBuses.Add`), y el efecto se
+  le suma con "+"; el mismo menú tiene "Nuevo separador". Los paneles de reverb y delay en slot (`ReverbSlotPanel`,
+  `DelaySlotPanel`) tienen sus presets y perillas; un slot apagado deja pasar lo que le llega. Los selectores de
+  salida y los envíos de pistas y carpetas ofrecen los buses (`Targets`, `ProjectBuses.CanFeed`), y la clave de
+  `RefreshMixer` lleva el ruteo de los buses para rearmar las tiras cuando cambia.
+- **Envíos en las tiras** (`Router`: pista, carpeta o bus): una barra por bus de su lista (`CompactSends`), con "+"
+  para elegirlos y el mismo menú de clic derecho que en el inspector (`ShowSendMenu`). Cada pista elige sus buses
+  (`Send.Hidden`, `ProjectBuses.Shown` / `ShowSend`): una pista o un bus nuevos no traen ninguno (pedido del usuario:
+  se suman a mano) y sacar uno lo apaga y guarda su nivel. La clave de `RefreshMixer` lleva los envíos de cada lista
+  para rearmar las tiras. La salida (`OutputSelect`) va en el inspector y, en la tira de una carpeta, bajo sus envíos.
 
 ## Pistas MIDI y piano roll (`MainWindow.Midi.cs`, `Controls/PianoRollView.cs`, `Controls/TimelineView.Midi.cs`)
 
@@ -664,10 +756,11 @@ Logic o Studio One). Etapas siguientes en PENDIENTES: sampler, después VST3.
   más fuerte); en la grilla, una línea en el principio y el final de cada clip, fuera del clip que se edita todo más
   oscuro y las notas de los otros clips tenues (sus velocidades también, en la franja VEL). Un clic adentro de otro
   clip lo pasa a editar y sigue como un clic ahí (`ClipPicked`); fuera de todo clip no se escriben notas. Grilla e imán
-  cuentan desde el principio del timeline, como los del timeline. **Sigue al timeline** mientras está a la vista
-  (`FollowPiano`): clic en un clip MIDI lo muestra (en la misma pista, solo lo trae a la vista); clic en otra pista MIDI
-  (su encabezado o un tramo vacío) muestra esa pista entera, en el clip bajo el cabezal (si no hay, el siguiente o el
-  último). "Pista entera" (`PianoRollView.Frame.Track`) encaja todos sus clips a lo ancho si un compás queda de al
+  cuentan desde el principio del timeline, como los del timeline. **Muestra la pista elegida** (pedido del usuario): al
+  abrirlo y mientras está a la vista (`ShowPiano`, `FollowPiano`), clic en un clip MIDI lo muestra (en la misma pista,
+  solo lo trae a la vista); clic en otra pista MIDI (su encabezado o un tramo vacío) muestra esa pista entera, en el
+  clip bajo el cabezal (si no hay, el siguiente o el último); sin pista elegida, o con una de audio, queda vacío.
+  Abrir un clip (doble clic, "Ver notas") elige su pista. "Pista entera" (`PianoRollView.Frame.Track`) encaja todos sus clips a lo ancho si un compás queda de al
   menos 48 px; si no, deja el cabezal en el medio. Las notas van con las puntas redondeadas y una rayita abajo que se
   llena según su velocidad (pedidos del usuario). Teclado a la izquierda (sus teclas suenan; las
   filas de las negras más oscuras, una línea en cada Do), el cabezal de acento y, abajo, la franja **VEL** con una barra por nota
@@ -702,7 +795,7 @@ Logic o Studio One). Etapas siguientes en PENDIENTES: sampler, después VST3.
 - **Inspector de una pista MIDI** (`InitMidiInspector`, `RefreshMidiInspector`): INSTRUMENTO, una tarjeta con un
   desplegable (nombre, "Nativo" o "VST3 · marca" y ▾; abre el mismo menú de arriba, nunca una lista a la vista: con
   muchos plugins llenaba el panel), cómo va (listo, abriendo, no abrió) y "Abrir la ventana". Debajo, la fila SALIDA y
-  los envíos a buses, las mismas secciones que una pista de audio (`inspectorSends`, que `PlaceInspectorSends` mueve
+  los envíos a buses, la misma bandeja que una pista de audio (`sendsTray`, que `PlaceInspectorSends` mueve
   acá mientras se ve una pista MIDI).
 - **Instrumento o efecto** (`VstPluginInfo.IsInstrument`): la búsqueda (`wtvsthost --scan`) crea cada plugin y le
   pregunta sus entradas: de audio principales (un sidechain no cuenta) y de notas. Toma notas y no audio → instrumento;
@@ -716,6 +809,16 @@ Logic o Studio One). Etapas siguientes en PENDIENTES: sampler, después VST3.
   cerrarla, fuera del deshacer como el tempo. Si no abre (archivo que falta, error) o se cierra de golpe, un toast lo
   dice (con "Abrirlo de nuevo") y la pista vuelve al tono de prueba; no se reintenta solo. Con la transporte parada el
   instrumento sigue corriendo: las teclas del piano roll suenan a través de él y su cadena.
+- **Efecto VST3** (`MainWindow.VstFx.cs`, `InsertSlot.VstKind`, `VstSlotSettings`): "+ Efecto" (de una pista o un bus)
+  tiene dos entradas que se despliegan al pasar el mouse (pedido del usuario: todo junto era una lista larguísima,
+  `AddSlotGroup`): **Nativos** (los propios) y **VST3** (los efectos encontrados, cuántos son, y por marca desde 12, cada
+  marca otro submenú); abajo "Buscar plugins de nuevo" y "Administrar plugins…". La primera vez busca solo (`EnsurePlugins`). El slot es uno más
+  de la cadena (se mueve, duplica, pliega y apaga igual): su panel (`VstPanel` en el mixer, `VstSection` en la pestaña
+  Canal) tiene el ícono de enchufe (`FxIcon.Vst`), el nombre del plugin, "Abrir" (su ventana) y cómo va: andando y
+  cuántos ms llega tarde (lo compensa la mezcla), abriendo, o por qué no abrió. Mientras abre, si no abre o si se cierra
+  de golpe, el sonido pasa sin él (toast con "Abrirlo de nuevo"); apagado también pasa sin él, igual de atrasado, así
+  prenderlo y apagarlo no salta. Lo que se cambia en su ventana se guarda en el slot (`PluginRef.State`) como el de un
+  instrumento: 1,5 s después de tocarla y al cerrarla, fuera del deshacer.
 - **Configuración → Plugins** (`Dialogs/SettingsDialog.Plugins.cs`, pedido del usuario): las carpetas donde se buscan
   (las dos de Windows y las que suma el usuario con +, "vst.folders" en `config.json`), "Buscar nuevos" (solo los
   nuevos o actualizados) y "Revisar todos de nuevo" con el avance ("Abriendo X… (3 de 20)") y Cancelar (para entre un

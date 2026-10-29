@@ -12,13 +12,14 @@ namespace WildTrack.App.Controls;
 /// sits around 80% of the throw, like a console. Drag (Shift = fine), wheel (Shift = fine), double-click = 0 dB.
 /// The cap is a console's (asked by the user: big and easy to grab with the mouse): a grey shaded body with grooves and
 /// a white line at the level, the one shading and shadow in the window, made once and shared by every fader.
+/// <see cref="Slim"/> narrows the cap for the narrowest mixer strips; it stays as tall, so it is as easy to grab.
 /// </summary>
 public sealed class Fader : Control
 {
     /// <summary>The web's VOL_MAX: +3.5 dB at the top.</summary>
     public const double VolMax = 1.5;
     /// <summary>The cap's size (px): wide and tall enough to grab without aiming.</summary>
-    const double CapW = 30, CapH = 40;
+    const double CapW = 30, SlimCapW = 18, CapH = 40;
     /// <summary>Space above and below the travel, so the cap never leaves the control.</summary>
     const double Pad = CapH / 2;
     /// <summary>Between the cap's grooves (px).</summary>
@@ -35,7 +36,7 @@ public sealed class Fader : Control
     static readonly IPen GrooveLight = new ImmutablePen(Color.FromArgb(70, 255, 255, 255).ToUInt32(), 1);
     static readonly IPen LevelLine = new ImmutablePen(Colors.White.ToUInt32(), 2);
 
-    double value = 1, dragPos, dragY;
+    double value = 1, dragPos, dragY, capW = CapW;
     IPointer? pointer;
     public event Action<double>? Changed;
 
@@ -46,6 +47,19 @@ public sealed class Fader : Control
         Cursor = new Cursor(StandardCursorType.SizeNorthSouth);
         ToolTip.SetTip(this, "Arrastrá o usá la rueda (Shift = fino) · doble click: 0 dB");
         AutomationProperties.SetName(this, "Volumen");
+    }
+
+    /// <summary>The narrow cap, for a strip with little room.</summary>
+    public bool Slim
+    {
+        set
+        {
+            double w = value ? SlimCapW : CapW;
+            if (w == capW) return;
+            capW = w;
+            Width = capW + 4;
+            InvalidateVisual();
+        }
     }
 
     public static double ToPos(double v) => Math.Sqrt(Math.Max(0, v) / VolMax);
@@ -70,7 +84,7 @@ public sealed class Fader : Control
         ctx.DrawLine(Palette.Pen(Palette.Alpha(Palette.FaintColor, 0.6)), new Point(0, uy), new Point(w, uy));
         // the cap: a shadow under it, the shaded body, grooves across and the white line at the level
         double capY = Math.Round(h - Pad - travel * pos);
-        var cap = new Rect(cx - CapW / 2, capY - CapH / 2, CapW, CapH);
+        var cap = new Rect(cx - capW / 2, capY - CapH / 2, capW, CapH);
         ctx.DrawRectangle(CapShadow, null, cap.Translate(new Vector(0, 2)), 4, 4);
         ctx.DrawRectangle(CapFill, CapEdge, cap.Deflate(0.5), 4, 4);
         for (double gy = cap.Top + 5; gy < cap.Bottom - 5; gy += Groove)

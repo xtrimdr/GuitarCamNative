@@ -42,7 +42,7 @@ public static class ProjectMarkers
     }
 
     public static Marker Find(Project p, string id) =>
-        p.Markers.Find(m => m.Id == id) ?? throw new ArgumentException(Texts.T("err.marker.notFound", "No encontré ese marcador."));
+        p.Markers.Find(m => m.Id == id) ?? throw new ArgumentException(Texts.T("err.marker.notFound", "Marcador no encontrado."));
 
     /// <summary>A marker at <paramref name="sec"/>; without a name, "Marcador n" with the first n not taken.</summary>
     public static Marker Add(Project p, double sec, string? name = null)
@@ -142,7 +142,7 @@ public static class ProjectMarkers
                 double end = i + 1 < list.Count ? list[i + 1].Sec : lengthSec;
                 if (end > 0 && end - list[i].Sec < MinChapterSec)
                 {
-                    problem = Texts.T("markers.chapters.short", "«{0}» dura menos de {1} s y YouTube no lo tomaría", list[i].Name, MinChapterSec);
+                    problem = Texts.T("markers.chapters.short", "«{0}» dura menos de {1} s: YouTube no lo acepta", list[i].Name, MinChapterSec);
                     break;
                 }
             }

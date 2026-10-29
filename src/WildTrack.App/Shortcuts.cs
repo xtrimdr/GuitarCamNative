@@ -57,6 +57,7 @@ static class Shortcuts
         new("mixer", Loc.T("sc.group.view"), Loc.T("sc.mixer"), [G(Key.X)]),
         new("leftPanel", Loc.T("sc.group.view"), Loc.T("sc.leftPanel"), [G(Key.B)]),
         new("rightPanel", Loc.T("sc.group.view"), Loc.T("sc.rightPanel"), [G(Key.P)]),
+        new("fullScreen", Loc.T("sc.group.view"), Loc.T("sc.fullScreen"), [G(Key.F11)]),
         new("toolSelect", Loc.T("sc.group.tools"), Loc.T("sc.toolSelect"), [G(Key.D1), G(Key.NumPad1)]),
         new("toolRange", Loc.T("sc.group.tools"), Loc.T("sc.toolRange"), [G(Key.D2), G(Key.NumPad2)]),
         new("toolSplit", Loc.T("sc.group.tools"), Loc.T("sc.toolSplit"), [G(Key.D3), G(Key.NumPad3)]),

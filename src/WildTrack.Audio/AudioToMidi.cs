@@ -67,7 +67,7 @@ public static class AudioToMidi
         lock (sessionLock)
         {
             if (session != null) return session;
-            if (!Available) throw new InvalidOperationException(Texts.T("err.toMidi.noModel", "Falta el modelo que saca las notas (basic-pitch\\nmp.onnx). Reinstalá WildTrack."));
+            if (!Available) throw new InvalidOperationException(Texts.T("err.toMidi.noModel", "Falta el modelo de extracción (basic-pitch\\nmp.onnx). Reinstalá WildTrack."));
             try
             {
                 using var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
@@ -77,7 +77,7 @@ public static class AudioToMidi
             }
             catch (Exception e) when (e is OnnxRuntimeException or DllNotFoundException or TypeInitializationException)
             {
-                throw new InvalidOperationException(Texts.T("err.toMidi.engine", "No pude arrancar el extractor de notas: {0}", e.Message), e);
+                throw new InvalidOperationException(Texts.T("err.toMidi.engine", "No se pudo iniciar la extracción de notas: {0}", e.Message), e);
             }
         }
     }

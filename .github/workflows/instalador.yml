@@ -71,7 +71,7 @@ jobs:
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'GuitarCamNative' }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'WildTrack' }}
           signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG || 'release-signing' }}
           github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
           wait-for-completion: true
@@ -99,6 +99,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $v = $env:GITHUB_REF_NAME.TrimStart('v')
+          # a release made by hand for this tag stays as it is; the build is still in the run's artifacts
+          gh release view $env:GITHUB_REF_NAME *> $null
+          if ($LASTEXITCODE -eq 0) { Write-Host "El release $env:GITHUB_REF_NAME ya existe: no lo toco."; exit 0 }
           gh release create $env:GITHUB_REF_NAME artifacts/final/WildTrack-Setup.exe --draft --verify-tag `
             --title "WildTrack $v" --notes "Borrador armado por GitHub Actions: escribí las notas y publicalo."
           if ($LASTEXITCODE -ne 0) { throw 'No pude crear el release' }

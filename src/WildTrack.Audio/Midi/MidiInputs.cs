@@ -142,8 +142,8 @@ public sealed class MidiInputs : IDisposable
         catch (NAudio.MmException e)
         {
             port.Error = e.Result == NAudio.MmResult.AlreadyAllocated
-                ? Texts.T("midi.err.busy", "Lo está usando otro programa: cerralo y buscá de nuevo.")
-                : Texts.T("midi.err.open", "No pude abrirlo ({0}).", e.Result);
+                ? Texts.T("midi.err.busy", "En uso por otro programa.")
+                : Texts.T("midi.err.open", "No se pudo abrir ({0}).", e.Result);
         }
     }
 

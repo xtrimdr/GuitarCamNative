@@ -62,7 +62,7 @@ public partial class MainWindow
 
     /// <summary>The video's column may grow until the timeline beside it would get narrower than <see cref="StageMinWidth"/>.</summary>
     double ClampStage(double w) =>
-        Math.Clamp(w, StageSideMinWidth, Math.Max(StageSideMinWidth, Math.Min(StageSideMaxWidth, Bounds.Width - InspectorBar.Width - ProjectBar.Width - StageMinWidth)));
+        Math.Clamp(w, StageSideMinWidth, Math.Max(StageSideMinWidth, Math.Min(StageSideMaxWidth, Bounds.Width - ShownWidth(InspectorBar) - ShownWidth(ProjectBar) - StageMinWidth)));
 
     void SetStageWidth(double w)
     {

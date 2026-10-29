@@ -53,20 +53,32 @@ public partial class MainWindow : Window
         {
             if (e.Source is Control c && c.FindAncestorOfType<Button>(true) != null) return;
             if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
-            if (e.ClickCount == 2) WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+            if (WindowState == WindowState.FullScreen)
+            {
+                if (e.ClickCount == 2) ToggleFullScreen();
+            }
+            else if (e.ClickCount == 2) WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
             else BeginMoveDrag(e);
         };
+        InitFullScreen();
+        InitWindowPlace();
 
         SessionChip.Click += async (_, _) => await ShowSessionMenu();
-        ExportButton.Click += (_, _) =>
+        ExportButton.Click += async (_, _) =>
         {
             if (store == null || restoring || Projects.IsVisible || RecordingBusy) return;
+            // the export opens its own copies of the plugins with their saved state: what was just changed in a plugin's
+            // window goes in first
+            if (PluginStatesDue && !store.ReadOnly) await SavePluginStates();
+            if (store == null) return;
             if (Export.TryOpen(store, tracks, out var error)) { engine.Pause(); engine.Seek(0); }
             else if (error != null) Toast(error);
         };
         Export.ExportCompleted += res =>
         {
-            MarkDirty(); SaveSoon(); RefreshHistory();
+            MarkDirty();
+            RefreshHistory();
+            _ = SaveExportVersion(res.File); // saves the project too
             bool video = res.FileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase);
             Toast(res.FileName, Loc.T(video ? "exp.done.video" : "exp.done.audio"),
                 action: (Loc.T("proj.reveal"), () => RevealInExplorer(null, res.FullPath)));
@@ -104,7 +116,11 @@ public partial class MainWindow : Window
 
         Timeline.SeekRequested += engine.Seek;
         Timeline.ScrubChanged += Scrub;
-        Timeline.SelectionChanged += i => ShowTrack(i >= 0 && i < tracks.Count ? tracks[i] : null);
+        Timeline.SelectionChanged += i =>
+        {
+            BusSelectionLost();
+            ShowTrack(i >= 0 && i < tracks.Count ? tracks[i] : null);
+        };
         Preview.ClipSelected += (track, clip) => Timeline.SelectClip(tracks.IndexOf(track), clip.Clip.Id);
         Preview.FramingRequested += (clip, zoom, x, y) =>
         {
@@ -138,6 +154,7 @@ public partial class MainWindow : Window
         InitTrackLook();
         InitTransitions();
         InitProjectBar();
+        InitSidebarToggles();
         InitMixer();
         InitLayout();
         InitTopBar();
@@ -212,10 +229,10 @@ public partial class MainWindow : Window
                 return;
             }
             // what was just changed in a plugin's window goes in the project before it closes
-            if (InstrumentStatesDue && store is { ReadOnly: false })
+            if (PluginStatesDue && store is { ReadOnly: false })
             {
                 e.Cancel = true;
-                await SaveInstrumentStates();
+                await SavePluginStates();
                 Close();
                 return;
             }
@@ -256,6 +273,7 @@ public partial class MainWindow : Window
         {
             SessionLog.Write("ventana cerrada");
             timer.Stop();
+            SaveWindowPlace();
             // stacked (solo audio, Vertical layout) the bottom row is closed: the heights remembered before stay
             try { if (!stackedViews && !(mixerView && masteringView)) AppConfig.Set(mixerView ? "mixerHeight" : "timelineHeight", Root.RowDefinitions[3].ActualHeight.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* View preference only. */ }
@@ -403,6 +421,7 @@ public partial class MainWindow : Window
         engine.Stop();
         takePreview.Stop();
         DropAllInstruments();
+        DropAllEffects();
         historyConfirmPurge = false;
         historyDeletingExport = null;
         FlushSave();
@@ -416,6 +435,7 @@ public partial class MainWindow : Window
         {
             undo.Clear();
             armedIds = null;
+            ResetSteps(Loc.T("steps.origin.open"));
         }
         UpdateUndoButtons();
     }
@@ -445,7 +465,7 @@ public partial class MainWindow : Window
     async Task OpenProject(string dir, bool preserveUndo = false)
     {
         await FlushProjectOperation();
-        if (InstrumentStatesDue && store is { ReadOnly: false }) await SaveInstrumentStates();
+        if (PluginStatesDue && store is { ReadOnly: false }) await SavePluginStates();
         Status(Loc.T("main.loading"));
         var next = await Task.Run(() => ProjectStore.Open(dir));
         CloseProject(clearUndo: !preserveUndo);
@@ -498,6 +518,7 @@ public partial class MainWindow : Window
         foreach (var t in list) t.SetMidi(p.Settings.Bpm);
         engine.SetTracks(list, p.Settings);
         SyncInstruments();
+        SyncEffects();
         RefreshTranspose();
         SessionName.Text = p.Name;
         Title = WindowTitle(p.Name);
@@ -563,6 +584,7 @@ public partial class MainWindow : Window
     {
         foreach (var (c, text, action) in shortcutTips) ToolTip.SetTip(c, Shortcuts.Tip(text, action));
         foreach (var c in new Control[] { ZoomIcon, ZoomSlider }) ToolTip.SetTip(c, Shortcuts.WheelTip(Loc.T("timeline.zoom"), "wheelZoom"));
+        foreach (var c in new Control[] { mixerZoomIcon, mixerZoomSlider }) ToolTip.SetTip(c, Shortcuts.WheelTip(Loc.T("mixer.zoom"), "wheelZoom"));
         foreach (var c in new Control[] { HeightIcon, TrackHeightSlider }) ToolTip.SetTip(c, Shortcuts.WheelTip(Loc.T("timeline.height"), "wheelHeight"));
         string keys = string.Join(" / ", new[] { Shortcuts.Label("play"), Shortcuts.Label("record") }.Where(k => k.Length > 0));
         ToolTip.SetTip(RecStopButton, keys.Length > 0 ? $"{Loc.T("transport.rec.stop.tip")} ({keys})" : Loc.T("transport.rec.stop.tip"));
@@ -705,11 +727,21 @@ public partial class MainWindow : Window
             case "solo" when sel != null:
                 Edit(t => t.Channel.Solo = !t.Channel.Solo, "solo");
                 break;
+            // a hidden panel comes back first, as it was; shown, the key folds or opens it
+            case "leftPanel" when !InspectorBar.IsVisible:
+                SetInspectorHidden(false);
+                break;
             case "leftPanel":
                 SetInspectorCollapsed(inspectorExpanded.IsVisible);
                 break;
+            case "rightPanel" when !ProjectBar.IsVisible:
+                SetProjectBarHidden(false);
+                break;
             case "rightPanel":
                 SetProjectBarCollapsed(projectBarExpanded.IsVisible);
+                break;
+            case "fullScreen":
+                ToggleFullScreen();
                 break;
             default:
                 return;
@@ -780,6 +812,8 @@ public partial class MainWindow : Window
         TickTopBar();
         TickInspectorSpectrum();
         TickMeters();
+        // a VST3 effect added, loaded or moved: the rest of the mix waits for it
+        engine.UpdateLatency();
         if (Settings.IsVisible) Settings.Meter.Push(m.InL, m.InR);
         if (engine.IsOpen) ShowDsp(engine.LoadPercent);
         gapLog.Tick(engine);
@@ -824,6 +858,7 @@ public partial class MainWindow : Window
         undo.Checkpoint(store.Project, $"track:{track.Track.Id}:{key}");
         change(track);
         track.ApplyChannel();
+        SyncEffects();
         MarkDirty();
         UpdateUndoButtons();
         RefreshInspectorText();
@@ -873,15 +908,21 @@ public partial class MainWindow : Window
     {
         UndoButton.IsEnabled = !restoring && !RecordingBusy && store?.ReadOnly == false && undo.CanUndo;
         RedoButton.IsEnabled = !restoring && !RecordingBusy && store?.ReadOnly == false && undo.CanRedo;
+        ScheduleSteps();
     }
 
-    /// <summary>Restores editable data with cached audio; recordings and project history never roll back.</summary>
-    async Task RestoreEdit(bool redo)
+    Task RestoreEdit(bool redo) => RestoreEdit(p => redo ? undo.Redo(p) : undo.Undo(p), Loc.T(redo ? "main.redone" : "main.undone"));
+
+    /// <summary>
+    /// Restores editable data with cached audio; recordings and project history never roll back. <paramref name="move"/>
+    /// is the undo, redo or jump to a step (Historial → Pasos); <paramref name="done"/> what the status says after.
+    /// </summary>
+    async Task RestoreEdit(Func<Project, bool> move, string done)
     {
         if (restoring || RecordingBusy || store == null || store.ReadOnly || Projects.IsVisible) return;
         var st = store;
         string? selected = sel?.Track.Id;
-        if (!(redo ? undo.Redo(st.Project) : undo.Undo(st.Project))) return;
+        if (!move(st.Project)) return;
         restoring = true;
         MarkDirty();
         saveTimer.Stop();
@@ -926,7 +967,7 @@ public partial class MainWindow : Window
             else await ApplyTracks(st);
             int index = tracks.FindIndex(t => t.Track.Id == selected);
             Timeline.Select(index >= 0 ? index : tracks.Count - 1);
-            Status(Loc.T(redo ? "main.redone" : "main.undone"));
+            Status(done);
         }
         catch (Exception e)
         {

@@ -102,7 +102,8 @@ Respetan la cultura del sistema (en es-AR, con coma):
   `failed` en rojo si no se pudo guardar). En las filas el hover lo marca la fila
   (fondo `Raised` y borde `Line`); en el `CheckBox` brilla solo la cajita. Va como `Effect`
   del botón: un `BoxShadow` en el presentador queda cortado. Otra excepción pedida por el usuario: la tapa del fader
-  (`Fader`) imita la de una consola, con sombreado, ranuras y una sombra abajo, para que se vea y se agarre fácil. Los botones de color (acento, primario, peligro, grabar,
+  (`Fader`) imita la de una consola, con sombreado, ranuras y una sombra abajo, para que se vea y se agarre fácil. Y la
+  línea de los separadores (timeline y mixer) lleva un brillo suave de su color (el acento si no tiene uno). Los botones de color (acento, primario, peligro, grabar,
   `lit`) no cambian de color en hover: el glow es la respuesta. Su fondo y su texto van en el presentador
   (`/template/ ContentPresenter#PART_ContentPresenter`, sin estado en el selector), como los chips ON: puesto solo en
   el `Button`, el texto quieto sale blanco del Fluent.
@@ -155,8 +156,8 @@ Para un control nuevo, primero reutilizá estas. Los controles Fluent (sliders, 
 
 ## Mensajes al usuario
 
-- Van a la campanita (`Status`) o, si conviene verlos en el momento, a un toast (`Toast`). En primera persona y en
-  criollo: **qué pasó + qué hago ahora o qué podés hacer** ("No pude guardar: {motivo}. Lo vuelvo a intentar…").
+- Van a la campanita (`Status`) o, si conviene verlos en el momento, a un toast (`Toast`). Profesionales y cortos (ver
+  "Tono" en la guía de la raíz): **qué pasó y, si hace falta, qué hacer** ("No se pudo guardar: {motivo}. Reintentando…").
 - Nada de diálogos modales para errores, ni stack traces, ni jerga ("excepción", "null").
 - Un archivo que falta no rompe nada: el clip queda **offline** (gris, "Sin conexión: falta el archivo de audio").
 - Cargas largas en segundo plano (`Task.Run`) con un aviso; la UI nunca se congela esperando disco, FFmpeg o el driver.

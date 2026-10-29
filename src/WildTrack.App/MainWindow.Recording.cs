@@ -387,7 +387,8 @@ public partial class MainWindow
                         noteTracks.Add(mt.Name);
                     }
                 return null;
-            }, null);
+            }, null, step: EditSteps.Recorded([.. kept.Select(k => k.Take.Journal.Name)],
+                [.. played.Where(x => x.Notes.Count > 0).Select(x => store?.Project.Tracks.Find(t => t.Id == x.TrackId)?.Name).OfType<string>()]));
             string? notesDone = noteCount == 0 ? null : Loc.T(grid > 0 ? "midi.rec.done.quantized" : "midi.rec.done", noteCount,
                 string.Join(", ", noteTracks.Select(n => $"\"{n}\"")), PianoSnapLabel());
             if (kept.Count == 0)

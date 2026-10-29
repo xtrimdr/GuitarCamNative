@@ -141,6 +141,7 @@ public static class ProjectHistory
     public static void DeleteExport(ProjectStore store, ExportRecord e)
     {
         TrashExport(store.Dir, e);
+        store.UnlinkExport(e.File);
         ForgetExport(store.Project, e);
     }
 
@@ -288,10 +289,10 @@ public static class ProjectHistory
                     lines.Add(new(at, "history", [new(T("act.versionBack", "Volviste a la versión ")), Quote(e.Name ?? "")]));
                     break;
                 case "recording-recovered":
-                    lines.Add(new(at, "mic", [new(T("act.recovered", "Recuperé ")), Quote(e.Name ?? T("act.aChannel", "un canal")), new(T("act.recovered.end", " después de un corte"))]));
+                    lines.Add(new(at, "mic", [new(T("act.recovered", "Se recuperó ")), Quote(e.Name ?? T("act.aChannel", "un canal")), new(T("act.recovered.end", " tras un corte"))]));
                     break;
                 case "media-adopted":
-                    lines.Add(new(at, "plus", [new(T("act.adopted", "Sumé archivos que estaban en media: ")), Quote(e.Name ?? "")]));
+                    lines.Add(new(at, "plus", [new(T("act.adopted", "Archivos agregados desde media: ")), Quote(e.Name ?? "")]));
                     break;
                 default:
                     lines.Add(new(at, "history", [new(e.Type)]));

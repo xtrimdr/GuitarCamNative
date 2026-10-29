@@ -70,7 +70,7 @@ public static class VstScanner
     {
         error = null;
         string? exe = VstHost.Find();
-        if (exe == null) { error = Texts.T("err.vst.noHost", "Falta wtvsthost.exe, el programa que abre los plugins VST3."); return []; }
+        if (exe == null) { error = Texts.T("err.vst.noHost", "Falta wtvsthost.exe."); return []; }
         var psi = new ProcessStartInfo(exe)
         {
             UseShellExecute = false,
@@ -105,7 +105,7 @@ public static class VstScanner
             }
             catch (JsonException) { }
         }
-        if (list.Count == 0 && error == null && p.ExitCode != 0) error = Texts.T("err.vst.scanCrash", "se cerró al abrirlo");
+        if (list.Count == 0 && error == null && p.ExitCode != 0) error = Texts.T("err.vst.scanCrash", "se cerró al abrir");
         return list;
     }
 }

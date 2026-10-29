@@ -397,6 +397,11 @@ public partial class MainWindow
         string id = sep.Id;
         Folder S() => FolderById(id) ?? sep;
         var line = new Rectangle { Width = 2, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Stretch, Margin = new Thickness(0, 40, 0, 8) };
+        // the same soft glow as in the timeline (TimelineView.DrawSeparatorLine): stacked faint bands, denser at the line
+        var glow = new Rectangle[TimelineView.GlowSteps];
+        for (int k = 0; k < glow.Length; k++)
+            glow[k] = new Rectangle { Width = 2 + 2 * TimelineView.GlowReach * (k + 1) / TimelineView.GlowSteps, HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Stretch, Margin = line.Margin, IsHitTestVisible = false };
         var name = new TextBlock { FontSize = 11, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.8, TextTrimming = TextTrimming.CharacterEllipsis,
             Background = Palette.App, Padding = new Thickness(6, 0) };
         var rotated = new LayoutTransformControl { LayoutTransform = new RotateTransform(-90), Child = name, HorizontalAlignment = HorizontalAlignment.Center,
@@ -406,15 +411,17 @@ public partial class MainWindow
             Content = new TextBlock { Classes = { "icon" }, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
         eye.Click += (_, _) => FolderEdit(S(), x => x.HiddenInTimeline = !x.HiddenInTimeline, "hidden");
         var box = new Border { Width = SeparatorW, Margin = new Thickness(StripGap / 2, StripGap), Background = Brushes.Transparent, CornerRadius = new CornerRadius(8), Cursor = new Cursor(StandardCursorType.Hand),
-            Child = new Grid { Children = { line, rotated, eye } } };
+            Child = new Grid() };
+        ((Grid)box.Child).Children.AddRange([.. glow, line, rotated, eye]);
         ToolTip.SetTip(box, Loc.T("separator.strip.tip"));
         mx.Refresh.Add(() =>
         {
             var s = S();
-            var c = TimelineView.FolderColor(s);
+            var c = TimelineView.SeparatorColor(s);
             name.Text = s.Name;
             name.Foreground = Palette.Alpha(c, 1);
-            line.Fill = Palette.Alpha(c, 0.45);
+            line.Fill = Palette.Alpha(c, TimelineView.SeparatorLineAlpha);
+            foreach (var g in glow) g.Fill = Palette.Alpha(c, TimelineView.GlowAlpha);
             ((TextBlock)eye.Content!).Text = s.HiddenInTimeline ? "" : "";
             ((TextBlock)eye.Content!).Foreground = s.HiddenInTimeline ? Palette.Faint : Palette.Dim;
             ToolTip.SetTip(eye, Loc.T(s.HiddenInTimeline ? "separator.show.tip" : "separator.hide.tip"));
@@ -444,7 +451,7 @@ public partial class MainWindow
         mixerStrips.PointerPressed += (_, e) =>
         {
             if (e.Source != mixerStrips || !e.GetCurrentPoint(mixerStrips).Properties.IsLeftButtonPressed || restoring) return;
-            if (sel != null || SelectedFolder != null) Timeline.Select(-1);
+            if (sel != null || SelectedFolder != null || selBusId != null) Timeline.Select(-1);
         };
         mixerStrips.PointerReleased += (_, e) =>
         {

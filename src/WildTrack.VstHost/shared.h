@@ -17,7 +17,8 @@ constexpr int32_t MaxBlock = 8192;
 constexpr int32_t MaxEvents = 512;
 
 enum EventType : int32_t { NoteOn = 0, NoteOff = 1 };
-enum SlotFlags : int32_t { AllNotesOff = 1, Playing = 2 };
+// Reset: the plugin forgets its tails and delay lines before the block (an effect, when the transport starts)
+enum SlotFlags : int32_t { AllNotesOff = 1, Playing = 2, Reset = 4 };
 enum Status : int32_t { Loading = 0, Ready = 1, Failed = 2, Crashed = 3 };
 
 #pragma pack(push, 8)

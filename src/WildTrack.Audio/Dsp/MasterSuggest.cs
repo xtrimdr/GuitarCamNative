@@ -217,14 +217,14 @@ public static class MasterSuggest
         // rumble: more under 40 Hz than a finished mix has → cut higher
         double lowCut = d[0] > 4 ? 40 : 30;
         lines.Add(new(d[0] > 4
-            ? Texts.T("suggest.lowcut.rumble", "Corte en {0} Hz: hay retumbe abajo de todo.", lowCut)
-            : Texts.T("suggest.lowcut", "Corte en {0} Hz, por las dudas.", lowCut)));
+            ? Texts.T("suggest.lowcut.rumble", "Corte en {0} Hz: hay retumbe en los graves.", lowCut)
+            : Texts.T("suggest.lowcut", "Corte en {0} Hz.", lowCut)));
 
         double mudDev = (d[3] + d[4]) / 2, mud = 0;
         if (mudDev > 1.5)
         {
             mud = -Math.Clamp(Half(mudDev * 0.6), 1, 3);
-            lines.Add(new(Texts.T("suggest.mud", "Barro {0}: sobra entre 250 y 500 Hz.", Db(mud))));
+            lines.Add(new(Texts.T("suggest.mud", "Barro {0}: exceso entre 250 y 500 Hz.", Db(mud))));
         }
 
         double lowsDev = (d[1] + d[2]) / 2, lows = 0;
@@ -246,15 +246,15 @@ public static class MasterSuggest
             air > 0 ? "Aire {0}: le falta brillo arriba." : "Aire {0}: tiene de más arriba.", Db(air))));
 
         double low = Amount(p.BandCrestDb[0]), mid = Amount(p.BandCrestDb[1]), high = Amount(p.BandCrestDb[2]);
-        lines.Add(new(Texts.T("suggest.bands", "Multibanda {0} / {1} / {2} %: según lo picuda que es cada banda.",
+        lines.Add(new(Texts.T("suggest.bands", "Multibanda {0} / {1} / {2} %, según la dinámica de cada banda.",
             Math.Round(low * 100), Math.Round(mid * 100), Math.Round(high * 100))));
 
         // the pick: 2–5 kHz much spikier than the mids around it
         double pick = p.PickCrestDb - p.BandCrestDb[1] > 3 || p.PickCrestDb > 20 ? 0.5 : 0;
-        if (pick > 0) lines.Add(new(Texts.T("suggest.pick", "Púa al {0} %: los ataques pinchan entre 2 y 5 kHz.", Math.Round(pick * 100))));
+        if (pick > 0) lines.Add(new(Texts.T("suggest.pick", "Púa al {0} %: ataques fuertes entre 2 y 5 kHz.", Math.Round(pick * 100))));
 
         if (mud == 0 && lows == 0 && presence == 0 && air == 0)
-            lines.Insert(0, new(Texts.T("suggest.even", "La mezcla está pareja: casi no hay que tocarle el color.")));
+            lines.Insert(0, new(Texts.T("suggest.even", "Mezcla equilibrada: casi no hace falta EQ.")));
 
         var next = current with
         {

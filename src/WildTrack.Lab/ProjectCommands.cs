@@ -20,6 +20,7 @@ static class ProjectCommands
         if (sub == "verificar-paquete") return PackageChecks.Run();
         if (sub == "verificar-bloqueo") return LockChecks.Run();
         if (sub == "verificar-ab") return MixCompareChecks.Run();
+        if (sub == "verificar-pasos") return StepChecks.Run();
         string? dir = a.Positional.Skip(1).FirstOrDefault();
         if (dir == null) throw new ArgumentException("Falta la carpeta del proyecto.");
         dir = Path.GetFullPath(dir);
@@ -28,6 +29,8 @@ static class ProjectCommands
             "abrir" => Open(dir),
             "versiones" => Versions(dir),
             "volver" => Restore(dir, a.Positional.Skip(2).FirstOrDefault()),
+            "guardar-version" => SaveVersion(dir, a.Positional.Skip(2).FirstOrDefault()),
+            "nombrar-version" => NameVersion(dir, a.Positional.Skip(2).FirstOrDefault(), a.Positional.Skip(3).FirstOrDefault()),
             "clips" => Clips(dir),
             "transiciones" => Transitions(dir),
             "importar-audio" => ImportAudio(dir, a),
@@ -557,7 +560,33 @@ static class ProjectCommands
         var list = ProjectStore.Snapshots(dir);
         if (list.Count == 0) Console.WriteLine("Todavía no hay versiones guardadas.");
         for (int i = 0; i < list.Count; i++)
-            Console.WriteLine($"{i + 1,3} · {RelativeTime(list[i].Time)} · {list[i].Time:dd/MM/yyyy HH:mm:ss}");
+        {
+            var s = list[i];
+            string what = s.Name != null ? $"«{s.Name}»" : s.Export != null ? $"de la exportación {s.Export}"
+                : s.Before != null ? $"antes de volver a {s.Before}" : "guardada sola";
+            Console.WriteLine($"{i + 1,3} · {RelativeTime(s.Time)} · {s.Time:dd/MM/yyyy HH:mm:ss} · {what}{(s.Kept ? "" : " (se borra con el tiempo)")}");
+        }
+        return 0;
+    }
+
+    /// <summary>"Guardar versión" of Historial: the project as it is, named (kept) or not.</summary>
+    static int SaveVersion(string dir, string? name)
+    {
+        using var store = ProjectStore.Open(dir);
+        var s = store.SaveVersion(store.Serialize(), name);
+        Console.WriteLine($"Guardé la versión {(s.Name != null ? $"«{s.Name}»" : "sin nombre")} ({s.File}).");
+        return 0;
+    }
+
+    /// <summary>Names version n of the list (or takes its name off with no name).</summary>
+    static int NameVersion(string dir, string? value, string? name)
+    {
+        var list = ProjectStore.Snapshots(dir);
+        if (!int.TryParse(value, out int n) || n < 1 || n > list.Count)
+            throw new ArgumentException("Elegí un número de la lista de «wtlab proyecto versiones carpeta».");
+        using var store = ProjectStore.Open(dir);
+        store.RenameVersion(list[n - 1], name);
+        Console.WriteLine(string.IsNullOrWhiteSpace(name) ? $"La versión {n} quedó sin nombre." : $"La versión {n} ahora se llama «{name.Trim()}».");
         return 0;
     }
 

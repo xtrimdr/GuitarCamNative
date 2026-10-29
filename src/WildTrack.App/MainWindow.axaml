@@ -101,6 +101,13 @@
     <Style Selector="ToggleButton.mode:disabled">
       <Setter Property="Opacity" Value="0.6" />
     </Style>
+    <!-- full screen (F11): Avalonia's own title bar shows up at the top as an accent strip that slides down on hover;
+         ours stays, and F11 or a double click on it leaves full screen. TitleBar sets its own IsVisible in code,
+         which beats a style: it goes see-through and out of the mouse's way instead -->
+    <Style Selector="TitleBar:fullscreen">
+      <Setter Property="Opacity" Value="0" />
+      <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
   </Window.Styles>
 
   <!-- maximized, Windows pushes a window with our own title bar 8 px past each screen edge: OffScreenMargin
@@ -111,7 +118,7 @@
          bar (the system buttons sit on its right); the second holds the project's tools, Exportar on the right -->
     <Border x:Name="TitleBar" Grid.ColumnSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
       <Grid RowDefinitions="44,Auto">
-        <Grid ColumnDefinitions="Auto,*,Auto" Margin="12,0,150,0">
+        <Grid x:Name="TitleRow" ColumnDefinitions="Auto,*,Auto" Margin="12,0,150,0">
           <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
             <Button x:Name="LogoButton" Classes="ghost" Padding="2" Margin="-2,0" ToolTip.Tip="{loc:T title.about.tip}" AutomationProperties.Name="{loc:T title.about}">
               <Image Source="/Assets/WildTrack-64.png" Width="24" Height="24" RenderOptions.BitmapInterpolationMode="HighQuality" />
@@ -148,6 +155,24 @@
               </StackPanel>
             </StackPanel>
             <c:NotificationBell x:Name="Bell" VerticalAlignment="Center" />
+            <!-- hide the side panels entirely (MainWindow.Sidebars.cs): a window with its panel filled in while it shows.
+                 The empty TextBlock inherits the button's color (hover included) for the paths, like LayoutSideText -->
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <Button x:Name="LeftPanelButton" Classes="ghost">
+                <Panel Width="16" Height="16">
+                  <TextBlock x:Name="LeftPanelInk" />
+                  <Path Data="M1.5,2.5 H14.5 V13.5 H1.5 Z M6,2.5 V13.5" Stroke="{Binding #LeftPanelInk.Foreground}" StrokeThickness="1.2" StrokeJoin="Round" />
+                  <Path x:Name="LeftPanelFill" Data="M1.5,2.5 H6 V13.5 H1.5 Z" Fill="{Binding #LeftPanelInk.Foreground}" />
+                </Panel>
+              </Button>
+              <Button x:Name="RightPanelButton" Classes="ghost">
+                <Panel Width="16" Height="16">
+                  <TextBlock x:Name="RightPanelInk" />
+                  <Path Data="M1.5,2.5 H14.5 V13.5 H1.5 Z M10,2.5 V13.5" Stroke="{Binding #RightPanelInk.Foreground}" StrokeThickness="1.2" StrokeJoin="Round" />
+                  <Path x:Name="RightPanelFill" Data="M10,2.5 H14.5 V13.5 H10 Z" Fill="{Binding #RightPanelInk.Foreground}" />
+                </Panel>
+              </Button>
+            </StackPanel>
             <!-- the window's layout: Clásico / Vertical (MainWindow.Layout.cs) -->
             <Button x:Name="LayoutButton" Classes="ghost" ToolTip.ShowOnDisabled="True" ToolTip.Tip="{loc:T winlayout.title}" AutomationProperties.Name="{loc:T winlayout.title}">
               <TextBlock Classes="icon" Text="&#xE80A;" />

@@ -71,8 +71,15 @@ static class BusCommands
                 bm.Muted = !bm.Muted;
                 changed = true;
                 break;
+            case "color":
+            case "icono":
+                // "ninguno" goes back to no color, or to the icon of its first reverb or delay
+                var bl = Find(v1);
+                string? look = v2 is "" or "ninguno" ? null : v2;
+                changed = op == "color" ? ProjectBuses.SetLook(p, bl.Id, look, bl.Icon) : ProjectBuses.SetLook(p, bl.Id, bl.Color, look);
+                break;
             default:
-                throw new ArgumentException("buses: agregar [nombre] [--tipo reverb|delay|vacio] | quitar n | renombrar n nombre | volumen n x | paneo n x | mute n");
+                throw new ArgumentException("buses: agregar [nombre] [--tipo reverb|delay|vacio] | quitar n | renombrar n nombre | volumen n x | paneo n x | mute n | color n #rrggbb|ninguno | icono n id|ninguno");
         }
         if (changed)
         {
@@ -86,7 +93,7 @@ static class BusCommands
             var b = list[i];
             int outs = ProjectBuses.All(p).Count(r => r.Output == b.Id);
             int sends = ProjectBuses.All(p).Count(r => r.Sends.Exists(s => s.BusId == b.Id && s.On && s.Level > 0));
-            Console.WriteLine($"  {i + 1}. {b.Name}  {Fmt(b.Volume)}{(b.Pan != 0 ? $" · paneo {b.Pan:+0.00;-0.00}" : "")}{(b.Muted ? " · mute" : "")} · sale a {OutName(p, b.Output)}"
+            Console.WriteLine($"  {i + 1}. {b.Name}  {Fmt(b.Volume)}{(b.Pan != 0 ? $" · paneo {b.Pan:+0.00;-0.00}" : "")}{(b.Muted ? " · mute" : "")}{(b.Color != null ? $" · color {b.Color}" : "")}{(b.Icon != null ? $" · ícono {b.Icon}" : "")} · sale a {OutName(p, b.Output)}"
                 + $" · le llegan {outs} salida(s) y {sends} envío(s)  [{b.Id}]");
             for (int k = 0; k < b.Inserts.Count; k++) Console.WriteLine($"       {k + 1}. {InsertCommands.Describe(b.Inserts[k])}");
             foreach (var s in b.Sends) Console.WriteLine($"       → {ProjectBuses.Find(p, s.BusId)?.Name ?? s.BusId}  {Send(s.Level, s.On, s.Pre)}");
@@ -232,7 +239,7 @@ static class BusCommands
                 y.AsSpan(pos, n).CopyTo(chain.BufferR(n));
                 bus.Begin(n);
                 chain.ProcessFilledBuffer(n, false, sink.AsSpan(0, n), sink.AsSpan(0, n), out _, out _, out _);
-                foreach (var s in chain.BlockSends) chain.AddSend(n, s.Level, s.Pre, bus.BufferL(n), bus.BufferR(n));
+                foreach (var s in chain.BlockSends) chain.AddSend(n, s, bus.BufferL(n), bus.BufferR(n));
                 bus.End(n, outL.AsSpan(pos, n), sink.AsSpan(0, n));
             }
             return outL;
@@ -297,18 +304,19 @@ static class BusCommands
         bool specs = spec.Nodes.Count == 4 && spec.Nodes[nodeIds.IndexOf(g.Id)].Output == spec.Nodes[nodeIds.IndexOf(ProjectBuses.ReverbId)].Output
             && ChannelDsp.Track(p, nodeIds, p.Tracks[0], [], -24) is { Output: var o, Sends: [{ Pre: true }] } && o == nodeIds.IndexOf(g.Id);
         bool removed = ProjectBuses.Remove(p, r2.Id) && g.Output == null && ch.SendTo(r2.Id) == null && !ProjectBuses.Remove(p, r2.Id);
-        // taking a bus out of a track's list keeps its level, off; adding it back turns it on with that level
+        // a track's list holds only the buses added to it; taking one out keeps its level, off; adding it back turns it
+        // on with that level
         var hideTrack = new Track { Name = "C" };
         p.Tracks.Add(hideTrack);
         var hideCh = hideTrack.Channel;
         ProjectBuses.SetSend(p, hideCh, ProjectBuses.ReverbId, 0.35);
-        bool hides = ProjectBuses.Shown(p, hideCh).Count == p.Settings.Buses.Count
+        bool hides = ProjectBuses.Shown(p, new Channel()).Count == 0 && ProjectBuses.Shown(p, hideCh) is [{ Id: ProjectBuses.ReverbId }]
             && ProjectBuses.ShowSend(p, hideCh, ProjectBuses.ReverbId, false) && !ProjectBuses.Shown(p, hideCh).Exists(b => b.Id == ProjectBuses.ReverbId)
             && hideCh.SendTo(ProjectBuses.ReverbId) is { On: false, Hidden: true, Level: 0.35 } && !ProjectBuses.ShowSend(p, hideCh, ProjectBuses.ReverbId, false)
             && ProjectBuses.ShowSend(p, hideCh, ProjectBuses.ReverbId, true) && hideCh.SendTo(ProjectBuses.ReverbId) is { On: true, Hidden: false, Level: 0.35 }
-            && ProjectBuses.ShowSend(p, hideCh, ProjectBuses.DelayId, false) && hideCh.SendTo(ProjectBuses.DelayId) is { Hidden: true, Level: 0 }
+            && !ProjectBuses.ShowSend(p, hideCh, ProjectBuses.DelayId, false) && ProjectBuses.ShowSend(p, hideCh, ProjectBuses.DelayId, true)
+            && hideCh.SendTo(ProjectBuses.DelayId) is { Hidden: false, On: true, Level: 0 }
             && ProjectBuses.Shown(p, g).Count == 0;
-        ProjectBuses.ShowSend(p, hideCh, ProjectBuses.DelayId, true);
         // a folder never sends pre-fader
         var folder = new Folder { Name = "F" };
         p.Folders.Add(folder);
@@ -392,7 +400,7 @@ static class BusCommands
                 TrackDspChain.SampleClips([.. tracks[k].Clips], pos, n, sr, c.BufferL(n), c.BufferR(n));
                 var to = tracks[k].Output >= 0 ? nodes[tracks[k].Output] : null;
                 c.ProcessFilledBuffer(n, false, to != null ? to.BufferL(n) : ml, to != null ? to.BufferR(n) : mr, out _, out _, out _);
-                foreach (var s in c.BlockSends) c.AddSend(n, s.Level, s.Pre, s.To!.BufferL(n), s.To.BufferR(n));
+                foreach (var s in c.BlockSends) c.AddSend(n, s, s.To!.BufferL(n), s.To.BufferR(n));
             }
             foreach (var node in nodes) node.End(n, ml, mr);
         }

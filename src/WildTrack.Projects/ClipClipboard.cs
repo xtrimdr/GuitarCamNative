@@ -65,19 +65,19 @@ public sealed class ClipClipboard
     /// </summary>
     public List<string> Paste(Project p, string? trackId, double atSec)
     {
-        if (p.Id != ProjectId && Items.Count > 0) throw new ArgumentException(Texts.T("err.clip.pasteOtherProject", "Esos clips son de otro proyecto: copialos de nuevo acá."));
+        if (p.Id != ProjectId && Items.Count > 0) throw new ArgumentException(Texts.T("err.clip.pasteOtherProject", "Los clips son de otro proyecto: copialos de nuevo acá."));
         if (Items.Any(i => p.FindMedia(i.Clip.MediaId) == null))
-            throw new ArgumentException(Texts.T("err.clip.pasteNoMedia", "Ya no está la toma de alguno de esos clips."));
+            throw new ArgumentException(Texts.T("err.clip.pasteNoMedia", "Falta la toma de alguno de los clips."));
         int at = p.Tracks.FindIndex(t => t.Id == (trackId ?? TopTrackId));
         // MIDI clips copied in another project go back to its first MIDI track when no track is chosen
         if (at < 0 && trackId == null && Items.Count == 0) at = p.Tracks.FindIndex(t => t.IsMidi);
-        if (at < 0) throw new ArgumentException(Texts.T("err.clip.trackNotFound", "No encontré esa pista."));
+        if (at < 0) throw new ArgumentException(Texts.T("err.clip.trackNotFound", "Pista no encontrada."));
         at = Math.Min(at, p.Tracks.Count - Lanes);
         if (at < 0) throw new ArgumentException(Texts.T("err.clip.pasteTracks", "Esos clips ocupan {0} pistas y el proyecto tiene {1}.", Lanes, p.Tracks.Count));
         if (Items.Any(i => p.Tracks[at + i.Lane].IsMidi))
-            throw new ArgumentException(Texts.T("err.midi.noAudio", "Las tomas no van en una pista MIDI: elegí una pista de audio."));
+            throw new ArgumentException(Texts.T("err.midi.noAudio", "Las tomas de audio no van en pistas MIDI."));
         if (MidiItems.Any(i => !p.Tracks[at + i.Lane].IsMidi))
-            throw new ArgumentException(Texts.T("err.midi.pasteNotMidi", "Los clips MIDI van en pistas MIDI: elegí una pista MIDI para pegarlos."));
+            throw new ArgumentException(Texts.T("err.midi.pasteNotMidi", "Los clips MIDI se pegan en pistas MIDI."));
         double shift = atSec - StartSec;
         List<string> pasted = [];
         foreach (var item in Items)

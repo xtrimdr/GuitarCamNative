@@ -12,9 +12,21 @@ public static class ChannelInserts
 
     public static InsertSlot? Add(List<InsertSlot> slots, string kind, int? at = null)
     {
-        if (!Audio.Dsp.TrackInserts.IsKind(kind)) return null;
+        // a VST3 slot needs its plugin: AddVst
+        if (!Audio.Dsp.TrackInserts.IsKind(kind) || kind == InsertSlot.VstKind) return null;
         var slot = InsertSlot.New(kind);
         slot.On = true;
+        slots.Insert(Math.Clamp(at ?? slots.Count, 0, slots.Count), slot);
+        return slot;
+    }
+
+    /// <summary>Adds a VST3 effect at <paramref name="at"/> (the end when null), on, with the plugin's own sound (no saved state).</summary>
+    public static InsertSlot? AddVst(List<InsertSlot> slots, PluginRef plugin, int? at = null)
+    {
+        var p = new PluginRef { Path = plugin.Path, ClassId = plugin.ClassId, Name = plugin.Name, Vendor = plugin.Vendor };
+        if (!p.Normalize()) return null;
+        var slot = new InsertSlot { Type = InsertSlot.VstKind, Vst = new VstSlotSettings { Plugin = p } };
+        slot.Normalize();
         slots.Insert(Math.Clamp(at ?? slots.Count, 0, slots.Count), slot);
         return slot;
     }

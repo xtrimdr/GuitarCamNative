@@ -85,41 +85,6 @@ public partial class MainWindow
     string TransposeTagTip(LiveTrack t) => TransposeProgress(t) is { } p
         ? Loc.T("insp.transpose.working", $"{p * 100:0}") : Loc.T("mix.transpose.tag.tip", TransposeText(t.Track.Transpose));
 
-    /// <summary>The wide mixer strip's Transponer, beside the reverb and delay sends (asked by the user): − and + a
-    /// semitone around the value, lit while the track is moved. There is no ON/OFF: 0 is the original.</summary>
-    void TransposePanel(StackPanel fx, LiveTrack t)
-    {
-        var panel = FxPanel(fx, Loc.T("insp.section.transpose"), FxIcon.Transpose, () => t.Track.Transpose != 0, null, _ => "");
-        Button Step(string glyph, int delta, string tip)
-        {
-            var b = new Button { Classes = { "chip" }, Width = 26, Height = 26, MinHeight = 26, Padding = new Thickness(0), CornerRadius = new CornerRadius(4),
-                Content = new TextBlock { Classes = { "icon" }, Text = glyph, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
-            ToolTip.SetTip(b, tip);
-            b.Click += (_, _) => SetTranspose(t, t.Track.Transpose + delta);
-            mx.Refresh.Add(() => b.IsEnabled = Math.Abs(t.Track.Transpose + delta) <= PitchShifter.MaxSemitones);
-            return b;
-        }
-        var value = new TextBlock { Classes = { "mono" }, FontSize = 14, FontWeight = FontWeight.SemiBold, MinWidth = 30, TextAlignment = TextAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center, Background = Brushes.Transparent };
-        ToolTip.SetTip(value, Loc.T("mix.transpose.reset.tip"));
-        value.DoubleTapped += (_, _) => SetTranspose(t, 0);
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        row.Children.Add(Step("", -1, Loc.T("mix.transpose.down.tip")));
-        row.Children.Add(value);
-        row.Children.Add(Step("", 1, Loc.T("mix.transpose.up.tip")));
-        var info = new TextBlock { FontSize = 11, Foreground = Palette.Dim, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 4, 0, 0) };
-        void Show()
-        {
-            double v = t.Track.Transpose;
-            value.Text = v == 0 ? "0" : TransposeTag(v);
-            info.Text = TransposeProgress(t) is { } p ? Loc.T("mix.transpose.working", $"{p * 100:0}") : TransposeText(v);
-        }
-        mx.Refresh.Add(Show);
-        mx.Transpose.Add(Show);
-        panel.Body.Children.Add(row);
-        panel.Body.Children.Add(info);
-    }
-
     /// <summary>The compact strip's mark of a transposed track ("+2" in the accent, under its name), hidden at 0.</summary>
     TextBlock TransposeTagText(LiveTrack t)
     {

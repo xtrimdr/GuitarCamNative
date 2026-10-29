@@ -39,7 +39,7 @@ public static class AudioExporter
         Action<AudioExportProgress>? onProgress = null, CancellationToken ct = default)
     {
         if (job.MixTracks.All(t => !t.HasSound))
-            throw new ExportException(Texts.T("err.export.noTracks", "Necesitás al menos un canal en el timeline para exportar."));
+            throw new ExportException(Texts.T("err.export.noTracks", "No hay canales en el timeline."));
         string ext = Extension(format);
         var target = Mp4Exporter.CheckDestination(job.ProjectDir, job.OutDir,
             string.IsNullOrWhiteSpace(job.FileName) ? job.ProjectName : job.FileName, ext);
@@ -87,7 +87,7 @@ public static class AudioExporter
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
-                throw new ExportException(Texts.T("err.export.replace", "No se pudo reemplazar {0}: puede que esté abierto en otro programa.", outFilename));
+                throw new ExportException(Texts.T("err.export.replace", "No se pudo reemplazar {0}: puede estar abierto en otro programa.", outFilename));
             }
             long bytes = File.Exists(target.FullPath) ? new FileInfo(target.FullPath).Length : 0;
             string rel = Path.GetRelativePath(Path.GetFullPath(job.ProjectDir), target.FullPath);
@@ -118,7 +118,7 @@ public static class AudioExporter
     {
         var audible = MixRenderer.Audible(job.MixTracks).ToList();
         if (audible.Count == 0)
-            throw new ExportException(Texts.T("err.export.noTracks", "Necesitás al menos un canal en el timeline para exportar."));
+            throw new ExportException(Texts.T("err.export.noTracks", "No hay canales en el timeline."));
         string parent = Path.GetDirectoryName(exportFullPath)!;
         string baseName = Path.GetFileNameWithoutExtension(exportFullPath) + " - stems";
         string folder = Path.Combine(parent, baseName);
@@ -153,7 +153,7 @@ public static class AudioExporter
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException)
                 {
-                    throw new ExportException(Texts.T("err.export.replace", "No se pudo reemplazar {0}: puede que esté abierto en otro programa.", name));
+                    throw new ExportException(Texts.T("err.export.replace", "No se pudo reemplazar {0}: puede estar abierto en otro programa.", name));
                 }
             }
             finally

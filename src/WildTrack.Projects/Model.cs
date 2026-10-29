@@ -92,8 +92,9 @@ public sealed class ProjectSettings
     public double? LoopStartSec { get; set; }
     public double? LoopEndSec { get; set; }
     /// <summary>
-    /// Native only: the buses (<see cref="Bus"/>, edited through <see cref="ProjectBuses"/>), in the mixer's order. A new
-    /// project brings "Reverb" and "Delay" (<see cref="ProjectBuses.Defaults"/>).
+    /// Native only: the buses (<see cref="Bus"/>, edited through <see cref="ProjectBuses"/>), in the mixer's order. Starts
+    /// with "Reverb" and "Delay" (<see cref="ProjectBuses.Defaults"/>), what a template without buses gets; an empty new
+    /// project clears them (<see cref="ProjectLibrary.Create"/>).
     /// </summary>
     public List<Bus> Buses { get; set; } = ProjectBuses.Defaults();
     /// <summary>Native only: the mix's A/B (<see cref="MixCompare"/>); null = one mix, nothing to compare.</summary>
@@ -475,6 +476,8 @@ public sealed class Track
     /// still scales a track made taller or shorter; null = 1. The lane stays within <see cref="MinHeight"/>..<see cref="MaxHeight"/> px. Native only.</summary>
     public double? HeightScale { get; set; }
     public const double MinHeight = 40, MaxHeight = 320;
+    /// <summary>The shared height a new timeline starts at; a folder's heights are its px at this zoom.</summary>
+    public const double DefaultHeight = 64;
     /// <summary>
     /// Semitones its audio is moved by without changing its length, so it stays in sync with the video
     /// (<see cref="WildTrack.Audio.Dsp.PitchShifter"/>, cached by <see cref="ProjectStore.TrackAudio"/>); fractions are
@@ -551,17 +554,19 @@ public sealed class Folder : IRouted
 {
     public string Id { get; set; } = Ids.New("fld");
     public string Name { get; set; } = "";
-    /// <summary>"#rrggbb" or null (the accent), like <see cref="Track.Color"/>.</summary>
+    /// <summary>"#rrggbb" or null (a neutral gray), like <see cref="Track.Color"/>.</summary>
     public string? Color { get; set; }
     /// <summary>Folded in the timeline: only its own row shows.</summary>
     public bool Collapsed { get; set; }
     /// <summary>Folded in the mixer: only its own strip shows.</summary>
     public bool MixerCollapsed { get; set; }
-    /// <summary>Its own row height in the timeline (px, <see cref="MinHeight"/>..<see cref="MaxHeight"/>); null = the usual one.</summary>
+    /// <summary>Its own row height in the timeline when open: px at the tracks' <see cref="Track.DefaultHeight"/>, scaled
+    /// with the vertical zoom and shown within <see cref="MinHeight"/>..<see cref="MaxHeight"/>; null = the usual one.</summary>
     public double? Height { get; set; }
+    /// <summary><see cref="MinHeight"/> is also the height of a folder's row without send knobs (the timeline's FolderH).</summary>
     public const double MinHeight = 34, MaxHeight = 160;
     /// <summary>Its folded row height (its mini map) as a multiple of the tracks' shared height, so the vertical zoom
-    /// still scales it, like <see cref="Track.HeightScale"/>; null = 1. Native only.</summary>
+    /// still scales it, like <see cref="Track.HeightScale"/>; null = the usual one, as open. Native only.</summary>
     public double? HeightScale { get; set; }
     /// <summary>
     /// How many tracks come before it in <see cref="Project.Tracks"/>. With children it is the first child's index
@@ -614,7 +619,9 @@ public interface IRouted
 /// <summary>The channel strip of a track: stays with the track when its clips change.</summary>
 /// <summary>
 /// A track's mixer channel. Its effects are insert slots (<see cref="Inserts"/>, native only) that can be added,
-/// removed, repeated and reordered; a new channel brings Vida → compressor → EQ, the chain that was fixed before.
+/// removed, repeated and reordered; a new channel starts with none (asked by the user, 2026-10-29: the three slots it
+/// brought, all off, filled the inspector), and a factory template's tracks bring Vida → compressor → EQ
+/// (<see cref="DefaultInserts"/>), the chain that was fixed before.
 /// <see cref="Sat"/>, <see cref="Comp"/> and <see cref="Eq"/> are the first slot of each kind (what the inspector, the
 /// timeline knobs and the compact strip edit). A kind with no slot gives a spare that isn't heard; turning it on
 /// (<see cref="AdoptSpares"/>) puts it back in the chain where it went by default.
@@ -628,7 +635,7 @@ public sealed class Channel : IRouted
     public bool Muted { get; set; }
     public bool Solo { get; set; }
     /// <summary>The insert slots, in the order the sound goes through them.</summary>
-    public List<InsertSlot>? Inserts { get; set; } = DefaultInserts();
+    public List<InsertSlot>? Inserts { get; set; } = [];
     /// <summary>Native only: the bus its output goes to; null = the master. A track in a folder goes through the folder instead.</summary>
     public string? Output { get; set; }
     /// <summary>Native only: its sends to buses (<see cref="ProjectSettings.Buses"/>), one per bus at most.</summary>
@@ -743,7 +750,7 @@ public sealed class Channel : IRouted
     {
         if (OldSat == null && OldComp == null && OldEq == null)
         {
-            Inserts ??= DefaultInserts();
+            Inserts ??= [];
             return;
         }
         Inserts =
@@ -793,8 +800,8 @@ public sealed class Send
     public bool Pre { get; set; }
     /// <summary>
     /// Taken out of the track's (or folder's) list of buses (asked by the user: not every track wants every bus): off and
-    /// not shown, its level kept for when it is added back. A bus without a send is shown, so a new track or bus starts
-    /// with all of them (<see cref="ProjectBuses.Shown"/>).
+    /// not shown, its level kept for when it is added back. A bus without a send isn't in the list either: a new track
+    /// or bus starts with none, the user adds them (<see cref="ProjectBuses.Shown"/>).
     /// </summary>
     public bool Hidden { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
@@ -816,6 +823,10 @@ public sealed class Bus : IRouted
     /// <summary>-1 (left) .. 1 (right), like a track's.</summary>
     public double Pan { get; set; }
     public bool Muted { get; set; }
+    /// <summary>"#rrggbb" or null (no color), like <see cref="Track.Color"/>.</summary>
+    public string? Color { get; set; }
+    /// <summary>An icon id from the tracks' set (<see cref="Track.Icon"/>); null = the icon of its first reverb or delay.</summary>
+    public string? Icon { get; set; }
     public List<InsertSlot> Inserts { get; set; } = [];
     /// <inheritdoc/>
     public string? Output { get; set; }
@@ -830,6 +841,8 @@ public sealed class Bus : IRouted
         MixerSide = MixerSides.Normalize(MixerSide, MixerSides.Right);
         if (string.IsNullOrEmpty(Id)) Id = Ids.New("bus");
         Name ??= "";
+        Icon = string.IsNullOrWhiteSpace(Icon) || Icon.Length > 64 ? null : Icon.Trim();
+        Color = Track.NormalizeColor(Color);
         Volume = double.IsFinite(Volume) ? Math.Clamp(Volume, 0, 1.5) : 1;
         Pan = double.IsFinite(Pan) ? Math.Clamp(Pan, -1, 1) : 0;
         Inserts ??= [];
@@ -840,15 +853,17 @@ public sealed class Bus : IRouted
 
 /// <summary>
 /// One insert slot of a <see cref="Channel"/>: its kind and the settings of that kind (the others stay null). A kind
-/// this version doesn't know (a future plugin slot) is kept as it came, through <see cref="Extra"/>, and not heard.
+/// this version doesn't know is kept as it came, through <see cref="Extra"/>, and not heard; so is a VST3 slot that
+/// doesn't say which plugin it is.
 /// </summary>
 public sealed class InsertSlot
 {
     public const string SatKind = Dsp.TrackInserts.Sat, CompKind = Dsp.TrackInserts.Comp, EqKind = Dsp.TrackInserts.Eq,
-        ReverbKind = Dsp.TrackInserts.Reverb, DelayKind = Dsp.TrackInserts.Delay, GateKind = Dsp.TrackInserts.Gate;
+        ReverbKind = Dsp.TrackInserts.Reverb, DelayKind = Dsp.TrackInserts.Delay, GateKind = Dsp.TrackInserts.Gate,
+        VstKind = Dsp.TrackInserts.Vst;
 
     public string Id { get; set; } = Ids.New("fx");
-    /// <summary>sat | comp | eq | gate | reverb | delay (the last two, in a return's chain)</summary>
+    /// <summary>sat | comp | eq | gate | reverb | delay (the last two, in a return's chain) | vst</summary>
     public string Type { get; set; } = EqKind;
     public SatSettings? Sat { get; set; }
     public CompSettings? Comp { get; set; }
@@ -857,6 +872,8 @@ public sealed class InsertSlot
     public ReverbSettings? Reverb { get; set; }
     public DelaySettings? Delay { get; set; }
     public GateSettings? Gate { get; set; }
+    /// <summary>A VST3 effect slot's plugin and its ON.</summary>
+    public VstSlotSettings? Vst { get; set; }
     /// <summary>
     /// Folded in the mixer (asked by the user): only its title row, with a summary, so a long chain fits. A view choice
     /// kept with the project, like a folder's fold; it changes nothing in the sound.
@@ -864,7 +881,7 @@ public sealed class InsertSlot
     public bool Collapsed { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
-    [JsonIgnore] public bool Known => Dsp.TrackInserts.IsKind(Type);
+    [JsonIgnore] public bool Known => Dsp.TrackInserts.IsKind(Type) && (Type != VstKind || Vst?.Plugin is { Path.Length: > 0, ClassId.Length: > 0 });
 
     /// <summary>Whether it sounds: its kind's own ON.</summary>
     [JsonIgnore]
@@ -873,7 +890,7 @@ public sealed class InsertSlot
         get => Type switch
         {
             SatKind => Sat?.On == true, CompKind => Comp?.On == true, EqKind => Eq?.On == true,
-            ReverbKind => Reverb?.Muted == false, DelayKind => Delay?.Muted == false, GateKind => Gate?.On == true, _ => false,
+            ReverbKind => Reverb?.Muted == false, DelayKind => Delay?.Muted == false, GateKind => Gate?.On == true, VstKind => Vst?.On == true, _ => false,
         };
         set
         {
@@ -886,6 +903,7 @@ public sealed class InsertSlot
                 case ReverbKind: Reverb!.Muted = !value; break;
                 case DelayKind: Delay!.Muted = !value; break;
                 case GateKind: Gate!.On = value; break;
+                case VstKind: Vst!.On = value; break;
             }
         }
     }
@@ -913,14 +931,27 @@ public sealed class InsertSlot
         if (string.IsNullOrEmpty(Id)) Id = Ids.New("fx");
         switch (Type)
         {
-            case SatKind: Sat ??= new(); Comp = null; Eq = null; Reverb = null; Delay = null; Gate = null; break;
-            case CompKind: Comp ??= new(); Comp.Eq ??= new(); Sat = null; Eq = null; Reverb = null; Delay = null; Gate = null; break;
-            case EqKind: Eq ??= new(); Eq.Normalize(); Sat = null; Comp = null; Reverb = null; Delay = null; Gate = null; break;
-            case ReverbKind: Reverb ??= new(); Sat = null; Comp = null; Eq = null; Delay = null; Gate = null; break;
-            case DelayKind: Delay ??= new(); Delay.Mode ??= "stereo"; Delay.Division ??= "1/8."; Sat = null; Comp = null; Eq = null; Reverb = null; Gate = null; break;
-            case GateKind: Gate ??= new(); Gate.Normalize(); Sat = null; Comp = null; Eq = null; Reverb = null; Delay = null; break;
+            case SatKind: Sat ??= new(); Comp = null; Eq = null; Reverb = null; Delay = null; Gate = null; Vst = null; break;
+            case CompKind: Comp ??= new(); Comp.Eq ??= new(); Sat = null; Eq = null; Reverb = null; Delay = null; Gate = null; Vst = null; break;
+            case EqKind: Eq ??= new(); Eq.Normalize(); Sat = null; Comp = null; Reverb = null; Delay = null; Gate = null; Vst = null; break;
+            case ReverbKind: Reverb ??= new(); Sat = null; Comp = null; Eq = null; Delay = null; Gate = null; Vst = null; break;
+            case DelayKind: Delay ??= new(); Delay.Mode ??= "stereo"; Delay.Division ??= "1/8."; Sat = null; Comp = null; Eq = null; Reverb = null; Gate = null; Vst = null; break;
+            case GateKind: Gate ??= new(); Gate.Normalize(); Sat = null; Comp = null; Eq = null; Reverb = null; Delay = null; Vst = null; break;
+            case VstKind: Vst ??= new(); Vst.Plugin ??= new(); Vst.Plugin.Normalize(); Sat = null; Comp = null; Eq = null; Reverb = null; Delay = null; Gate = null; break;
         }
     }
+}
+
+/// <summary>
+/// A VST3 effect in a slot (native only): which plugin, with its sound as the user left it in its window
+/// (<see cref="PluginRef.State"/>, saved outside the undo like an instrument's), and whether it is on. It runs in its own
+/// process (<c>VstBridge</c>), opened by the window for playback and by the export for its own.
+/// </summary>
+public sealed class VstSlotSettings
+{
+    public bool On { get; set; } = true;
+    public PluginRef Plugin { get; set; } = new();
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 
 /// <summary>

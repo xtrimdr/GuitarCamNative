@@ -5,6 +5,72 @@ qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo p
 Hasta 2026-10-29 la app se llamó GuitarCam Studio Native: los ítems de antes usan los nombres de entonces
 (`GuitarCam.*`, `gclab`, `gcvsthost`).
 
+- 2026-10-29: **Versión 0.9.9 publicada**, la primera como WildTrack (instalador `WildTrack-Setup.exe` en el release
+  `v0.9.9`).
+- 2026-10-29: **La ventana recuerda dónde quedó**: posición, tamaño y si estaba maximizada, en `config.json` "window"
+  (`MainWindow.WindowPlace.cs`); si el monitor ya no está, abre centrada.
+- 2026-10-29: **Las carpetas siguen el zoom vertical**: su alto (abiertas o plegadas, con o sin alto propio) escala
+  con el alto de pista como las pistas (al alejar, el de siempre no baja: si no, se ocultan los knobs de envío); `Folder.Height` pasa a ser px al alto por defecto (`Track.DefaultHeight`)
+  (`TimelineView.FolderZoomed`, `SetRowHeight`).
+- 2026-10-29: **Envíos a mano y más compactos**: una pista o un bus nuevos ya no traen envíos a todos los buses, se
+  suman con "+ Envío" (`ProjectBuses.Shown`, `ShowSend`, comprobado en `wtlab`); en el inspector cada envío es una fila
+  fija (`InspectorSendRow`) y tiene menú de clic derecho, también en el mixer (`ShowSendMenu`).
+- 2026-10-29: **Menú de cada efecto con clic derecho**, en el mixer y en el inspector (`ShowSlotMenu`, el mismo del ⋯):
+  abrir, prender o apagar, apagar los demás, subir, bajar, duplicar y eliminar.
+- 2026-10-29: **VST3 más directos**: un clic en el renglón de un efecto VST3 cargado en el mixer abre su ventana, y
+  donde un plugin ya está puesto (lista del mixer, inspector, instrumento) se muestra sin su fabricante.
+- 2026-10-29: **Zoom del mixer y una sola tira**: en vez de Compacto / Amplio / Auto, un ancho de canal continuo
+  (42 a 150 px) que se cambia con el gesto de zoom del timeline (Shift+rueda, alrededor del mouse) o la barra de la
+  cabecera; la rueda sola y Ctrl+rueda desplazan el mixer a los costados (`ZoomMixer`, `OnMixerWheel`, `mixerStripW`).
+  Después de probar tres estilos, el usuario eligió la lista: se sacaron las tiras amplias con sus paneles al costado
+  (y su plegado, la fila de salida, los paneles de envío y el de Transponer). La tira se acomoda al angostarse
+  (`StripHead` con el ícono del canal siempre a la vista, `NarrowParts`, `Fader.Slim`, `MixerMeter.Scale`, filas con
+  ícono que suman ⏻, nombre y ajuste, `SlotBrief`, según su ancho). **FX** en la cabecera pone en bypass todos los
+  efectos, solo en la escucha (`PlaybackEngine.FxBypass`, `ChannelDsp.Specs(..., bypass)`, comprobado en
+  `wtlab comprobar-dsp`). Las carpetas siguen el zoom como las demás tiras y dejan 6 px de aire con el canal o separador de al lado (`FolderGap`).
+- 2026-10-29: **Compacto / amplio igual para todos los canales del mixer**: los buses se arman con las mismas piezas
+  que las pistas (`StripCardLook`, `CompactChain`, `WideControls`, `PanRow` genéricos; `BusStrip` en
+  `MainWindow.Buses.cs`, fuera `BusRack`) y el mismo ancho en los dos modos; se seleccionan como una pista
+  (`SelectBus`, panel del bus en el inspector) y tienen color e ícono (`Bus.Color`, `Bus.Icon`, `ProjectBuses.SetLook`,
+  el selector compartido `ShowLook`, `TrackBadge.SetBus`; `wtlab proyecto buses … color|icono`). Doble clic en el nombre
+  de una pista o un bus en el mixer lo renombra.
+- 2026-10-29: **Pantalla completa con F11** (atajo `fullScreen`, configurable; `MainWindow.FullScreen.cs`): F11 o
+  doble clic en la barra vuelven al estado de antes; la barra de título suelta el lugar de los botones del sistema.
+- 2026-10-29: **Textos profesionales**: `es.json` y `en.json` revisados enteros (estados, avisos, tooltips y ayudas
+  cortos, sin primera persona, humor ni explicaciones internas; "No se pudo…" en vez de "No pude…"), los respaldos de
+  `Texts.T` en Audio y Projects igualados al json, y fuera las ayudas que no sumaban (`insp.transpose.hint`,
+  `insp.comp.what`, `insp.clip.hint`, `vst.insp.hint`, `timeline.empty.b`, con su llamada en el código).
+- 2026-10-29: **Efectos VST3** en los slots de pistas y buses, mezclados con los propios ("+ Efecto" → VST3; panel con
+  "Abrir", estado guardado en el slot, el sonido pasa sin él mientras abre o si se cae): `VstInsert` (en vivo un bloque
+  tarde sin esperar al plugin, en la exportación su propia copia), `MainWindow.VstFx.cs`, `InsertSlot.VstKind`. Con
+  **compensación de latencia** en toda la mezcla, el click y las tomas (`LatencyDelay`, `MixLatency`,
+  `PlaybackEngine.UpdateLatency`, recorte en `MixRenderer`); el host reinicia el plugin al arrancar y avisa si cambia su
+  latencia. `wtlab vst efecto` compara el vivo con la exportación y `proyecto insertos … agregar vst --plugin`.
+- 2026-10-29: Las carpetas muestran sus envíos a buses como perillas en el timeline y, como las de las pistas,
+  arrancan a la izquierda debajo de la insignia en vez de repartirse el ancho; su
+  alto de siempre es el mismo abierta o plegada; se siguen redimensionando (`TimelineView.cs`, `MainWindow.Timeline.cs`).
+- 2026-10-29: Dos botones en la barra de título ocultan del todo el panel del canal y el del proyecto, y se recuerdan
+  (`MainWindow.Sidebars.cs`).
+- 2026-10-29: Carpetas más livianas en el timeline: la fila abierta baja de 64 a 34 px, su carril resume dónde hay clips
+  de sus pistas (`DrawFolderSummary`), sin color van en gris en vez del acento y el recuadro va al 45 %, un píxel adentro
+  para que el borde de la tarjeta no lo tape; la pista seleccionada lleva una píldora de acento visible y un tinte suave
+  del acento (`DrawSelectedPill`, `SelectedTint`) (`TimelineView.cs`).
+- 2026-10-29: Historial sirve para volver atrás: **Pasos** (los de deshacer de la sesión con nombre, clic para ir a
+  cualquiera; `EditSteps`, `UndoManager.Steps`/`JumpTo`, `MainWindow.Steps.cs`) y **Versiones** (las de `historial/`
+  con "Guardar versión" con nombre, una por exportación y Volver; `ProjectStore.SaveVersion`/`RenameVersion`,
+  `historial/versiones.json`). Volver a una versión ya no se lleva las tomas nuevas ni las exportaciones. Se fue la
+  sección Actividad. `wtlab proyecto verificar-pasos`, `guardar-version`, `nombrar-version`.
+- 2026-10-29: Un canal nuevo arranca sin efectos (`Channel.Inserts`; las plantillas de fábrica siguen con Vida →
+  Compresor → EQ). El inspector muestra el canal de una pista vacía (lo del clip va aparte, `clipSections`); las
+  tarjetas de efectos y envíos arrancan plegadas, más bajas y con un resumen al lado del título
+  (`SectionHeader.SetSummary`), y la ayuda del envío pasó al tooltip.
+- 2026-10-29: Un proyecto nuevo vacío arranca sin buses, así las pistas no muestran envíos; las plantillas siguen
+  trayendo los suyos (`ProjectLibrary.Create`).
+- 2026-10-29: En el inspector, efectos y envíos tienen cada uno su área: una bandeja más oscura con título, cuántos
+  hay y su "+", y sus secciones como tarjetas (`Controls/InspectorTray`); las bandejas se pliegan y la columna
+  plegada separa los grupos.
+- 2026-10-29: La insignia de una pista sin ícono muestra el de su tipo (onda, teclas MIDI o cámara si sale en el
+  video) con el número chiquito abajo a la derecha (`TrackIcons.DrawBadge`, `TrackBadge`).
 - 2026-10-29: La app pasa a llamarse **WildTrack** (ya es más un DAW que un estudio de cámara): proyectos y namespaces
   `WildTrack.*`, `WildTrack.exe`, `wtlab`, `wtvsthost`, `WildTrack.slnx`, instalador `WildTrack-Setup.exe` (mismo
   `AppId`: actualiza la instalación vieja y borra sus archivos y accesos). Los ajustes pasan a `%APPDATA%\WildTrack`

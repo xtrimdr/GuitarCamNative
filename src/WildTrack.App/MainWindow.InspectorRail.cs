@@ -8,9 +8,10 @@ namespace WildTrack.App;
 
 /// <summary>
 /// The folded Canal tab's column also shows the selected channel (asked by the user): under the open/show buttons, one
-/// icon per section of the channel in the order it sounds (Mezcla, the insert slots, Reverb, Delay, the extra
-/// returns' sends, Transponer), in accent when it's on and faint when it's off. A click opens the tab, unfolds that
-/// section and scrolls it to the top. Rebuilt only when the list of sections changes; edits just repaint it.
+/// icon per section of the channel in the order it sounds (Mezcla, the insert slots, the sends, Transponer), with a
+/// line between those groups like the tab's trays, in accent when it's on and faint when it's off. A click opens the
+/// tab, unfolds that section and scrolls it to the top. Rebuilt only when the list of sections changes; edits just
+/// repaint it.
 /// </summary>
 public partial class MainWindow
 {
@@ -27,14 +28,21 @@ public partial class MainWindow
         inspectorCollapsed.Children.Add(inspectorRail);
     }
 
-    /// <summary>The channel's sections in the order the Canal tab shows them; empty when there's nothing to show.</summary>
+    /// <summary>The channel's sections in the order the Canal tab shows them, with <see cref="RailBreak"/> between its
+    /// groups; empty when there's nothing to show.</summary>
     List<string> RailSections()
     {
-        if (sel == null || SelectedInspectorClip == null) return [];
-        List<string> list = ["Mezcla", .. chainSections, "Reverb", "Delay", .. sendSections, "Transponer"];
-        list.RemoveAll(t => !sectionLooks.ContainsKey(t));
+        if (sel == null || sel.Track.IsMidi) return [];
+        List<string> list = ["Mezcla", RailBreak, .. chainSections, RailBreak, .. sendSections, RailBreak, "Transponer"];
+        list.RemoveAll(t => t != RailBreak && !sectionLooks.ContainsKey(t));
+        // an empty group leaves no line of its own
+        for (int i = list.Count - 1; i >= 0; i--)
+            if (list[i] == RailBreak && (i == 0 || i == list.Count - 1 || list[i - 1] == RailBreak)) list.RemoveAt(i);
         return list;
     }
+
+    /// <summary>A line between two groups of the rail (never a section's id).</summary>
+    const string RailBreak = "|";
 
     void RefreshInspectorRail()
     {
@@ -47,6 +55,11 @@ public partial class MainWindow
             railItems.Clear();
             foreach (string title in titles)
             {
+                if (title == RailBreak)
+                {
+                    inspectorRail.Children.Add(new Border { Height = 1, Background = Palette.Line, Margin = new Thickness(12, 2) });
+                    continue;
+                }
                 var icon = FxIcon.Create(sectionLooks[title].Icon, 14);
                 icon.HorizontalAlignment = HorizontalAlignment.Center;
                 icon.VerticalAlignment = VerticalAlignment.Center;
@@ -70,11 +83,16 @@ public partial class MainWindow
     void GoToSection(string title)
     {
         SetInspectorCollapsed(false);
-        if (collapsedSections.Contains(title)) { SetSectionCollapsed(title, false); SaveCollapsedSections(); }
+        // a section inside a folded tray needs its tray open too
+        if (chainSections.Contains(title)) SetTrayCollapsed(chainTray, ChainTrayId, false);
+        if (sendSections.Contains(title)) SetTrayCollapsed(sendsTray, SendsTrayId, false);
+        // a send is a fixed row, never folded
+        if (!sendRows.ContainsKey(title) && IsCollapsed(title)) { SetSectionCollapsed(title, false); SaveCollapsedSections(); }
         Dispatcher.UIThread.Post(() =>
         {
-            if (!inspectorSections.TryGetValue(title, out var section) || inspectorExpanded.Children[^1] is not ScrollViewer scroll
-                || scroll.Content is not Visual content || section.Header.TranslatePoint(new Point(0, 0), content) is not { } at) return;
+            Control? target = inspectorSections.TryGetValue(title, out var section) ? section.Header : sendRows.GetValueOrDefault(title);
+            if (target == null || inspectorExpanded.Children[^1] is not ScrollViewer scroll
+                || scroll.Content is not Visual content || target.TranslatePoint(new Point(0, 0), content) is not { } at) return;
             scroll.Offset = new Vector(scroll.Offset.X, Math.Max(0, at.Y));
         }, DispatcherPriority.Loaded);
     }

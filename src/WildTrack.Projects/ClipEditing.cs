@@ -121,7 +121,7 @@ public static class ClipEditing
     {
         foreach (var t in p.Tracks)
             if (t.Clips.Find(c => c.Id == clipId) is { } c) return (t, c);
-        throw new ArgumentException(Texts.T("err.clip.clipNotFound", "No encontré ese clip en el proyecto."));
+        throw new ArgumentException(Texts.T("err.clip.clipNotFound", "Clip no encontrado."));
     }
 
     /// <summary>
@@ -147,8 +147,8 @@ public static class ClipEditing
     {
         if (IsLocked(t, c))
             throw new ArgumentException(t.Locked
-                ? Texts.T("err.clip.trackLocked", "La pista «{0}» está bloqueada: desbloqueala para mover, recortar o borrar sus tomas.", t.Name)
-                : Texts.T("err.clip.locked", "Ese clip está bloqueado: desbloquealo para moverlo, recortarlo o borrarlo."));
+                ? Texts.T("err.clip.trackLocked", "La pista «{0}» está bloqueada.", t.Name)
+                : Texts.T("err.clip.locked", "El clip está bloqueado."));
     }
 
     /// <summary>Locks or unlocks a clip.</summary>
@@ -165,13 +165,13 @@ public static class ClipEditing
     public static string MoveToTrack(Project p, string clipId, string targetId, string? swapId = null)
     {
         var (from, clip) = Find(p, clipId);
-        var to = p.Tracks.Find(t => t.Id == targetId) ?? throw new ArgumentException(Texts.T("err.clip.trackNotFound", "No encontré esa pista."));
+        var to = p.Tracks.Find(t => t.Id == targetId) ?? throw new ArgumentException(Texts.T("err.clip.trackNotFound", "Pista no encontrada."));
         if (from == to) return to.Id;
-        if (to.IsMidi) throw new ArgumentException(Texts.T("err.midi.noAudio", "Las tomas no van en una pista MIDI: elegí una pista de audio."));
+        if (to.IsMidi) throw new ArgumentException(Texts.T("err.midi.noAudio", "Las tomas de audio no van en pistas MIDI."));
         Unlocked(from, clip);
-        if (to.Locked) throw new ArgumentException(Texts.T("err.clip.trackLocked", "La pista «{0}» está bloqueada: desbloqueala para mover, recortar o borrar sus tomas.", to.Name));
+        if (to.Locked) throw new ArgumentException(Texts.T("err.clip.trackLocked", "La pista «{0}» está bloqueada.", to.Name));
         Clip? other = swapId == null ? null : to.Clips.Find(c => c.Id == swapId)
-            ?? throw new ArgumentException(Texts.T("err.clip.swapNotFound", "No encontré el clip para intercambiar."));
+            ?? throw new ArgumentException(Texts.T("err.clip.swapNotFound", "Clip a intercambiar no encontrado."));
         if (other != null) Unlocked(to, other);
         int index = from.Clips.IndexOf(clip);
         from.Clips.RemoveAt(index);
@@ -210,7 +210,7 @@ public static class ClipEditing
 
     public static string AddMedia(Project p, string mediaId, string? selectedTrackId)
     {
-        var media = p.FindMedia(mediaId) ?? throw new ArgumentException(Texts.T("err.clip.mediaNotFound", "No encontré ese canal en el historial."));
+        var media = p.FindMedia(mediaId) ?? throw new ArgumentException(Texts.T("err.clip.mediaNotFound", "Canal no encontrado en el historial."));
         if (p.Tracks.Any(t => t.Clips.Any(c => c.MediaId == mediaId))) throw new ArgumentException(Texts.T("err.clip.mediaInUse", "Ese canal ya está en el timeline."));
         var target = p.Tracks.Find(t => t.Id == selectedTrackId && t.Clips.Count == 0 && !t.IsMidi);
         Channel? previousChannel = null;
@@ -246,7 +246,7 @@ public static class ClipEditing
     {
         if (p.Tracks.Find(t => t.Id == id) is not { } track) return;
         if (HasLock(track))
-            throw new ArgumentException(Texts.T("err.track.locked", "«{0}» tiene tomas bloqueadas: desbloquealas para sacar la pista.", track.Name));
+            throw new ArgumentException(Texts.T("err.track.locked", "«{0}» tiene tomas bloqueadas.", track.Name));
         foreach (var c in track.Clips) Remember(p, track, c);
         int index = p.Tracks.IndexOf(track);
         p.Tracks.Remove(track);
@@ -299,7 +299,7 @@ public static class ClipEditing
         Unlocked(track, left);
         var w = Window(left, p.FindMedia(left.MediaId), durationSec);
         if (atSec < w.Start + ClipEnvelope.MinClipSec || atSec > w.End - ClipEnvelope.MinClipSec)
-            throw new ArgumentException(Texts.T("err.clip.splitEdge", "El cabezal tiene que estar adentro del clip, a más de 0,1 s de los bordes."));
+            throw new ArgumentException(Texts.T("err.clip.splitEdge", "El cabezal tiene que estar dentro del clip, a más de 0,1 s de los bordes."));
         double trimStart = ToSample(atSec - w.Origin);
         var right = Copy(left);
         right.Id = Ids.New("clp");
@@ -322,7 +322,7 @@ public static class ClipEditing
     /// </summary>
     public static int DeleteRange(Project p, string trackId, double startSec, double endSec, Func<Clip, double?>? lengthOf = null)
     {
-        var track = p.Tracks.Find(t => t.Id == trackId) ?? throw new ArgumentException(Texts.T("err.clip.trackNotFound", "No encontré esa pista."));
+        var track = p.Tracks.Find(t => t.Id == trackId) ?? throw new ArgumentException(Texts.T("err.clip.trackNotFound", "Pista no encontrada."));
         if (!(endSec > startSec)) return 0;
         int changed = 0;
         foreach (var clip in track.Clips.ToList())

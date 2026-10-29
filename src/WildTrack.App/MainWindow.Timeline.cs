@@ -234,6 +234,23 @@ public partial class MainWindow
                 ProjectBuses.SetSend(store!.Project, t.Channel, busId, amount, toggle ? !on : amount > 0 ? true : null);
             }, fx + (toggle ? ".on" : ".amount"));
         };
+        // a folder's send knobs, the same as a track's (its sends leave from the sum of its tracks)
+        Timeline.FolderSendKnobs = FolderSendKnobsOf;
+        Timeline.FolderSendState = (f, busId) =>
+        {
+            foreach (var s in f.Sends)
+                if (s.BusId == busId) return (s.On, s.Level);
+            return (false, 0);
+        };
+        Timeline.FolderSendRequested += (f, busId, toggle, amount) =>
+        {
+            if (busId.Length == 0) return;
+            FolderEdit(f, x =>
+            {
+                var (_, on, _) = ProjectBuses.SendOf(x, busId);
+                ProjectBuses.SetSend(store!.Project, x, busId, amount, toggle ? !on : amount > 0 ? true : null);
+            }, $"send.{busId}.{(toggle ? "on" : "level")}");
+        };
         Timeline.HeaderWidthChanged += w =>
         {
             TimelineToolbar.Width = TimelineFooter.Width = w;
@@ -278,14 +295,15 @@ public partial class MainWindow
 
     /// <summary>
     /// One checkpoint per committed gesture, applied in place (<see cref="ApplyTracks"/>): it keeps playing and
-    /// nothing on screen is rebuilt, like the web, where editing a lane is just a state change.
+    /// nothing on screen is rebuilt, like the web, where editing a lane is just a state change. <paramref name="step"/>
+    /// names the step in Historial → Pasos when the change alone can't tell what it was (a recording).
     /// </summary>
-    async Task EditTimeline(Func<Project, string?> edit, string? activity, string? clipId = null)
+    async Task EditTimeline(Func<Project, string?> edit, string? activity, string? clipId = null, EditSteps.Label? step = null)
     {
         if (restoring || store == null || store.ReadOnly || Projects.IsVisible) return;
         var st = store;
         restoring = true;
-        undo.Checkpoint(st.Project);
+        undo.Checkpoint(st.Project, label: step);
         UpdateUndoButtons();
         try
         {
@@ -374,6 +392,7 @@ public partial class MainWindow
         tracks = list;
         engine.UpdateTracks(list);
         SyncInstruments();
+        SyncEffects();
         RefreshTranspose();
         Timeline.LengthSec = engine.LengthSec;
         ApplyRouting(p, list);

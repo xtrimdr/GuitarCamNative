@@ -13,7 +13,7 @@
 //         editor-close          closes it
 //         quit
 //       and it says on stdout: "ready <latency> <outputs> <instrument>", "error <message>", "dirty" (a parameter
-//       changed in its window), "editor-open", "editor-closed".
+//       changed in its window), "latency <frames>" (the plugin changed its latency), "editor-open", "editor-closed".
 //   It exits when stdin closes or the app (--parent) goes away.
 
 #include <windows.h>
@@ -177,6 +177,8 @@ public:
     std::mutex lock;
     std::vector<std::pair<ParamID, ParamValue>> pending;
     std::atomic<ULONGLONG> lastDirty {0};
+    /// The plugin said its latency changed: read again before the next block.
+    std::atomic<bool> latencyChanged {false};
 
     tresult PLUGIN_API beginEdit(ParamID) override { return kResultOk; }
     tresult PLUGIN_API performEdit(ParamID id, ParamValue value) override
@@ -189,7 +191,12 @@ public:
         return kResultOk;
     }
     tresult PLUGIN_API endEdit(ParamID) override { Dirty(); return kResultOk; }
-    tresult PLUGIN_API restartComponent(int32) override { Dirty(); return kResultOk; }
+    tresult PLUGIN_API restartComponent(int32 flags) override
+    {
+        if (flags & kLatencyChanged) latencyChanged = true;
+        Dirty();
+        return kResultOk;
+    }
 
     /// At most one "dirty" every half second: a knob being turned sends hundreds of edits.
     void Dirty()
@@ -362,6 +369,21 @@ struct Host
         int32 n = std::max(1, std::min<int32>(s.frames, gcvst::MaxBlock));
         events.clear();
         params.clearQueue();
+        // the transport starts: an effect forgets its tails and delay lines (what VST3 hosts do to reset a processor)
+        if (s.flags & gcvst::Reset)
+        {
+            processor->setProcessing(false);
+            processor->setProcessing(true);
+        }
+        if (handler.latencyChanged.exchange(false))
+        {
+            int32_t latency = static_cast<int32_t>(processor->getLatencySamples());
+            if (latency != shared->latency)
+            {
+                shared->latency = latency;
+                Say("latency " + std::to_string(latency));
+            }
+        }
         // a jump or a stop: every note it holds goes off first
         if (s.flags & gcvst::AllNotesOff)
             for (int16 p = 0; p < 128; p++)
