@@ -41,7 +41,7 @@ It used to be called **GuitarCam Studio Native**: when you update, your settings
 More details in [Requirements](#requirements).
 </details>
 
-![Audio only mode: tracks with their effect knobs and the EQ with its live spectrum](docs/screenshots/audio-en.png)
+![Audio only: audio and MIDI tracks in folders, VST3 instruments and the piano roll below](docs/screenshots/piano-en.png)
 
 | | |
 |---|---|

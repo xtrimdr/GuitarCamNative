@@ -41,7 +41,7 @@ Antes se llamaba **GuitarCam Studio Native**: al actualizar, tus ajustes y proye
 Más detalles en [Requisitos](#requisitos).
 </details>
 
-![El modo Solo audio: pistas con sus knobs de efecto y el EQ con el espectro en vivo](docs/screenshots/audio-es.png)
+![Solo audio: pistas de audio y MIDI en carpetas, instrumentos VST3 y el piano roll abajo](docs/screenshots/piano-es.png)
 
 | | |
 |---|---|
