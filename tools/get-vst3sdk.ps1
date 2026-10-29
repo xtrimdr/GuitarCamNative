@@ -9,7 +9,7 @@ param(
 $root = Split-Path $PSScriptRoot -Parent
 $dest = Join-Path $root 'lib\vst3sdk'
 
-if (Test-Path (Join-Path $dest 'pluginterfaces\base') -and -not $Reemplazar) {
+if ((Test-Path (Join-Path $dest 'pluginterfaces\base')) -and -not $Reemplazar) {
     Write-Host "Ya está: $dest (usá -Reemplazar para bajarlo de nuevo)"
     exit 0
 }
@@ -17,11 +17,12 @@ if (Test-Path (Join-Path $dest 'pluginterfaces\base') -and -not $Reemplazar) {
 if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
 New-Item -ItemType Directory -Force (Split-Path $dest -Parent) | Out-Null
 
-git clone --depth 1 --branch $Version https://github.com/steinbergmedia/vst3sdk $dest
+# public.sdk trae ejemplos con rutas de más de 260 caracteres: sin longpaths el checkout falla en carpetas hondas
+git -c core.longpaths=true clone --depth 1 --branch $Version https://github.com/steinbergmedia/vst3sdk $dest
 if ($LASTEXITCODE -ne 0) { throw "No pude clonar el SDK ($Version)." }
 Push-Location $dest
 try {
-    git submodule update --init --depth 1 base pluginterfaces public.sdk
+    git -c core.longpaths=true submodule update --init --depth 1 base pluginterfaces public.sdk
     if ($LASTEXITCODE -ne 0) { throw 'No pude bajar los submódulos del SDK.' }
 }
 finally { Pop-Location }

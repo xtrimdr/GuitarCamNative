@@ -7,6 +7,20 @@ static class SystemCommands
 {
     public static int Run(Args a)
     {
+        if (a.Flag("instalar-ffmpeg"))
+        {
+            if (!FfmpegSetup.HasWinget())
+            {
+                Console.WriteLine($"No encontré winget: bajalo de {FfmpegSetup.DownloadUrl}");
+                return 1;
+            }
+            Console.WriteLine($"Instalando FFmpeg con winget ({FfmpegSetup.WingetId})…");
+            var r = FfmpegSetup.InstallAsync().GetAwaiter().GetResult();
+            Console.WriteLine($"winget terminó con el código {r.ExitCode}");
+            if (r.Log.Length > 0) Console.WriteLine(r.Log);
+            Console.WriteLine(r.Ready ? "FFmpeg listo" : "FFmpeg sigue sin aparecer en el PATH");
+            if (!r.Ready) return 1;
+        }
         string? ffmpeg = FfmpegInfo.Probe();
         Console.WriteLine(ffmpeg == null ? "FFmpeg no encontrado en el PATH: no vas a poder exportar" : $"FFmpeg {ffmpeg}".Trim());
         if (ffmpeg != null)

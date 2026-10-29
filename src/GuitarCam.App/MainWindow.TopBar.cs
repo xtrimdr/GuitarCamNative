@@ -51,17 +51,32 @@ public partial class MainWindow
         };
         SizeChanged += (_, e) => SysMeter.IsVisible = SysMeterSep.IsVisible = e.NewSize.Width >= SystemMeterMinWidth;
         MonitorToggle.IsCheckedChanged += (_, _) => engine.SoftwareMonitor = MonitorToggle.IsChecked == true;
+        FfmpegState.PointerPressed += (_, _) => FfmpegHelp.Show();
+        FfmpegHelp.Found += version =>
+        {
+            ShowFfmpeg(version);
+            Toast(Loc.T("ffmpeg.ready"));
+        };
+        FfmpegHelp.Failed += msg => Status(msg);
         Opened += async (_, _) =>
         {
             string? version = await Task.Run(FfmpegInfo.Probe);
-            bool ready = version != null;
-            About.SetFfmpeg(version);
-            FfmpegDot.Fill = ready ? Palette.Brush("#10b981") : Palette.Rec;
-            FfmpegText.Text = Loc.T("title.ffmpeg.missing");
-            ToolTip.SetTip(FfmpegState, Loc.T("title.ffmpeg.missing.tip"));
-            FfmpegState.IsVisible = FfmpegSep.IsVisible = !ready;
-            if (!ready) Status(Loc.T("title.ffmpeg.missing.status"));
+            ShowFfmpeg(version);
+            if (version != null) return;
+            Status(Loc.T("title.ffmpeg.missing.status"));
+            FfmpegHelp.Show();
         };
+    }
+
+    /// <summary>The top bar's FFmpeg chip (only while it is missing) and the about box; null = not on the PATH.</summary>
+    void ShowFfmpeg(string? version)
+    {
+        bool ready = version != null;
+        About.SetFfmpeg(version);
+        FfmpegDot.Fill = ready ? Palette.Brush("#10b981") : Palette.Rec;
+        FfmpegText.Text = Loc.T("title.ffmpeg.missing");
+        ToolTip.SetTip(FfmpegState, Loc.T("title.ffmpeg.missing.tip"));
+        FfmpegState.IsVisible = FfmpegSep.IsVisible = !ready;
     }
 
     /// <summary>Above this the callback is close to its deadline and the audio may drop out: the DSP bar goes red.</summary>

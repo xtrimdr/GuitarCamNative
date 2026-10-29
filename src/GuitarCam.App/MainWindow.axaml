@@ -145,7 +145,7 @@
               </StackPanel>
               <!-- FFmpeg only shows here when it is missing; its version is in "Acerca de" -->
               <Border x:Name="FfmpegSep" Classes="tsep" IsVisible="False" />
-              <StackPanel x:Name="FfmpegState" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Background="Transparent" IsVisible="False" ToolTip.Tip="{loc:T title.ffmpeg.looking}">
+              <StackPanel x:Name="FfmpegState" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Background="Transparent" Cursor="Hand" IsVisible="False" ToolTip.Tip="{loc:T title.ffmpeg.looking}">
                 <Ellipse x:Name="FfmpegDot" Width="6" Height="6" Fill="{StaticResource Faint}" VerticalAlignment="Center" />
                 <TextBlock x:Name="FfmpegText" Foreground="{StaticResource Faint}" Text="FFmpeg" />
               </StackPanel>
@@ -510,6 +510,7 @@
     <d:ExportDialog Grid.RowSpan="5" Grid.ColumnSpan="2" x:Name="Export" IsVisible="False" AutomationProperties.Name="{loc:T export.name}" />
     <d:SettingsDialog Grid.RowSpan="5" Grid.ColumnSpan="2" x:Name="Settings" IsVisible="False" />
     <d:AboutDialog Grid.RowSpan="5" Grid.ColumnSpan="2" x:Name="About" IsVisible="False" />
+    <d:FfmpegDialog Grid.RowSpan="5" Grid.ColumnSpan="2" x:Name="FfmpegHelp" IsVisible="False" />
     <d:UnsavedDialog Grid.RowSpan="5" Grid.ColumnSpan="2" x:Name="Unsaved" IsVisible="False" />
     <!-- toasts float over everything (the manager and the dialogs too), above the transport bar -->
     <c:ToastHost Grid.RowSpan="5" Grid.ColumnSpan="2" x:Name="Toasts" Margin="0,0,16,68" />

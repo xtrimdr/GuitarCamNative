@@ -37,10 +37,20 @@ public static class VideoEncoders
     /// <summary>Peak and buffer of the card's VBR, relative to the target bitrate: room for strumming, without blowing up the file.</summary>
     const double PeakFactor = 1.5, BufferFactor = 2.0;
 
-    static readonly Lazy<Task<FfmpegCaps>> caps = new(() => Task.Run(Probe));
+    static readonly object capsGate = new();
+    static Task<FfmpegCaps>? caps;
 
     /// <summary>What this machine's FFmpeg can do; probed the first time and remembered.</summary>
-    public static Task<FfmpegCaps> DetectAsync() => caps.Value;
+    public static Task<FfmpegCaps> DetectAsync()
+    {
+        lock (capsGate) return caps ??= Task.Run(Probe);
+    }
+
+    /// <summary>Drops what was probed, so the next <see cref="DetectAsync"/> looks again (FFmpeg was just installed).</summary>
+    public static void Forget()
+    {
+        lock (capsGate) caps = null;
+    }
 
     public static string Id(VideoEncoderKind k) => k switch
     {

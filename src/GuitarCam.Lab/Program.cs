@@ -154,8 +154,10 @@ static class Program
                                            graba el video como una toma (H.264, 30 fps, keyframe cada 1 s)
               camara verificar-corte [--dispositivo X]
                                            corta una grabación a la mitad (con y sin FFmpeg) y comprueba que el video quede
-              sistema   [--segundos 5]     muestra CPU, GPU y RAM cada 1,5 s como la barra de arriba, si está FFmpeg
-                                           y con qué placa de video exporta
+              sistema   [--segundos 5] [--instalar-ffmpeg]
+                                           muestra CPU, GPU y RAM cada 1,5 s como la barra de arriba, si está FFmpeg
+                                           y con qué placa de video exporta; --instalar-ffmpeg lo instala antes con
+                                           winget, como el aviso de la ventana
               version                      esta versión contra la última release de GitHub (el aviso de "Acerca de")
               proyecto abrir    carpeta    abre un proyecto nativo y muestra pistas, avisos e historial
               proyecto versiones carpeta   lista las versiones guardadas, de más nueva a más vieja

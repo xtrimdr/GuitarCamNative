@@ -575,6 +575,7 @@ public partial class MainWindow : Window
     async void OnKey(object? sender, KeyEventArgs e)
     {
         if (Unsaved.HandleKey(e)) return;
+        if (FfmpegHelp.HandleKey(e)) return;
         if (Export.IsVisible)
         {
             Export.HandleKey(e);

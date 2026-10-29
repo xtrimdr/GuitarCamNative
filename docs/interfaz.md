@@ -70,6 +70,10 @@ Ese es el diseño **Clásico**. Para el **Vertical**, ver el apartado que sigue.
   release (`UpdateCheck`, en `GuitarCam.Projects`; sin cuenta ni datos del usuario, y si falla no avisa nada). Una
   versión nueva sale en un toast con "Descargar" solo la primera vez (`config.json` "updateNotified"); después, solo
   en la campanita. La casilla "Avisarme cuando salga una versión nueva" lo apaga (`config.json` "checkUpdates": "off").
+- FFmpeg solo aparece en la barra si falta ("FFmpeg no encontrado", `MainWindow.TopBar.cs`). Al abrir sin FFmpeg, y
+  al hacer clic en ese chip, sale "Falta FFmpeg" (`Dialogs/FfmpegDialog`, pedido del usuario). Ofrece Instalar ahora
+  (winget, `FfmpegSetup`, si está; se puede cerrar mientras instala y avisa con un toast), Abrir la página (gyan.dev),
+  Ya lo instalé (relee el PATH y lo busca de nuevo) y el comando de winget para copiar.
 - El chip del proyecto abre un menú (`MainWindow.Versions.cs`): "Proyectos…" (el gestor) y "Volver a una versión
   guardada", con las últimas 20 de `historial/` (`ProjectStore.Snapshots`). Volver guarda antes lo actual como otra
   versión, recarga el proyecto y borra los pasos de deshacer. Sin proyecto abierto, va directo al gestor.

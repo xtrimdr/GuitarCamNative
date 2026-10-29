@@ -216,6 +216,19 @@ missing.
 It is released under the [GPL-3.0](LICENSE) license: you can use, study, modify and share it freely, and
 distributed modified versions must stay free under the same license.
 
+## Code signing policy
+
+The installer is built by GitHub Actions from this repository ([instalador.yml](.github/workflows/instalador.yml)),
+never on anyone's machine, so what you download comes from this code. Free code signing provided by
+[SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- Committers and reviewers: [xtrimdr](https://github.com/xtrimdr) (every outside change goes through their approval).
+- Approvers: [xtrimdr](https://github.com/xtrimdr).
+
+**Privacy policy**: this program will not transfer any information to other networked systems unless specifically
+requested by the user or the person installing or operating it: it checks GitHub's latest release for a new version
+(it can be turned off in About) and connects to the network camera you set up.
+
 ## gclab
 
 `gclab.exe` (`src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe`) tests the engine and projects from the

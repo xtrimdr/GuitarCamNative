@@ -3,6 +3,13 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-29: Sin FFmpeg, la app avisa al abrir con un cuadro (`Dialogs/FfmpegDialog`, también desde el chip
+  "FFmpeg no encontrado") que lo instala con winget (`Gyan.FFmpeg`, `GuitarCam.Audio/FfmpegSetup.cs`), abre la página
+  de descarga o lo busca de nuevo; relee el PATH del registro para no tener que reiniciar. `gclab sistema --instalar-ffmpeg`.
+- 2026-10-29: El instalador se arma en GitHub Actions (`.github/workflows/instalador.yml`): baja lo que no va en git
+  (`tools\get-ffmpeg.ps1`, nuevo; SDK de VST3 y Basic Pitch), corre `comprobar-dsp` y, con un tag `vX.Y.Z`, deja un
+  release en borrador. Listo para firmar con SignPath Foundation en cuanto aprueben el proyecto; política de firma y de
+  privacidad en los README. `get-vst3sdk.ps1` arreglado en carpetas limpias (rutas largas).
 - 2026-10-28: **Extraer MIDI** de un clip de audio, con el clic derecho (Acordes / Melodía) o arrastrándolo a una
   pista MIDI: Basic Pitch de Spotify por ONNX Runtime en la CPU (`AudioToMidi`, igual nota por nota al código de
   Spotify) más una limpieza propia (un ataque marcado dos veces es uno, fuera los fantasmas bajo una cuerda grave,

@@ -23,7 +23,8 @@ de **grabar → mezclar → exportar**.
 <details>
 <summary><b>Antes de instalar</b></summary>
 
-- **FFmpeg** y **ffprobe** en el `PATH`, para la cámara, el video y la exportación.
+- **FFmpeg** y **ffprobe** en el `PATH`, para la cámara, el video y la exportación. Si no están, GuitarCam te avisa
+  al abrir y lo instala con un clic (winget), o te lleva a la página para bajarlo.
 - Una interfaz de audio con driver **ASIO**, para grabar.
 - El instalador no está firmado: si Windows SmartScreen avisa, elegí **Más información → Ejecutar de todas formas**.
 
@@ -135,7 +136,7 @@ planeado y lo que falta está en [PENDIENTES.md](PENDIENTES.md).
 - Una interfaz de audio con driver **ASIO**.
 - **FFmpeg** y **ffprobe** en el `PATH` (cámara, video y exportación).
 - Para la preview, los DLL de **FFmpeg 9** (versión *shared*) en `lib\ffmpeg\` (`avcodec-63`, `avformat-63`,
-  `avutil-61`, `swscale-10`, `swresample-7` y su `LICENSE`). No van en git: se bajan de
+  `avutil-61`, `swscale-10`, `swresample-7` y su `LICENSE`). No van en git: los baja `tools\get-ffmpeg.ps1` de
   [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds/releases) (`ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip`,
   carpeta `bin`). El build los copia a `ffmpeg\` junto al exe. Sin ellos la preview usa ffmpeg.exe, que tarda más
   en cada salto.
@@ -254,6 +255,19 @@ para ver qué falta.
 Se distribuye bajo la licencia [GPL-3.0](LICENSE): podés usarla, estudiarla, modificarla y compartirla
 libremente, y las versiones modificadas que se distribuyan tienen que seguir siendo libres bajo la misma licencia.
 
+## Firma del código
+
+El instalador se arma en GitHub Actions a partir de este repositorio ([instalador.yml](.github/workflows/instalador.yml)),
+nunca en la PC de nadie, así lo que bajás sale de este código. Firma gratuita de código por
+[SignPath.io](https://about.signpath.io), certificado de [SignPath Foundation](https://signpath.org).
+
+- Commits y revisión: [xtrimdr](https://github.com/xtrimdr) (todo cambio de otra persona pasa por su aprobación).
+- Aprobación de cada firma: [xtrimdr](https://github.com/xtrimdr).
+
+**Privacidad**: el programa no manda información a ningún otro sistema, salvo lo que pidas vos: busca si hay una
+versión nueva consultando la última release en GitHub (se apaga en Acerca de) y se conecta a la cámara por red que
+configures.
+
 ## gclab
 
 `gclab.exe` (`src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe`) prueba el motor y los proyectos desde
@@ -267,7 +281,7 @@ la consola, sin abrir la ventana.
 | `mezclar proyecto\|toma.wav [--salida mezcla.wav] [--cadena vida,comp,eq,puerta]` | renderiza la mezcla offline, con el mismo grafo que la reproducción; con un WAV, `--cadena` arma los slots en ese orden (se pueden repetir) |
 | `procesar toma.wav --sat cinta --comp-estilo punteo --eq ritmica --reverb cuarto --delay punteada` | aplica efectos a un WAV |
 | `click` | escribe todos los sonidos de click a un WAV |
-| `sistema [--segundos 5]` | CPU, GPU y RAM, si FFmpeg está en el PATH y con qué placa de video exporta |
+| `sistema [--segundos 5] [--instalar-ffmpeg]` | CPU, GPU y RAM, si FFmpeg está en el PATH y con qué placa de video exporta; `--instalar-ffmpeg` lo instala antes con winget, como el aviso de la ventana |
 | `version` | esta versión contra la última release de GitHub (lo que avisa la ventana y muestra "Acerca de") |
 | `espectro [toma.wav]` | el espectro en vivo del EQ |
 | `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas, reinicio de la cadena, afinador, LUFS y mastering (bandas que suman plano, reducción por banda sin importar el nivel, Cinta, Ancho (graves mono y mismo volumen), soft clip, limitador prendido y apagado) y slots de efectos (un canal viejo migrado suena idéntico a la cadena fija, repetir, reordenar, cambio de lista sin saltos), puerta de ruido (baja el zumbido, deja pasar la nota, no aletea cuando una nota se apaga); además Nitidez, Claridad y Resplandor (un cuadro plano queda igual, un borde se marca, una luz en lo oscuro deja su halo de su color, los looks HDR y Soñado suman lo suyo solo con el filtro prendido) |
