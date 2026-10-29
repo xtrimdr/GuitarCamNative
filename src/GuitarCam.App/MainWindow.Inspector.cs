@@ -375,6 +375,7 @@ public partial class MainWindow
             {
                 case InsertSlot.SatKind: SatSection(t, id, nth, drag); break;
                 case InsertSlot.CompKind: CompSection(t, id, nth, drag); break;
+                case InsertSlot.GateKind: GateSection(t, id, nth, drag); break;
                 default: EqSection(t, id, nth, drag); break;
             }
         }
@@ -429,6 +430,27 @@ public partial class MainWindow
             Loc.T("insp.sat.hint"), chainRefresh);
         var satHint = Help(""); sat.Children.Add(satHint);
         chainRefresh.Add(() => satHint.Text = S().Mode == "tape" ? Loc.T("insp.sat.tape.hint") : Loc.T("insp.sat.tube.hint"));
+    }
+
+    void GateSection(LiveTrack t, string id, int nth, SlotDrag drag)
+    {
+        GateSettings G() => t.Channel.Slot(id)?.Gate ?? GoneGate;
+        void GateEdit(Action<GateSettings> edit, string key) => SlotEdit(t, id, s => edit(s.Gate!), key);
+        var gate = SlotSection(t, id, Loc.T("fx.gate"), nth, FxIcon.Gate, () => G().On, on => GateEdit(g => g.On = on, "gate.on"), drag);
+        var modes = new StackPanel { Orientation = Orientation.Horizontal };
+        gate.Children.Add(new Border { Classes = { "seg" }, HorizontalAlignment = HorizontalAlignment.Left, Child = modes });
+        foreach (string mode in GateModes)
+        {
+            var b = new ToggleButton { Content = Loc.T("gate.mode." + mode), Classes = { "seg" } };
+            ToolTip.SetTip(b, Loc.T($"gate.mode.{mode}.hint"));
+            b.Click += (_, _) => GateEdit(g => { g.Mode = mode; g.On = true; }, "gate.mode");
+            chainRefresh.Add(() => b.IsChecked = G().Mode == mode); modes.Children.Add(b);
+        }
+        EffectKnob(gate, Loc.T("insp.gate.threshold"), GateKnob(GateParams.DefaultThresholdDb), () => GateKnob(G().Threshold),
+            v => GateEdit(g => { g.Threshold = GateDb(v); g.On = true; }, "gate.threshold"),
+            v => $"{GateDb(v):0.#} dB", _ => "", Loc.T("insp.gate.hint"), chainRefresh);
+        var modeHint = Help(""); gate.Children.Add(modeHint);
+        chainRefresh.Add(() => modeHint.Text = Loc.T($"gate.mode.{G().Mode}.hint"));
     }
 
     void CompSection(LiveTrack t, string id, int nth, SlotDrag drag)

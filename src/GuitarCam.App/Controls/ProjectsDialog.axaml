@@ -108,7 +108,7 @@
       </Grid>
 
       <!-- toolbar -->
-      <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*" Margin="24,0">
+      <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,*" Margin="24,0">
         <Button x:Name="NewButton" Classes="btn primary" Padding="14,0">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Classes="icon" Text="&#xE710;" FontSize="13" FontWeight="Bold" />
@@ -124,7 +124,16 @@
             <TextBlock x:Name="OpenFolderText" Text="{loc:T proj.openFolder}" />
           </StackPanel>
         </Button>
-        <Panel Grid.Column="2" Margin="8,0,0,0">
+        <Button Grid.Column="2" x:Name="UnpackButton" Classes="btn outline" Margin="8,0,0,0" ToolTip.Tip="{loc:T proj.unpack.tip}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Panel Width="16" Height="16">
+              <TextBlock x:Name="UnpackIcon" Classes="icon" Text="&#xE7B8;" FontSize="14" HorizontalAlignment="Center" />
+              <Arc x:Name="UnpackSpin" Classes="spin" Width="14" Height="14" Stroke="{StaticResource Dim}" IsVisible="False" />
+            </Panel>
+            <TextBlock Text="{loc:T proj.unpack}" />
+          </StackPanel>
+        </Button>
+        <Panel Grid.Column="3" Margin="8,0,0,0">
           <TextBox x:Name="SearchBox" Classes="field" Watermark="{loc:T proj.search}" AutomationProperties.Name="{loc:T proj.search.name}" Padding="32,0,12,0" />
           <TextBlock Classes="icon" Text="&#xE721;" FontSize="13" Foreground="{StaticResource Faint}" Margin="11,0,0,0"
                      HorizontalAlignment="Left" IsHitTestVisible="False" />

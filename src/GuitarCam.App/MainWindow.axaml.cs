@@ -140,6 +140,7 @@ public partial class MainWindow : Window
         InitMixer();
         InitLayout();
         InitTopBar();
+        InitUpdates();
         InitMeters();
         InitShortcutTips();
 

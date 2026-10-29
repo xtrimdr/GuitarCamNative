@@ -74,6 +74,9 @@ public partial class MainWindow
         public readonly List<(string Id, MixerMeter Meter)> NodeMeters = [];
         public MixerMeter? Master;
         public TextBlock? Lim;
+        /// <summary>The master's correlation readout and the hundredth it shows (so the text changes only with it).</summary>
+        public TextBlock? Cor;
+        public int CorHundredths = int.MaxValue;
         /// <summary>The master's short-term LUFS readout and the tenth it shows (int.MaxValue = not yet written).</summary>
         public TextBlock? Lufs;
         public int LufsTenths = int.MaxValue;
@@ -439,6 +442,7 @@ public partial class MainWindow
         mx.Master?.Set(masterShowL, masterShowR, Math.Sqrt(engine.OutRms.MeanSqL), Math.Sqrt(engine.OutRms.MeanSqR));
         TickNodes();
         ShowMasterLufs();
+        ShowMasterCorrelation();
         if (mx.Lim != null) mx.Lim.Opacity = lim < -0.5 ? 1 : 0.25;
     }
 
@@ -473,6 +477,7 @@ public partial class MainWindow
         rmsStamp = now;
         for (int i = 0; i < tracks.Count; i++) tracks[i].Chain.Rms.Take(dt);
         engine.OutRms.Take(dt);
+        engine.Correlation.Take(dt);
         TakeNodesRms(dt);
     }
 
@@ -485,6 +490,23 @@ public partial class MainWindow
         if (s == mx.LufsTenths) return;
         mx.LufsTenths = s;
         mx.Lufs.Text = s == int.MinValue ? "—" : $"{s / 10.0:0.0}";
+    }
+
+    /// <summary>
+    /// The master's COR: the correlation in tenths, red under zero (what cancels in mono), amber under +0.3 (wide), dim
+    /// otherwise. Changes only with the shown hundredth, so the tick allocates nothing while it holds.
+    /// </summary>
+    static readonly IBrush CorWide = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Palette.MeterYellow);
+
+    void ShowMasterCorrelation()
+    {
+        if (mx.Cor == null) return;
+        double c = engine.Correlation.Value;
+        int h = double.IsNaN(c) ? int.MinValue : (int)Math.Round(c * 10) * 10;
+        if (h == mx.CorHundredths) return;
+        mx.CorHundredths = h;
+        mx.Cor.Text = h == int.MinValue ? "—" : h == 0 ? "0.0" : $"{h / 100.0:+0.0;-0.0}";
+        mx.Cor.Foreground = h == int.MinValue ? Palette.Faint : h < 0 ? Palette.Rec : h < 30 ? CorWide : Palette.Dim;
     }
 
     // --- strips ----------------------------------------------------------------------------------------
@@ -938,6 +960,7 @@ public partial class MainWindow
         InsertSlot.CompKind => Loc.T("fx.comp"),
         InsertSlot.ReverbKind => "Reverb",
         InsertSlot.DelayKind => "Delay",
+        InsertSlot.GateKind => Loc.T("fx.gate"),
         _ => "EQ",
     };
 
@@ -1063,6 +1086,7 @@ public partial class MainWindow
             case InsertSlot.CompKind: CompPanel(fx, o, slot.Id, nth, menu, gr, drag); break;
             case InsertSlot.ReverbKind: ReverbSlotPanel(fx, o, slot.Id, nth, menu, drag); break;
             case InsertSlot.DelayKind: DelaySlotPanel(fx, o, slot.Id, nth, menu, drag); break;
+            case InsertSlot.GateKind: GatePanel(fx, o, slot.Id, nth, menu, drag); break;
             default: EqPanel(fx, o, slot.Id, nth, menu, drag); break;
         }
     }
@@ -1071,6 +1095,14 @@ public partial class MainWindow
     static readonly SatSettings GoneSat = new();
     static readonly CompSettings GoneComp = new();
     static readonly EqSettings GoneEq = new();
+    static readonly GateSettings GoneGate = new();
+
+    /// <summary>The gate's modes in their order, with their names' and hints' keys.</summary>
+    static readonly string[] GateModes = [GateParams.Soft, GateParams.Normal, GateParams.Hard];
+
+    /// <summary>The gate's threshold (dBFS) on a 0–1 knob and back, in half dB steps.</summary>
+    static double GateKnob(double db) => (db - GateParams.MinThresholdDb) / (GateParams.MaxThresholdDb - GateParams.MinThresholdDb);
+    static double GateDb(double v) => Math.Round((GateParams.MinThresholdDb + Math.Clamp(v, 0, 1) * (GateParams.MaxThresholdDb - GateParams.MinThresholdDb)) * 2) / 2;
 
     static string SlotTitle(string name, int nth) => nth > 1 ? $"{name} {nth}" : name;
 
@@ -1128,6 +1160,30 @@ public partial class MainWindow
         });
         satSide.Children.Add(mode); satSide.Children.Add(satLabel);
         sat.Body.Children.Add(Row(satKnob, satSide));
+    }
+
+    void GatePanel(StackPanel fx, SlotOwner o, string id, int nth, Control menu, SlotDrag? drag)
+    {
+        GateSettings G() => o.Slot(id)?.Gate ?? GoneGate;
+        var gate = FxPanel(fx, SlotTitle(Loc.T("fx.gate"), nth), FxIcon.Gate, () => G().On, () => SlotEdit(o, id, s => s.On = !s.On, "gate.on"),
+            on => Loc.T(on ? "insp.power.gate.off" : "insp.power.gate.on"), menu, drag, id, o,
+            () => $"{Loc.T("gate.mode." + G().Mode)} · {G().Threshold:0} dB");
+        var knob = FxKnob(gate, Loc.T("mix.gate.knob"), GateKnob(GateParams.DefaultThresholdDb), () => GateKnob(G().Threshold),
+            v => SlotEdit(o, id, s => { s.Gate!.Threshold = GateDb(v); s.Gate.On = true; }, "gate.threshold"), () => Loc.T("mix.gate.knob.tip"));
+        var side = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
+        var mode = new SelectButton();
+        mode.SetItems(GateModes.Select(m => Loc.T("gate.mode." + m)).ToArray(), GateModes.Select(m => (string?)Loc.T($"gate.mode.{m}.hint")).ToArray());
+        mode.Selected += i => { string m = GateModes[i]; SlotEdit(o, id, s => { s.Gate!.Mode = m; s.Gate.On = true; }, "gate.mode"); };
+        var label = new TextBlock { FontSize = 12, FontWeight = FontWeight.Medium, Classes = { "mono" }, TextTrimming = TextTrimming.CharacterEllipsis };
+        mx.Refresh.Add(() =>
+        {
+            int i = Math.Max(0, Array.IndexOf(GateModes, G().Mode));
+            mode.SelectedIndex = i;
+            ToolTip.SetTip(mode, Loc.T($"gate.mode.{GateModes[i]}.hint"));
+            label.Text = $"{G().Threshold:0.#} dB";
+        });
+        side.Children.Add(mode); side.Children.Add(label);
+        gate.Body.Children.Add(Row(knob, side));
     }
 
     void CompPanel(StackPanel fx, SlotOwner o, string id, int nth, Control menu, bool meter, SlotDrag? drag)
@@ -1323,6 +1379,7 @@ public partial class MainWindow
         kinds.Add(Kind(InsertSlot.SatKind, Loc.T("fx.life"), Loc.T("mix.slot.add.sat")));
         kinds.Add(Kind(InsertSlot.CompKind, Loc.T("insp.section.comp"), Loc.T("mix.slot.add.comp")));
         kinds.Add(Kind(InsertSlot.EqKind, "EQ", Loc.T("mix.slot.add.eq")));
+        kinds.Add(Kind(InsertSlot.GateKind, Loc.T("fx.gate"), Loc.T("mix.slot.add.gate")));
         OpenAnchoredMenu(Popup(kinds, 200), b);
     }
 
@@ -1636,19 +1693,36 @@ public partial class MainWindow
     Control Master(bool wide)
     {
         var box = StripCard(MasterW);
-        var head = new StackPanel { Spacing = 4 };
+        // the head's fixed row (StripHeadH): the button, then LIM and MONO side by side
+        var head = new StackPanel { Spacing = 2 };
         head.Children.Add(MasterButton());
         mx.Lim = new TextBlock { Text = "LIM", Classes = { "mono" }, FontSize = 9, FontWeight = FontWeight.Bold, LetterSpacing = 0.8, Foreground = Palette.Accent, Opacity = 0.25,
-            HorizontalAlignment = HorizontalAlignment.Center };
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         ToolTip.SetTip(mx.Lim, Loc.T("mix.master.lim.tip"));
-        head.Children.Add(mx.Lim);
+        var mono = StripToggle("MONO", Loc.T("mix.master.mono.tip"), 14, () => engine.MonoCheck, false, () =>
+        {
+            engine.MonoCheck = !engine.MonoCheck;
+            RefreshMixer();
+        });
+        mono.Width = 32;
+        mono.CornerRadius = new CornerRadius(3);
+        ((TextBlock)mono.Content!).FontSize = 8;
+        head.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, HorizontalAlignment = HorizontalAlignment.Center,
+            Children = { mx.Lim, mono } });
         mx.Master = new MixerMeter(wide: true);
-        // the foot shows the output's short-term LUFS (the transport's measurement), where "Salida" was
-        mx.Lufs = new TextBlock { Text = "—", Classes = { "mono" }, FontSize = 10, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center };
+        // the foot shows the output's short-term LUFS (the transport's measurement), where "Salida" was, and under it
+        // the correlation (two short lines in the fixed StripFootH)
+        mx.Lufs = new TextBlock { Text = "—", Classes = { "mono" }, FontSize = 10, LineHeight = 12, Foreground = Palette.Dim, VerticalAlignment = VerticalAlignment.Center };
         mx.LufsTenths = int.MaxValue;
-        var output = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 3, Background = Brushes.Transparent,
+        var lufs = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 3, Height = 12, HorizontalAlignment = HorizontalAlignment.Center, Background = Brushes.Transparent,
             Children = { mx.Lufs, new TextBlock { Text = "LUFS", FontSize = 9, LetterSpacing = 0.8, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center } } };
-        ToolTip.SetTip(output, Loc.T("mix.master.lufs.tip"));
+        ToolTip.SetTip(lufs, Loc.T("mix.master.lufs.tip"));
+        mx.Cor = new TextBlock { Text = "—", Classes = { "mono" }, FontSize = 8.5, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center };
+        mx.CorHundredths = int.MaxValue;
+        var cor = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 3, Height = 10, HorizontalAlignment = HorizontalAlignment.Center, Background = Brushes.Transparent,
+            Children = { mx.Cor, new TextBlock { Text = "COR", FontSize = 8, LetterSpacing = 0.8, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center } } };
+        ToolTip.SetTip(cor, Loc.T("mix.master.cor.tip"));
+        var output = new StackPanel { Children = { lufs, cor } };
         box.Child = StripLayout(wide, head, null, mx.Master, output);
         return box;
     }

@@ -111,6 +111,44 @@ public static class ProjectMarkers
 
     public static void ClearLoop(ProjectSettings s) => s.LoopStartSec = s.LoopEndSec = null;
 
+    /// <summary>YouTube's rules for chapters in a description: the first at 0:00, at least three, each this long.</summary>
+    public const int MinChapters = 3;
+    public const double MinChapterSec = 10;
+
+    /// <summary>
+    /// The markers as YouTube chapters, one "m:ss Name" a line, to paste in the video's description (the export starts at
+    /// the timeline's 0, so the times are the same). The first chapter must be at 0:00: a song whose first marker comes
+    /// later gets an "Inicio" before it, and one within the first second counts as 0:00. <c>Problem</c> says, in words,
+    /// why YouTube would ignore them (too few, one too short); the text is made anyway.
+    /// </summary>
+    public static (string Text, string? Problem) Chapters(Project p, double lengthSec)
+    {
+        var list = p.Markers.Where(m => m.Sec < lengthSec || lengthSec <= 0).Select(m => (Sec: m.Sec < 1 ? 0 : Math.Floor(m.Sec), m.Name)).ToList();
+        if (list.Count == 0 || list[0].Sec > 0) list.Insert(0, (0, Texts.T("markers.start", "Inicio")));
+        // two markers in the same second: the later one wins, YouTube would take only one anyway
+        for (int i = list.Count - 2; i >= 0; i--) if (list[i].Sec == list[i + 1].Sec) list.RemoveAt(i);
+        bool hours = lengthSec >= 3600 || list[^1].Sec >= 3600;
+        string Time(double sec)
+        {
+            var t = TimeSpan.FromSeconds(sec);
+            return hours ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}" : $"{(int)t.TotalMinutes}:{t.Seconds:00}";
+        }
+        string text = string.Join(Environment.NewLine, list.Select(c => $"{Time(c.Sec)} {c.Name}"));
+        string? problem = null;
+        if (list.Count < MinChapters) problem = Texts.T("markers.chapters.few", "YouTube pide al menos {0} capítulos", MinChapters);
+        else
+            for (int i = 0; i < list.Count; i++)
+            {
+                double end = i + 1 < list.Count ? list[i + 1].Sec : lengthSec;
+                if (end > 0 && end - list[i].Sec < MinChapterSec)
+                {
+                    problem = Texts.T("markers.chapters.short", "«{0}» dura menos de {1} s y YouTube no lo tomaría", list[i].Name, MinChapterSec);
+                    break;
+                }
+            }
+        return (text, problem);
+    }
+
     /// <summary>The A–B range, or null when the loop repeats the whole song.</summary>
     public static (double Start, double End)? Loop(ProjectSettings s) =>
         s.LoopStartSec is { } a && s.LoopEndSec is { } b ? (a, b) : null;

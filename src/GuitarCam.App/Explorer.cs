@@ -22,6 +22,13 @@ public static class Explorer
         Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true, Verb = "open" })?.Dispose(),
         $"\"{folder}\"");
 
+    /// <summary>Opens a web page in the default browser; a failure (no browser set) is ignored.</summary>
+    public static void Browse(string url)
+    {
+        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })?.Dispose(); }
+        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException) { }
+    }
+
     public static void Select(string file) => Launch(() =>
     {
         // with no child items, the shell opens the item's folder with the item selected

@@ -3,6 +3,26 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-28: **Copiar capítulos para YouTube** (clic derecho en la franja de marcadores): los marcadores como
+  "0:00 Intro…" para la descripción del video, con aviso si YouTube no los tomaría (menos de 3, alguno de menos de
+  10 s; `ProjectMarkers.Chapters`, `CopyChapters`). En gclab: `proyecto marcadores … capitulos`.
+- 2026-10-28: **Usar plantilla en una pista que ya existe** (clic derecho en la pista): le pone el sonido de la
+  plantilla (efectos, volumen, paneo y envíos a los buses que haya) sin tocar sus tomas, nombre, look ni ruteo
+  (`TrackPresets.ApplyTo`, `ApplyPresetSubmenu`). En gclab: `proyecto editar … aplicar-plantilla pista nombre`.
+- 2026-10-28: **Paquete ZIP del proyecto** en el gestor: "Para compartir" (el proyecto y las tomas que suenan) o
+  "Respaldo completo" (también tomas sin usar, versiones y exportaciones); las tomas importadas sin copiar entran en
+  `media/de-afuera/` y el JSON del paquete las apunta ahí. "Abrir paquete…" lo trae como proyecto nuevo, sin pisar
+  ninguno y rechazando entradas que salgan de la carpeta (`ProjectPackage.cs`). En gclab: `proyectos empaquetar` /
+  `desempaquetar` y `proyecto verificar-paquete`.
+- 2026-10-28: **Puerta de ruido** como slot de efectos (pistas, carpetas y buses): calla el zumbido entre frases con
+  Suave / Normal / Firme y una perilla de Umbral; abre en ~1 ms, cierra 6 dB por debajo después de 60 ms, así una nota
+  que se apaga no aletea (`Dsp/NoiseGate.cs`, `GateInsert`, `GateSettings`, `GatePanel` / `GateSection`). Y botón
+  **MONO** en la tira del master para escuchar la mezcla en mono, solo el monitoreo y con fundido de 10 ms
+  (`PlaybackEngine.MonoCheck`), y **COR** bajo los LUFS: la correlación de la salida, en rojo bajo cero
+  (`Dsp/CorrelationTap.cs`, `ShowMasterCorrelation`). En gclab: `insertos … agregar puerta`, `--cadena …,puerta` y filas en `comprobar-dsp`.
+- 2026-10-28: Aviso de versión nueva: al abrir, la app compara su versión con la última release de GitHub
+  (`UpdateCheck` en `GuitarCam.Projects`, `MainWindow.Updates.cs`); toast con "Descargar" la primera vez, campanita
+  después, estado y casilla para apagarlo en "Acerca de". En gclab: `version`.
 - 2026-10-28: Entradas MIDI, etapa 4 del editor MIDI (ideada con el usuario): Configuración → MIDI con cada teclado o
   controlador (lucecita de actividad, nombre propio, prendido, canal, curva de velocidad, Notas / Perillas / Transporte;
   `SettingsDialog.Midi.cs`, `MidiSetup`, `config.json` "midi"), el teclado suena en la pista MIDI elegida y en las

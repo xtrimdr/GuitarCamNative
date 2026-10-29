@@ -88,6 +88,19 @@ public sealed class EqInsert(int sampleRate) : ITrackInsert
     public double TakeGrDb() => 0;
 }
 
+/// <summary>The noise gate as a slot: its reduction feeds the strip's meter like the compressor's.</summary>
+public sealed class GateInsert(int sampleRate) : ITrackInsert
+{
+    public NoiseGate Gate { get; } = new(sampleRate);
+    public string Kind => TrackInserts.Gate;
+    public int LatencySamples => 0;
+
+    public void Set(GateParams p) => Gate.Set(p);
+    public void Process(Span<float> left, Span<float> right) => Gate.Process(left, right);
+    public void Reset() => Gate.Reset();
+    public double TakeGrDb() => Gate.TakeGrDb();
+}
+
 /// <summary>
 /// The reverb as a slot, for a return's chain (<see cref="ReturnDspChain"/>): the same <see cref="ReverbBus"/> as the fixed
 /// Reverb return, so a return with only this slot sounds exactly like it. Off (<see cref="ReverbParams.Muted"/>) it is
@@ -164,6 +177,8 @@ public sealed record InsertSpec(string Id, string Kind)
     /// <summary>A delay slot's settings (<see cref="DelayParams.Muted"/> = off) and the tempo its note values follow.</summary>
     public DelayParams Delay { get; init; } = DelayParams.Defaults;
     public double Bpm { get; init; } = 120;
+    /// <summary>A gate slot's settings (<see cref="GateParams.On"/> = the slot is on).</summary>
+    public GateParams Gate { get; init; } = GateParams.Defaults;
 }
 
 /// <summary>
@@ -179,9 +194,10 @@ public static class TrackInserts
     public const string Eq = "eq";
     public const string Reverb = "reverb";
     public const string Delay = "delay";
+    public const string Gate = "gate";
     public static readonly string[] DefaultOrder = [Sat, Comp, Eq];
 
-    public static bool IsKind(string? kind) => kind is Sat or Comp or Eq or Reverb or Delay;
+    public static bool IsKind(string? kind) => kind is Sat or Comp or Eq or Reverb or Delay or Gate;
 
     /// <summary>The kinds only a return's chain offers (a track's and a folder's menus don't).</summary>
     public static bool ReturnOnly(string? kind) => kind is Reverb or Delay;
@@ -193,6 +209,7 @@ public static class TrackInserts
         Eq => new EqInsert(sampleRate),
         Reverb => new ReverbInsert(sampleRate),
         Delay => new DelayInsert(sampleRate),
+        Gate => new GateInsert(sampleRate),
         _ => throw new ArgumentException($"unknown insert kind '{kind}'", nameof(kind)),
     };
 
@@ -205,6 +222,7 @@ public static class TrackInserts
             case EqInsert e: e.Set(spec.EqOn, spec.EqBands); break;
             case ReverbInsert r: r.Set(spec.Reverb); break;
             case DelayInsert d: d.Set(spec.Delay, spec.Bpm); break;
+            case GateInsert g: g.Set(spec.Gate); break;
         }
     }
 

@@ -17,6 +17,7 @@ static class ProjectCommands
         if (sub == "verificar-historial") return HistoryCommands.Check();
         if (sub == "verificar-carpetas") return FolderChecks();
         if (sub == "verificar-marcadores") return MarkerChecks();
+        if (sub == "verificar-paquete") return PackageChecks.Run();
         string? dir = a.Positional.Skip(1).FirstOrDefault();
         if (dir == null) throw new ArgumentException("Falta la carpeta del proyecto.");
         dir = Path.GetFullPath(dir);
@@ -191,6 +192,15 @@ static class ProjectCommands
                 var preset = TrackPresets.All().Find(t => t.Id == id || string.Equals(t.Name, id, StringComparison.OrdinalIgnoreCase))
                     ?? throw new ArgumentException("No encontré esa plantilla de pista (gclab proyecto plantillas-de-pista).");
                 Console.WriteLine(TrackPresets.AddTo(p, preset, p.Settings.AudioOnly));
+                break;
+            case "aplicar-plantilla":
+                // pista (id o número) nombre: the preset's sound on that track, its takes kept
+                var onto = p.Tracks.Find(t => t.Id == id) ?? (int.TryParse(id, out int nt) && nt >= 1 && nt <= p.Tracks.Count ? p.Tracks[nt - 1] : null)
+                    ?? throw new ArgumentException("No encontré esa pista.");
+                var chosen = TrackPresets.All().Find(t => t.Id == value || string.Equals(t.Name, value, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new ArgumentException("No encontré esa plantilla de pista (gclab proyecto plantillas-de-pista).");
+                int skipped = TrackPresets.ApplyTo(p, onto, chosen);
+                Console.WriteLine($"{onto.Name}: suena como «{chosen.Name}» ({onto.Channel.Slots.Count} slots{(skipped > 0 ? $", {skipped} envíos a buses que no hay" : "")})");
                 break;
             case "borrar-rango":
                 // pista[,pista…] desde --hasta fin [--cerrar]: with --cerrar what follows slides left over the gap
@@ -452,7 +462,7 @@ static class ProjectCommands
         string id = a.Positional.ElementAtOrDefault(3) ?? "";
         string value = a.Positional.ElementAtOrDefault(4) ?? "";
         double Sec(string s) => double.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
-        if (op.Length > 0)
+        if (op.Length > 0 && op != "capitulos")
         {
             if (store.ReadOnly) throw new IOException(store.ReadOnlyReason);
             switch (op)
@@ -461,10 +471,18 @@ static class ProjectCommands
                 case "mover": ProjectMarkers.Move(p, id, Sec(value)); break;
                 case "renombrar": ProjectMarkers.Rename(p, id, value); break;
                 case "quitar": ProjectMarkers.Remove(p, id); break;
-                default: throw new ArgumentException("marcadores carpeta [agregar segundos [nombre] | mover id segundos | renombrar id nombre | quitar id]");
+                default: throw new ArgumentException("marcadores carpeta [agregar segundos [nombre] | mover id segundos | renombrar id nombre | quitar id | capitulos]");
             }
             p.AddLog("markers-edited", op);
             store.Save();
+        }
+        if (op == "capitulos")
+        {
+            // what "Copiar capítulos para YouTube" copies, for the project's length
+            var (text, problem) = ProjectMarkers.Chapters(p, p.Tracks.SelectMany(t => t.Clips).Select(c => ClipEditing.Window(c, p.FindMedia(c.MediaId)).End).DefaultIfEmpty(0).Max());
+            Console.WriteLine(text);
+            if (problem != null) Console.WriteLine($"Ojo: {problem}");
+            return 0;
         }
         if (p.Markers.Count == 0) Console.WriteLine("Sin marcadores.");
         foreach (var m in p.Markers) Console.WriteLine($"{m.Id} · {m.Sec,8:0.000} s · {m.Name}");
@@ -839,6 +857,21 @@ static class LibraryCommands
                 return 0;
             case "duplicar":
                 Console.WriteLine($"Copia: {ProjectLibrary.Duplicate(Path.GetFullPath(Need(arg1)))}");
+                return 0;
+            case "empaquetar":
+            {
+                string dir = Path.GetFullPath(Need(arg1));
+                var kind = a.Flag("completo") ? PackageKind.Backup : PackageKind.Share;
+                string name;
+                using (var s = ProjectStore.Open(dir)) name = s.Project.Name;
+                string zip = Path.GetFullPath(a.Get("salida") ?? Path.Combine(Path.GetDirectoryName(dir)!, ProjectLibrary.PackageFileName(name, kind)));
+                var packed = ProjectLibrary.Pack(dir, zip, kind);
+                Console.WriteLine($"Paquete {(kind == PackageKind.Backup ? "de respaldo" : "para compartir")}: {packed.File}");
+                Console.WriteLine($"  {packed.Files} archivos · {packed.Bytes / 1e6:0.0} MB{(packed.Missing > 0 ? $" · {packed.Missing} tomas que no estaban en el disco" : "")}");
+                return 0;
+            }
+            case "desempaquetar":
+                Console.WriteLine($"Proyecto: {ProjectLibrary.Unpack(Path.GetFullPath(Need(arg1)))}");
                 return 0;
             case "borrar":
                 ProjectLibrary.Delete(Path.GetFullPath(Need(arg1)));

@@ -26,7 +26,7 @@ public sealed class ProjectStore : IDisposable
     public const string HistoryDir = "historial";
     /// <summary>What can be made again from the media (transposed takes); deleting it only costs time.</summary>
     public const string CacheDir = "cache";
-    const string LockName = "guitarcam.lock";
+    public const string LockName = "guitarcam.lock";
     const string SnapshotStamp = "yyyy-MM-dd_HH-mm-ss";
 
     /// <summary>A new snapshot at most this often while saving.</summary>

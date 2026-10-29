@@ -34,3 +34,21 @@ static class SystemCommands
 
     static string Gb(long bytes) => (bytes / (1024.0 * 1024 * 1024)).ToString("0.0");
 }
+
+/// <summary>The update check of "Acerca de" without the window: this build's version against GitHub's latest release.</summary>
+static class VersionCommands
+{
+    public static int Run(Args a)
+    {
+        Console.WriteLine($"Esta versión: {GuitarCam.Projects.UpdateCheck.Current.ToString(3)}");
+        var latest = GuitarCam.Projects.UpdateCheck.LatestAsync().GetAwaiter().GetResult();
+        if (latest == null)
+        {
+            Console.WriteLine("No pude saber cuál es la última versión en GitHub (¿sin internet, sin releases o límite de la API?)");
+            return 1;
+        }
+        Console.WriteLine($"Última en GitHub: {latest.Version.ToString(3)} ({latest.Tag}) {latest.Url}");
+        Console.WriteLine(GuitarCam.Projects.UpdateCheck.IsNewer(latest) ? "Hay una versión nueva: la ventana avisa" : "Estás al día");
+        return 0;
+    }
+}

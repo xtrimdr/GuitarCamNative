@@ -634,6 +634,7 @@ static class DspCommands
         allOk &= MasterChecks(sr48);
         allOk &= TransposeCommands.Check();
         allOk &= InsertCommands.Check();
+        allOk &= GateChecks.Check();
         allOk &= BusCommands.Check();
         allOk &= MeterChecks.Check();
         allOk &= MidiCommands.Check();

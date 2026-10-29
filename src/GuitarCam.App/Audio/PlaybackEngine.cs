@@ -151,6 +151,17 @@ public sealed class PlaybackEngine : IDisposable
     public bool Calibrating => activeCalibration != null;
     public bool ClickOn { get; set; }
 
+    /// <summary>
+    /// Listen to the master in mono (the mixer's MONO): checks a doubled guitar or a stereo reverb for what cancels
+    /// when it plays on one speaker. Only what you hear: the meters, the loudness and the export stay stereo. Folds in
+    /// and out over <see cref="MonoFoldSamples"/>, so it never clicks.
+    /// </summary>
+    public bool MonoCheck { get; set; }
+    /// <summary>10 ms at 48 kHz.</summary>
+    const int MonoFoldSamples = 480;
+    // audio thread only: 0 = stereo, 1 = mono
+    float monoLevel;
+
     /// <summary>Disk error encountered by the active or last recording session, if any.</summary>
     public Exception? RecordingDiskError
     {
@@ -588,6 +599,20 @@ public sealed class PlaybackEngine : IDisposable
     /// node's input by its smoothstep, so the fade starts and ends without a corner; the buses run after it, so their
     /// tails ring on. Once at 0 the rest is silence.
     /// </summary>
+    /// <summary>Folds the master toward mono by <paramref name="level"/>, moving it toward <paramref name="on"/> sample by sample.</summary>
+    static void FoldMono(ref float level, bool on, Span<float> l, Span<float> r)
+    {
+        float target = on ? 1 : 0, step = 1f / MonoFoldSamples;
+        if (level == 0 && !on) return;
+        for (int i = 0; i < l.Length; i++)
+        {
+            if (level != target) level = on ? Math.Min(1, level + step) : Math.Max(0, level - step);
+            float mid = (l[i] + r[i]) * 0.5f;
+            l[i] += (mid - l[i]) * level;
+            r[i] += (mid - r[i]) * level;
+        }
+    }
+
     static void TransportRamp(ref float level, bool fadeIn, float rate, int n, float[] gain, Span<float> ml, Span<float> mr, BusDspChain[] nodes)
     {
         float x = level, step = fadeIn ? rate : -rate;
@@ -802,6 +827,8 @@ public sealed class PlaybackEngine : IDisposable
 
     /// <summary>The RMS of what goes out (the same signal as the master's peak), for the mixer's master meter.</summary>
     public RmsTap OutRms { get; } = new();
+    /// <summary>The master's correlation (after the limiter, before MONO and the click), for the mixer's COR.</summary>
+    public CorrelationTap Correlation { get; } = new();
 
     /// <summary>Peak levels since the last call (input 1-2 after pre-amp gain + soft limit, master out).</summary>
     public (float InL, float InR, float OutL, float OutR) TakeMeters()
@@ -969,6 +996,8 @@ public sealed class PlaybackEngine : IDisposable
             buses.Process(ml, mr);
             Loudness.Process(ml, mr);
             TruePeak.Process(ml, mr);
+            Correlation.Add(ml, mr, n);
+            FoldMono(ref monoLevel, MonoCheck, ml, mr);
 
             double beatLen = SampleRate * 60.0 / bpm;
             int limLatency = buses.Limiter.Latency;
@@ -1070,6 +1099,8 @@ public sealed class PlaybackEngine : IDisposable
             // naturally in real time (matching MixBus in the web app).
             for (int i = 0; i < curNodes.Length; i++) curNodes[i].End(n, ml, mr);
             buses.Process(ml, mr);
+            Correlation.Add(ml, mr, n);
+            FoldMono(ref monoLevel, MonoCheck, ml, mr);
             float ol = outL, or = outR;
             for (int i = 0; i < n; i++)
             {

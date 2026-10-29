@@ -100,6 +100,33 @@ public static class TrackPresets
     }
 
     /// <summary>
+    /// Puts the preset's sound on a track that already exists: its effect slots (with new ids, so the engine starts
+    /// them fresh instead of mixing them up with the old ones), fader, pan and its send levels to the buses this project
+    /// also has (a bus it doesn't have is skipped; a send the preset has none for stays as it was). What belongs to the
+    /// track and not to the sound stays: takes, name, color, icon, input, output, mute, solo and Transponer. The
+    /// caller measures the compressors again against the track's takes. Returns how many sends it skipped.
+    /// </summary>
+    public static int ApplyTo(Project p, Track t, TrackPreset preset)
+    {
+        var src = ProjectLibrary.Clone(preset.Channel);
+        src.Normalize();
+        var ch = t.Channel;
+        var slots = src.Slots;
+        foreach (var s in slots) s.Id = Ids.New("fx");
+        ch.Inserts = slots;
+        ch.Volume = src.Volume;
+        ch.Pan = src.Pan;
+        int skipped = 0;
+        foreach (var s in src.Sends)
+        {
+            if (ProjectBuses.SetSend(p, ch, s.BusId, s.Level, s.On, s.Pre) is { } mine) mine.Hidden = s.Hidden;
+            else skipped++;
+        }
+        t.Normalize();
+        return skipped;
+    }
+
+    /// <summary>
     /// Adds an empty track from the preset at the end (in solo audio projects without a panel); its compressor's raw
     /// values get computed again from the first take, like a template's. Returns its id.
     /// </summary>

@@ -58,7 +58,7 @@ static class InsertCommands
             "duplicar" => ChannelInserts.Duplicate(slots, Id(v1)) != null,
             "prender" or "apagar" => Toggle(slots.Find(s => s.Id == Id(v1))!, op == "prender"),
             "plegar" => Fold(slots.Find(s => s.Id == Id(v1))!),
-            _ => throw new ArgumentException("insertos: agregar vida|comp|eq (y reverb|delay en un bus) | quitar n | mover n m | duplicar n | prender n | apagar n | plegar n"),
+            _ => throw new ArgumentException("insertos: agregar vida|comp|eq|puerta (y reverb|delay en un bus) | quitar n | mover n m | duplicar n | prender n | apagar n | plegar n"),
         };
         if (changed)
         {
@@ -83,7 +83,8 @@ static class InsertCommands
         "sat" or "vida" or "valvula" or "saturacion" => TrackInserts.Sat,
         "comp" or "compresor" => TrackInserts.Comp,
         "eq" => TrackInserts.Eq,
-        _ => throw new ArgumentException($"No conozco el efecto «{name}»: vida, comp o eq."),
+        "puerta" or "gate" => TrackInserts.Gate,
+        _ => throw new ArgumentException($"No conozco el efecto «{name}»: vida, comp, eq o puerta."),
     };
 
     /// <summary>The kind to add to a chain: a return's also takes reverb and delay.</summary>
@@ -115,6 +116,7 @@ static class InsertCommands
             InsertSlot.CompKind => $"{on} Compresor {s.Comp!.Preset} {s.Comp.Amount * 100:0}%{(s.Comp.Limit ? " + lim" : "")}",
             InsertSlot.EqKind => $"{on} EQ {s.Eq!.Bands.Count(b => b.On)} bandas activas",
             InsertSlot.ReverbKind => $"{on} Reverb {ReverbPreset(s.Reverb!)}{s.Reverb!.Decay:0.0} s",
+            InsertSlot.GateKind => $"{on} Puerta {(s.Gate!.Mode switch { "soft" => "suave", "hard" => "firme", _ => "normal" })} {s.Gate.Threshold:0.#} dB",
             InsertSlot.DelayKind => $"{on} Delay {(s.Delay!.Sync ? s.Delay.Division : $"{s.Delay.TimeMs:0} ms")} · repite {s.Delay.Feedback * 100:0}%",
             _ => $"--- {s.Type} (desconocido: se guarda tal cual y no suena)",
         } + $"  [{s.Id}]";
@@ -131,6 +133,7 @@ static class InsertCommands
         {
             TrackInserts.Sat => new InsertSpec($"s{i}", TrackInserts.Sat) { Sat = sat },
             TrackInserts.Comp => new InsertSpec($"s{i}", TrackInserts.Comp) { Comp = comp },
+            TrackInserts.Gate => new InsertSpec($"s{i}", TrackInserts.Gate) { Gate = GateParams.Defaults with { On = true } },
             _ => new InsertSpec($"s{i}", TrackInserts.Eq) { EqOn = eqOn, EqBands = eqBands },
         }).ToArray();
     }

@@ -114,6 +114,25 @@ public partial class MainWindow
         else if (!next) engine.Seek(0);
     }
 
+    /// <summary>
+    /// Copies the markers as YouTube chapters ("0:00 Intro"…, <see cref="ProjectMarkers.Chapters"/>) to paste in the
+    /// video's description; the toast says if YouTube would ignore them and why.
+    /// </summary>
+    async Task CopyChapters()
+    {
+        if (store == null || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return;
+        var (text, problem) = ProjectMarkers.Chapters(store.Project, engine.LengthSec);
+        try
+        {
+            await clipboard.SetTextAsync(text);
+            Toast(problem == null ? Loc.T("marker.chapters.done") : Loc.T("marker.chapters.warn", problem));
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            Status(Loc.T("marker.chapters.fail"));
+        }
+    }
+
     /// <summary>The strip's right click: on a marker, the marker's things; elsewhere, adding one and the range.</summary>
     void ShowStripMenu(Marker? marker, double sec, Point point)
     {
@@ -158,6 +177,8 @@ public partial class MainWindow
             }, Key("loopOut"), sec >= ProjectMarkers.MinLoopSec));
             list.Add(MenuAction(Loc.T("loop.clear"), () => { ClearLoopRange(); return Task.CompletedTask; }, enabled: loop != null, tip: Loc.T("loop.clear.tip")));
         }
+        list.Add(new Separator());
+        list.Add(MenuAction(Loc.T("marker.chapters"), CopyChapters, enabled: store.Project.Markers.Count > 0, icon: "", tip: Loc.T("marker.chapters.tip")));
         OpenTimelineMenu(Popup(list, 240), point, MenuHeight(list));
 
         static string? Key(string id) => Shortcuts.Label(id) is { Length: > 0 } k ? k : null;

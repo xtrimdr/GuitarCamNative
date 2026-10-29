@@ -143,11 +143,14 @@ public static class ChannelDsp
                 InsertSlot.CompKind => new InsertSpec(s.Id, s.Type) { Comp = Comp(s.Comp!) },
                 InsertSlot.ReverbKind => new InsertSpec(s.Id, s.Type) { Reverb = Reverb(s.Reverb!) },
                 InsertSlot.DelayKind => new InsertSpec(s.Id, s.Type) { Delay = Delay(s.Delay!), Bpm = bpm },
+                InsertSlot.GateKind => new InsertSpec(s.Id, s.Type) { Gate = Gate(s.Gate!) },
                 _ => new InsertSpec(s.Id, s.Type) { EqOn = s.Eq!.On, EqBands = EqBands(s.Eq) },
             });
         }
         return [.. list];
     }
+
+    public static GateParams Gate(GateSettings g) => new(g.On, GateParams.ParseMode(g.Mode), g.Threshold);
 
     public static SatParams Sat(SatSettings s, double rmsDb) =>
         SatParams.From(s.On, s.Mode == "tape" ? SatMode.Tape : SatMode.Tube, s.Amount, rmsDb);

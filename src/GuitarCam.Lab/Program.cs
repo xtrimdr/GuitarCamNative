@@ -35,6 +35,7 @@ static class Program
                 "nitidez" => DetailCommands.Run(a),
                 "camara" => CameraCommands.Run(a),
                 "sistema" => SystemCommands.Run(a),
+                "version" => VersionCommands.Run(a),
                 "proyecto" => ProjectCommands.Run(a),
                 "midi" => MidiCommands.Run(a),
                 "vst" => VstCommands.Run(a),
@@ -74,7 +75,7 @@ static class Program
                                            aplica efectos de pista y buses a un WAV
               mezclar   carpeta-proyecto|entrada.wav [--salida mezcla.wav] [--segundos N]
                         [--sat valvula|cinta] [--vida 0.3] [--comp] [--comp-estilo rhythm|arpeggio|lead] [--comp-cant 0.5]
-                        [--eq rhythm|lead|acoustic|front] [--cadena vida,comp,eq]
+                        [--eq rhythm|lead|acoustic|front] [--cadena vida,comp,eq,puerta]
                                            renderiza la mezcla completa offline (sin la demora del limitador); con un WAV,
                                            --cadena arma los slots de la pista en ese orden (se pueden repetir: eq,vida,eq)
               exportar  [carpeta-proyecto] [--salida nombre] [--carpeta destino] [--calidad alta|estandar|borrador]
@@ -142,6 +143,7 @@ static class Program
                                            corta una grabación a la mitad (con y sin FFmpeg) y comprueba que el video quede
               sistema   [--segundos 5]     muestra CPU, GPU y RAM cada 1,5 s como la barra de arriba, si está FFmpeg
                                            y con qué placa de video exporta
+              version                      esta versión contra la última release de GitHub (el aviso de "Acerca de")
               proyecto abrir    carpeta    abre un proyecto nativo y muestra pistas, avisos e historial
               proyecto versiones carpeta   lista las versiones guardadas, de más nueva a más vieja
               proyecto volver   carpeta n  restaura la versión n y conserva el estado actual en el historial
@@ -174,23 +176,24 @@ static class Program
               proyecto editar carpeta lado id izquierda|derecha   de qué lado del mixer va la tira (pista, carpeta, separador o bus)
               proyecto editar carpeta transponer pista semitonos   cambia el tono de la pista sin cambiar el largo (-12..+12, 0 = original)
                                            y deja sus tomas transpuestas en cache/ (como el Transponer del inspector)
-              proyecto editar carpeta guardar-plantilla pista [nombre] | usar-plantilla id|nombre   plantillas de pista (pistas.json)
+              proyecto editar carpeta guardar-plantilla pista [nombre] | usar-plantilla id|nombre | aplicar-plantilla pista nombre   plantillas de pista (pistas.json)
               proyecto plantillas-de-pista x   lista las plantillas de pista guardadas
               proyecto verificar-carpetas  verifica el orden de carpetas y pistas, mover adentro y afuera, quitar y deshacer
-              proyecto marcadores carpeta [agregar segundos [nombre] | mover id segundos | renombrar id nombre | quitar id]
+              proyecto marcadores carpeta [agregar segundos [nombre] | mover id segundos | renombrar id nombre | quitar id | capitulos]
                                            los marcadores del tema (Intro, Solo…); sin operación, los lista
               proyecto repetir carpeta [desde hasta | --quitar]   el rango A–B que repite el loop; sin nada, lo muestra
               proyecto duracion carpeta           cuánto dura el tema y si entra en cada red (historias, X, Reels, TikTok)
               proyecto verificar-marcadores verifica orden, nombres, saltos, deshacer y guardado de marcadores y del rango A–B
+              proyecto verificar-paquete   empaqueta un proyecto con una toma de afuera y lo desempaqueta: lo que suena, el respaldo y un ZIP tramposo
               proyecto editar carpeta ganancia clip dB | curva clip "seg:dB,..."   volumen del clip y su curva (seg desde el inicio de la toma)
               proyecto verificar-tomas     verifica a qué pista va una toma nueva, su nombre y su canal
               proyecto importar-audio carpeta archivo [--en segundos] [--pista id]   copia un audio de afuera a media/ y lo pone en una pista
               proyecto verificar-importar  verifica la importación de audio (formato, nombres, archivos rotos)
-              proyecto insertos carpeta pista [agregar vida|comp|eq [--en n] | quitar n | mover n m | duplicar n | prender n | apagar n | plegar n]
+              proyecto insertos carpeta pista [agregar vida|comp|eq|puerta [--en n] | quitar n | mover n m | duplicar n | prender n | apagar n | plegar n]
                                            los slots de efectos de la pista (número o id), en el orden en que suenan; sin
                                            operación, los lista. Como el menú de cada efecto en la tira ancha del mixer;
                                            plegar n lo pliega o despliega en el mixer (no cambia el sonido)
-              proyecto insertos carpeta --bus id|n [agregar reverb|delay|vida|comp|eq … | quitar n | …]
+              proyecto insertos carpeta --bus id|n [agregar reverb|delay|vida|comp|eq|puerta … | quitar n | …]
                                            lo mismo para un bus (la reverb y el delay solo van en buses)
               proyecto buses carpeta [agregar [nombre] [--tipo reverb|delay|vacio] | quitar n | renombrar n nombre |
                         volumen n 0.8 | paneo n -0.3 | mute n]
@@ -243,6 +246,9 @@ static class Program
               proyectos lista|plantillas [--raiz X]
               proyectos nuevo "Nombre" [--plantilla id] | renombrar carpeta "Nombre" | duplicar carpeta
               proyectos borrar carpeta | guardar-plantilla carpeta "Nombre"
+              proyectos empaquetar carpeta [--completo] [--salida x.zip] | desempaquetar x.zip
+                                           el proyecto en un ZIP (solo lo que suena, o con --completo todas las tomas,
+                                           versiones y exportaciones) y de vuelta a un proyecto nuevo
               proyectos previsualizar "Nombre" | olvidar carpeta | carpeta ruta
               proyectos buscar carpeta     qué abre "Abrir carpeta" con esa carpeta (el proyecto, uno adentro, vacía, de la web…)
               proyectos borrar-plantilla id

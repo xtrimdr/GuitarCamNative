@@ -66,8 +66,8 @@ More details in [Requirements](#requirements).
 ### Mix
 
 - A per-track effects chain: saturation (**Vida**, tube or tape), a **compressor** with presets (Strumming /
-  Arpeggio / Lead), a **6-band EQ** with live spectrum, and sends to **reverb** and **delay**, plus a master limiter
-  and pan templates.
+  Arpeggio / Lead), a **6-band EQ** with live spectrum, a **noise gate** for the hum between phrases, and sends to
+  **reverb** and **delay**, plus a master limiter, a **MONO** button to check the mix and pan templates.
 - A full **mixer** with **buses**: every track or folder picks its output (the master or a bus) and sends to the
   buses (before or after the fader); the buses go to the master. A bus has volume, pan and effects, so it works for a reverb, a delay or to process
   a group. Folders only group. Strips are reordered by dragging them in the mixer (the timeline follows), sit on the
@@ -95,7 +95,8 @@ More details in [Requirements](#requirements).
 
 - **Never loses anything**: atomic saving (after every edit, every X minutes or by hand with Ctrl+S or the disk
   button, chosen in Settings → Saving and export; takes are always saved), copies in `historial/` to go back, recovery of
-  interrupted recordings and a project manager with a Recycle Bin.
+  interrupted recordings and a project manager with a Recycle Bin and **ZIP packages** to take a project to another
+  computer or keep a full backup.
 - Configurable language, theme and keyboard shortcuts.
 
 ## Where it is going

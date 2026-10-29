@@ -68,6 +68,7 @@ public sealed partial class ProjectsDialog : UserControl
         CloseButton.Click += (_, _) => Cancel();
         NewButton.Click += (_, _) => StartNew();
         OpenFolderButton.Click += async (_, _) => await OpenFolder();
+        UnpackButton.Click += async (_, _) => await Unpack();
         SearchBox.TextChanged += (_, _) => RenderList();
         NewCancel.Click += (_, _) => SetDraft(null);
         NewCreate.Click += async (_, _) => await SubmitDraft();
@@ -383,6 +384,72 @@ public sealed partial class ProjectsDialog : UserControl
         }, Loc.T("proj.err.duplicate"));
     }
 
+    /// <summary>The row's package button: a small menu with the two kinds, then where to save the ZIP.</summary>
+    void ShowPackMenu(ProjectLibrary.Summary p, Control anchor)
+    {
+        var menu = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
+        foreach (var (kind, key) in new[] { (PackageKind.Share, "proj.pack.share"), (PackageKind.Backup, "proj.pack.backup") })
+        {
+            var item = new MenuItem { Header = new StackPanel { Spacing = 1, Children =
+            {
+                new TextBlock { Text = Loc.T(key), FontSize = 12 },
+                new TextBlock { Text = Loc.T(key + ".hint"), FontSize = 10.5, Foreground = Res("Faint") },
+            } } };
+            item.Click += async (_, _) => await Pack(p, kind);
+            menu.Items.Add(item);
+        }
+        menu.ShowAt(anchor);
+    }
+
+    async Task Pack(ProjectLibrary.Summary p, PackageKind kind)
+    {
+        var sp = TopLevel.GetTopLevel(this)?.StorageProvider;
+        if (sp == null || busy != null) return;
+        var file = await sp.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = Loc.T(kind == PackageKind.Backup ? "proj.pack.backup" : "proj.pack.share"),
+            SuggestedFileName = ProjectLibrary.PackageFileName(p.Name, kind),
+            DefaultExtension = "zip",
+            FileTypeChoices = [new FilePickerFileType("ZIP") { Patterns = ["*.zip"] }],
+            ShowOverwritePrompt = true,
+        });
+        if (file?.TryGetLocalPath() is not { } zip) return;
+        // a package inside its own project would pack itself in the next backup
+        if (System.IO.Path.GetFullPath(zip).StartsWith(System.IO.Path.GetFullPath(p.Dir) + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            error = Loc.T("proj.pack.inside");
+            RenderAll();
+            return;
+        }
+        bool isCurrent = Same(p.Dir, CurrentDir);
+        await Run($"pack:{p.Dir}", async () =>
+        {
+            // the package reads the project from disk: what the window has goes there first
+            if (isCurrent && FlushCurrent != null) await FlushCurrent();
+            var res = await Task.Run(() => ProjectLibrary.Pack(p.Dir, zip, kind));
+            notice = Loc.T("proj.pack.done", System.IO.Path.GetFileName(res.File), GuitarCam.Audio.Mp4Exporter.FormatBytes(res.Bytes))
+                + (res.Missing > 0 ? " " + Loc.T("proj.pack.missing", res.Missing) : "");
+            Explorer.Select(res.File);
+        }, Loc.T("proj.err.pack"));
+    }
+
+    async Task Unpack() =>
+        await Run("__unpack", async () =>
+        {
+            var sp = TopLevel.GetTopLevel(this)?.StorageProvider;
+            if (sp == null) return;
+            var picked = await sp.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = Loc.T("proj.unpack.pick"),
+                FileTypeFilter = [new FilePickerFileType("ZIP") { Patterns = ["*.zip"] }],
+            });
+            if (picked.FirstOrDefault()?.TryGetLocalPath() is not { } zip) return;
+            string dir = await Task.Run(() => ProjectLibrary.Unpack(zip));
+            var list = await Refresh();
+            highlight = dir;
+            notice = Loc.T("proj.unpack.done", list?.Find(x => Same(x.Dir, dir))?.Name ?? System.IO.Path.GetFileName(dir));
+        }, Loc.T("proj.err.unpack"));
+
     async Task Remove(ProjectLibrary.Summary p) =>
         await Run($"del:{p.Dir}", async () =>
         {
@@ -463,6 +530,9 @@ public sealed partial class ProjectsDialog : UserControl
         bool idle = busy == null;
         NewButton.IsEnabled = idle;
         OpenFolderButton.IsEnabled = idle;
+        UnpackButton.IsEnabled = idle;
+        UnpackIcon.IsVisible = busy != "__unpack";
+        UnpackSpin.IsVisible = busy == "__unpack";
         ChangeRoot.IsEnabled = idle;
         RevealRoot.IsEnabled = root.Length > 0;
         bool picking = busy == "__pick";
@@ -666,6 +736,9 @@ public sealed partial class ProjectsDialog : UserControl
                     actions.Children.Add(RowAction("", Loc.T("proj.saveTemplate.tip"),
                         () => SetDraft(new Draft(DraftKind.Template, p.Name, p.Dir))));
                 actions.Children.Add(RowAction("", Loc.T("menu.duplicate"), async () => await Duplicate(p)));
+                Button? pack = null;
+                pack = RowAction("", Loc.T("proj.pack.tip"), () => ShowPackMenu(p, pack!));
+                actions.Children.Add(pack);
                 actions.Children.Add(RowAction("", Loc.T("proj.reveal.tip"), () => Reveal(p.Dir)));
                 var del = RowAction("", isCurrent ? Loc.T("proj.deleteCurrent") : Loc.T("hist.delete"), () =>
                 {

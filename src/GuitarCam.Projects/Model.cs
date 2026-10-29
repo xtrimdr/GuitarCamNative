@@ -836,10 +836,10 @@ public sealed class Bus : IRouted
 public sealed class InsertSlot
 {
     public const string SatKind = Dsp.TrackInserts.Sat, CompKind = Dsp.TrackInserts.Comp, EqKind = Dsp.TrackInserts.Eq,
-        ReverbKind = Dsp.TrackInserts.Reverb, DelayKind = Dsp.TrackInserts.Delay;
+        ReverbKind = Dsp.TrackInserts.Reverb, DelayKind = Dsp.TrackInserts.Delay, GateKind = Dsp.TrackInserts.Gate;
 
     public string Id { get; set; } = Ids.New("fx");
-    /// <summary>sat | comp | eq | reverb | delay (the last two, in a return's chain)</summary>
+    /// <summary>sat | comp | eq | gate | reverb | delay (the last two, in a return's chain)</summary>
     public string Type { get; set; } = EqKind;
     public SatSettings? Sat { get; set; }
     public CompSettings? Comp { get; set; }
@@ -847,6 +847,7 @@ public sealed class InsertSlot
     /// <summary>A reverb or delay slot's settings; their <c>Muted</c> is the slot's OFF.</summary>
     public ReverbSettings? Reverb { get; set; }
     public DelaySettings? Delay { get; set; }
+    public GateSettings? Gate { get; set; }
     /// <summary>
     /// Folded in the mixer (asked by the user): only its title row, with a summary, so a long chain fits. A view choice
     /// kept with the project, like a folder's fold; it changes nothing in the sound.
@@ -863,7 +864,7 @@ public sealed class InsertSlot
         get => Type switch
         {
             SatKind => Sat?.On == true, CompKind => Comp?.On == true, EqKind => Eq?.On == true,
-            ReverbKind => Reverb?.Muted == false, DelayKind => Delay?.Muted == false, _ => false,
+            ReverbKind => Reverb?.Muted == false, DelayKind => Delay?.Muted == false, GateKind => Gate?.On == true, _ => false,
         };
         set
         {
@@ -875,6 +876,7 @@ public sealed class InsertSlot
                 case EqKind: Eq!.On = value; break;
                 case ReverbKind: Reverb!.Muted = !value; break;
                 case DelayKind: Delay!.Muted = !value; break;
+                case GateKind: Gate!.On = value; break;
             }
         }
     }
@@ -902,12 +904,31 @@ public sealed class InsertSlot
         if (string.IsNullOrEmpty(Id)) Id = Ids.New("fx");
         switch (Type)
         {
-            case SatKind: Sat ??= new(); Comp = null; Eq = null; Reverb = null; Delay = null; break;
-            case CompKind: Comp ??= new(); Comp.Eq ??= new(); Sat = null; Eq = null; Reverb = null; Delay = null; break;
-            case EqKind: Eq ??= new(); Eq.Normalize(); Sat = null; Comp = null; Reverb = null; Delay = null; break;
-            case ReverbKind: Reverb ??= new(); Sat = null; Comp = null; Eq = null; Delay = null; break;
-            case DelayKind: Delay ??= new(); Delay.Mode ??= "stereo"; Delay.Division ??= "1/8."; Sat = null; Comp = null; Eq = null; Reverb = null; break;
+            case SatKind: Sat ??= new(); Comp = null; Eq = null; Reverb = null; Delay = null; Gate = null; break;
+            case CompKind: Comp ??= new(); Comp.Eq ??= new(); Sat = null; Eq = null; Reverb = null; Delay = null; Gate = null; break;
+            case EqKind: Eq ??= new(); Eq.Normalize(); Sat = null; Comp = null; Reverb = null; Delay = null; Gate = null; break;
+            case ReverbKind: Reverb ??= new(); Sat = null; Comp = null; Eq = null; Delay = null; Gate = null; break;
+            case DelayKind: Delay ??= new(); Delay.Mode ??= "stereo"; Delay.Division ??= "1/8."; Sat = null; Comp = null; Eq = null; Reverb = null; Gate = null; break;
+            case GateKind: Gate ??= new(); Gate.Normalize(); Sat = null; Comp = null; Eq = null; Reverb = null; Delay = null; break;
         }
+    }
+}
+
+/// <summary>
+/// The noise gate: how much it closes (<see cref="Mode"/>: soft | normal | hard, <see cref="Dsp.GateParams"/>) and where
+/// it opens (dBFS, absolute: the noise it removes doesn't depend on the take's level the way Vida does).
+/// </summary>
+public sealed class GateSettings
+{
+    public bool On { get; set; }
+    public string Mode { get; set; } = Dsp.GateParams.Normal;
+    public double Threshold { get; set; } = Dsp.GateParams.DefaultThresholdDb;
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+
+    internal void Normalize()
+    {
+        Mode = Dsp.GateParams.ParseMode(Mode);
+        Threshold = double.IsFinite(Threshold) ? Math.Clamp(Threshold, Dsp.GateParams.MinThresholdDb, Dsp.GateParams.MaxThresholdDb) : Dsp.GateParams.DefaultThresholdDb;
     }
 }
 

@@ -76,8 +76,8 @@ Más detalles en [Requisitos](#requisitos).
 ### Mezclar
 
 - Cadena de efectos por pista: saturación (**Vida**, válvula o cinta), **compresor** con presets (Rasgueo / Arpegio /
-  Punteo), **EQ de 6 bandas** con espectro en vivo, y envíos a **reverb** y **delay**, más limitador master y paneo
-  con plantillas.
+  Punteo), **EQ de 6 bandas** con espectro en vivo, **puerta de ruido** para el zumbido entre frases, y envíos a
+  **reverb** y **delay**, más limitador master, botón **MONO** para chequear la mezcla y paneo con plantillas.
 - **Transponer** por pista (−12 a +12 semitonos) sin cambiar el largo, así la toma sigue en sincronía con el video:
   se calcula en segundo plano (unos 4 s por 3 min) con un vocoder de fase de alta calidad, se ve el progreso sobre los
   clips y queda guardada en `cache/`.
@@ -109,7 +109,8 @@ Más detalles en [Requisitos](#requisitos).
 
 - **No pierde nada**: guardado atómico (solo después de cada edición, cada X minutos o a mano con Ctrl+S o el
   diskette, a elección en Configuración → Guardado y exportación; las tomas se guardan siempre), copias en `historial/` para volver
-  atrás, recuperación de grabaciones interrumpidas y un gestor de proyectos con Papelera.
+  atrás, recuperación de grabaciones interrumpidas y un gestor de proyectos con Papelera y **paquetes ZIP** para
+  mandar un proyecto a otra compu o guardar un respaldo completo.
 - Idiomas, tema, atajos de teclado y diseño de la ventana (Clásico o Vertical, para videos 9:16) configurables.
 
 ## Hacia dónde va
@@ -253,12 +254,13 @@ la consola, sin abrir la ventana.
 | `dispositivos` / `panel` | drivers ASIO y dispositivos WASAPI / panel del driver (tamaño de buffer) |
 | `latencia [--modo cable\|tocando] [--ver] [--borrar]` | mide la latencia ida y vuelta, o muestra / borra la guardada |
 | `grabar --monitor --sat valvula` | graba sobre el click; con `--monitor` te escuchás con el efecto (también `--ganancia`, `--descartar`, `--entradas 1,2,3-4`) |
-| `mezclar proyecto\|toma.wav [--salida mezcla.wav] [--cadena vida,comp,eq]` | renderiza la mezcla offline, con el mismo grafo que la reproducción; con un WAV, `--cadena` arma los slots en ese orden (se pueden repetir) |
+| `mezclar proyecto\|toma.wav [--salida mezcla.wav] [--cadena vida,comp,eq,puerta]` | renderiza la mezcla offline, con el mismo grafo que la reproducción; con un WAV, `--cadena` arma los slots en ese orden (se pueden repetir) |
 | `procesar toma.wav --sat cinta --comp-estilo punteo --eq ritmica --reverb cuarto --delay punteada` | aplica efectos a un WAV |
 | `click` | escribe todos los sonidos de click a un WAV |
 | `sistema [--segundos 5]` | CPU, GPU y RAM, si FFmpeg está en el PATH y con qué placa de video exporta |
+| `version` | esta versión contra la última release de GitHub (lo que avisa la ventana y muestra "Acerca de") |
 | `espectro [toma.wav]` | el espectro en vivo del EQ |
-| `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas, reinicio de la cadena, afinador, LUFS y mastering (bandas que suman plano, reducción por banda sin importar el nivel, Cinta, Ancho (graves mono y mismo volumen), soft clip, limitador prendido y apagado) y slots de efectos (un canal viejo migrado suena idéntico a la cadena fija, repetir, reordenar, cambio de lista sin saltos); además Nitidez, Claridad y Resplandor (un cuadro plano queda igual, un borde se marca, una luz en lo oscuro deja su halo de su color, los looks HDR y Soñado suman lo suyo solo con el filtro prendido) |
+| `comprobar-dsp` | comprobaciones propias del DSP: remuestreo, tomas, reinicio de la cadena, afinador, LUFS y mastering (bandas que suman plano, reducción por banda sin importar el nivel, Cinta, Ancho (graves mono y mismo volumen), soft clip, limitador prendido y apagado) y slots de efectos (un canal viejo migrado suena idéntico a la cadena fija, repetir, reordenar, cambio de lista sin saltos), puerta de ruido (baja el zumbido, deja pasar la nota, no aletea cuando una nota se apaga); además Nitidez, Claridad y Resplandor (un cuadro plano queda igual, un borde se marca, una luz en lo oscuro deja su halo de su color, los looks HDR y Soñado suman lo suyo solo con el filtro prendido) |
 | `looks [--look id] [--salida look.cube] [--blancos n] [--negros n] [--luz n]` | los looks de color con colores de prueba, comprobación de rango y, con `--look`, el LUT `.cube` de ese look con Blancos, Negros y Sensación de luz |
 | `masterizar archivo.wav [--cuanto 0.35] [--banda-graves\|--banda-medios\|--banda-agudos 0..1] [--corte] [--barro] [--graves] [--presencia] [--aire] [--inclinacion] [--cinta] [--ancho] [--graves-mono] [--recorte] [--empuje] [--techo] [--release] [--sin-limitador] [--volumen youtube\|instagram\|tiktok\|spotify\|apple] [--pua 0..1] [--look natural\|glue\|bright\|warm\|front\|pick [--cuanto-look 1]] [--sugerime]` | el mastering de la ventana sobre un WAV: cuánto comprime cada banda (y la Púa), cuánto recortan el soft clip (Auto incluido) y el limitador y los LUFS de entrada y salida; `--volumen` es el Destino del master (mide el archivo y usa esa ganancia en vez del Empuje), `--look` pone un look, `--sugerime` muestra qué oye y qué propone, y masteriza con eso |
 | `midi ver\|pista\|clip\|nota\|acordes\|quitar carpeta` | pistas MIDI, sus clips y sus notas (`clip --pista n --en 0 --compases 4`, `nota --clip id --altura C4 --pulso 0 --largo 1 --vel 100`, `acordes --clip id` escribe Do, Sol, Lam, Fa); `mezclar carpeta` las renderiza |
@@ -290,18 +292,19 @@ la consola, sin abrir la ventana.
 | `proyecto editar carpeta transicion clip corte\|fundido\|negro [--segundos 0.5]`, `proyecto transiciones carpeta` | la transición que entra a ese clip (imagen y sonido) y la lista de uniones de cada pista |
 | `proyecto editar carpeta nueva-carpeta\|a-carpeta\|sacar-de-carpeta\|mover-carpeta\|quitar-carpeta\|carpeta …` | carpetas de pistas: agrupar, mover adentro y afuera, renombrar y plegar |
 | `proyecto editar carpeta nuevo-separador [nombre] [--en n] [--visible] \| lado id izquierda\|derecha` | separadores con nombre (nacen ocultos en el timeline salvo `--visible`; `carpeta id --ocultar` lo alterna) y de qué lado del mixer va cada tira |
-| `proyecto editar carpeta guardar-plantilla pista [nombre] \| usar-plantilla nombre`, `proyecto plantillas-de-pista x` | plantillas de pista (`pistas.json`) |
+| `proyecto editar carpeta guardar-plantilla pista [nombre] \| usar-plantilla nombre \| aplicar-plantilla pista nombre`, `proyecto plantillas-de-pista x` | plantillas de pista (`pistas.json`) |
 | `proyecto encuadre\|sincronia\|formato\|modo carpeta …` | encuadre del clip, ajuste de sincronía, formato del video y modo Video / Solo audio |
 | `proyecto importar-audio carpeta archivo` | copia un audio de afuera a `media/` y lo pone en una pista |
-| `proyecto marcadores carpeta [agregar\|mover\|renombrar\|quitar …]`, `proyecto repetir carpeta [desde hasta \| --quitar]` | marcadores del tema y rango A–B del loop |
+| `proyecto marcadores carpeta [agregar\|mover\|renombrar\|quitar … \| capitulos]`, `proyecto repetir carpeta [desde hasta \| --quitar]` | marcadores del tema y rango A–B del loop (`capitulos`: los marcadores como capítulos de YouTube) |
 | `proyecto duracion carpeta` | cuánto dura el tema y si entra en cada red (historias, X, Reels · Shorts, TikTok) |
 | `proyecto historial carpeta` | tomas en uso y no usadas, exportaciones y actividad |
-| `proyecto insertos carpeta pista [agregar vida\|comp\|eq [--en n] \| quitar n \| mover n m \| duplicar n \| prender n \| apagar n \| plegar n]` | los slots de efectos de la pista en su orden; sin operación, los lista (`plegar` lo pliega en el mixer) |
-| `proyecto insertos carpeta --bus id\|n [agregar reverb\|delay\|vida\|comp\|eq … \| quitar n \| …]` | lo mismo para un bus (la reverb y el delay solo van en buses) |
+| `proyecto insertos carpeta pista [agregar vida\|comp\|eq\|puerta [--en n] \| quitar n \| mover n m \| duplicar n \| prender n \| apagar n \| plegar n]` | los slots de efectos de la pista en su orden; sin operación, los lista (`plegar` lo pliega en el mixer) |
+| `proyecto insertos carpeta --bus id\|n [agregar reverb\|delay\|vida\|comp\|eq\|puerta … \| quitar n \| …]` | lo mismo para un bus (la reverb y el delay solo van en buses) |
 | `proyecto buses carpeta [agregar [nombre] [--tipo reverb\|delay\|vacio] \| quitar n \| renombrar n nombre \| volumen n x \| paneo n x \| mute n]` | los buses, en el orden en que suenan, con sus slots, su salida y sus envíos; quitar uno se lleva los envíos que le llegaban |
 | `proyecto envios carpeta quien [bus [nivel] [--pre\|--post] [--apagar\|--prender] [--quitar\|--sumar]] [--salida bus\|master]` | la salida y los envíos de una pista (número o id) o `carpeta:n`; un bus (`bus:n`) sale solo al master, así que lo rechaza; `--quitar`/`--sumar` saca o vuelve a poner un bus en su lista |
-| `proyecto verificar-deshacer\|verificar-clips\|verificar-tomas\|verificar-importar\|verificar-historial\|verificar-carpetas\|verificar-marcadores` | pruebas automáticas sobre una carpeta temporal |
+| `proyecto verificar-deshacer\|verificar-clips\|verificar-tomas\|verificar-importar\|verificar-historial\|verificar-carpetas\|verificar-marcadores\|verificar-paquete` | pruebas automáticas sobre una carpeta temporal |
 | `proyectos lista\|plantillas\|nuevo\|renombrar\|duplicar\|borrar\|olvidar\|carpeta\|buscar` | lo que hace el gestor de proyectos (`buscar`: qué abre "Abrir carpeta") |
+| `proyectos empaquetar carpeta [--completo] [--salida x.zip] \| desempaquetar x.zip` | el proyecto en un ZIP (para compartir: lo que suena; `--completo`: también las tomas sin usar, las versiones y las exportaciones) y de vuelta a un proyecto nuevo |
 | `proyectos guardar-plantilla\|borrar-plantilla` | plantillas de proyecto del usuario |
 | `proyectos plantillas-video\|guardar-plantilla-video\|aplicar-plantilla-video\|borrar-plantilla-video` | plantillas de video (filtro, ajustes y efectos) |
 

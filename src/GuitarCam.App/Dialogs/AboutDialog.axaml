@@ -66,6 +66,22 @@
           </Grid>
         </Border>
 
+        <!-- the latest release on GitHub (UpdateCheck, asked by MainWindow.Updates.cs when the window opens) -->
+        <Border Classes="section" Padding="12,10">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock x:Name="UpdateText" Classes="dim" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap" />
+              <Button Grid.Column="1" x:Name="UpdateButton" Classes="chip" Margin="12,0,0,0" IsVisible="False" ToolTip.Tip="{loc:T about.update.download.tip}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Classes="icon" Text="&#xE896;" FontSize="13" />
+                  <TextBlock Text="{loc:T about.update.download}" />
+                </StackPanel>
+              </Button>
+            </Grid>
+            <CheckBox x:Name="UpdateCheckBox" Content="{loc:T about.update.check}" FontSize="12" ToolTip.Tip="{loc:T about.update.check.tip}" />
+          </StackPanel>
+        </Border>
+
         <Grid ColumnDefinitions="*,Auto">
           <TextBlock Classes="dim" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap"
                      Text="{loc:T about.settings}" />

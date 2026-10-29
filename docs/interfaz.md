@@ -64,9 +64,17 @@ Ese es el diseño **Clásico**. Para el **Vertical**, ver el apartado que sigue.
   quedan a la derecha (margen 150). `TransparencyLevelHint="None"` no se toca: con transparencia, píxeles oscuros
   del video dejan ver lo que hay detrás.
 - El logo es el ícono de la app y abre "Acerca de" (`Dialogs/AboutDialog`).
+  Ahí dice si hay una versión nueva: 5 s después de abrir, `MainWindow.Updates.cs` le pregunta a GitHub por la última
+  release (`UpdateCheck`, en `GuitarCam.Projects`; sin cuenta ni datos del usuario, y si falla no avisa nada). Una
+  versión nueva sale en un toast con "Descargar" solo la primera vez (`config.json` "updateNotified"); después, solo
+  en la campanita. La casilla "Avisarme cuando salga una versión nueva" lo apaga (`config.json` "checkUpdates": "off").
 - El chip del proyecto abre un menú (`MainWindow.Versions.cs`): "Proyectos…" (el gestor) y "Volver a una versión
   guardada", con las últimas 20 de `historial/` (`ProjectStore.Snapshots`). Volver guarda antes lo actual como otra
   versión, recarga el proyecto y borra los pasos de deshacer. Sin proyecto abierto, va directo al gestor.
+- El gestor (`Controls/ProjectsDialog.axaml.cs`) empaqueta: el botón de paquete de cada fila abre "Para compartir" /
+  "Respaldo completo" y pide dónde guardar el ZIP (`ProjectLibrary.Pack`; nunca dentro del mismo proyecto; el actual
+  se guarda antes, `FlushCurrent`) y "Abrir paquete…" de la barra lo trae como proyecto nuevo, resaltado en la lista
+  (`ProjectLibrary.Unpack`).
 - Al lado del nombre, el estado del guardado (`TickTopBar`): Guardando / Guardado / Sin guardar / Error al guardar /
   Solo lectura. "Sin guardar" sale cuando Configuración → Guardado y exportación (`SaveMode`) guarda cada X minutos o a mano; el
   diskette antes de deshacer (`SaveButton`, el atajo "save") guarda ya y está apagado si no hay nada pendiente.
@@ -136,7 +144,7 @@ Ese es el diseño **Clásico**. Para el **Vertical**, ver el apartado que sigue.
 - Una tarjeta (`Border.section`) por bloque, con ícono + etiqueta en mayúscula y, si se puede apagar, un ON/OFF a la
   derecha. Apagada → controles al 40 % de opacidad, pero se pueden seguir tocando.
 - **Los efectos son la cadena de slots del canal** (`RebuildInspectorChain`, pedido del usuario): después de Mezcla,
-  una sección por slot en el orden en que suena (Saturación, Compresor, EQ; un tipo repetido se numera, "EQ 2", y
+  una sección por slot en el orden en que suena (Saturación, Compresor, EQ, Puerta; un tipo repetido se numera, "EQ 2", y
   recuerda su propio plegado), con el ⋯ del slot (`SlotMenuButton`) y una manija de puntos (`GripDots`) para
   arrastrarla; al final, "+ Efecto". Se rearma solo cuando cambia la pista o la lista (sus refrescos van aparte, en
   `chainRefresh`); el espectro en vivo va en el primer EQ. Transponer no es un slot y queda fijo.
@@ -297,7 +305,7 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   tenues por las pistas. Los **marcadores** son banderitas `Raised` con el nombre en `Dim` y una línea tenue hacia
   abajo: se arrastran, un clic salta, doble clic los renombra en el lugar (`MainWindow.Rename.cs`); doble clic en
   vacío agrega uno (y abre su nombre). Todo se imanta como los clips (Alt = libre). Clic derecho: el menú de la franja
-  o del marcador (nombres de la lista `MarkerNames`, "Repetir hasta el siguiente", borrar). Los marcadores van en
+  o del marcador (nombres de la lista `MarkerNames`, "Repetir hasta el siguiente", borrar); los dos terminan con "Copiar capítulos para YouTube" (`CopyChapters`, `ProjectMarkers.Chapters`: "0:00 Inicio" si el primero no está en 0, y avisa si YouTube los ignoraría). Los marcadores van en
   `Project.Markers` y se deshacen; el rango va en `ProjectSettings.LoopStartSec/LoopEndSec`, fuera del deshacer como el
   tempo (`ProjectMarkers`). Atajos: L loop, I / O ponen A / B en el cabezal, K marcador, `,` / `.` saltan.
 - **Marcas de duración por red** (`Controls/TimelineView.Social.cs`, `SocialLengths` en `GuitarCam.Audio`, pedido del
@@ -440,7 +448,10 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 
 Clic derecho en una pista → "Guardar como plantilla" guarda su canal (sin mute ni solo), color, ícono, entrada y si
 va en el video; "Nueva pista → Plantilla" crea una pista con eso. En el menú de nueva pista las explicaciones son
-tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
+tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado. "Usar plantilla" (en el mismo menú de la pista de
+audio, `ApplyPresetSubmenu`) le pone a una pista que ya existe el sonido de una plantilla (`TrackPresets.ApplyTo`):
+slots con ids nuevos, volumen, paneo y envíos a los buses que el proyecto tiene; tomas, nombre, color, ícono, entrada,
+salida, mute/solo y Transponer quedan. Un paso de deshacer; los compresores se vuelven a medir con sus tomas.
 
 ## Armar y grabar (`MainWindow.Recording.cs`)
 
@@ -479,7 +490,10 @@ tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
   número entra justo (5 caracteres en 27 px). La carpeta muestra la suma de sus pistas y el bus su salida (`MixerLayout.NodeMeters`,
   leídos de `engine.Node`). El pie del
   master muestra los LUFS de corto plazo de la salida (la misma medición que la celda LUFS del transporte,
-  `engine.Loudness`), en el lugar donde decía "Salida".
+  `engine.Loudness`), en el lugar donde decía "Salida". Al lado de LIM, **MONO** (`engine.MonoCheck`): pliega la salida
+  a mono con 10 ms de fundido, solo lo que se oye (medidores, LUFS y exportación siguen en estéreo); no se guarda.
+  Bajo los LUFS, **COR** (`engine.Correlation`, `ShowMasterCorrelation`): la correlación de la salida en décimas, en
+  rojo bajo cero y en amarillo bajo +0,3. Cabecera y pie tienen alto fijo: LIM y MONO van en una fila, LUFS y COR en dos líneas cortas.
 - Cada canal es una tarjeta (`StripCard`) y todos (pistas, carpetas, buses, master) se arman con `StripLayout`, que les da
   las mismas filas: así faders y medidores tienen siempre la misma altura. Lo que vaya en la cabecera o en los
   controles tiene que entrar en su fila fija, no estirarla. Los paneles de efecto angostos se reacomodan
@@ -501,7 +515,7 @@ tooltips con 1 s de demora (`MenuTipDelay`), no texto al costado.
   cuerpo gris sombreado, ranuras, una línea blanca en el nivel y una sombra abajo; la ranura oscura se ilumina en
   acento hasta el nivel. La escala en dB va en el medidor.
 - **Slots de efectos** (tira amplia, `WideFx` → `SlotPanels`, que recibe un `SlotOwner`: el canal de una pista o un bus): un panel por slot en el orden en que suena (`SatPanel`,
-  `CompPanel`, `EqPanel`; un tipo repetido se numera, "EQ 2"). El ⋯ del título (`SlotMenuButton`) sube, baja, duplica o
+  `CompPanel`, `EqPanel`, `GatePanel`; un tipo repetido se numera, "EQ 2"). El ⋯ del título (`SlotMenuButton`) sube, baja, duplica o
   saca el slot; también se arrastra de su barra de título (`Controls/SlotDrag.cs`, animado como el reordenar pistas
   del timeline: los demás se corren para hacerle lugar, al soltar se acomoda y recién ahí cambia el orden). "+ Efecto" (`AddSlotButton`) agrega uno al final, ya prendido. El gráfico de cada EQ abre sus bandas en
   un flyout (`ShowSlotEq`). Cada slot se **pliega** (pedido del usuario, `InsertSlot.Collapsed`, guardado en el proyecto

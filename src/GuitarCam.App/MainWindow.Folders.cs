@@ -472,6 +472,51 @@ public partial class MainWindow
         return new MenuItem { Header = MenuHeader(Loc.T("preset.menu"), new TextBlock { Text = "", Classes = { "icon" }, FontSize = 12 }), ItemsSource = items };
     }
 
+    /// <summary>
+    /// The track menu's "Usar plantilla": puts a saved preset's sound on this track, keeping its takes, name, look and
+    /// routing (<see cref="TrackPresets.ApplyTo"/>). One undo step; the compressors are measured again on its takes.
+    /// </summary>
+    MenuItem ApplyPresetSubmenu(LiveTrack track, bool enabled)
+    {
+        var items = new List<object>();
+        var presets = TrackPresets.All();
+        foreach (var preset in presets)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, MinWidth = 180 };
+            row.Children.Add(new TrackIconView { Icon = preset.Icon, Width = 14, Height = 14, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0),
+                Foreground = preset.Color != null ? Palette.Brush(preset.Color) : Palette.Dim, IsVisible = preset.Icon != null });
+            row.Children.Add(new TextBlock { Text = preset.Name, FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
+            var item = new MenuItem { Header = row, IsEnabled = enabled };
+            ToolTip.SetTip(item, preset.Summary);
+            ToolTip.SetShowDelay(item, (int)MenuTipDelay.TotalMilliseconds);
+            item.Click += (_, _) => ApplyPreset(track, preset);
+            items.Add(item);
+        }
+        if (presets.Count == 0)
+            items.Add(new MenuItem { IsEnabled = false, Header = new TextBlock { Text = Loc.T("preset.none"), FontSize = 11, TextWrapping = TextWrapping.Wrap, MaxWidth = 220 } });
+        var menu = new MenuItem { Header = MenuHeader(Loc.T("preset.apply"), new TextBlock { Text = "", Classes = { "icon" }, FontSize = 12 }), ItemsSource = items };
+        ToolTip.SetTip(menu, Loc.T("preset.apply.tip"));
+        ToolTip.SetShowDelay(menu, (int)MenuTipDelay.TotalMilliseconds);
+        return menu;
+    }
+
+    void ApplyPreset(LiveTrack track, TrackPreset preset)
+    {
+        if (store == null) return;
+        int skipped = 0;
+        EditTrack(track, x =>
+        {
+            skipped = TrackPresets.ApplyTo(store.Project, x.Track, preset);
+            // a preset's compressor was measured on another take: measured again on this one, unless it is manual
+            if (x.Envelope != null)
+                foreach (var s in x.Channel.Slots)
+                    if (s.Comp is { } c && c.Preset != "custom") RecalculateInspectorComp(x, c);
+        }, $"preset.{preset.Id}");
+        RefreshMixer();
+        RebuildInspectorSends(track);
+        Toast(Loc.T("preset.applied", preset.Name, track.Track.Name) + (skipped > 0 ? " " + Loc.T("preset.applied.skipped", skipped) : ""));
+    }
+
     // --- the folder in the inspector ----------------------------------------------------------------
 
     readonly StackPanel folderPanel = new() { Spacing = 12, IsVisible = false };

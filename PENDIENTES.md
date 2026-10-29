@@ -172,17 +172,10 @@ de video y normalización ya están anotados arriba; el análisis amplía su alc
   reproducción y exportación; distinguirlo de las transiciones visuales.
 - [ ] **Exportar un rango**: solo el tramo A–B (o entre marcadores), con su cola de efectos como la exportación
   completa.
-- [ ] **Aplicar una plantilla de pista a una pista existente**: hoy una plantilla (`TrackPresets`) solo crea una pista
-  nueva; cargarla sobre una pista con clips, sin tocarlos, y definir qué pasa con los envíos y los retornos compartidos.
 - [ ] **Bloquear edición de pistas o clips**: proteger contra mover, recortar, borrar y reemplazar al
   grabar, con deshacer y una regla compartida por ventana y `gclab`.
 - [ ] **Comparar mezclas A/B**: guardar estados de canales y buses para comparar sonidos dentro del
   proyecto, sin duplicar los medios.
-- [ ] **Chequeo mono y correlación**: revisar la mezcla y capturas con varios micrófonos; distinguir
-  monitoreo de lo que se exporta.
-- [ ] **Puerta / expansor suave**: reducir ruido entre frases sin cortar el sustain de la guitarra.
-- [ ] **Paquete portable del proyecto**: ZIP para trasladar o respaldar, distinguiendo copia reducida
-  para compartir de respaldo completo con tomas no usadas e historial.
 - [ ] **Rescatar audio recién tocado**: investigar un búfer opcional y preasignado para recuperar una
   idea sin haber apretado Grabar. Adaptación propia: la grabación retrospectiva del manual es MIDI.
 - [ ] **Congelar pistas al incorporar VST**: render temporal reversible para reducir DSP, conservando

@@ -9,11 +9,11 @@ namespace GuitarCam.App.Controls;
 /// Port of FX_ICONS (GuitarCam/src/components/fxIcons.ts): one icon per effect, shared by the inspector and the mixer
 /// so both always show the same one. Drawn from lucide's own paths (24×24 grid, 2 px round stroke, like the web)
 /// because Segoe Fluent Icons has no flame or waves: Sat = Flame, Comp = Gauge, EQ = SlidersVertical,
-/// Reverb = Waves, Delay = Repeat. <see cref="Create"/> also takes a Segoe glyph, so a section header accepts either.
+/// Reverb = Waves, Delay = Repeat, Gate = DoorOpen. <see cref="Create"/> also takes a Segoe glyph, so a section header accepts either.
 /// </summary>
 public sealed class FxIcon : Control
 {
-    public const string Sat = "sat", Comp = "comp", Eq = "eq", Reverb = "reverb", Delay = "delay", Transpose = "transpose";
+    public const string Sat = "sat", Comp = "comp", Eq = "eq", Reverb = "reverb", Delay = "delay", Gate = "gate", Transpose = "transpose";
     /// <summary>Not an effect: the timeline's Mano tool (its button and pointer), because Segoe has no open hand.</summary>
     public const string Hand = "hand";
 
@@ -26,6 +26,8 @@ public sealed class FxIcon : Control
         [Eq] = Geometry.Parse("M10 8h4 M12 21v-9 M12 8V3 M17 16h4 M19 12V3 M19 21v-5 M3 14h4 M5 10V3 M5 21v-7"),
         [Reverb] = Geometry.Parse("M2 5q2.5 2 5 0t5 0 5 0 5 0 M2 12q2.5 2 5 0t5 0 5 0 5 0 M2 19q2.5 2 5 0t5 0 5 0 5 0"),
         [Delay] = Geometry.Parse("M17 2l4 4-4 4 M3 11v-1a4 4 0 0 1 4-4h14 M7 22l-4-4 4-4 M21 13v1a4 4 0 0 1-4 4H3"),
+        // lucide "door-open"
+        [Gate] = Geometry.Parse("M11 20H2 M11 4.562v16.157a1 1 0 0 0 1.242.97L19 20V5.562a2 2 0 0 0-1.515-1.94l-4-1A2 2 0 0 0 11 4.561z M11 4H8a2 2 0 0 0-2 2v14 M14 12h.01 M22 20h-3"),
         // lucide "music": a note for the track's pitch (Transponer)
         [Transpose] = Geometry.Parse("M9 18V5l12-2v13 M3 18a3 3 0 1 0 6 0a3 3 0 1 0-6 0 M15 16a3 3 0 1 0 6 0a3 3 0 1 0-6 0"),
         // lucide "hand"
