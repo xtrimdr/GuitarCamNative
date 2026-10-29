@@ -6,12 +6,12 @@ Investigación del 2026-10-25. Sale de tres fuentes:
    (`%LOCALAPPDATA%\CapCut\User Data\Cache\onlineMaterial\Ajuste predefinido3.json`) trae la lista **exacta** de
    parámetros del panel Ajustar, y los 24 borradores de `User Data\Projects` dicen qué filtros, efectos y valores usás.
 2. Las páginas de ayuda de CapCut y guías de terceros (poco precisas; los menús cambian seguido).
-3. Lo que ya tiene GuitarCam (`VideoColorProcessor`, `PreviewVideoFx`, `Mp4Exporter`).
+3. Lo que ya tiene WildTrack (`VideoColorProcessor`, `PreviewVideoFx`, `Mp4Exporter`).
 
 No hizo falta el GitHub de REA: con los archivos locales alcanzó. **No copiamos los LUT ni los shaders de CapCut**
 (son material de ellos); recreamos el *look* con nuestra propia matemática, como ya se hizo con "Brujo".
 
-## 1. Lo que GuitarCam ya tiene
+## 1. Lo que WildTrack ya tiene
 
 - 18 looks (Brujo, Sepia, B/N, Noir, Cálido, Frío, Cine, Vintage, Película, Blockbuster, Bleach, Dorado, Noche,
   Nórdico, Neón, Sci-fi, Desierto) con intensidad (`Amount`).
@@ -24,7 +24,7 @@ No hizo falta el GitHub de REA: con los archivos locales alcanzó. **No copiamos
 
 Del preset (campo → nombre en CapCut en español → ¿lo tenemos?):
 
-| Campo | En CapCut | GuitarCam |
+| Campo | En CapCut | WildTrack |
 |---|---|---|
 | `brightness_value` | Brillo | ≈ Exposición |
 | `contrast_value` | Contraste | ✅ |
@@ -52,7 +52,7 @@ Del preset (campo → nombre en CapCut en español → ¿lo tenemos?):
 
 En tus borradores aparecen una y otra vez **Nitidez** (0,68 – 1,0), **Claridad** (0,21 – 1,0), Negros (−0,1 a −0,26),
 Blancos, Sensación de luz, temperatura fría y saturación baja con contraste arriba. O sea: **lo que más te falta en
-GuitarCam es Nitidez y Claridad**, seguido de Blancos/Negros.
+WildTrack es Nitidez y Claridad**, seguido de Blancos/Negros.
 
 Filtros que usaste: **Brujo** (ya está), **Bosque negro**, **Negro vintage**, **Hielo negro**, **Noche santa**,
 **Luz central**, **Sueño de Mistwood**. Categorías que muestra tu CapCut: "bw", "Filtros", "NEW".
@@ -74,7 +74,7 @@ los que usás son de tres familias fáciles de recrear:
 - **Destellos** (paparazzi, flash, fuga blanca): fogonazos blancos breves.
 - **Luces de fiesta** (discoteca, colorido): manchas de color que giran o titilan.
 
-## 4. Propuesta para GuitarCam, por orden de valor / esfuerzo
+## 4. Propuesta para WildTrack, por orden de valor / esfuerzo
 
 ### A. Al LUT, sin costo en tiempo real (lo más barato y útil)
 
@@ -111,7 +111,7 @@ Medir la carga antes de decidir: la vista previa ya pasa cada cuadro por el LUT 
 ## 5. Looks recreados (2026-10-25)
 
 Cómo funcionan por dentro: los filtros de CapCut son un LUT (PNG de 512×512, 64³) y a veces un shader corto.
-"Luz central" suma un suavizado de piel y una imagen de esquinas oscuras (en GuitarCam: el look + la viñeta).
+"Luz central" suma un suavizado de piel y una imagen de esquinas oscuras (en WildTrack: el look + la viñeta).
 Los efectos (Luciérnaga, Bokeh, Chispa…) son secuencias de PNG prerenderizadas que se mezclan encima.
 
 Para dar el mismo resultado sin usar sus archivos, cada look es un modelo nuestro (`FittedLook`: curva de tono,
@@ -119,7 +119,7 @@ brillo/saturación/giro por tono, saturación por brillo, virado y curvas por ca
 mínimos cuadrados contra el filtro, con colores al azar y cuadros reales de tus tomas. Diferencia media medida en
 cuadros que no se usaron para ajustar (0–255 por canal):
 
-| Look GuitarCam | Inspirado en | Diferencia |
+| Look WildTrack | Inspirado en | Diferencia |
 |---|---|---|
 | Brujo | Brujo | 1,6 |
 | Solo rojo | Bosque negro | 6,5 |
@@ -139,9 +139,9 @@ música. Lo que aparece en varias fuentes a la vez es lo que cuenta como "usable
 
 ### Filtros (looks)
 
-Se agrupan como en CapCut, por familia. ✅ = ya está en GuitarCam.
+Se agrupan como en CapCut, por familia. ✅ = ya está en WildTrack.
 
-| Familia | Lo más pedido | En GuitarCam |
+| Familia | Lo más pedido | En WildTrack |
 |---|---|---|
 | **Natural** | Fresco / Limpio (más brillo, colores naturales), Brillante, Clásico (casi sin cambio) | ❌ Fresco · ❌ Limpio |
 | **Cálidos** | Cálido, Dorado / Otoño, Verano | ✅ Cálido · ✅ Dorado · ✅ Desierto |

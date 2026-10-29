@@ -1,0 +1,50 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="FFmpeg.AutoGen" Version="9.0.1.1" />
+  </ItemGroup>
+
+  <!-- FFmpeg 9 shared DLLs for the in-process preview decoder (NativeVideoSource): lib/ffmpeg is kept out of git
+       (see README). Without them the preview falls back to ffmpeg.exe through a pipe. -->
+  <ItemGroup>
+    <None Include="..\..\lib\ffmpeg\*.dll;..\..\lib\ffmpeg\*.txt" Link="ffmpeg\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- Basic Pitch's model (Spotify, Apache 2.0) for "Extraer MIDI" (AudioToMidi): lib/basic-pitch is kept out of git
+       (tools/get-basic-pitch.ps1). Without it the extractor says it is missing and the rest works. -->
+  <ItemGroup>
+    <None Include="..\..\lib\basic-pitch\*.onnx;..\..\lib\basic-pitch\*.txt" Link="basic-pitch\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- wtvsthost.exe, the VST3 plugin host (src/WildTrack.VstHost, C++): built here with Visual Studio's MSBuild when the
+       C++ tools, the Windows SDK and lib/vst3sdk (tools/get-vst3sdk.ps1) are there, and copied next to the app and
+       wtlab. Without them the build goes on and the app plays MIDI tracks with the test tone only. -->
+  <PropertyGroup>
+    <WtVstHostDir>$(MSBuildThisFileDirectory)..\WildTrack.VstHost\</WtVstHostDir>
+    <WtVstHostExe>$(WtVstHostDir)bin\Release\wtvsthost.exe</WtVstHostExe>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(WtVstHostExe)" Link="wtvsthost.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(WtVstHostExe)')" />
+  </ItemGroup>
+  <Target Name="BuildVstHost" BeforeTargets="BeforeBuild" Condition="'$(OS)' == 'Windows_NT' And Exists('$(MSBuildThisFileDirectory)..\..\lib\vst3sdk\pluginterfaces\base') And Exists('$(MSBuildProgramFiles32)\Windows Kits\10\Include')">
+    <Exec Command="&quot;$(MSBuildProgramFiles32)\Microsoft Visual Studio\Installer\vswhere.exe&quot; -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find MSBuild\**\Bin\amd64\MSBuild.exe" ConsoleToMSBuild="true" StandardOutputImportance="low" ContinueOnError="true" Condition="Exists('$(MSBuildProgramFiles32)\Microsoft Visual Studio\Installer\vswhere.exe')">
+      <Output TaskParameter="ConsoleOutput" PropertyName="WtVsMsBuild" />
+    </Exec>
+    <Message Importance="normal" Text="Sin MSBuild de Visual Studio con C++: no compilo wtvsthost.exe (las pistas MIDI suenan con el tono de prueba)." Condition="'$(WtVsMsBuild)' == '' Or !Exists('$(WtVsMsBuild)')" />
+    <Exec Command="&quot;$(WtVsMsBuild)&quot; &quot;$(WtVstHostDir)WildTrack.VstHost.vcxproj&quot; -p:Configuration=Release -p:Platform=x64 -nologo -v:quiet -m" Condition="'$(WtVsMsBuild)' != '' And Exists('$(WtVsMsBuild)')" />
+    <ItemGroup Condition="Exists('$(WtVstHostExe)')">
+      <None Remove="$(WtVstHostExe)" />
+      <None Include="$(WtVstHostExe)" Link="wtvsthost.exe" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+
+</Project>

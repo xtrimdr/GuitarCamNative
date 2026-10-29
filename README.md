@@ -1,9 +1,10 @@
-# GuitarCam Studio Native
+# WildTrack
 
 **Español** · [English](README_EN.md)
 
-**GuitarCam Studio Native** es una aplicación de escritorio para Windows para hacer **videos de guitarra**:
+**WildTrack** es un DAW de escritorio para Windows que también hace **videos de guitarra**:
 grabás tomas con cámara y audio, las mezclás y exportás un video con un panel por toma.
+Antes se llamaba **GuitarCam Studio Native**: al actualizar, tus ajustes y proyectos siguen ahí.
 
 Funciona tanto como un **cam studio** (grabar tomas con cámara y armar el video) como un **DAW** (grabar,
 editar y mezclar audio en un timeline y un mixer completos, con o sin imagen: el modo **Solo audio**
@@ -13,8 +14,8 @@ Está pensada para usarse con la guitarra colgada: atajos de una tecla, botones 
 de **grabar → mezclar → exportar**.
 
 <p align="center">
-  <a href="https://github.com/xtrimdr/GuitarCamNative/releases/latest/download/GuitarCamStudio-Setup.exe">
-    <img src="https://img.shields.io/github/v/release/xtrimdr/GuitarCamNative?style=for-the-badge&label=Descargar%20para%20Windows&color=22d3ee&labelColor=18181b" alt="Descargar para Windows" height="56">
+  <a href="https://github.com/xtrimdr/WildTrack/releases/latest/download/WildTrack-Setup.exe">
+    <img src="https://img.shields.io/github/v/release/xtrimdr/WildTrack?style=for-the-badge&label=Descargar%20para%20Windows&color=22d3ee&labelColor=18181b" alt="Descargar para Windows" height="56">
   </a>
   <br>
   <sub>Windows 10/11 de 64 bits · instalador autocontenido, sin instalar .NET</sub>
@@ -23,7 +24,7 @@ de **grabar → mezclar → exportar**.
 <details>
 <summary><b>Antes de instalar</b></summary>
 
-- **FFmpeg** y **ffprobe** en el `PATH`, para la cámara, el video y la exportación. Si no están, GuitarCam te avisa
+- **FFmpeg** y **ffprobe** en el `PATH`, para la cámara, el video y la exportación. Si no están, WildTrack te avisa
   al abrir y lo instala con un clic (winget), o te lleva a la página para bajarlo.
 - Una interfaz de audio con driver **ASIO**, para grabar.
 - El instalador no está firmado: si Windows SmartScreen avisa, elegí **Más información → Ejecutar de todas formas**.
@@ -122,7 +123,7 @@ Más detalles en [Requisitos](#requisitos).
 
 ## Hacia dónde va
 
-GuitarCam Studio Native está **en desarrollo constante**. La idea es llevarla a un nivel que sirva tanto
+WildTrack está **en desarrollo constante**. La idea es llevarla a un nivel que sirva tanto
 para quien recién empieza y quiere hacer música rápido y sin complicaciones, como para profesionales que
 quieren hacer música en serio.
 
@@ -143,7 +144,7 @@ planeado y lo que falta está en [PENDIENTES.md](PENDIENTES.md).
 - [.NET 10 SDK](https://dotnet.microsoft.com/) para compilar.
 - Para los plugins VST3 (opcional): Visual Studio con **Desarrollo para el escritorio con C++** y el **Windows 11 SDK**,
   y el SDK de VST3 de Steinberg (licencia MIT) en `lib\vst3sdk`, que baja `tools\get-vst3sdk.ps1` (unos 21 MB, fuera de
-  git). Con eso, `dotnet build` también compila `gcvsthost.exe` (`src\GuitarCam.VstHost`, C++) y lo copia junto al exe;
+  git). Con eso, `dotnet build` también compila `wtvsthost.exe` (`src\WildTrack.VstHost`, C++) y lo copia junto al exe;
   sin eso la app compila igual y las pistas MIDI suenan con el tono de prueba.
 - Para **Extraer MIDI**: el modelo de Basic Pitch (Spotify, Apache 2.0, ~230 KB) en `lib\basic-pitch`, que baja
   `tools\get-basic-pitch.ps1` (fuera de git). El build lo copia a `basic-pitch\` junto al exe; sin él, "Extraer MIDI"
@@ -155,17 +156,17 @@ planeado y lo que falta está en [PENDIENTES.md](PENDIENTES.md).
 tools\probar.ps1 "qué probar"
 ```
 
-Compila, corre `gclab comprobar-dsp`, copia la app a `pruebas\<fecha>-<commit>` (fuera de git; quedan las
+Compila, corre `wtlab comprobar-dsp`, copia la app a `pruebas\<fecha>-<commit>` (fuera de git; quedan las
 últimas 5) y la abre desde ahí, con la marca "PRUEBA <commit>" en la barra de título. Como nunca corre desde `bin\`,
 la app abierta no traba la próxima compilación. `-Abrir` abre la última copia sin compilar, `-NoAbrir` solo compila y
-copia, `-SinComprobar` salta `gclab`, `-Proyecto carpeta` abre ese proyecto. Si ya hay un GuitarCam abierto, antes de abrir
+copia, `-SinComprobar` salta `wtlab`, `-Proyecto carpeta` abre ese proyecto. Si ya hay un WildTrack abierto, antes de abrir
 pregunta en un cuadro si lo cierra (guarda el proyecto antes), así la copia nueva no abre el mismo proyecto en solo
 lectura. Si algo falla, dice "NO SE PUEDE PROBAR" y no abre nada (desde el acceso directo, que no muestra la consola, queda
-anotado en `%APPDATA%\GuitarCam Studio\sesiones.log`, junto con cada inicio y cierre de la app y sus errores). `dotnet build` solo sigue sirviendo para compilar.
+anotado en `%APPDATA%\WildTrack\sesiones.log`, junto con cada inicio y cierre de la app y sus errores). `dotnet build` solo sigue sirviendo para compilar.
 
 La app arranca en el gestor de **Proyectos** (lista, buscador, plantillas, renombrar, duplicar, Papelera).
 Con una carpeta de proyecto como argumento, la abre directo. Con `--probar "texto"` muestra ese texto en un aviso fijo ("Para probar") al abrir. `tools\make-shortcut.ps1` crea un acceso
-directo en el escritorio que abre la última copia de prueba (`probar.ps1 -Abrir`). Los ajustes se guardan en `%APPDATA%\GuitarCam Studio`.
+directo en el escritorio que abre la última copia de prueba (`probar.ps1 -Abrir`). Los ajustes se guardan en `%APPDATA%\WildTrack`.
 
 ## Atajos principales
 
@@ -224,16 +225,16 @@ la vuelve al alto general). El botón ↺ al pie de los encabezados iguala todas
 
 ```
 src/
-  GuitarCam.Audio      motor de audio: DSP, ASIO dúplex, click, grabación a disco, exportación
-  GuitarCam.Projects   modelo del proyecto, guardado atómico, historial, gestor de proyectos
-  GuitarCam.App        la ventana (Avalonia 11.3)
-  GuitarCam.Lab        gclab.exe: consola para probar audio, DSP y proyectos sin la ventana
-  GuitarCam.VstHost    gcvsthost.exe (C++): abre un plugin VST3 en su propio proceso
+  WildTrack.Audio      motor de audio: DSP, ASIO dúplex, click, grabación a disco, exportación
+  WildTrack.Projects   modelo del proyecto, guardado atómico, historial, gestor de proyectos
+  WildTrack.App        la ventana (Avalonia 11.3)
+  WildTrack.Lab        wtlab.exe: consola para probar audio, DSP y proyectos sin la ventana
+  WildTrack.VstHost    wtvsthost.exe (C++): abre un plugin VST3 en su propio proceso
 tools/                 ícono, acceso directo y utilidades de verificación
 ```
 
 Las dependencias van hacia abajo (App → Projects → Audio): el motor y el modelo del proyecto no conocen la
-interfaz, y todo lo que hacen se puede ejercitar desde `gclab`. El proyecto se guarda en una carpeta:
+interfaz, y todo lo que hacen se puede ejercitar desde `wtlab`. El proyecto se guarda en una carpeta:
 
 ```
 guitarcam.json        el proyecto
@@ -246,7 +247,7 @@ exports/              videos y audios exportados
 
 ## Contribuir y licencia
 
-GuitarCam Studio Native es **gratis y sin fines de lucro**: se hace para la comunidad, para que cualquiera
+WildTrack es **gratis y sin fines de lucro**: se hace para la comunidad, para que cualquiera
 pueda grabar y hacer música sin pagar un peso. Las contribuciones son bienvenidas y **todas pasan por la
 aprobación del mantenedor**: abrí un issue o un Pull Request siguiendo [CONTRIBUTING.md](CONTRIBUTING.md).
 Antes de tocar código, leé [AGENTS.md](AGENTS.md) (la guía del proyecto) y mirá [PENDIENTES.md](PENDIENTES.md)
@@ -268,9 +269,9 @@ nunca en la PC de nadie, así lo que bajás sale de este código. Firma gratuita
 versión nueva consultando la última release en GitHub (se apaga en Acerca de) y se conecta a la cámara por red que
 configures.
 
-## gclab
+## wtlab
 
-`gclab.exe` (`src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe`) prueba el motor y los proyectos desde
+`wtlab.exe` (`src\WildTrack.Lab\bin\Debug\net10.0-windows\wtlab.exe`) prueba el motor y los proyectos desde
 la consola, sin abrir la ventana.
 
 | Comando | Qué hace |

@@ -27,7 +27,7 @@ y no hay ninguna regla de "igualar a la web". Las decisiones las toma el usuario
 - **Medidor del sistema**: CPU / GPU / RAM de toda la PC, cada 1,5 s. CPU y RAM salen del sistema; GPU
   (el motor más cargado, como el Administrador de tareas) y VRAM, de los contadores de rendimiento de
   Windows. Tooltips "Procesador…", "Placa de video…", "Memoria…" ✅ (`SystemStats.cs` por PDH, sin
-  PowerShell; `gclab sistema`). Se oculta con la ventana a menos de 1600 px, para dejarle lugar a la barra de estado.
+  PowerShell; `wtlab sistema`). Se oculta con la ventana a menos de 1600 px, para dejarle lugar a la barra de estado.
 - **Aviso "FFmpeg no encontrado"** si falta en el PATH (no se va a poder exportar) ✅, junto a la resolución de
   la cámara y "48 kHz". La nativa muestra solo el número de versión ("FFmpeg 8.1.2"; el resto, en el tooltip).
 - **Selector de tema** (ícono de paleta): acento (presets + "Color a elección") y fondo (Grafito,
@@ -53,7 +53,7 @@ recuerda. Arriba, "Mostrar / Colapsar todos los efectos" ✅ (nativa: plegado en
   "Comprime"; "Ajuste fino a mano" con Umbral, Ratio, Ataque, Release, Knee, Ganancia; EQ del preset
   (Corte de graves, Barro 280 Hz, Presencia, Brillo 9 kHz); "Limitar picos"; "Volver al estilo por
   defecto" ✅.
-- **EQ** (§5.4): switch + editor gráfico + espectro en vivo ✅ (`SpectrumTap`, `gclab espectro`).
+- **EQ** (§5.4): switch + editor gráfico + espectro en vivo ✅ (`SpectrumTap`, `wtlab espectro`).
 - **Reverb**: switch + "Envío a reverb" ✅. **Delay**: switch + "Envío a delay" ✅.
 - **Sincronización**: "Offset de audio" (mueve la toma con su anclaje) y "Latencia de cámara" ✅ (en la
   nativa, por clip).
@@ -152,7 +152,7 @@ Arpegio + Punteo", "Rítmica + Punteo vertical", "Toma única". Las del usuario 
 proyecto); guardar con el mismo nombre reemplaza; se borran desde el formulario de nuevo proyecto
 ("mía"). "Guardar como plantilla" toma cada pista con mute/solo limpios y el nombre sin "Toma N — ".
 
-### 2.3 Historial (pestaña derecha, `HistoryPanel`) ✅ (`MainWindow.History.cs`, `GuitarCam.Projects/ProjectHistory.cs`)
+### 2.3 Historial (pestaña derecha, `HistoryPanel`) ✅ (`MainWindow.History.cs`, `WildTrack.Projects/ProjectHistory.cs`)
 - **Tomas**: todas las grabadas, filtro Todas / En uso / Sin usar, buscador, agrupadas por día ("Hoy",
   "Ayer", fecha). Por toma: escuchar el WAV crudo (sin efectos), mostrar en el Explorador, quitar del
   timeline (el archivo queda) o volver a agregarla; "No usada"; reintentar si no se pudo guardar.
@@ -301,7 +301,7 @@ grabación caen en el mismo cuadro. La toma nueva:
 - Nativa: motor de grabación ✅ (`RecordingSession.cs`: cuenta, mismo reloj, `syncMs`, descarte ≤ 0,3 s;
   cerrar la app grabando conserva la toma; errores de disco y muestras perdidas a la vista), con
   `RecordingWriter` y el diario `*.grabando.json` ✅. Flujo en la ventana ✅ (`MainWindow.Recording.cs`,
-  `TakeRecording.cs`, `gclab proyecto toma` / `verificar-tomas`): R, cuenta, destino, nombre, canal,
+  `TakeRecording.cs`, `wtlab proyecto toma` / `verificar-tomas`): R, cuenta, destino, nombre, canal,
   descarte, deshacer, cerrar la ventana grabando guarda la toma. Con cámara, el video va al lado
   (`media/{id}.mp4`, §11) con la latencia de cámara y el espejo del momento. Diferencia: sin cámara (o si
   no manda imagen, con aviso) la toma es solo audio y una pista nueva no ocupa panel (la web no deja
@@ -316,7 +316,7 @@ detecta tus ataques). Guarda mediana y dispersión por par entrada + salida, con
 el sample rate de ese momento, para avisar si el equipo cambió. "Descartar la medición y usar lo que
 informa el navegador" (en nativo: lo que informa el driver ASIO).
 - Nativa: la medición (con cable y tocando), el guardado y el aviso de equipo cambiado ✅
-  (`LatencyCalibration.cs`, `gclab latencia`) y la pantalla de Configuración → Sincronización ✅ (falta probarla
+  (`LatencyCalibration.cs`, `wtlab latencia`) y la pantalla de Configuración → Sincronización ✅ (falta probarla
   con el cable o tocando).
 
 ---
@@ -334,7 +334,7 @@ Pestaña **Color** de la barra derecha, secciones Plantillas / Filtro / Ajustes 
   cuadro; iguales en intensidad, no grano por grano), Barras de cine (Sin barras / 1.85 / 2.00 / 2.39);
   "Ver sin efectos / Aplicar efectos".
 - **Plantillas de video** (filtro + ajustes + efectos), del programa; mismo nombre = actualizar. Nativa:
-  `%APPDATA%\GuitarCam Studio\plantillas-video.json` (`VideoTemplates.cs`), `gclab proyectos plantillas-video…`.
+  `%APPDATA%\GuitarCam Studio\plantillas-video.json` (`VideoTemplates.cs`), `wtlab proyectos plantillas-video…`.
 - Orden por toma: LUT → grano → espejo → escala/recorte → viñeta → barras → padding → fades.
 
 ---
@@ -345,7 +345,7 @@ Diálogo de ajustes del programa (no del proyecto), con los atajos apagados mien
 - **Entradas y salidas**: interfaz (refrescar dispositivos), canales (Estéreo: Input 1 → L, Input 2 → R;
   Mono 1; Mono 2), ganancia de entrada, salida ("Predeterminada de Windows"; no se cambia mientras se
   graba o calibra), monitorear la entrada por esa salida. En nativo: driver ASIO, canales del driver y
-  "panel del driver" (tamaño de buffer), como en `gclab panel`.
+  "panel del driver" (tamaño de buffer), como en `wtlab panel`.
 - **Cámara**: Webcam / Driver o IP DroidCam (IP y puerto, por defecto 192.168.1.50:4747); resolución
   Auto (nativa) / 1080p / 720p / 480p a 30 fps; espejar la imagen en vivo.
 - **Sincronización**: estado (latencia calibrada / estimada), Calibrar latencia (§5.9), ajuste fino de
@@ -357,12 +357,12 @@ Diálogo de ajustes del programa (no del proyecto), con los atajos apagados mien
   web. Cámara: la lista es la de DirectShow por FFmpeg (`Video/LiveCamera.cs`); como en la web, la cámara,
   la resolución, la IP, el espejo y la latencia de cámara viven en memoria y al abrir se vuelve a elegir
   la cámara por la preferencia de la web. Debajo del medidor de entrada, "Buffer" muestra el tamaño actual y
-  "Panel del driver" abre el panel del fabricante (como `gclab panel`); cuando el driver avisa que cambió
+  "Panel del driver" abre el panel del fabricante (como `wtlab panel`); cuando el driver avisa que cambió
   (kAsioResetRequest) la app reabre el audio sola, y si está grabando o calibrando espera a que termine.
 
 ---
 
-## 8. Exportación ✅ (motor, diálogo y `gclab exportar`)
+## 8. Exportación ✅ (motor, diálogo y `wtlab exportar`)
 
 - **Diálogo de configuración**: nombre del archivo (arranca en uno libre, "nombre (2)"), carpeta (la
   `exports` del proyecto o otra elegida; "Esa carpeta ya no existe. Elegí otra."), calidad **Alta** (CRF
@@ -380,9 +380,9 @@ Diálogo de ajustes del programa (no del proyecto), con los atajos apagados mien
   terminar; cancelar mata FFmpeg y lo borra. Queda registrada en el proyecto.
 - En nativo el render offline y FFmpeg corren en el mismo proceso, sin servidor ni subida.
 - Nativa: render offline de la mezcla con el mismo grafo que la reproducción ✅ (`MixRenderer`,
-  `gclab mezclar`; los medios se remuestrean a 48 kHz con `AudioLoader`) ✅. `Mp4Exporter`: el mismo
+  `wtlab mezclar`; los medios se remuestrean a 48 kHz con `AudioLoader`) ✅. `Mp4Exporter`: el mismo
   `filter_complex` que `server/index.js` (LUT de color y viñeta idénticas byte a byte a las de la web),
-  progreso, cancelación y `.part` ✅; `gclab exportar` ✅. El diálogo (`Dialogs/ExportDialog`) está hecho
+  progreso, cancelación y `.part` ✅; `wtlab exportar` ✅. El diálogo (`Dialogs/ExportDialog`) está hecho
   y se abre desde "Exportar MP4" ✅; comparado con la web lado a lado el 2026-10-23 (mismos textos y orden; la
   calidad pasó al `Segmented` gris de la web) ✅.
 
@@ -448,7 +448,7 @@ Los atajos no corren mientras se escribe en un campo ni con Configuración abier
 1. **Gestor de proyectos** igual al de la web, con plantillas (§2.1, §2.2): hoy es lo más distinto.
 2. **Deshacer/rehacer** y **edición de clips en el timeline** (§9, §3): base para editar sin miedo.
 3. **Completar la mezcla**: fades, EQ, presets del compresor y su EQ, reverb, delay, envíos (§5), con
-   `gclab verificar` para cada port.
+   `wtlab verificar` para cada port.
 4. **Inspector completo** (§1.2) y **Mixer** (§4), con tempo y transporte completos (§1.6, §4.5).
 5. **Exportación** (§8) con color y efectos (§6): cierra "mezclo y exporto" para proyectos importados.
 6. **Grabación** (§5.8), calibración (§5.9), monitor en vivo (§1.5), cámara (§11) y Configuración (§7).

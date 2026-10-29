@@ -2,7 +2,7 @@
 
 Referencia para agentes: qué hay en cada parte de la ventana, cómo se comporta y en qué archivo vive. No hace falta
 leerla entera: buscá el apartado de lo que vas a tocar. Las reglas generales de diseño (tokens, tipografía, clases,
-atajos) están en [src/GuitarCam.App/AGENTS.md](../src/GuitarCam.App/AGENTS.md). Si cambiás cómo funciona algo de
+atajos) están en [src/WildTrack.App/AGENTS.md](../src/WildTrack.App/AGENTS.md). Si cambiás cómo funciona algo de
 acá, actualizá su apartado en el mismo cambio.
 
 La captura de referencia es [captura.png](captura.png).
@@ -21,7 +21,7 @@ encima de la ventana principal mientras esta carga detrás y se va con un fundid
 ## Estructura
 
 ```
-┌ barra de título propia (44) ─ logo · nombre · NATIVE · (PRUEBA) ··························· CPU │ GPU │ RAM │ DSP │ FFmpeg · 🔔 · tema · ⚙ · [_ □ ×] ┐
+┌ barra de título propia (44) ─ logo · nombre · (PRUEBA) ···································· CPU │ GPU │ RAM │ DSP │ FFmpeg · 🔔 · tema · ⚙ · [_ □ ×] ┐
 ├ fila de herramientas (~40) ─ Video|Solo audio · chip del proyecto (guardado) ▾ │ guardar · deshacer/rehacer ···· [↖ ⌶│✂ ⌫│🎧 🔍 ✋] ···· [Exportar MP4] ┤
 ├ inspector (290↔) ┬─ preview (un panel por pista con video) ────────┬─ "En vivo" (256) ─┬─ proyecto (290↔, plegable a 44) ┤
 │ TOMA + secciones │                                                 │ cámara + entrada  │ pestañas Color / Historial     │
@@ -67,7 +67,7 @@ Ese es el diseño **Clásico**. Para el **Vertical**, ver el apartado que sigue.
 - El logo es el ícono de la app y abre "Acerca de" (`Dialogs/AboutDialog`), con el mismo encabezado que el splash
   (`BrandArt`: logo grande, brillo y línea del acento del tema, versión en la esquina).
   Ahí dice si hay una versión nueva: 5 s después de abrir, `MainWindow.Updates.cs` le pregunta a GitHub por la última
-  release (`UpdateCheck`, en `GuitarCam.Projects`; sin cuenta ni datos del usuario, y si falla no avisa nada). Una
+  release (`UpdateCheck`, en `WildTrack.Projects`; sin cuenta ni datos del usuario, y si falla no avisa nada). Una
   versión nueva sale en un toast con "Descargar" solo la primera vez (`config.json` "updateNotified"); después, solo
   en la campanita. La casilla "Avisarme cuando salga una versión nueva" lo apaga (`config.json` "checkUpdates": "off").
 - FFmpeg solo aparece en la barra si falta ("FFmpeg no encontrado", `MainWindow.TopBar.cs`). Al abrir sin FFmpeg, y
@@ -77,7 +77,7 @@ Ese es el diseño **Clásico**. Para el **Vertical**, ver el apartado que sigue.
 - El chip del proyecto abre un menú (`MainWindow.Versions.cs`): "Proyectos…" (el gestor) y "Volver a una versión
   guardada", con las últimas 20 de `historial/` (`ProjectStore.Snapshots`). Volver guarda antes lo actual como otra
   versión, recarga el proyecto y borra los pasos de deshacer. Sin proyecto abierto, va directo al gestor.
-- El gestor (`Controls/ProjectsDialog.axaml.cs`) empaqueta: el botón de paquete de cada fila abre "Para compartir" /
+- El gestor (`Controls/ProjectsDialog.axaml.cs`) lleva el logo de la app en el encabezado. Empaqueta: el botón de paquete de cada fila abre "Para compartir" /
   "Respaldo completo" y pide dónde guardar el ZIP (`ProjectLibrary.Pack`; nunca dentro del mismo proyecto; el actual
   se guarda antes, `FlushCurrent`) y "Abrir paquete…" de la barra lo trae como proyecto nuevo, resaltado en la lista
   (`ProjectLibrary.Unpack`).
@@ -88,7 +88,7 @@ Ese es el diseño **Clásico**. Para el **Vertical**, ver el apartado que sigue.
   "¿Guardo los cambios?" (`Dialogs/UnsavedDialog`): Guardar y cerrar (Enter), Cerrar sin guardar, Cancelar (Esc).
   Si el guardado falla, no cierra. Después de cada edición no pregunta: lo pendiente se escribe y cierra.
 - Una copia hecha por `tools\probar.ps1` lleva un `prueba.txt` al lado del exe (commit, con o sin cambios, hora):
-  `TestBuild` lo lee y la barra muestra, después de NATIVE, el badge "PRUEBA a1b2c3d + cambios" (`TestBuildChip`,
+  `TestBuild` lo lee y la barra muestra, después del nombre, el badge "PRUEBA a1b2c3d + cambios" (`TestBuildChip`,
   fondo `Hover`, la hora en el tooltip) y el título de la ventana lo repite. Sin ese archivo no aparece nada.
 - CPU / GPU / RAM / DSP con la misma forma ("CPU 19% ▬"), con líneas `Border.tsep` entre los grupos.
 - Maximizada, Windows corre la ventana 8 px afuera de cada borde (por la barra propia). La grilla raíz lleva
@@ -137,7 +137,7 @@ Ese es el diseño **Clásico**. Para el **Vertical**, ver el apartado que sigue.
   de ±3 cents (`TunerView.InTuneCents`) la nota, la aguja y un "OK!" se ponen en verde (`InTune`), también en la celda.
 - El slider "Sensibilidad" es la compuerta de nivel de `PitchTap` (−70 a −30 dB, por defecto −50 =
   `PitchTap.DefaultGateDb`; el umbral de YIN no se toca). Se guarda en `config.json` (`tuner.gateDb`) al cerrar el
-  panel; en gclab, `afinar --umbral`.
+  panel; en wtlab, `afinar --umbral`.
 - El panel se cierra con un clic afuera (`IsLightDismissEnabled`), con A o con la celda; con el foco en el slider,
   los atajos pasan igual.
 - A la derecha, la celda "LUFS" con el integrado del master de la pasada actual (`LoudnessMeter`, BS.1770; empieza
@@ -217,7 +217,7 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   cuenta que usa la exportación**: lo que se ve tiene que ser lo que se exporta. Encuadre: cover-fit + zoom/paneo/espejo
   del clip. Etiqueta con el nombre de la pista abajo a la izquierda.
 - **Video de la preview**: cada clip tiene su `Video/VideoDecoder` (un hilo que va unos cuadros adelante). Lee con
-  FFmpeg dentro del proceso (`NativeVideoSource`, en `GuitarCam.Audio`: los DLL de `lib\ffmpeg`, en el procesador hasta
+  FFmpeg dentro del proceso (`NativeVideoSource`, en `WildTrack.Audio`: los DLL de `lib\ffmpeg`, en el procesador hasta
   1080p y en la placa de video arriba de eso); si no están los DLL o el archivo no abre, con ffmpeg.exe por pipe
   (`PipeVideoSource`, un proceso por salto). Un clip arranca su decodificador 1 s antes de empezar (`LiveClip.PreRollSec`),
   así los cortes no congelan la imagen, y un panel no muestra un cuadro hasta tener uno de ese momento (`LiveClip.Fresh`).
@@ -304,7 +304,7 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   sonido no cambia: los dos suenan.
 - **Bloquear** (`MainWindow.Locks.cs`): "Bloquear clip" en el menú del clip y "Bloquear pista" en el de la pista (no
   en las MIDI, por ahora). La regla es una sola, `ClipEditing.IsLocked` (`Clip.Locked` o `Track.Locked`), y la usa
-  gclab: lo bloqueado no cambia de lugar, de largo ni de pista, no se divide ni se borra (`Replace`, `Split`,
+  wtlab: lo bloqueado no cambia de lugar, de largo ni de pista, no se divide ni se borra (`Replace`, `Split`,
   `RemoveClip`… lo rechazan); borrar un tramo lo saltea y "cerrar el hueco" deja quieta su pista. El volumen, los
   fades, la curva y el encuadre sí se tocan. En el timeline un clip bloqueado lleva un candadito arriba a la derecha
   (a la izquierda del ícono de audio/video) y no muestra las pestañas de recorte; agarrarlo lo elige pero no lo mueve.
@@ -337,7 +337,7 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   o del marcador (nombres de la lista `MarkerNames`, "Repetir hasta el siguiente", borrar); los dos terminan con "Copiar capítulos para YouTube" (`CopyChapters`, `ProjectMarkers.Chapters`: "0:00 Inicio" si el primero no está en 0, y avisa si YouTube los ignoraría). Los marcadores van en
   `Project.Markers` y se deshacen; el rango va en `ProjectSettings.LoopStartSec/LoopEndSec`, fuera del deshacer como el
   tempo (`ProjectMarkers`). Atajos: L loop, I / O ponen A / B en el cabezal, K marcador, `,` / `.` saltan.
-- **Marcas de duración por red** (`Controls/TimelineView.Social.cs`, `SocialLengths` en `GuitarCam.Audio`, pedido del
+- **Marcas de duración por red** (`Controls/TimelineView.Social.cs`, `SocialLengths` en `WildTrack.Audio`, pedido del
   usuario): el clic derecho en la regla, debajo de la grilla, prende o apaga cada una (varias a la vez; ninguna de
   entrada; `socialMarks` en config.json, de la app y no del proyecto, como la grilla). En ese menú (pedido del usuario)
   el clic izquierdo elige y cierra, y el **clic derecho elige y lo deja abierto**, para cambiar varias seguidas
@@ -473,7 +473,7 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   ellas) y el selector de salida donde ellas tienen el paneo y M S ● (`CompactFolderControls`). Cada edición es un
   `FolderEdit` con su deshacer. Para procesar un grupo, se manda la carpeta a un bus y los efectos van en el bus.
 
-## Plantillas de pista (`TrackPresets`, `%APPDATA%\GuitarCam Studio\pistas.json`)
+## Plantillas de pista (`TrackPresets`, `%APPDATA%\WildTrack\pistas.json`)
 
 Clic derecho en una pista → "Guardar como plantilla" guarda su canal (sin mute ni solo), color, ícono, entrada y si
 va en el video; "Nueva pista → Plantilla" crea una pista con eso. En el menú de nueva pista las explicaciones son
@@ -704,14 +704,14 @@ Logic o Studio One). Etapas siguientes en PENDIENTES: sampler, después VST3.
   muchos plugins llenaba el panel), cómo va (listo, abriendo, no abrió) y "Abrir la ventana". Debajo, la fila SALIDA y
   los envíos a buses, las mismas secciones que una pista de audio (`inspectorSends`, que `PlaceInspectorSends` mueve
   acá mientras se ve una pista MIDI).
-- **Instrumento o efecto** (`VstPluginInfo.IsInstrument`): la búsqueda (`gcvsthost --scan`) crea cada plugin y le
+- **Instrumento o efecto** (`VstPluginInfo.IsInstrument`): la búsqueda (`wtvsthost --scan`) crea cada plugin y le
   pregunta sus entradas: de audio principales (un sidechain no cuenta) y de notas. Toma notas y no audio → instrumento;
   toma audio y no notas → efecto, diga lo que diga su categoría; las dos cosas (un afinador por MIDI, un synth con
   sidechain) o ninguna → su categoría ("Instrument", o sin "Fx" y con notas). Un `plugins.json` de antes
   (`PluginCatalog.CurrentFormat`) se vuelve a abrir una vez en la próxima búsqueda, que la primera lista de
   instrumentos lanza sola (`EnsurePlugins`). La lista sale de `PluginCatalog` (`plugins.json`): la primera
   vez hay que buscarlos ("Buscar plugins VST3…", unos segundos, con toast). Elegir uno es un paso de deshacer; el plugin
-  carga en segundo plano (su proceso, `gcvsthost.exe`) y mientras tanto la pista suena con el tono de prueba. Lo que el
+  carga en segundo plano (su proceso, `wtvsthost.exe`) y mientras tanto la pista suena con el tono de prueba. Lo que el
   usuario cambia en la ventana del plugin se guarda en el proyecto (su estado, en base64) 1,5 s después de tocarla y al
   cerrarla, fuera del deshacer como el tempo. Si no abre (archivo que falta, error) o se cierra de golpe, un toast lo
   dice (con "Abrirlo de nuevo") y la pista vuelve al tono de prueba; no se reintenta solo. Con la transporte parada el
@@ -725,7 +725,7 @@ Logic o Studio One). Etapas siguientes en PENDIENTES: sampler, después VST3.
   sola para la ventana (`PluginScan`): el menú de la pista, el inspector MIDI y esta página se actualizan con
   `PluginScan.Changed`. El menú del instrumento lleva "Administrar plugins…" y el toast de la búsqueda, "Administrar".
 - **Sonido**: sin instrumento, un tono de prueba (`NoteSynth`, sin estado: igual en la reproducción, la
-  exportación y gclab). Las notas que suenan al tocar el teclado del piano roll o escribir van directo a la salida
+  exportación y wtlab). Las notas que suenan al tocar el teclado del piano roll o escribir van directo a la salida
   (`PlaybackEngine.PreviewNote`), sin la cadena de la pista.
 - **Teclado MIDI** (`MainWindow.MidiInput.cs`, etapa 4, decidido con el usuario): suena en la **pista MIDI elegida**
   (como Logic y Studio One, sin armar nada) y en las **armadas**, con su instrumento (o el tono de prueba, que suena

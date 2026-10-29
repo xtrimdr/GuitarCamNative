@@ -1,9 +1,10 @@
-# GuitarCam Studio Native
+# WildTrack
 
 [Español](README.md) · **English**
 
-**GuitarCam Studio Native** is a Windows desktop application for making **guitar videos**: you record takes
+**WildTrack** is a Windows desktop DAW that also makes **guitar videos**: you record takes
 with camera and audio, mix them, and export a video with one panel per take.
+It used to be called **GuitarCam Studio Native**: when you update, your settings and projects are still there.
 
 It works both as a **cam studio** (record takes with a camera and build the video) and as a **DAW** (record,
 edit and mix audio in a full timeline and mixer, with or without picture: **Audio only** mode is for making
@@ -13,8 +14,8 @@ It is designed to be used with the guitar strapped on: one-key shortcuts, big bu
 **record → mix → export**.
 
 <p align="center">
-  <a href="https://github.com/xtrimdr/GuitarCamNative/releases/latest/download/GuitarCamStudio-Setup.exe">
-    <img src="https://img.shields.io/github/v/release/xtrimdr/GuitarCamNative?style=for-the-badge&label=Download%20for%20Windows&color=22d3ee&labelColor=18181b" alt="Download for Windows" height="56">
+  <a href="https://github.com/xtrimdr/WildTrack/releases/latest/download/WildTrack-Setup.exe">
+    <img src="https://img.shields.io/github/v/release/xtrimdr/WildTrack?style=for-the-badge&label=Download%20for%20Windows&color=22d3ee&labelColor=18181b" alt="Download for Windows" height="56">
   </a>
   <br>
   <sub>64-bit Windows 10/11 · self-contained installer, no .NET install needed</sub>
@@ -108,7 +109,7 @@ More details in [Requirements](#requirements).
 
 ## Where it is going
 
-GuitarCam Studio Native is **under constant development**. The goal is to take it to a level that works both
+WildTrack is **under constant development**. The goal is to take it to a level that works both
 for people just starting out who want to make music quickly and without complications, and for professionals
 who want to make music seriously.
 
@@ -128,15 +129,15 @@ in [PENDIENTES.md](PENDIENTES.md) (in Spanish).
 tools\probar.ps1 "what to try"
 ```
 
-It builds, runs `gclab comprobar-dsp`, copies the app to `pruebas\<date>-<commit>` (ignored by git; the last
+It builds, runs `wtlab comprobar-dsp`, copies the app to `pruebas\<date>-<commit>` (ignored by git; the last
 5 are kept) and opens it from there, marked "TEST <commit>" in the title bar. Since it never runs from `bin\`, an open
 app does not block the next build. `-Abrir` opens the newest copy without building, `-NoAbrir` only builds and copies,
-`-SinComprobar` skips `gclab`, `-Proyecto folder` opens that project. If a GuitarCam is already open, a dialog asks first whether to close it
+`-SinComprobar` skips `wtlab`, `-Proyecto folder` opens that project. If a WildTrack is already open, a dialog asks first whether to close it
 (it saves the project before closing), so the new copy does not open the same project read-only. Plain `dotnet build` still works for building.
 
 The app starts in the **Projects** manager (list, search, templates, rename, duplicate, Recycle Bin). With a
 project folder as an argument, it opens it directly. `tools\make-shortcut.ps1` creates a desktop shortcut that opens the newest test copy (`probar.ps1 -Abrir`).
-Settings are stored in `%APPDATA%\GuitarCam Studio`.
+Settings are stored in `%APPDATA%\WildTrack`.
 
 ## Main shortcuts
 
@@ -187,15 +188,15 @@ and recording won't replace it; volume, fades and framing still change.
 
 ```
 src/
-  GuitarCam.Audio      audio engine: DSP, duplex ASIO, click, recording to disk, export
-  GuitarCam.Projects   project model, atomic saving, history, project manager
-  GuitarCam.App        the window (Avalonia 11.3)
-  GuitarCam.Lab        gclab.exe: console to test audio, DSP and projects without the window
+  WildTrack.Audio      audio engine: DSP, duplex ASIO, click, recording to disk, export
+  WildTrack.Projects   project model, atomic saving, history, project manager
+  WildTrack.App        the window (Avalonia 11.3)
+  WildTrack.Lab        wtlab.exe: console to test audio, DSP and projects without the window
 tools/                 icon, shortcut and verification utilities
 ```
 
 Dependencies point downward (App → Projects → Audio): the engine and the project model know nothing about
-the interface, and everything they do can be exercised from `gclab`. A project is saved in a folder:
+the interface, and everything they do can be exercised from `wtlab`. A project is saved in a folder:
 
 ```
 guitarcam.json        the project
@@ -207,7 +208,7 @@ exports/              exported videos and audio
 
 ## Contributing and license
 
-GuitarCam Studio Native is **free and non-profit**: it is made for the community, so anyone can record and
+WildTrack is **free and non-profit**: it is made for the community, so anyone can record and
 make music without paying a cent. Contributions are welcome and **all of them go through the maintainer's
 approval**: open an issue or a Pull Request following [CONTRIBUTING.md](CONTRIBUTING.md). Before touching code,
 read [AGENTS.md](AGENTS.md) (the project guide, in Spanish) and see [PENDIENTES.md](PENDIENTES.md) for what is
@@ -229,9 +230,9 @@ never on anyone's machine, so what you download comes from this code. Free code 
 requested by the user or the person installing or operating it: it checks GitHub's latest release for a new version
 (it can be turned off in About) and connects to the network camera you set up.
 
-## gclab
+## wtlab
 
-`gclab.exe` (`src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe`) tests the engine and projects from the
+`wtlab.exe` (`src\WildTrack.Lab\bin\Debug\net10.0-windows\wtlab.exe`) tests the engine and projects from the
 console without opening the window. Its commands and options are in Spanish (for example `grabar`, `mezclar`,
 `exportar`, `proyecto`, `proyectos`); run it without arguments to see the help, or see the command table in
-the [Spanish README](README.md#gclab).
+the [Spanish README](README.md#wtlab).

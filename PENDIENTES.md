@@ -1,4 +1,4 @@
-# Pendientes — GuitarCam Studio Native
+# Pendientes — WildTrack
 
 Ideas y cosas para implementar en la versión nativa. Cada ítem: qué es, por qué, y notas si hay.
 Al terminar uno, pasarlo a [HECHO.md](HECHO.md) con la fecha (y sacarlo de acá).
@@ -35,7 +35,7 @@ _Ideas y mejoras para la nativa._
   proyecto o por pista? ¿se elige con clic derecho en la perilla, en Configuración o en los dos? ¿qué hace sin destino
   (apagada con aviso, o agrega el efecto)? Lo mismo serviría para MIDI learn.
 - [ ] **Buses que mandan a otros buses** (sacado el 2026-10-26 a pedido del usuario: el circuito no quedaba claro).
-  El motor y `gclab` ya lo soportan; falta una forma de verlo y editarlo que se entienda (un diagrama del ruteo, o
+  El motor y `wtlab` ya lo soportan; falta una forma de verlo y editarlo que se entienda (un diagrama del ruteo, o
   solo una salida por bus sin envíos) antes de volver a abrirlo.
 - …y más: ir sumando acá
 
@@ -137,7 +137,7 @@ Etapas (cada una sirve sola):
 Sobre la toma, no en vivo, y solo monofónico (voz, punteo, bajo; un rasgueo no se separa nota por nota). Es un editor
 opcional que se abre desde el clip, como el piano roll: no suma pasos a "grabo, mezclo y exporto". Base que ya hay:
 `PitchShifter` (no cambia el largo, los ataques quedan en su lugar), `TransposeCache` (render en segundo plano a
-`cache/`, el media no se toca) y el YIN de `PitchTap`. Cada etapa se ejercita desde `gclab`.
+`cache/`, el media no se toca) y el YIN de `PitchTap`. Cada etapa se ejercita desde `wtlab`.
 - [ ] **Etapa 1: detectar notas.** YIN sobre toda la toma → curva de pitch → "gotas" (una por nota) dibujadas sobre el
   audio, tipo piano roll. Sin corregir todavía: sirve para ver si la detección anda con tomas reales.
 - [ ] **Etapa 2: corregir.** `PitchShifter` con una relación de tono por cuadro (hoy una sola para toda la toma).
@@ -204,6 +204,11 @@ de video y normalización ya están anotados arriba; el análisis amplía su alc
 
 ## Notas
 
+- Lo que quedó del nombre viejo (2026-10-29, ver HECHO): la carpeta `D:\Programacion\GuitarCamNative` (la memoria
+  de Claude va por esa ruta: moverla también), el slug de SignPath del workflow (en SignPath, revisar si guarda la
+  URL del repo, que ahora es `xtrimdr/WildTrack`; no crear nunca otro repo `GuitarCamNative`, rompe la redirección) y el archivo `guitarcam.json` de cada proyecto (renombrarlo pide migrar al abrir y
+  que las versiones viejas no lo vean). Antes de publicar con el nombre nuevo, buscarlo en las oficinas de marcas
+  (USPTO, INPI). El botón de descarga del README apunta a `WildTrack-Setup.exe`: anda recién con el próximo release.
 - `AudioGapLog` es un diagnóstico provisorio: sacarlo (o dejarlo detrás de una opción) cuando el audio esté confirmado.
 
 - Puntitos en la preview (resuelto): con la ventana permitiendo transparencia, algunos píxeles oscuros

@@ -43,26 +43,26 @@ jobs:
           $v = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
           if ("v$v" -ne $env:GITHUB_REF_NAME) { throw "Directory.Build.props dice $v y el tag es $env:GITHUB_REF_NAME" }
 
-      - name: Comprobar el DSP (gclab comprobar-dsp)
+      - name: Comprobar el DSP (wtlab comprobar-dsp)
         shell: pwsh
         run: |
-          dotnet build src/GuitarCam.Lab -c Release -nologo -v:minimal
-          if ($LASTEXITCODE -ne 0) { throw 'gclab no compiló' }
-          & src/GuitarCam.Lab/bin/Release/net10.0-windows/gclab.exe comprobar-dsp
-          if ($LASTEXITCODE -ne 0) { throw "gclab comprobar-dsp falló ($LASTEXITCODE)" }
+          dotnet build src/WildTrack.Lab -c Release -nologo -v:minimal
+          if ($LASTEXITCODE -ne 0) { throw 'wtlab no compiló' }
+          & src/WildTrack.Lab/bin/Release/net10.0-windows/wtlab.exe comprobar-dsp
+          if ($LASTEXITCODE -ne 0) { throw "wtlab comprobar-dsp falló ($LASTEXITCODE)" }
 
       - name: Instalador
         shell: pwsh
         run: |
           ./tools/make-installer.ps1
-          if (-not (Test-Path artifacts/publish/gcvsthost.exe)) { throw 'Falta gcvsthost.exe: no compiló el puente de VST3' }
+          if (-not (Test-Path artifacts/publish/wtvsthost.exe)) { throw 'Falta wtvsthost.exe: no compiló el puente de VST3' }
 
       - name: Subir el instalador sin firmar
         id: unsigned
         uses: actions/upload-artifact@v4
         with:
           name: instalador-sin-firmar
-          path: artifacts/GuitarCamStudio-Setup.exe
+          path: artifacts/WildTrack-Setup.exe
           if-no-files-found: error
 
       - name: Firmar con SignPath
@@ -80,17 +80,17 @@ jobs:
       - name: Elegir el instalador final
         shell: pwsh
         run: |
-          $signed = 'artifacts/signed/GuitarCamStudio-Setup.exe'
-          $exe = if (Test-Path $signed) { $signed } else { 'artifacts/GuitarCamStudio-Setup.exe' }
+          $signed = 'artifacts/signed/WildTrack-Setup.exe'
+          $exe = if (Test-Path $signed) { $signed } else { 'artifacts/WildTrack-Setup.exe' }
           New-Item -ItemType Directory -Force artifacts/final | Out-Null
           Copy-Item $exe artifacts/final/
-          $sig = Get-AuthenticodeSignature artifacts/final/GuitarCamStudio-Setup.exe
+          $sig = Get-AuthenticodeSignature artifacts/final/WildTrack-Setup.exe
           Write-Host "Firma: $($sig.Status) $($sig.SignerCertificate.Subject)"
 
       - uses: actions/upload-artifact@v4
         with:
           name: instalador
-          path: artifacts/final/GuitarCamStudio-Setup.exe
+          path: artifacts/final/WildTrack-Setup.exe
 
       - name: Release en borrador
         if: startsWith(github.ref, 'refs/tags/')
@@ -99,6 +99,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $v = $env:GITHUB_REF_NAME.TrimStart('v')
-          gh release create $env:GITHUB_REF_NAME artifacts/final/GuitarCamStudio-Setup.exe --draft --verify-tag `
-            --title "GuitarCam Studio Native $v" --notes "Borrador armado por GitHub Actions: escribí las notas y publicalo."
+          gh release create $env:GITHUB_REF_NAME artifacts/final/WildTrack-Setup.exe --draft --verify-tag `
+            --title "WildTrack $v" --notes "Borrador armado por GitHub Actions: escribí las notas y publicalo."
           if ($LASTEXITCODE -ne 0) { throw 'No pude crear el release' }

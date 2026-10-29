@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WildTrack.App/WildTrack.App.csproj" />
+    <Project Path="src/WildTrack.Audio/WildTrack.Audio.csproj" />
+    <Project Path="src/WildTrack.Lab/WildTrack.Lab.csproj" />
+    <Project Path="src/WildTrack.Projects/WildTrack.Projects.csproj" />
+  </Folder>
+</Solution>

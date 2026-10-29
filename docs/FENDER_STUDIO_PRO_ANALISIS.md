@@ -1,4 +1,4 @@
-# Opcional — ideas del manual de Fender Studio Pro para GuitarCam Native
+# Opcional — ideas del manual de Fender Studio Pro para WildTrack Native
 
 Relevamiento: **2026-10-24**. Las propuestas nuevas de este informe son opcionales, sin compromiso de
 implementación ni cambios en el funcionamiento de la app. Las funciones ya pedidas conservan su estado
@@ -29,7 +29,7 @@ documentación y el código; no se probó la app ni el hardware durante este rel
 
 ## Primero: mejoras con efecto directo sobre el trabajo diario
 
-| Propuesta | Para qué nos sirve | Situación en GuitarCam | Dificultad estimada |
+| Propuesta | Para qué nos sirve | Situación en WildTrack | Dificultad estimada |
 |---|---|---|---|
 | Repetir un rango A–B | Practicar o mezclar ocho compases sin volver al principio | Hay loop de la duración completa, falta rango | Media |
 | Marcadores con nombre | Saltar a Intro, Estribillo o Solo | No se encontró un modelo de marcadores | Baja–media |
@@ -96,7 +96,7 @@ automáticamente cada vez que se corrige una nota.
 ### 5. Colas de efectos y exportación de un fragmento
 
 El manual ofrece tiempo adicional para la caída de efectos y selección del tramo exportado.
-En GuitarCam, `MixRenderer.MixDurationSec` calcula el final del último clip y los exportadores usan
+En WildTrack, `MixRenderer.MixDurationSec` calcula el final del último clip y los exportadores usan
 esa duración: una cola que siga sonando después puede quedar cortada. Propongo **“Conservar colas”**,
 con duración máxima, y exportar un rango para sacar un adelanto del tema.
 [Fuente: Mixing Down, Export Range](https://fenderstudiopromanual.fender.com/en/Content/Mixing_Topics/Mixing_Down.htm).
@@ -127,19 +127,19 @@ En nuestra app protegería una toma cuyo audio y encuadre ya están listos.
 
 Empezaría con una acción de contexto **“Bloquear edición”**, reversible y visible. Debe cubrir mover,
 recortar, borrar y reemplazar al grabar; conviene permitir seguir mezclando. La protección tiene que
-vivir también en `Projects`, para que los comandos de `gclab` y futuras herramientas respeten la regla.
+vivir también en `Projects`, para que los comandos de `wtlab` y futuras herramientas respeten la regla.
 
 ### 8. Historial de versiones accesible
 
 El manual expone guardar una versión y restaurarla desde la interfaz. Nuestro equivalente ya existe
-en `ProjectStore` y `gclab`, y `PENDIENTES.md` reconoce que falta dónde tocarlo en la ventana.
+en `ProjectStore` y `wtlab`, y `PENDIENTES.md` reconoce que falta dónde tocarlo en la ventana.
 Recomiendo un bloque **“Versiones guardadas”** en Historial, con fecha, nombre opcional y restauración
 conservando el estado anterior, como hace el almacenamiento actual.
 [Fuente: Saving Options](https://fenderstudiopromanual.fender.com/en/Content/Saving%2C%20Import%20and%20Export/Saving%20Options.htm).
 
 ## Después: desarrollar ideas que ya están en nuestros pendientes
 
-| Idea existente | Qué aporta el manual | Alcance recomendado para GuitarCam |
+| Idea existente | Qué aporta el manual | Alcance recomendado para WildTrack |
 |---|---|---|
 | Grabación en loop y comping | Pasadas separadas, escucha de alternativas y elección por fragmentos | Primero elegir una pasada completa; luego combinar frases. Mantener juntos audio, video y corrección de sincronía. [Comping](https://fenderstudiopromanual.fender.com/en/Content/Editing_Topics/Comping.htm) |
 | Pedalera MIDI y MIDI learn | Vincular un control físico con una acción o parámetro | Priorizar grabar/parar, play y marcadores; después aprender perillas. No exige esperar a pistas MIDI con instrumentos. [Control Linking](https://fenderstudiopromanual.fender.com/en/Content/Control_Link_Topics/Control_Linking.htm) |
@@ -170,7 +170,7 @@ sus offsets de cámara y su recuperación si se interrumpe la grabación.
   tomas descartadas e historial; no confundir “para compartir” con “respaldo completo”.
   [Zip Export and Import](https://fenderstudiopromanual.fender.com/en/Content/Saving%2C%20Import%20and%20Export/Zip_export_and_import.htm).
 - **Rescatar lo que acabo de tocar:** adaptación propia inspirada en Retrospective Recording. El tema
-  del manual habla de **MIDI**, no de un búfer de audio o cámara. Para GuitarCam se podría investigar un
+  del manual habla de **MIDI**, no de un búfer de audio o cámara. Para WildTrack se podría investigar un
   anillo preasignado de audio, opcional y con duración acotada; recuperar video requeriría otro diseño.
   [Retrospective Recording](https://fenderstudiopromanual.fender.com/en/Content/Fundamentals_Topics/Retrospective_Record.htm).
 - **Congelar pistas cuando lleguen VST:** renderizar temporalmente pistas costosas conservando originales
@@ -202,6 +202,6 @@ La idea ya anotada de tablatura en pantalla puede abordarse sin construir un edi
    puede adelantarse si ya hay una pedalera disponible para probar.
 5. **Dar forma al resultado:** automatización de mezcla y del director de video, e importación del celular.
 
-Todo cambio de motor o proyecto debería poder ejercitarse desde `gclab`, compartir comportamiento
+Todo cambio de motor o proyecto debería poder ejercitarse desde `wtlab`, compartir comportamiento
 entre reproducción y exportación y conservar medios originales. No se asignan plazos: la dificultad
 indicada es relativa y todavía no hay un diseño técnico completo de cada función.

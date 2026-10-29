@@ -1,0 +1,104 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:WildTrack.App"
+             x:Class="WildTrack.App.Dialogs.AboutDialog"
+             AutomationProperties.Name="{loc:T title.about}"
+             Background="#B3000000" KeyboardNavigation.TabNavigation="Cycle" Focusable="True">
+
+  <!-- native only: the web app has no about box; same frame as SettingsDialog -->
+  <UserControl.Styles>
+    <Style Selector="Button.act">
+      <Setter Property="Width" Value="32" />
+      <Setter Property="Height" Value="32" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Faint}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.act:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Hover}" />
+      <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Border Width="560" HorizontalAlignment="Center" VerticalAlignment="Center"
+          Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12" ClipToBounds="True">
+    <Grid RowDefinitions="Auto,Auto">
+      <!-- the same hero as the splash (SplashWindow): glow, big logo, name and tagline, version at the corner -->
+      <Grid Height="250" Background="{StaticResource App}" ClipToBounds="True">
+        <Ellipse x:Name="Glow" Width="520" Height="520" Margin="-200,-150,0,0"
+                 HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False" />
+
+        <StackPanel Orientation="Horizontal" Spacing="26" Margin="30,0,36,6" VerticalAlignment="Center">
+          <Image x:Name="Logo" Width="190" Height="190" RenderOptions.BitmapInterpolationMode="HighQuality" />
+          <StackPanel VerticalAlignment="Center" Spacing="6">
+            <TextBlock Text="WildTrack" FontSize="34" FontWeight="SemiBold" LetterSpacing="-0.5" Foreground="{StaticResource Fg}" />
+            <TextBlock Text="{loc:T splash.tagline}" FontSize="13" Foreground="{StaticResource Faint}" Margin="2,2,0,0" />
+          </StackPanel>
+        </StackPanel>
+
+        <Button x:Name="CloseButton" Classes="act" Margin="10" HorizontalAlignment="Right" VerticalAlignment="Top"
+                ToolTip.Tip="{loc:T settings.close}" AutomationProperties.Name="{loc:T settings.close}">
+          <TextBlock Classes="icon" Text="&#xE711;" FontSize="13" />
+        </Button>
+
+        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,20,14" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+          <Border x:Name="TestChip" IsVisible="False" Background="{StaticResource RecSoft}" CornerRadius="4" Padding="6,1" VerticalAlignment="Center">
+            <TextBlock x:Name="TestText" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Rec}" />
+          </Border>
+          <TextBlock x:Name="VersionText" Classes="mono" FontSize="11.5" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <Border x:Name="AccentLine" Height="2" VerticalAlignment="Bottom" />
+      </Grid>
+
+      <StackPanel Grid.Row="1" Margin="24,20,24,20" Spacing="14">
+        <TextBlock Classes="dim" TextWrapping="Wrap" LineHeight="18"
+                   Text="{loc:T about.desc}" />
+
+        <Border Classes="section" Padding="12,10">
+          <Grid x:Name="Info" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="16">
+            <TextBlock Classes="label" Text="AUDIO" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" x:Name="AudioText" Classes="dim mono" HorizontalAlignment="Right" />
+            <TextBlock Grid.Row="1" Classes="label" Text="{loc:T about.ui}" VerticalAlignment="Center" />
+            <TextBlock Grid.Row="1" Grid.Column="1" x:Name="UiText" Classes="dim mono" HorizontalAlignment="Right" />
+            <TextBlock Grid.Row="2" Classes="label" Text="VIDEO" VerticalAlignment="Center" />
+            <TextBlock Grid.Row="2" Grid.Column="1" x:Name="VideoText" Classes="dim mono" Text="{loc:T about.ffmpeg}" HorizontalAlignment="Right" />
+            <TextBlock Grid.Row="3" Classes="label" Text="{loc:T about.icons}" VerticalAlignment="Center" />
+            <TextBlock Grid.Row="3" Grid.Column="1" Classes="dim mono" Text="IconOven (MIT)" HorizontalAlignment="Right" />
+          </Grid>
+        </Border>
+
+        <!-- the latest release on GitHub (UpdateCheck, asked by MainWindow.Updates.cs when the window opens) -->
+        <Border Classes="section" Padding="12,10">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock x:Name="UpdateText" Classes="dim" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap" />
+              <Button Grid.Column="1" x:Name="UpdateButton" Classes="chip" Margin="12,0,0,0" IsVisible="False" ToolTip.Tip="{loc:T about.update.download.tip}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Classes="icon" Text="&#xE896;" FontSize="13" />
+                  <TextBlock Text="{loc:T about.update.download}" />
+                </StackPanel>
+              </Button>
+            </Grid>
+            <CheckBox x:Name="UpdateCheckBox" Content="{loc:T about.update.check}" FontSize="12" ToolTip.Tip="{loc:T about.update.check.tip}" />
+          </StackPanel>
+        </Border>
+
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Classes="dim" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap"
+                     Text="{loc:T about.settings}" />
+          <Button Grid.Column="1" x:Name="SettingsFolderButton" Classes="chip" Margin="12,0,0,0" ToolTip.Tip="{loc:T about.settings.tip}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Classes="icon" Text="&#xE838;" FontSize="13" />
+              <TextBlock Text="{loc:T about.openFolder}" />
+            </StackPanel>
+          </Button>
+        </Grid>
+      </StackPanel>
+    </Grid>
+  </Border>
+</UserControl>

@@ -1,12 +1,12 @@
-﻿# The one way to try a change: builds the solution, runs gclab's DSP checks, copies the app to its own folder
-# and opens that copy. The app never runs from bin\, so an open GuitarCam never blocks the next build, and every
+﻿# The one way to try a change: builds the solution, runs wtlab's DSP checks, copies the app to its own folder
+# and opens that copy. The app never runs from bin\, so an open WildTrack never blocks the next build, and every
 # copy carries a prueba.txt mark (commit, uncommitted changes, time) that the app shows in its title bar.
 #   tools\probar.ps1 "qué probar"            -> build, check, copy and open with that test note
 #   tools\probar.ps1 "qué probar" -Proyecto D:\...\MiTema   -> same, opening that project directly
 #   tools\probar.ps1 -Abrir                  -> open the newest copy without building (the desktop shortcut)
-#   tools\probar.ps1 -SinComprobar           -> skip gclab comprobar-dsp (UI-only changes in a hurry)
+#   tools\probar.ps1 -SinComprobar           -> skip wtlab comprobar-dsp (UI-only changes in a hurry)
 #   tools\probar.ps1 -NoAbrir                -> build, check and copy only (what the agent runs after each change)
-# Before opening, if a GuitarCam is already open, a dialog asks whether to close it (it saves first), so the new copy
+# Before opening, if a WildTrack is already open, a dialog asks whether to close it (it saves first), so the new copy
 # does not open the same project read-only; one open from bin\ is asked about before building, since it blocks it.
 param(
     [Parameter(Position = 0)][string]$Que = '',
@@ -17,7 +17,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$bin = Join-Path $root 'src\GuitarCam.App\bin\Debug\net10.0-windows'
+$bin = Join-Path $root 'src\WildTrack.App\bin\Debug\net10.0-windows'
 # Not under AppData: run from an MSIX-packaged tool (the Claude desktop app), Windows redirects AppData writes into
 # the package's own LocalCache and the desktop shortcut would never find the copies
 $copies = Join-Path $root 'pruebas'
@@ -34,7 +34,7 @@ function Fail([string]$text) {
 # The app's own sesiones.log: a window this script closes looks like one closed by hand, so it says so there
 function SessionLog([string]$text) {
     try {
-        $dir = Join-Path $env:APPDATA 'GuitarCam Studio'
+        $dir = Join-Path $env:APPDATA 'WildTrack'
         New-Item -ItemType Directory -Force $dir | Out-Null
         Add-Content -Path (Join-Path $dir 'sesiones.log') -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')  $text" -Encoding UTF8
     } catch { }
@@ -42,20 +42,23 @@ function SessionLog([string]$text) {
 # From the desktop shortcut the console is hidden: an error would vanish without a trace
 trap { SessionLog "probar.ps1 falló: $_ $($_.InvocationInfo.PositionMessage)"; break }
 
-# How long a GuitarCam asked to close gets to save and close before the script gives up
+# How long a WildTrack asked to close gets to save and close before the script gives up
 $CloseWaitSec = 20
 
-# Asks in a dialog (the agent's console cannot be answered) whether to close the GuitarCam windows that are open.
+# The app's process, and its name before the rename (a test copy from then may still be open)
+$AppProcesses = 'WildTrack', 'GuitarCam'
+
+# Asks in a dialog (the agent's console cannot be answered) whether to close the WildTrack windows that are open.
 # Closing goes through the window's own close, so the project is saved and a take in progress is kept; an export in
 # progress refuses to close. Returns 'closed', 'keep' (open the new one anyway) or 'cancel'.
 function AskClose($procs, [string]$why, [bool]$canKeep) {
     Add-Type -AssemblyName System.Windows.Forms
-    $names = ($procs | ForEach-Object { if ($_.MainWindowTitle) { $_.MainWindowTitle } else { 'GuitarCam' } }) -join "`n"
-    $text = "Tenés GuitarCam abierto:`n$names`n`n$why`n`n¿Lo cierro? (guarda el proyecto antes de cerrar)"
+    $names = ($procs | ForEach-Object { if ($_.MainWindowTitle) { $_.MainWindowTitle } else { 'WildTrack' } }) -join "`n"
+    $text = "Tenés WildTrack abierto:`n$names`n`n$why`n`n¿Lo cierro? (guarda el proyecto antes de cerrar)"
     if ($canKeep) { $text += "`n`nSí: lo cierro y abro la nueva.`nNo: abro la nueva igual (si es el mismo proyecto, en solo lectura).`nCancelar: no abro nada." }
     $buttons = if ($canKeep) { 'YesNoCancel' } else { 'YesNo' }
     $owner = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true; ShowInTaskbar = $false }
-    $answer = [System.Windows.Forms.MessageBox]::Show($owner, $text, 'GuitarCam · Probar', $buttons, 'Question')
+    $answer = [System.Windows.Forms.MessageBox]::Show($owner, $text, 'WildTrack · Probar', $buttons, 'Question')
     $owner.Dispose()
     if ($answer -eq 'Cancel' -or (-not $canKeep -and $answer -eq 'No')) { return 'cancel' }
     if ($answer -eq 'No') { return 'keep' }
@@ -63,15 +66,15 @@ function AskClose($procs, [string]$why, [bool]$canKeep) {
     foreach ($p in $procs) { [void]$p.CloseMainWindow() }
     foreach ($p in $procs) {
         if (-not $p.WaitForExit($CloseWaitSec * 1000)) {
-            Fail "GuitarCam no se cerró en $CloseWaitSec s (¿está exportando o esperando algo?). Cerralo a mano y volvé a correr esto."
+            Fail "WildTrack no se cerró en $CloseWaitSec s (¿está exportando o esperando algo?). Cerralo a mano y volvé a correr esto."
         }
     }
-    Write-Host 'GuitarCam cerrado.' -ForegroundColor DarkGray
+    Write-Host 'WildTrack cerrado.' -ForegroundColor DarkGray
     return 'closed'
 }
 
 function Launch([string]$dir) {
-    $open = @(Get-Process GuitarCam -ErrorAction SilentlyContinue)
+    $open = @(Get-Process $AppProcesses -ErrorAction SilentlyContinue)
     if ($open.Count -and (AskClose $open 'Voy a abrir la versión nueva para probar.' $true) -eq 'cancel') {
         Write-Host 'No abrí nada: elegiste cancelar.' -ForegroundColor Yellow
         exit 2
@@ -79,10 +82,10 @@ function Launch([string]$dir) {
     $a = @()
     if ($Proyecto) { $a += $Proyecto }
     if ($Que) { $a += '--probar'; $a += $Que }
-    $exe = Join-Path $dir 'GuitarCam.exe'
+    $exe = Join-Path $dir 'WildTrack.exe'
     SessionLog "probar.ps1 abre $exe"
     # Opened through Explorer, so it runs as the user's own app even when this script runs inside a packaged tool
-    # (otherwise it would read and write a redirected copy of %APPDATA%\GuitarCam Studio, not the user's settings)
+    # (otherwise it would read and write a redirected copy of %APPDATA%\WildTrack, not the user's settings)
     $lnk = Join-Path $dir 'abrir.lnk'
     $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
     $s.TargetPath = $exe
@@ -101,9 +104,9 @@ if ($Abrir) {
 }
 
 # An app opened straight from bin\ (an old shortcut, or by hand) locks the DLLs and the build fails
-$fromBin = @(Get-Process GuitarCam -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($bin, 'OrdinalIgnoreCase') })
+$fromBin = @(Get-Process $AppProcesses -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($bin, 'OrdinalIgnoreCase') })
 if ($fromBin.Count -and (AskClose $fromBin 'Está abierto desde la carpeta de compilación y no me deja compilar.' $false) -ne 'closed') {
-    Fail 'hay un GuitarCam abierto desde bin\ y no lo cerré. Cerralo y volvé a correr esto.'
+    Fail 'hay un WildTrack abierto desde bin\ y no lo cerré. Cerralo y volvé a correr esto.'
 }
 
 Push-Location $root
@@ -116,13 +119,13 @@ $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $mark = "$commit$(if ($dirty) { ' + cambios sin commit' })"
 
 Write-Host "Compilando ($mark)..." -ForegroundColor Cyan
-dotnet build (Join-Path $root 'GuitarCamNative.slnx') -c Debug -nologo -v:minimal -clp:ErrorsOnly
+dotnet build (Join-Path $root 'WildTrack.slnx') -c Debug -nologo -v:minimal -clp:ErrorsOnly
 if ($LASTEXITCODE -ne 0) { Fail 'la compilación falló (arriba están los errores).' }
 
 if (-not $SinComprobar) {
-    Write-Host 'Comprobando el DSP (gclab comprobar-dsp)...' -ForegroundColor Cyan
-    $out = & (Join-Path $root 'src\GuitarCam.Lab\bin\Debug\net10.0-windows\gclab.exe') comprobar-dsp 2>&1
-    if ($LASTEXITCODE -ne 0) { $out | Write-Host; Fail "gclab comprobar-dsp falló (código $LASTEXITCODE)." }
+    Write-Host 'Comprobando el DSP (wtlab comprobar-dsp)...' -ForegroundColor Cyan
+    $out = & (Join-Path $root 'src\WildTrack.Lab\bin\Debug\net10.0-windows\wtlab.exe') comprobar-dsp 2>&1
+    if ($LASTEXITCODE -ne 0) { $out | Write-Host; Fail "wtlab comprobar-dsp falló (código $LASTEXITCODE)." }
     Write-Host '  todo bien' -ForegroundColor DarkGray
 }
 

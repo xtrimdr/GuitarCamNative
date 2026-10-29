@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:WildTrack.App"
+             x:Class="WildTrack.App.Dialogs.UnsavedDialog"
+             AutomationProperties.Name="{loc:T unsaved.title}"
+             Background="#B3000000" KeyboardNavigation.TabNavigation="Cycle" Focusable="True">
+
+  <!-- same frame as AboutDialog: asked on closing with edits that haven't reached the project yet -->
+  <Border Width="440" HorizontalAlignment="Center" VerticalAlignment="Center"
+          Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12" ClipToBounds="True">
+    <StackPanel Margin="24,22,24,20" Spacing="16">
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <TextBlock Classes="icon" Text="&#xE74E;" FontSize="20" Foreground="{StaticResource Accent}" VerticalAlignment="Center" />
+        <TextBlock Text="{loc:T unsaved.title}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+      </StackPanel>
+      <TextBlock x:Name="Body" Classes="dim" TextWrapping="Wrap" LineHeight="18" />
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+        <Button x:Name="DiscardButton" Classes="btn danger" Content="{loc:T unsaved.discard}" ToolTip.Tip="{loc:T unsaved.discard.tip}" />
+        <Button Grid.Column="2" x:Name="CancelButton" Classes="btn" Margin="8,0,0,0" Content="{loc:T transport.count.cancel}" />
+        <Button Grid.Column="3" x:Name="SaveButton" Classes="btn primary" Margin="8,0,0,0" Padding="16,0" Content="{loc:T unsaved.save}" />
+      </Grid>
+    </StackPanel>
+  </Border>
+</UserControl>

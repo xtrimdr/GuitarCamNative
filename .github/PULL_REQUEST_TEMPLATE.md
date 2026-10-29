@@ -8,7 +8,7 @@
 
 ## Cómo lo probé / How I tested it
 
-<!-- gclab, la ventana, qué casos. Si no pudiste probar algo (ASIO, cámara…), decilo. -->
+<!-- wtlab, la ventana, qué casos. Si no pudiste probar algo (ASIO, cámara…), decilo. -->
 
 ## Lista / Checklist
 

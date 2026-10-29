@@ -1,0 +1,10 @@
+Drawings the icon's engravings are made from (tools/make-icon.ps1). All from Openclipart, public domain (CC0):
+no attribution required. https://openclipart.org/share
+
+guitarra.svg   https://openclipart.org/detail/175753/white-electric-guitar
+violin.svg     https://openclipart.org/detail/313617/vintage-violin-line-art
+microfono.svg  https://openclipart.org/detail/338822/retro-microphone
+trompeta.svg   https://openclipart.org/detail/23308/trumpet
+saxo.svg       https://openclipart.org/detail/263045/saxophone
+
+The keyboard has no drawing: tools/icon/relieves.py draws it.

@@ -1,5 +1,5 @@
 # Baja el SDK de VST3 de Steinberg (licencia MIT desde la 3.8) a lib\vst3sdk, fuera de git como los DLL de FFmpeg.
-# Solo lo que usa el puente de plugins (src\GuitarCam.VstHost): pluginterfaces, base y public.sdk, en un clon
+# Solo lo que usa el puente de plugins (src\WildTrack.VstHost): pluginterfaces, base y public.sdk, en un clon
 # superficial de una versión fija. Correlo de nuevo con -Reemplazar para cambiar de versión.
 param(
     [string]$Version = 'v3.8.1_build_84',

@@ -1,8 +1,21 @@
-# Hecho — GuitarCam Studio Native
+# Hecho — WildTrack
 
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
+Hasta 2026-10-29 la app se llamó GuitarCam Studio Native: los ítems de antes usan los nombres de entonces
+(`GuitarCam.*`, `gclab`, `gcvsthost`).
 
+- 2026-10-29: La app pasa a llamarse **WildTrack** (ya es más un DAW que un estudio de cámara): proyectos y namespaces
+  `WildTrack.*`, `WildTrack.exe`, `wtlab`, `wtvsthost`, `WildTrack.slnx`, instalador `WildTrack-Setup.exe` (mismo
+  `AppId`: actualiza la instalación vieja y borra sus archivos y accesos). Los ajustes pasan a `%APPDATA%\WildTrack`
+  (`WildTrack.Audio/AppFolder.cs` copia la primera vez lo que falte de `%APPDATA%\GuitarCam Studio`) y la carpeta de
+  proyectos por defecto a `Documentos\WildTrack Proyectos` si no existía la vieja. El repo de GitHub pasa a
+  `xtrimdr/WildTrack` (`UpdateCheck.Repo`, links de los README; GitHub redirige el nombre viejo, así la 0.9.8
+  instalada sigue encontrando las versiones nuevas). Siguen igual `guitarcam.json` y las menciones a la web original. Ícono nuevo, renderizado en Blender
+  (`tools/make-icon.ps1` + `tools/icon/`): un diafragma de seis hojas de acero cepillado alrededor del sensor, con
+  un aro pulido y, desde 128 px, en cada hoja grabada apenas la parte más reconocible de un instrumento, en primer
+  plano (pastillas de guitarra, teclas, rejilla de micrófono, campana de saxo, efes de violín, pistones de trompeta).
+  Los dibujos son de Openclipart, dominio público (`tools/icon/instrumentos/ORIGEN.txt`).
 - 2026-10-29: Sin FFmpeg, la app avisa al abrir con un cuadro (`Dialogs/FfmpegDialog`, también desde el chip
   "FFmpeg no encontrado") que lo instala con winget (`Gyan.FFmpeg`, `GuitarCam.Audio/FfmpegSetup.cs`), abre la página
   de descarga o lo busca de nuevo; relee el PATH del registro para no tener que reiniciar. `gclab sistema --instalar-ffmpeg`.
