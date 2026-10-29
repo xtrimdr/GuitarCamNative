@@ -1,18 +1,17 @@
-# WildTrack
+<p align="center">
+  <img src="docs/wildtrack-icon.png" alt="Ícono de WildTrack: un diafragma de acero hecho de instrumentos" width="220">
+</p>
 
-**Español** · [English](README_EN.md)
+<h1 align="center">WildTrack</h1>
 
-**WildTrack** es un DAW de escritorio para Windows, para cualquier músico: guitarra, bajo, voz, teclados,
-batería o lo que toques. Y además hace **videos**: grabás tomas con cámara y audio, las mezclás y exportás un
-video con un panel por toma.
-Antes se llamaba **GuitarCam Studio Native**: al actualizar, tus ajustes y proyectos siguen ahí.
+<p align="center">
+  <b>Un DAW para grabar, mezclar, masterizar y exportar música en Windows.</b><br>
+  Audio y MIDI, instrumentos y efectos VST3, buses y mastering. Y si grabás con cámara, también el video.
+</p>
 
-Funciona tanto como un **cam studio** (grabar tomas con cámara y armar el video) como un **DAW** (grabar,
-editar y mezclar audio en un timeline y un mixer completos, con o sin imagen: el modo **Solo audio**
-sirve para hacer música sin video).
-
-Está pensada para usarse con el instrumento en la mano: atajos de una tecla, botones grandes y un camino corto
-de **grabar → mezclar → exportar**.
+<p align="center">
+  <b>Español</b> · <a href="README_EN.md">English</a>
+</p>
 
 <p align="center">
   <a href="https://github.com/xtrimdr/WildTrack/releases/latest/download/WildTrack-Setup.exe">
@@ -21,6 +20,15 @@ de **grabar → mezclar → exportar**.
   <br>
   <sub>Windows 10/11 de 64 bits · instalador autocontenido, sin instalar .NET</sub>
 </p>
+
+**WildTrack** es un DAW para cualquier instrumento y cualquier estilo: guitarra, bajo, voz, teclados, batería, una
+banda entera o una producción armada en la compu. Grabás, editás, mezclás, masterizás y exportás con pistas de audio
+y MIDI, piano roll, instrumentos y efectos VST3, buses y una cadena de master completa.
+
+Además hace **videos**: si grabás con cámara, cada toma guarda su imagen y WildTrack arma un video con un panel por
+toma, con color y formatos para redes. Es un extra para cuando lo necesitás; sin cámara, funciona como cualquier DAW.
+
+Antes se llamaba **GuitarCam Studio Native**: al actualizar, tus ajustes y proyectos siguen ahí.
 
 <details>
 <summary><b>Antes de instalar</b></summary>
@@ -33,14 +41,14 @@ de **grabar → mezclar → exportar**.
 Más detalles en [Requisitos](#requisitos).
 </details>
 
-![El timeline en modo Video: un panel por toma, carpetas de pistas con su color, los knobs de cada pista y la pestaña de color](docs/screenshots/timeline-es.png)
+![El modo Solo audio: pistas con sus knobs de efecto y el EQ con el espectro en vivo](docs/screenshots/audio-es.png)
 
 | | |
 |---|---|
 | ![El mixer sonando: carpetas, buses de reverb y delay y el master](docs/screenshots/mixer-es.png) | ![La vista Mastering: la cadena del master de izquierda a derecha y el volumen de salida](docs/screenshots/master-es.png) |
-| **El mixer**: una tira por pista, las carpetas, los buses de reverb y delay y el master. | **Mastering**: Look, limpieza, multibanda, color, Cinta, Ancho, soft clip y limitador, con el Destino de volumen y "Sugerime". |
-| ![Formato vertical 9:16 con el diseño Vertical: el video a lo alto y el timeline y el mixer al lado](docs/screenshots/vertical-es.png) | ![El modo Solo audio: pistas con sus knobs de efecto y el EQ con el espectro en vivo](docs/screenshots/audio-es.png) |
-| **Vertical 9:16** con el diseño Vertical: el video a lo alto y el timeline y el mixer al lado. | **Solo audio**: pistas con sus knobs de efecto y el EQ con el espectro en vivo. |
+| **Mixer**: una tira por pista, carpetas, buses y el master. | **Mastering**: Look, limpieza, multibanda, color, Cinta, Ancho, soft clip y limitador, con Destino de volumen y "Sugerime". |
+| ![El timeline en modo Video: un panel por toma, carpetas de pistas con su color y la pestaña de color](docs/screenshots/timeline-es.png) | ![Formato vertical 9:16 con el diseño Vertical: el video a lo alto y el timeline y el mixer al lado](docs/screenshots/vertical-es.png) |
+| **Modo Video**: un panel por toma y la pestaña de color. | **Vertical 9:16** para Reels, Shorts y TikTok, con el diseño Vertical. |
 
 *Las capturas son del proyecto de demo; las imágenes de los paneles son fotos de [Unsplash](https://unsplash.com).*
 
@@ -48,84 +56,93 @@ Más detalles en [Requisitos](#requisitos).
 
 ### Grabar
 
-- Audio por **ASIO** (entrada y salida en un mismo callback, con monitoreo) y video desde una cámara (DirectShow o
-  DroidCam por IP). Cada toma se escribe a disco mientras ocurre, así que un corte no la pierde.
+- Audio por **ASIO** (entrada y salida en un mismo callback, con monitoreo). Cada toma se escribe a disco mientras
+  ocurre, así que un corte no la pierde.
 - Se graba desde donde esté el cabezal, para regrabar solo un pedazo, con **metrónomo** (compás, tempo, tap tempo,
   cuenta previa y seis sonidos de click) y **calibración de latencia** con cable o tocando.
-- **Afinador** con notas en castellano, flechas que te dicen para dónde girar la clavija y sensibilidad ajustable.
+- **MIDI** desde teclados y controladores: cada pista MIDI elige su entrada y su canal, toca en vivo por su
+  instrumento y graba las notas en un clip.
+- **Afinador** con notas en castellano, flechas que indican para dónde girar la clavija y sensibilidad ajustable.
 
 ### Editar
 
 - **Timeline** con varias pistas: clips que se mueven, recortan, dividen y duplican, fades, ganancia por clip con su
-  **curva de volumen**, rango de borrado, deshacer y rehacer ilimitados, e importación de audio de afuera (WAV, MP3,
-  FLAC, OGG, M4A, AIFF). **Detectar tempo** en cualquier clip (clic derecho) y poner el proyecto a esos BPM.
-  **Extraer MIDI**: las notas de un clip de audio (acordes o melodía) pasan a una pista MIDI, con el clic derecho o
+  **curva de volumen**, rango de borrado, deshacer y rehacer ilimitados, e importación de audio (WAV, MP3, FLAC, OGG,
+  M4A, AIFF). **Detectar tempo** en cualquier clip (clic derecho) y poner el proyecto a esos BPM.
+- **Pistas MIDI** con **piano roll**: doble clic en su carril crea un clip y lo abre. Clic escribe una nota, arrastrar
+  la mueve o la alarga, clic derecho la borra, y abajo va la velocidad de cada nota.
+- **Extraer MIDI**: las notas de un clip de audio (acordes o melodía) pasan a una pista MIDI, con el clic derecho o
   arrastrando el clip a una pista MIDI (Basic Pitch de Spotify, en la CPU).
 - **Carpetas** que se pliegan y agrupan pistas; varias pistas se marcan con Ctrl+clic / Shift+clic y se mueven juntas.
-  Cada pista tiene su **color** (24, en orden de arco iris) y un **ícono de instrumento** (guitarras, bajo, batería,
+  Cada pista tiene su **color** (24, en orden de arco iris), un **ícono de instrumento** (guitarras, bajo, batería,
   synths, cuerdas, vientos, percusión…), su propio alto y sus knobs de Vida, Comp, Reverb, Delay y Tono en el
   encabezado (cuáles se ven, en Configuración → Vista).
 - Un sonido que te gusta se guarda como **plantilla de pista** y vuelve desde Nueva pista → Plantilla.
-- **Pistas MIDI** para armar la base: doble clic en su carril crea un clip y lo abre en el **piano roll** (el botón
-  "Piano roll" del transporte). Clic escribe una nota, arrastrar la mueve o la alarga, clic derecho borra, y abajo va la
-  velocidad de cada nota. Cada pista MIDI toca con un **instrumento VST3** (Surge XT, MT-PowerDrumKit…: clic derecho
-  en la pista → Instrumento, o el botón del piano roll, que también abre la ventana del plugin) o, sin plugin, con un
-  tono de prueba. Cada plugin corre en su propio proceso: si se cuelga, se calla ese y el resto sigue sonando.
-- **Efectos VST3** en los canales y los buses (amps, pedales, reverbs de terceros): "+ Efecto" → VST3, mezclados en
-  cualquier orden con los propios; "Abrir" abre su ventana y lo que ajustes ahí queda en el proyecto. Lo que un plugin
+- Arriba de la regla, un **rango A–B** para repetir un tramo y **marcadores** con nombre (Intro, Estribillo, Solo…)
+  para saltar de una parte a otra. Zoom de un tiempo a toda la canción con atajos que se asignan en Configuración →
+  Atajos de teclado.
+
+### Instrumentos y efectos VST3
+
+- Cada pista MIDI toca con un **instrumento VST3** (Surge XT, MT-PowerDrumKit…: clic derecho en la pista →
+  Instrumento, o el botón del piano roll, que también abre la ventana del plugin) o, sin plugin, con un tono de prueba.
+- **Efectos VST3** en los canales y los buses (amps, pedales, reverbs de terceros): "+ Efecto" → VST3, en cualquier
+  orden junto con los propios; "Abrir" abre su ventana y lo que ajustes ahí queda en el proyecto.
+- Cada plugin corre en su propio proceso: si se cuelga, se calla ese y el resto sigue sonando. Lo que un plugin
   atrasa se compensa en toda la mezcla, el click y las tomas que grabás encima (PDC), y la exportación pasa por los
   mismos plugins.
-- Arriba de la regla, un **rango A–B** para repetir un tramo (practicar el solo, mezclar un pedazo) y **marcadores**
-  con nombre (Intro, Estribillo, Solo…) para saltar de una parte a otra. Zoom de un tiempo a toda la canción con
-  atajos que se asignan en Configuración → Atajos de teclado.
-- **Marcas de duración por red** (clic derecho en la regla; con clic derecho en una opción el menú queda abierto): una
-  línea donde termina una historia, un post de X, un Reel o Short, un TikTok, así sabés mientras grabás si el tema entra. Si te pasás, la línea se pone ámbar; la de
-  historias se repite en cada corte.
 
 ### Mezclar
 
-- Cadena de efectos por pista: saturación (**Vida**, válvula o cinta), **compresor** con presets (Rasgueo / Arpegio /
-  Punteo), **EQ de 6 bandas** con espectro en vivo, **puerta de ruido** para el zumbido entre frases, y envíos a
-  **reverb** y **delay**, más limitador master, botón **MONO** para chequear la mezcla, **FX** para escucharla sin efectos y paneo con plantillas.
-- **Transponer** por pista (−12 a +12 semitonos) sin cambiar el largo, así la toma sigue en sincronía con el video:
-  se calcula en segundo plano (unos 4 s por 3 min) con un vocoder de fase de alta calidad, se ve el progreso sobre los
-  clips y queda guardada en `cache/`.
+- Cadena de efectos por canal, en el orden que quieras: saturación (**Vida**, válvula o cinta), **compresor** con
+  presets (Rasgueo / Arpegio / Punteo), **EQ de 6 bandas** con espectro en vivo y **puerta de ruido**, más paneo
+  con plantillas, botón **MONO** para chequear la mezcla y **FX** para escucharla sin efectos.
+- **Transponer** por pista (−12 a +12 semitonos) sin cambiar el largo: se calcula en segundo plano (unos 4 s por
+  3 min) con un vocoder de fase de alta calidad, se ve el progreso sobre los clips y queda guardada en `cache/`.
 - **Mixer** completo con **buses**: cada pista o carpeta elige su salida (el master o un bus) y manda a los buses
-  con sus envíos (antes o después del fader); los buses salen al master. Un bus tiene volumen, paneo y efectos, así que sirve para una reverb, un
-  delay o para procesar un grupo (un compresor para todas las guitarras). Las carpetas solo agrupan. Las tiras se
-  ordenan arrastrándolas en el mixer (el timeline las sigue), van a la izquierda o a la derecha, y hay separadores con
-  nombre para ordenar proyectos grandes.
-- **A | B** en la barra del mixer: dos mezclas de las mismas tomas (canales, envíos y buses) para ir y venir mientras
+  con sus envíos (antes o después del fader); los buses salen al master. Un bus tiene volumen, paneo y efectos: sirve
+  para una reverb, un delay o para procesar un grupo. Las carpetas solo agrupan. Las tiras se ordenan arrastrándolas
+  (el timeline las sigue), van a la izquierda o a la derecha, y hay separadores con nombre para proyectos grandes.
+- **A | B** en la barra del mixer: dos mezclas de las mismas tomas (canales, envíos y buses) para comparar mientras
   suena; la B arranca como copia de la A y el clic derecho copia una sobre la otra u olvida la otra.
 - Audio de nivel profesional: arrancar, parar, saltar y arrastrar el cabezal llevan su fundido, sin clics ni cortes.
 
-### Armar el video
+### Masterizar
 
-- Un panel por pista con cover-fit, zoom, paneo y espejo; relaciones **16:9 / 9:16 / 1:1**, disposición lado a lado
-  o apilada.
-- Pestaña de **color** con 28 looks (Brujo, Cine, Moody, Fresco, Noche azul, Hielo, Soñado, HDR…), ajustes (exposición, contraste,
-  Blancos, Negros, Sensación de luz…), efectos (Nitidez, Claridad, Resplandor, viñeta, grano, barras de cine) y plantillas. Lo que ves en la vista previa es lo que se exporta.
+- Vista **Mastering** con la cadena del master: Look, limpieza, multibanda, color, Cinta, Ancho, soft clip y
+  limitador con true peak. **Sugerime** escucha la mezcla y propone ajustes.
+- **Destino** de volumen (YouTube, Instagram, TikTok, Spotify, Apple Music): se escucha mientras mezclás y la
+  exportación lo respeta. Medidor de **LUFS** en la barra de transporte.
 
 ### Exportar
 
-- **MP4** (mezcla offline + FFmpeg, con progreso y cancelación), con presets para **Reels · TikTok**, **YouTube** e
-  **Instagram** (1:1 y 4:5) que acomodan el cuadro. El volumen sale del **Destino** del master (YouTube, Instagram,
-  TikTok, Spotify, Apple Music), que se escucha mientras mezclás y la exportación respeta.
-- Fácil o a medida: elegís destino y calidad, y si querés, en **Avanzado** la resolución (720p a 4K) y el bitrate.
-- El video se codifica con la **placa de video** (NVIDIA, AMD o Intel) si hay una, las tomas se procesan en paralelo
-  y la mezcla usa todos los núcleos; si la placa falla, sigue sola con el procesador.
-- **Solo el loop A–B** ("Tramo" en el diálogo) para sacar un clip corto del tema, con la reverb y el delay sonando
-  hasta apagarse después de B.
-- En el modo **Solo audio**, WAV de 24 bits o MP3 de 320 kbps; si querés, además cada pista en su WAV (stems).
-  Medidor de **LUFS** del master en la barra de transporte.
+- Audio en **WAV** de 24 bits o **MP3** de 320 kbps; si querés, además cada pista en su WAV (**stems**).
+- **Solo el loop A–B** ("Tramo" en el diálogo) para sacar un pedazo del tema, con la reverb y el delay sonando hasta
+  apagarse después de B.
+- La mezcla usa todos los núcleos del procesador.
+
+### Videos
+
+- Con una cámara (DirectShow o DroidCam por IP), cada toma graba también su imagen, en sincronía con el audio.
+- Un panel por pista con cover-fit, zoom, paneo y espejo; relaciones **16:9 / 9:16 / 1:1**, disposición lado a lado
+  o apilada, y el diseño de ventana **Vertical** para trabajar en 9:16.
+- Pestaña de **color** con 28 looks (Brujo, Cine, Moody, Fresco, Noche azul, Hielo, Soñado, HDR…), ajustes
+  (exposición, contraste, Blancos, Negros, Sensación de luz…), efectos (Nitidez, Claridad, Resplandor, viñeta,
+  grano, barras de cine) y plantillas. Lo que ves en la vista previa es lo que se exporta.
+- Exporta **MP4** con presets para **Reels · TikTok**, **YouTube** e **Instagram** (1:1 y 4:5); en **Avanzado**, la
+  resolución (720p a 4K) y el bitrate. El video se codifica con la **placa de video** (NVIDIA, AMD o Intel) si hay
+  una; si falla, sigue con el procesador.
+- **Marcas de duración por red** en la regla (clic derecho): dónde termina una historia, un post de X, un Reel o
+  Short, un TikTok. Si el tema se pasa, la línea se pone ámbar.
+
 ### Y además
 
-- **No pierde nada**: guardado atómico (solo después de cada edición, cada X minutos o a mano con Ctrl+S o el
-  diskette, a elección en Configuración → Guardado y exportación; las tomas se guardan siempre), la pestaña
-  **Historial** para volver atrás (cada paso de esta sesión con su nombre, a un clic, y versiones guardadas: solas, con
-  nombre o la de cada exportación), recuperación de grabaciones interrumpidas y un gestor de proyectos con Papelera y **paquetes ZIP** para
-  mandar un proyecto a otra compu o guardar un respaldo completo.
-- Idiomas, tema, atajos de teclado y diseño de la ventana (Clásico o Vertical, para videos 9:16) configurables.
+- **No pierde nada**: guardado atómico (después de cada edición, cada X minutos o a mano con Ctrl+S o el diskette, a
+  elección en Configuración → Guardado y exportación; las tomas se guardan siempre), la pestaña **Historial** para
+  volver atrás (cada paso de esta sesión con su nombre, a un clic, y versiones guardadas: solas, con nombre o la de
+  cada exportación), recuperación de grabaciones interrumpidas y un gestor de proyectos con Papelera y **paquetes
+  ZIP** para llevar un proyecto a otra compu o guardar un respaldo completo.
+- Idiomas, tema, atajos de teclado y diseño de la ventana (Clásico o Vertical) configurables.
 
 ## Hacia dónde va
 

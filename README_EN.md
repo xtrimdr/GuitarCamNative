@@ -1,26 +1,35 @@
-# WildTrack
+<p align="center">
+  <img src="docs/wildtrack-icon.png" alt="WildTrack icon: a steel iris made of instruments" width="220">
+</p>
 
-[Español](README.md) · **English**
+<h1 align="center">WildTrack</h1>
 
-**WildTrack** is a Windows desktop DAW for every musician: guitar, bass, vocals, keys, drums or whatever you
-play. It also makes **videos**: you record takes with camera and audio, mix them, and export a video with one
-panel per take.
-It used to be called **GuitarCam Studio Native**: when you update, your settings and projects are still there.
+<p align="center">
+  <b>A DAW to record, mix, master and export music on Windows.</b><br>
+  Audio and MIDI, VST3 instruments and effects, buses and mastering. And if you record with a camera, the video too.
+</p>
 
-It works both as a **cam studio** (record takes with a camera and build the video) and as a **DAW** (record,
-edit and mix audio in a full timeline and mixer, with or without picture: **Audio only** mode is for making
-music without video).
-
-It is designed to be used with your instrument in hand: one-key shortcuts, big buttons and a short path of
-**record → mix → export**.
+<p align="center">
+  <a href="README.md">Español</a> · <b>English</b>
+</p>
 
 <p align="center">
   <a href="https://github.com/xtrimdr/WildTrack/releases/latest/download/WildTrack-Setup.exe">
     <img src="https://img.shields.io/github/v/release/xtrimdr/WildTrack?style=for-the-badge&label=Download%20for%20Windows&color=22d3ee&labelColor=18181b" alt="Download for Windows" height="56">
   </a>
   <br>
-  <sub>64-bit Windows 10/11 · self-contained installer, no .NET install needed</sub>
+  <sub>Windows 10/11, 64-bit · self-contained installer, no .NET install needed</sub>
 </p>
+
+**WildTrack** is a DAW for any instrument and any style: guitar, bass, vocals, keys, drums, a whole band or a
+production built in the computer. You record, edit, mix, master and export with audio and MIDI tracks, a piano roll,
+VST3 instruments and effects, buses and a full master chain.
+
+It also makes **videos**: if you record with a camera, every take keeps its picture and WildTrack builds a video with
+one panel per take, with color grading and formats for social media. It is an extra for when you need it; without a
+camera, it works like any other DAW.
+
+It used to be called **GuitarCam Studio Native**: when you update, your settings and projects are still there.
 
 <details>
 <summary><b>Before installing</b></summary>
@@ -32,14 +41,14 @@ It is designed to be used with your instrument in hand: one-key shortcuts, big b
 More details in [Requirements](#requirements).
 </details>
 
-![The timeline in Video mode: one panel per take, colored track folders, each track's knobs and the color tab](docs/screenshots/timeline-en.png)
+![Audio only mode: tracks with their effect knobs and the EQ with its live spectrum](docs/screenshots/audio-en.png)
 
 | | |
 |---|---|
 | ![The mixer while playing: folders, reverb and delay buses and the master](docs/screenshots/mixer-en.png) | ![The Mastering view: the master chain from left to right and the output loudness](docs/screenshots/master-en.png) |
-| **The mixer**: one strip per track, the folders, the reverb and delay buses and the master. | **Mastering**: look, cleanup, multiband, color, tape, width, soft clip and limiter, with a loudness target and "Suggest". |
-| ![Vertical 9:16 with the Vertical layout: the video full height, the timeline and mixer beside it](docs/screenshots/vertical-en.png) | ![Audio only mode: tracks with their effect knobs and the EQ with its live spectrum](docs/screenshots/audio-en.png) |
-| **Vertical 9:16** with the Vertical layout: the video full height, the timeline and mixer beside it. | **Audio only**: tracks with their effect knobs and the EQ with its live spectrum. |
+| **Mixer**: one strip per track, folders, buses and the master. | **Mastering**: look, cleanup, multiband, color, tape, width, soft clip and limiter, with a loudness target and "Suggest". |
+| ![The timeline in Video mode: one panel per take, colored track folders and the color tab](docs/screenshots/timeline-en.png) | ![Vertical 9:16 with the Vertical layout: the video full height, the timeline and mixer beside it](docs/screenshots/vertical-en.png) |
+| **Video mode**: one panel per take and the color tab. | **Vertical 9:16** for Reels, Shorts and TikTok, with the Vertical layout. |
 
 *The screenshots show the demo project; the panel images are photos from [Unsplash](https://unsplash.com).*
 
@@ -47,67 +56,92 @@ More details in [Requirements](#requirements).
 
 ### Record
 
-- Audio over **ASIO** (input and output in the same callback, with monitoring) and video from a camera (DirectShow
-  or DroidCam over IP). Each take is written to disk as it happens, so a crash does not lose it.
+- Audio over **ASIO** (input and output in the same callback, with monitoring). Each take is written to disk as it
+  happens, so a crash does not lose it.
 - Recording starts at the playhead, so you can redo just one part, with a **metronome** (time signature, tempo, tap
   tempo, count-in and six click sounds) and **latency calibration** with a cable or by playing.
-- A **tuner** with arrows that tell you which way to turn the peg and adjustable sensitivity.
+- **MIDI** from keyboards and controllers: each MIDI track picks its input and channel, plays live through its
+  instrument and records the notes into a clip.
+- A **tuner** with arrows that show which way to turn the peg and adjustable sensitivity.
 
 ### Edit
 
 - A multitrack **timeline**: clips you can move, trim, split and duplicate, fades, clip gain with its own **volume
-  curve**, range delete, unlimited undo and redo, and import of outside audio (WAV, MP3, FLAC, OGG, M4A, AIFF).
-  **Detect tempo** on any clip (right-click) and set the project to those BPM. **Extract MIDI**: the notes of an
-  audio clip (chords or melody) go to a MIDI track, from the right-click or by dragging the clip onto a MIDI track
-  (Spotify's Basic Pitch, on the CPU).
+  curve**, range delete, unlimited undo and redo, and audio import (WAV, MP3, FLAC, OGG, M4A, AIFF). **Detect tempo**
+  on any clip (right-click) and set the project to those BPM.
+- **MIDI tracks** with a **piano roll**: double-click on the lane creates a clip and opens it. Click writes a note,
+  dragging moves or lengthens it, right-click deletes it, and each note's velocity sits below.
+- **Extract MIDI**: the notes of an audio clip (chords or melody) go to a MIDI track, from the right-click or by
+  dragging the clip onto a MIDI track (Spotify's Basic Pitch, on the CPU).
 - **Folders** that fold and group tracks; Ctrl+click / Shift+click marks several tracks to move them together. Each
   track gets its own **color** (24, in rainbow order), an **instrument icon** (guitars, bass, drums, synths, strings,
-  winds, percussion…), its own height and Vida, Comp, Reverb and Delay knobs in its header.
+  winds, percussion…), its own height and Vida, Comp, Reverb, Delay and Pitch knobs in its header (which ones show,
+  in Settings → View).
 - A sound you like saves as a **track preset** and comes back from New track → Preset.
-- Above the ruler, an **A–B range** loops a stretch (to practice the solo or mix a part) and named **markers**
-  (Intro, Chorus, Solo…) jump from one part to another. Zoom from one beat to the whole song with shortcuts you
-  assign in Settings → Keyboard shortcuts.
+- Above the ruler, an **A–B range** loops a stretch and named **markers** (Intro, Chorus, Solo…) jump from one part
+  to another. Zoom from one beat to the whole song with shortcuts you assign in Settings → Keyboard shortcuts.
+
+### VST3 instruments and effects
+
+- Each MIDI track plays through a **VST3 instrument** (Surge XT, MT-PowerDrumKit…: right-click the track →
+  Instrument, or the piano roll button, which also opens the plugin window) or, with no plugin, a test tone.
+- **VST3 effects** on channels and buses (amps, pedals, third-party reverbs): "+ Effect" → VST3, in any order
+  alongside the built-in ones; "Open" shows its window and what you set there is saved in the project.
+- Each plugin runs in its own process: if one hangs, only that one goes quiet and the rest keeps playing. Plugin
+  latency is compensated across the whole mix, the click and the takes you record on top (PDC), and the export runs
+  through the same plugins.
 
 ### Mix
 
-- A per-track effects chain: saturation (**Vida**, tube or tape), a **compressor** with presets (Strumming /
-  Arpeggio / Lead), a **6-band EQ** with live spectrum, a **noise gate** for the hum between phrases, and sends to
-  **reverb** and **delay**, plus a master limiter, a **MONO** button to check the mix, **FX** to hear it without effects, and pan templates.
+- A per-channel effects chain, in any order: saturation (**Vida**, tube or tape), a **compressor** with presets
+  (Strumming / Arpeggio / Lead), a **6-band EQ** with live spectrum and a **noise gate**, plus pan templates, a
+  **MONO** button to check the mix and **FX** to hear it without effects.
+- **Transpose** per track (−12 to +12 semitones) without changing the length: it is computed in the background
+  (about 4 s per 3 min) with a high-quality phase vocoder, progress shows on the clips and the result is kept in
+  `cache/`.
 - A full **mixer** with **buses**: every track or folder picks its output (the master or a bus) and sends to the
-  buses (before or after the fader); the buses go to the master. A bus has volume, pan and effects, so it works for a reverb, a delay or to process
-  a group. Folders only group. Strips are reordered by dragging them in the mixer (the timeline follows), sit on the
-  left or the right, and named separators keep big projects tidy.
-- **A | B** on the mixer bar: two mixes of the same takes (channels, sends and buses) to flip between while it plays;
+  buses (before or after the fader); the buses go to the master. A bus has volume, pan and effects: use it for a
+  reverb, a delay or to process a group. Folders only group. Strips are reordered by dragging (the timeline
+  follows), sit on the left or the right, and named separators keep big projects tidy.
+- **A | B** on the mixer bar: two mixes of the same takes (channels, sends and buses) to compare while it plays;
   B starts as a copy of A, and right-click copies one over the other or forgets the other.
 - Professional-grade audio: starting, stopping, jumping and dragging the playhead all fade, with no clicks or dropouts.
 
-### Build the video
+### Master
 
-- A panel per track with cover-fit, zoom, pan and mirror; **16:9 / 9:16 / 1:1** aspect ratios, side-by-side or
-  stacked layout.
-- A **color** tab with 26 looks (Brujo, Cine, Moody, Fresco, Noche azul, Hielo…), adjustments (exposure, contrast,
-  whites, blacks, light…), effects and templates. What you see in the preview is what gets exported.
+- A **Mastering** view with the master chain: look, cleanup, multiband, color, tape, width, soft clip and a true-peak
+  limiter. **Suggest** listens to the mix and proposes settings.
+- A loudness **Target** (YouTube, Instagram, TikTok, Spotify, Apple Music): you hear it while mixing and the export
+  follows it. A **LUFS** meter sits in the transport bar.
 
 ### Export
 
-- **MP4** (offline mix + FFmpeg, with progress and cancellation), with presets for **Reels · TikTok**, **YouTube** and
-  **Instagram** (1:1 and 4:5) that fit the frame and bring the mix to −14 LUFS.
-- Easy or custom: pick the destination and quality, and if you want, the resolution (720p to 4K) and bitrate under **Advanced**.
-- The video is encoded on the **video card** (NVIDIA, AMD or Intel) when there is one, the takes are processed in
-  parallel and the mix uses every core; if the card fails, it carries on with the processor.
-- **Just the loop A–B** ("Range" in the dialog) to cut a short clip out of the song, with reverb and delay ringing
-  out after B.
-- In **Audio only** mode, 24-bit WAV or 320 kbps MP3; optionally each track in its own WAV too (stems). A master
-  **LUFS** meter sits in the transport bar.
+- Audio as 24-bit **WAV** or 320 kbps **MP3**; optionally each track in its own WAV too (**stems**).
+- **Just the A–B loop** ("Range" in the dialog) to cut a part of the song, with reverb and delay ringing out after B.
+- The mix uses every processor core.
+
+### Videos
+
+- With a camera (DirectShow or DroidCam over IP), every take also records its picture, in sync with the audio.
+- A panel per track with cover-fit, zoom, pan and mirror; **16:9 / 9:16 / 1:1** aspect ratios, side-by-side or
+  stacked layout, and the **Vertical** window layout to work in 9:16.
+- A **color** tab with 28 looks (Brujo, Cine, Moody, Fresco, Noche azul, Hielo, Soñado, HDR…), adjustments
+  (exposure, contrast, whites, blacks, light…), effects (sharpness, clarity, glow, vignette, grain, cinema bars) and
+  templates. What you see in the preview is what gets exported.
+- **MP4** export with presets for **Reels · TikTok**, **YouTube** and **Instagram** (1:1 and 4:5); under
+  **Advanced**, the resolution (720p to 4K) and bitrate. The video is encoded on the **video card** (NVIDIA, AMD or
+  Intel) when there is one; if it fails, it carries on with the processor.
+- **Social length marks** on the ruler (right-click): where a story, an X post, a Reel or Short and a TikTok end. If
+  the song runs over, the line turns amber.
 
 ### And also
 
 - **Never loses anything**: atomic saving (after every edit, every X minutes or by hand with Ctrl+S or the disk
-  button, chosen in Settings → Saving and export; takes are always saved), the **History** tab to go back (every step of
-  the session by name, one click away, and saved versions: automatic, named or the one of each export), recovery of
-  interrupted recordings and a project manager with a Recycle Bin and **ZIP packages** to take a project to another
-  computer or keep a full backup.
-- Configurable language, theme and keyboard shortcuts.
+  button, chosen in Settings → Saving and export; takes are always saved), the **History** tab to go back (every step
+  of the session by name, one click away, and saved versions: automatic, named or the one of each export), recovery
+  of interrupted recordings and a project manager with a Recycle Bin and **ZIP packages** to take a project to
+  another computer or keep a full backup.
+- Configurable language, theme, keyboard shortcuts and window layout (Classic or Vertical).
 
 ## Where it is going
 
