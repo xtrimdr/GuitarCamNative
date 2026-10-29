@@ -251,6 +251,13 @@ public partial class MainWindow
     void ClipEdit(Action<Clip, Media?> edit, string key)
     {
         if (syncing || restoring || store == null || store.ReadOnly || SelectedInspectorClip is not { } live) return;
+        // a locked clip keeps its place and length; the slider goes back to where it was
+        if (key is "trim-start" or "trim-end" or "sync" && sel != null && ClipEditing.IsLocked(sel.Track, live.Clip))
+        {
+            ToastLocked(sel.Track, live.Clip.Id);
+            RefreshInspectorText();
+            return;
+        }
         undo.Checkpoint(store.Project, $"clip:{live.Clip.Id}:{key}");
         edit(live.Clip, live.Media);
         live.RefreshCurve();

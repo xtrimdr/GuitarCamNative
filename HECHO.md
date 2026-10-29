@@ -3,6 +3,38 @@
 Lo que ya se terminó de [PENDIENTES.md](PENDIENTES.md), el más nuevo arriba. Cada ítem: fecha (AAAA-MM-DD),
 qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo para buscar cómo se resolvió algo.
 
+- 2026-10-28: **Extraer MIDI** de un clip de audio, con el clic derecho (Acordes / Melodía) o arrastrándolo a una
+  pista MIDI: Basic Pitch de Spotify por ONNX Runtime en la CPU (`AudioToMidi`, igual nota por nota al código de
+  Spotify) más una limpieza propia (un ataque marcado dos veces es uno, fuera los fantasmas bajo una cuerda grave,
+  notas desde 70 ms para semicorcheas y chugs, y el modo Melodía de a una nota); las notas van a un clip MIDI del mismo
+  tramo en una pista nueva debajo (`MidiEditing.AddExtracted`, `MainWindow.ToMidi.cs`). Modelo en `lib\basic-pitch`
+  (`tools\get-basic-pitch.ps1`). En gclab: `extraer-midi archivo` (con `--midi` y `--verdad`) y sus filas en
+  `comprobar-dsp` (`ToMidiChecks`, cuerdas pulsadas sintéticas: riff, trémolo y acordes F ≥ 0,93, chugs 0,94).
+- 2026-10-28: **Detectar tempo** en el clic derecho de cualquier clip de audio: flujo espectral + autocorrelación con
+  preferencia por 120 y un peine que afina a la décima y halla el primer golpe (`TempoDetector`); un menú ofrece poner el
+  proyecto a ese tempo, al doble o a la mitad, y el toast trae "Volver a N" (`MainWindow.TempoDetect.cs`). En gclab:
+  `tempo archivo` y sus filas en `comprobar-dsp` (`TempoChecks`).
+- 2026-10-28: **Comparar mezclas A | B** en la barra del mixer: dos mezclas de las mismas tomas (canales, carpetas y
+  buses, sin el master), ida y vuelta mientras suena sin perder el estado de los efectos, con deshacer, "Copiar A en B"
+  y "Olvidar" (`MixCompare`, `MainWindow.MixCompare.cs`). En gclab: `proyecto mezcla … ab|copiar|olvidar` y
+  `proyecto verificar-ab`.
+- 2026-10-28: **Bloquear clips y pistas** (clic derecho): lo bloqueado no se mueve, no se recorta, no se divide ni se
+  borra, y grabar no lo pisa (la toma va a una pista nueva); volumen, fades y encuadre siguen. Una sola regla,
+  `ClipEditing.IsLocked`, para la ventana (`MainWindow.Locks.cs`, candado en el timeline) y gclab (`editar … bloquear`,
+  `proyecto verificar-bloqueo`).
+- 2026-10-28: **Exportar solo el loop A–B** ("Tramo" en el diálogo de exportar, MP4 y audio, stems incluidos): la
+  mezcla corta las tomas en B y deja sonar la cola, arranca en A con un fundido corto, y el video lleva solo las tomas
+  del tramo (`ExportRange`, `MixMaster.Render`, `MixRenderer` con `stopSec`). En gclab: `exportar … --rango 12-45|loop`
+  y las filas "Rango:" de `comprobar-dsp`.
+- 2026-10-28: **Escalar y humanizar velocidades**: "Ajustar" en la cabecera del piano roll (Escalar alrededor del
+  promedio, Humanizar ± al azar; `MidiEditing.ScaleVelocity` / `HumanizeVelocity`). En gclab: `midi velocidad` y
+  `midi humanizar`, y su comprobación en `midi comprobar`.
+- 2026-10-28: **Piano roll: herramientas de velocidad y flechas**: la franja de velocidad con escala, botón para
+  mostrarla, paso vertical (caja y menú), Lápiz / Línea y clic derecho a 100; Shift+flechas mueven las notas (←→ un
+  paso del imán), Ctrl+↑↓ una octava (`PianoRollView`, `BuildPianoVelocityTools`).
+- 2026-10-28: **Piano roll: copiar, pegar, duplicar y scrub**: clic derecho en vacío deselecciona, Shift+arrastrar
+  copia las notas elegidas, Ctrl+C/X/V y D con las notas (siempre dentro del clip, con el imán) y la regla hace scrub
+  en vivo como la del timeline (`PianoRollView`).
 - 2026-10-28: **Copiar capítulos para YouTube** (clic derecho en la franja de marcadores): los marcadores como
   "0:00 Intro…" para la descripción del video, con aviso si YouTube no los tomaría (menos de 3, alguno de menos de
   10 s; `ProjectMarkers.Chapters`, `CopyChapters`). En gclab: `proyecto marcadores … capitulos`.
@@ -30,6 +62,10 @@ qué se hizo y dónde. Es historial: no hace falta leerlo para trabajar, salvo p
   `LiveNotes`), las pistas MIDI se arman y graban las notas en un clip nuevo (`MidiEditing.AddRecorded`), cada pista
   elige su entrada y canal (`Track.MidiInput`), y cuantizar con Q, el menú del clip o al grabar, al imán del piano roll
   (`MidiEditing.Quantize`). En gclab: `midi entradas`, `midi escuchar`, `midi cuantizar` y sus comprobaciones.
+- 2026-10-28: Acento "Fuego" (#ff5809) en la paleta y los acentos ordenados por tono, de cálidos a fríos (pedido del
+  usuario, `UiTheme.Accents`).
+- 2026-10-28: "Acerca de" con el diseño del splash (pedido del usuario): logo grande, brillo y línea del acento del
+  tema, versión en la esquina (`Dialogs/AboutDialog`, `BrandArt.cs`). El splash dura al menos 3 s.
 - 2026-10-28: Splash al abrir (pedido del usuario): ícono, nombre, versión con commit y franja de carga animada, con
   los colores del tema, mientras se arma la ventana principal (`SplashWindow`, `App.axaml.cs`).
 - 2026-10-28: Inspector de la pista MIDI (pedido del usuario): el instrumento se elige en un desplegable en vez de una

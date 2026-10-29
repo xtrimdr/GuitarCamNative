@@ -29,7 +29,7 @@ public static class TakeRecording
     public static Track? PickTarget(Project p, string? selectedTrackId)
     {
         int sel = p.Tracks.FindIndex(t => t.Id == selectedTrackId);
-        static bool Free(Track t) => t.Clips.Count == 0 && !t.IsMidi;
+        static bool Free(Track t) => t.Clips.Count == 0 && !t.IsMidi && !t.Locked;
         if (sel >= 0 && Free(p.Tracks[sel])) return p.Tracks[sel];
         return p.Tracks.Where((t, i) => i > sel && Free(t)).FirstOrDefault() ?? p.Tracks.Find(Free);
     }
@@ -61,11 +61,13 @@ public static class TakeRecording
     /// <summary>
     /// Adds the recorded WAV as a media and a clip where recording started plus its sync correction.
     /// Returns the track that got it. A target that was removed meanwhile counts as no target; one with clips
-    /// (armed by hand) loses them to the take: all of them from 0, only the covered stretch from the playhead.
+    /// (armed by hand) loses them to the take: all of them from 0, only the covered stretch from the playhead. A target
+    /// with a lock (<see cref="ClipEditing.HasLock"/>) keeps what it has: the take goes to a new track, never lost.
     /// </summary>
     public static Track AddTake(Project p, ProjectStore.RecordingJournal j, double durationSec, int sampleRate, int channels, int takeNumber)
     {
         var target = p.Tracks.Find(t => t.Id == j.TrackId);
+        if (target != null && ClipEditing.HasLock(target)) target = null;
         if (target != null && j.StartSec > 0)
             ClipEditing.DeleteRange(p, target.Id, j.AtSec, j.AtSec + durationSec);
         else if (target != null)

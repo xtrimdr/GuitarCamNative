@@ -203,6 +203,8 @@ public sealed record ExportJobSpec
     public double? TargetLufs { get; init; }
     /// <summary>Native only: who encodes the video, a <see cref="VideoEncoders.ParsePreference"/> id ("auto" = the card if it has one).</summary>
     public string Encoder { get; init; } = VideoEncoders.Auto;
+    /// <summary>Native only: just this stretch of the song (the loop A–B, <see cref="ExportRange"/>); null = all of it.</summary>
+    public ExportRange? Range { get; init; }
 }
 
 public sealed record ExportResult(
@@ -430,16 +432,19 @@ public static partial class Mp4Exporter
     {
         if (job.Takes.Count == 0)
             throw new ExportException("No hay canales activos para exportar.");
+        var takes = job.Range is { } range ? ExportRange.Takes(job.Takes, range) : job.Takes;
+        if (takes.Count == 0)
+            throw new ExportException(Texts.T("err.export.rangeEmpty", "Entre A y B no se ve ninguna toma: mové el loop adonde haya video."));
 
         var (outW, outH) = ExportSize(job.AspectRatio, job.Resolution);
-        int numTakes = job.Takes.Count;
-        int PanelOf(int i) => job.Takes[i].Panel >= 0 ? job.Takes[i].Panel : i;
-        int numPanels = PanelCount(job.Takes);
+        int numTakes = takes.Count;
+        int PanelOf(int i) => takes[i].Panel >= 0 ? takes[i].Panel : i;
+        int numPanels = PanelCount(takes);
         var ffmpegArgs = new List<string> { "-y" };
 
         for (int i = 0; i < numTakes; i++)
         {
-            string vp = job.Takes[i].VideoPath;
+            string vp = takes[i].VideoPath;
             if (string.IsNullOrWhiteSpace(vp) || !File.Exists(vp))
                 throw new ExportException($"Falta el video del canal #{i + 1}");
             ffmpegArgs.Add("-i");
@@ -477,11 +482,12 @@ public static partial class Mp4Exporter
         double maxDuration = 1.0;
         for (int i = 0; i < numTakes; i++)
         {
-            double end = job.Takes[i].Window.End;
+            double end = takes[i].Window.End;
             if (end > maxDuration) maxDuration = end;
         }
         double mixDur = MixRenderer.MixDurationSec(job.MixTracks, job.SampleRate);
         if (mixDur > maxDuration) maxDuration = mixDur;
+        if (job.Range is { } cut) maxDuration = cut.LengthSec;
         double contentEnd = maxDuration;
         double tail = audioSec is { } a && a - contentEnd > MinTailSec ? a - contentEnd : 0;
         maxDuration += tail;
@@ -496,10 +502,10 @@ public static partial class Mp4Exporter
         for (int panel = 0; panel < numPanels; panel++)
         {
             int[] members = [.. Enumerable.Range(0, numTakes).Where(i => PanelOf(i) == panel)];
-            var windows = members.Select(i => job.Takes[i].Window).ToArray();
+            var windows = members.Select(i => takes[i].Window).ToArray();
             for (int m = 0; m < members.Length; m++)
             {
-                var t = job.Takes[members[m]];
+                var t = takes[members[m]];
                 if (ClipTransitions.Find(windows, m, ClipTransitions.Parse(t.Transition), t.TransitionSec) is not { } j) continue;
                 int o = members[j.Out], n = members[j.In];
                 lead[n] = Math.Max(lead[n], j.Overhang);
@@ -522,7 +528,7 @@ public static partial class Mp4Exporter
 
         for (int i = 0; i < numTakes; i++)
         {
-            var t = job.Takes[i];
+            var t = takes[i];
             string vIn = $"{i}:v";
             var rect = panelRects[PanelOf(i)];
             // a later clip of a shared panel starts at its own time instead of padding with the background,
@@ -724,6 +730,7 @@ public static partial class Mp4Exporter
             }
             double mixDur = MixRenderer.MixDurationSec(job.MixTracks, job.SampleRate);
             if (mixDur > maxDuration) maxDuration = mixDur;
+            job = job with { Range = ExportRange.Fit(job.Range, maxDuration) };
 
             var mix = await Task.Run(() =>
                 MixMaster.Render(
@@ -734,7 +741,8 @@ public static partial class Mp4Exporter
                     job.TailSec,
                     job.TargetLufs,
                     f => Report(ExportStage.Mix, f, 0, null),
-                    ct), ct).ConfigureAwait(false);
+                    ct,
+                    job.Range), ct).ConfigureAwait(false);
 
             ct.ThrowIfCancellationRequested();
             Report(ExportStage.Upload, 1, 0, null);

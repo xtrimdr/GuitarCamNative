@@ -20,7 +20,7 @@ static class MidiCommands
         if (sub == "entradas") return Inputs();
         if (sub == "escuchar") return Listen(a.Get("entrada"), a.Double("segundos", 10));
         string? dir = a.Positional.Skip(1).FirstOrDefault();
-        if (dir == null) throw new ArgumentException("midi ver|pista|clip|nota|acordes|cuantizar|quitar|instrumento <carpeta> (o midi comprobar, entradas, escuchar)");
+        if (dir == null) throw new ArgumentException("midi ver|pista|clip|nota|acordes|cuantizar|velocidad|humanizar|quitar|instrumento <carpeta> (o midi comprobar, entradas, escuchar)");
         using var store = ProjectStore.Open(Path.GetFullPath(dir));
         var p = store.Project;
         if (sub != "ver" && store.ReadOnly) throw new IOException(store.ReadOnlyReason);
@@ -65,6 +65,21 @@ static class MidiCommands
                 string clip = a.Get("clip") ?? throw new ArgumentException("Falta --clip.");
                 double grid = Grid(a.Get("grilla", "1/16")) ?? throw new ArgumentException("--grilla: 1/4, 1/8, 1/16, 1/32 o 1/8T.");
                 Console.WriteLine($"{MidiEditing.Quantize(p, clip, grid)} notas movidas a {a.Get("grilla", "1/16")}.");
+                break;
+            }
+            case "velocidad":
+            {
+                string clip = a.Get("clip") ?? throw new ArgumentException("Falta --clip.");
+                var (_, c) = MidiEditing.Find(p, clip);
+                Console.WriteLine($"{MidiEditing.ScaleVelocity(c.Notes, a.Double("rango", 100))} notas cambiadas.");
+                break;
+            }
+            case "humanizar":
+            {
+                string clip = a.Get("clip") ?? throw new ArgumentException("Falta --clip.");
+                var (_, c) = MidiEditing.Find(p, clip);
+                var random = a.Get("semilla") != null ? new Random(a.Int("semilla", 0)) : new Random();
+                Console.WriteLine($"{MidiEditing.HumanizeVelocity(c.Notes, a.Int("cantidad", 10), random)} notas cambiadas.");
                 break;
             }
             case "instrumento":
@@ -366,6 +381,18 @@ static class MidiCommands
         bool quantOk = moved == 2 && Math.Abs(q[0].Beat - 0) < 1e-9 && Math.Abs(q[1].Beat - 0.5) < 1e-9 && q[0].Beats == 0.4
             && MidiEditing.Quantize(q, 0, 120, 0) == 0;
         Show("Teclado: cuantizar a la grilla", $"{moved} movidas", "2", quantOk);
+
+        // velocity: scaled around the average (50% halves the distance, 0% evens it), humanized inside the range
+        var vel = new List<MidiNote> { new() { Velocity = 80 }, new() { Velocity = 100 }, new() { Velocity = 120 } };
+        MidiEditing.ScaleVelocity(vel, 50);
+        bool scaleOk = vel[0].Velocity == 90 && vel[1].Velocity == 100 && vel[2].Velocity == 110;
+        MidiEditing.ScaleVelocity(vel, 0, [vel[0], vel[1]]);
+        scaleOk &= vel[0].Velocity == 95 && vel[1].Velocity == 95 && vel[2].Velocity == 110;
+        var loud = Enumerable.Range(0, 200).Select(_ => new MidiNote { Velocity = 125 }).ToList();
+        MidiEditing.HumanizeVelocity(loud, 10, new Random(1));
+        bool humOk = loud.All(n => n.Velocity is >= 115 and <= 127) && loud.Select(n => n.Velocity).Distinct().Count() > 5
+            && MidiEditing.HumanizeVelocity(loud, 0, new Random(1)) == 0;
+        Show("Velocidad: escalar y humanizar", $"{vel[0].Velocity}/{vel[1].Velocity}/{vel[2].Velocity}", "95/95/110", scaleOk && humOk);
 
         // a recorded clip: from the bar where the take began to the bar after it ended, quantized when asked
         var proj = new Project();

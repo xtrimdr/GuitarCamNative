@@ -415,14 +415,23 @@ public partial class MainWindow
         if (sel == null || store == null) return Task.CompletedTask;
         string trackId = sel.Track.Id;
         // the clips caught by the selection box (takes and MIDI clips) go all at once (one step to undo)
-        if (Timeline.BoxedClipIds.ToList() is { Count: > 1 } boxed)
+        if (Timeline.BoxedClipIds.ToList() is { Count: > 1 } picked)
+        {
+            var boxed = WithoutLocked(picked);
+            if (boxed.Count == 0) return Task.CompletedTask;
             return EditTimeline(p =>
             {
                 foreach (var id in boxed) MidiEditing.RemoveAny(p, id);
                 return trackId;
             }, "clips-removed");
+        }
         if (Timeline.SelectedMidiId is { } midi) return RemoveMidiClip(midi);
         string? clipId = Timeline.SelectedClipId ?? sel.Clips.FirstOrDefault()?.Clip.Id;
+        if (clipId != null ? ClipEditing.IsLocked(store.Project, clipId) : ClipEditing.HasLock(sel.Track))
+        {
+            ToastLocked(sel.Track, clipId);
+            return Task.CompletedTask;
+        }
         return EditTimeline(p =>
         {
             if (clipId != null) { ClipEditing.RemoveClip(p, clipId); return trackId; }
@@ -444,6 +453,7 @@ public partial class MainWindow
     {
         if (sel == null) { Status(Loc.T("timeline.split.pick")); return; }
         if (ClipUnderPlayhead() is not { } clip) { Status(Loc.T("timeline.split.nowhere")); return; }
+        if (RefuseLocked(sel, clip)) return;
         string trackId = sel.Track.Id;
         double at = engine.PositionSec, length = clip.LengthSec;
         string? right = null;
@@ -507,9 +517,10 @@ public partial class MainWindow
         {
             if (store.ReadOnly) return;
             string? trackId = sel?.Track.Id;
+            var gone = WithoutLocked(ids);
             await EditTimeline(p =>
             {
-                foreach (var id in ids) MidiEditing.RemoveAny(p, id);
+                foreach (var id in gone) MidiEditing.RemoveAny(p, id);
                 return trackId;
             }, ids.Count > 1 ? "clips-cut" : "clip-cut");
         }
@@ -688,6 +699,11 @@ public partial class MainWindow
     void AskRemoveTrack(string id, Point at)
     {
         if (store == null || restoring || store.ReadOnly || tracks.FirstOrDefault(t => t.Track.Id == id) is not { } track) return;
+        if (ClipEditing.HasLock(track.Track))
+        {
+            ToastLocked(track.Track);
+            return;
+        }
         var list = new List<object>
         {
             new MenuItem { Header = Loc.T("track.remove.ask", track.Track.Name), IsEnabled = false, FontSize = 11 },
@@ -729,18 +745,20 @@ public partial class MainWindow
             string id = clip.Clip.Id;
             double at = engine.PositionSec;
             bool under = at > clip.ClipStartSec + ClipEnvelope.MinClipSec && at < clip.ClipEndSec - ClipEnvelope.MinClipSec;
+            // a locked clip keeps its place and length: what would change them is greyed out
+            bool free = !ClipEditing.IsLocked(track.Track, clip.Clip);
             list.Add(MenuAction(Loc.T("menu.split"), async () =>
             {
                 string? right = null;
                 await EditTimeline(p => { right = ClipEditing.Split(p, id, at, clip.LengthSec); return track.Track.Id; }, "clip-split");
                 if (right != null) Timeline.SelectClip(Timeline.Selected, right);
-            }, "Alt+X", enabled && under));
+            }, "Alt+X", enabled && under && free));
             // the boxed clips, when this is one of them, are duplicated, copied, aligned (or removed) all at once
             var boxed = Timeline.BoxedClipIds.Contains(id) ? Timeline.BoxedClipIds.ToList() : [id];
             list.Add(MenuAction(Loc.T("menu.duplicate"), () => DuplicateClips(boxed), Shortcuts.Label("duplicate"), enabled));
             list.Add(MenuAction(Loc.T("menu.copy"), () => CopySelection(cut: false), Shortcuts.Label("copy")));
-            list.Add(MenuAction(Loc.T("menu.cut"), () => CopySelection(cut: true), Shortcuts.Label("cut"), enabled));
-            list.Add(MenuAction(Loc.T("menu.toStart"), () => Command(p => ClipEditing.ToStart(p, id, clip.LengthSec), "clip-moved"), enabled: enabled));
+            list.Add(MenuAction(Loc.T("menu.cut"), () => CopySelection(cut: true), Shortcuts.Label("cut"), enabled && free));
+            list.Add(MenuAction(Loc.T("menu.toStart"), () => Command(p => ClipEditing.ToStart(p, id, clip.LengthSec), "clip-moved"), enabled: enabled && free));
             // where clips overlap the last one shows: this is on only when one over it covers part of it
             bool covered = track.Clips.SkipWhile(o => o != clip).Skip(1).Any(o => o.ClipStartSec < clip.ClipEndSec && o.ClipEndSec > clip.ClipStartSec);
             list.Add(MenuAction(Loc.T("menu.toFront"), () => Command(p => ClipEditing.BringToFront(p, id), "clip-to-front"),
@@ -750,22 +768,25 @@ public partial class MainWindow
             {
                 await EditTimeline(p =>
                 {
-                    foreach (var b in boxed.Where(b => MidiEditing.TryFind(p, b) == null))
+                    foreach (var b in boxed.Where(b => MidiEditing.TryFind(p, b) == null && !ClipEditing.IsLocked(p, b)))
                         ClipEditing.AlignToGrid(p, b, grid, tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Clip.Id == b)?.LengthSec);
                     return track.Track.Id;
                 }, "clip-aligned", id);
                 Timeline.BoxClips(boxed);
-            }, enabled: enabled && grid > 0, tip: grid > 0 ? Loc.T("menu.alignGrid.tip", Timeline.SnapMode == "bar" ? Loc.T("snap.label.1") : Timeline.SnapMode) : Loc.T("menu.alignGrid.off")));
+            }, enabled: enabled && grid > 0 && (free || boxed.Count > 1), tip: grid > 0 ? Loc.T("menu.alignGrid.tip", Timeline.SnapMode == "bar" ? Loc.T("snap.label.1") : Timeline.SnapMode) : Loc.T("menu.alignGrid.off")));
             var w = ClipEditing.Window(clip.Clip, clip.Media, clip.LengthSec);
             list.Add(MenuAction(Loc.T("menu.fixCut"), () => Command(p => ClipEditing.FixCut(p, id, clip.LengthSec), "clip-trimmed"),
-                w.AnchorCut > 0.0005 ? $"{w.AnchorCut:0.00} s" : null, enabled && w.AnchorCut > 0.0005));
+                w.AnchorCut > 0.0005 ? $"{w.AnchorCut:0.00} s" : null, enabled && free && w.AnchorCut > 0.0005));
             var c = clip.Clip;
             list.Add(MenuAction(Loc.T("menu.resetClip"), () => Command(p => ClipEditing.Reset(p, id), "clip-reset"),
-                enabled: enabled && (c.TrimStartSec != 0 || c.TrimEndSec != 0 || c.FadeInSec != 0 || c.FadeOutSec != 0 || c.VideoFadeInSec != 0 || c.VideoFadeOutSec != 0)));
+                enabled: enabled && free && (c.TrimStartSec != 0 || c.TrimEndSec != 0 || c.FadeInSec != 0 || c.FadeOutSec != 0 || c.VideoFadeInSec != 0 || c.VideoFadeOutSec != 0)));
+            list.Add(DetectTempoItem(clip, point, enabled));
+            list.Add(ExtractMidiItem(track, clip, enabled));
             list.AddRange(TransitionItems(track, clip, point));
+            list.Add(ClipLockItem(track, clip, enabled));
             list.Add(new Separator());
             list.Add(MenuAction(boxed.Count > 1 ? Loc.T("menu.removeClips", boxed.Count) : Loc.T("menu.removeClip"),
-                () => boxed.Count > 1 ? DeleteTimelineSelection() : Command(p => ClipEditing.RemoveClip(p, id), "clip-removed"), "Supr", enabled, danger: true));
+                () => boxed.Count > 1 ? DeleteTimelineSelection() : Command(p => ClipEditing.RemoveClip(p, id), "clip-removed"), "Supr", enabled && (free || boxed.Count > 1), danger: true));
             list.Add(new MenuItem { IsEnabled = false, Header = new TextBlock
             {
                 Text = Loc.T(track.Clips.Count > 1 ? "menu.clipKept.many" : "menu.clipKept.last"), FontSize = 10.5,
@@ -797,10 +818,11 @@ public partial class MainWindow
             list.Add(MenuAction(Loc.T("separator.addAbove"), () => NewSeparatorAbove(track), enabled: enabled, icon: "", tip: Loc.T("separator.add.tip")));
             list.Add(MenuAction(Loc.T("preset.save") + "…", () => { SavePreset(track, point); return Task.CompletedTask; }, enabled: true, icon: "", tip: Loc.T("preset.save.tip")));
             if (!track.Track.IsMidi) list.Add(ApplyPresetSubmenu(track, enabled));
+            if (!track.Track.IsMidi) list.Add(TrackLockItem(track, enabled));
             list.Add(MenuAction(Loc.T("menu.paste"), PasteClips, Shortcuts.Label("paste"), enabled && clipboard != null, icon: "", tip: Loc.T("menu.paste.tip")));
             list.Add(new Separator());
             list.Add(MenuAction(Loc.T("menu.removeTrack"), () => EditTimeline(p => { ClipEditing.RemoveTrack(p, track.Track.Id); return null; }, "track-removed"),
-                "Supr", enabled, danger: true));
+                "Supr", enabled && !ClipEditing.HasLock(track.Track), danger: true, tip: ClipEditing.HasLock(track.Track) ? Loc.T("lock.remove.tip") : null));
         }
         OpenTimelineMenu(Popup(list, 240), point, MenuHeight(list));
     }

@@ -750,13 +750,14 @@ public static class MixRenderer
         Action<double>? onProgress = null,
         CancellationToken ct = default,
         int only = -1,
-        bool limit = true)
+        bool limit = true,
+        double stopSec = double.PositiveInfinity)
     {
         int frames = Math.Max(1, (int)Math.Ceiling(durationSec * sampleRate));
         var outL = new float[frames];
         var outR = new float[frames];
         RenderTo(tracks, busSpec, durationSec, (at, l, r) => { l.CopyTo(outL.AsSpan(at)); r.CopyTo(outR.AsSpan(at)); },
-            sampleRate, onProgress, ct, only, limit);
+            sampleRate, onProgress, ct, only, limit, stopSec: stopSec);
         return (outL, outR);
     }
 
@@ -766,7 +767,8 @@ public static class MixRenderer
     /// <summary>
     /// <see cref="Render"/> without keeping the result: every rendered stretch goes to <paramref name="sink"/> in order,
     /// aligned to sample 0. <paramref name="master"/> = false leaves <see cref="MasterChain"/> out; stems never go
-    /// through it, like they never go through the limiter.
+    /// through it, like they never go through the limiter. <paramref name="stopSec"/> silences the clips and notes
+    /// there (an <see cref="ExportRange"/>'s B) while the effects ring on.
     /// </summary>
     public static void RenderTo(
         IReadOnlyList<MixTrackSpec> tracks,
@@ -778,7 +780,8 @@ public static class MixRenderer
         CancellationToken ct = default,
         int only = -1,
         bool limit = true,
-        bool master = true)
+        bool master = true,
+        double stopSec = double.PositiveInfinity)
     {
         var bus = new MixGraphBus(sampleRate);
         bus.Configure(busSpec);
@@ -845,6 +848,9 @@ public static class MixRenderer
         }
         if (only >= 0) anySolo = false;
 
+        long stopFrame = double.IsFinite(stopSec) ? (long)Math.Round(Math.Max(0, stopSec) * sampleRate) : long.MaxValue;
+        int stopFade = Math.Max(1, (int)(ExportRange.StopFadeSec * sampleRate));
+
         int chunks = (totalFrames + ChunkFrames - 1) / ChunkFrames;
         var sets = new ChunkSet[Math.Min(Sets, chunks)];
         var trackPre = active.Select(a => a.Pre).ToArray();
@@ -901,6 +907,7 @@ public static class MixRenderer
                         BusDspChain.Add(p.L.AsSpan(off, n), p.R.AsSpan(off, n), 1f, chain.BufferL(n), chain.BufferR(n));
                     }
                     else if (notes != null) NoteSynth.Render(notes, at + off, n, sampleRate, chain.BufferL(n), chain.BufferR(n));
+                    if (at + off + n > stopFrame - stopFade) ExportRange.Stop(chain.BufferL(n), chain.BufferR(n), at + off, stopFrame, stopFade);
                     chain.ProcessFilledBuffer(n, anySolo, b.L.AsSpan(off, n), b.R.AsSpan(off, n), out _, out _, out _);
                     if (pre && chain.BlockSends.Length > 0)
                     {

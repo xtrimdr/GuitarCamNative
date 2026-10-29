@@ -5,7 +5,7 @@
         Title="GuitarCam Studio Native"
         Icon="/Assets/GuitarCam.ico"
         Width="600" Height="360" CanResize="False" ShowInTaskbar="True"
-        WindowStartupLocation="CenterScreen" SystemDecorations="None"
+        WindowStartupLocation="CenterScreen" SystemDecorations="None" Topmost="True"
         TransparencyLevelHint="Transparent" Background="Transparent">
 
   <Border x:Name="Card" CornerRadius="10" Background="{StaticResource App}" BorderBrush="{StaticResource Line}" BorderThickness="1" ClipToBounds="True" Opacity="0">

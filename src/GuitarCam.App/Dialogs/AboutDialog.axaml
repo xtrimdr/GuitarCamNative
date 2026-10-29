@@ -24,32 +24,44 @@
     </Style>
   </UserControl.Styles>
 
-  <Border Width="440" HorizontalAlignment="Center" VerticalAlignment="Center"
+  <Border Width="560" HorizontalAlignment="Center" VerticalAlignment="Center"
           Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12" ClipToBounds="True">
     <Grid RowDefinitions="Auto,Auto">
-      <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="20,10,12,10">
-        <Grid ColumnDefinitions="*,Auto">
-          <TextBlock Text="{loc:T title.about}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
-          <Button Grid.Column="1" x:Name="CloseButton" Classes="act" ToolTip.Tip="{loc:T settings.close}" AutomationProperties.Name="{loc:T settings.close}">
-            <TextBlock Classes="icon" Text="&#xE711;" FontSize="13" />
-          </Button>
-        </Grid>
-      </Border>
+      <!-- the same hero as the splash (SplashWindow): glow, big logo, name and tagline, version at the corner -->
+      <Grid Height="210" Background="{StaticResource App}" ClipToBounds="True">
+        <Ellipse x:Name="Glow" Width="460" Height="460" Margin="-190,-150,0,0"
+                 HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False" />
 
-      <StackPanel Grid.Row="1" Margin="24,24,24,20" Spacing="16">
-        <StackPanel Orientation="Horizontal" Spacing="16">
-          <Image Source="/Assets/GuitarCam-64.png" Width="64" Height="64" RenderOptions.BitmapInterpolationMode="HighQuality" />
-          <StackPanel VerticalAlignment="Center" Spacing="4">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <TextBlock Text="GuitarCam Studio" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
-              <Border Background="{StaticResource AccentSoft}" CornerRadius="4" Padding="5,1" VerticalAlignment="Center">
-                <TextBlock Text="NATIVE" FontSize="9.5" FontWeight="Bold" LetterSpacing="0.8" Foreground="{StaticResource Accent}" />
+        <StackPanel Orientation="Horizontal" Spacing="24" Margin="36,0,36,6" VerticalAlignment="Center">
+          <Image x:Name="Logo" Width="112" Height="112" RenderOptions.BitmapInterpolationMode="HighQuality" />
+          <StackPanel VerticalAlignment="Center" Spacing="6">
+            <TextBlock Text="GuitarCam" FontSize="34" FontWeight="SemiBold" LetterSpacing="-0.5" Foreground="{StaticResource Fg}" />
+            <StackPanel Orientation="Horizontal" Spacing="10" Margin="2,-6,0,0">
+              <TextBlock Text="Studio" FontSize="19" FontWeight="Light" Foreground="{StaticResource Dim}" VerticalAlignment="Center" />
+              <Border Background="{StaticResource AccentSoft}" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+                <TextBlock Text="NATIVE" FontSize="10" FontWeight="Bold" LetterSpacing="1" Foreground="{StaticResource Accent}" />
               </Border>
             </StackPanel>
-            <TextBlock x:Name="VersionText" Classes="dim mono" />
+            <TextBlock Text="{loc:T splash.tagline}" FontSize="13" Foreground="{StaticResource Faint}" Margin="2,8,0,0" />
           </StackPanel>
         </StackPanel>
 
+        <Button x:Name="CloseButton" Classes="act" Margin="10" HorizontalAlignment="Right" VerticalAlignment="Top"
+                ToolTip.Tip="{loc:T settings.close}" AutomationProperties.Name="{loc:T settings.close}">
+          <TextBlock Classes="icon" Text="&#xE711;" FontSize="13" />
+        </Button>
+
+        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,20,14" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+          <Border x:Name="TestChip" IsVisible="False" Background="{StaticResource RecSoft}" CornerRadius="4" Padding="6,1" VerticalAlignment="Center">
+            <TextBlock x:Name="TestText" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Rec}" />
+          </Border>
+          <TextBlock x:Name="VersionText" Classes="mono" FontSize="11.5" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <Border x:Name="AccentLine" Height="2" VerticalAlignment="Bottom" />
+      </Grid>
+
+      <StackPanel Grid.Row="1" Margin="24,20,24,20" Spacing="14">
         <TextBlock Classes="dim" TextWrapping="Wrap" LineHeight="18"
                    Text="{loc:T about.desc}" />
 

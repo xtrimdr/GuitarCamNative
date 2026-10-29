@@ -124,9 +124,41 @@ public static class ClipEditing
         throw new ArgumentException(Texts.T("err.clip.clipNotFound", "No encontré ese clip en el proyecto."));
     }
 
+    /// <summary>
+    /// The lock rule, the same for the window and gclab: a clip of a locked track, or a locked clip, keeps its place,
+    /// its length and its spot on the track. The edits that would change those refuse it (<see cref="Unlocked"/>) and
+    /// the ones over several clips skip it; its gain, fades, curve and framing still change, so a locked take can still
+    /// be mixed.
+    /// </summary>
+    public static bool IsLocked(Track t, Clip c) => t.Locked || c.Locked;
+
+    /// <summary>Whether the clip with this id is locked (false when there is none).</summary>
+    public static bool IsLocked(Project p, string clipId)
+    {
+        foreach (var t in p.Tracks)
+            if (t.Clips.Find(c => c.Id == clipId) is { } c) return IsLocked(t, c);
+        return false;
+    }
+
+    /// <summary>A track with a lock on it: its own, or one of its clips'. It can't be removed or recorded over.</summary>
+    public static bool HasLock(Track t) => t.Locked || t.Clips.Any(c => c.Locked);
+
+    static void Unlocked(Track t, Clip c)
+    {
+        if (IsLocked(t, c))
+            throw new ArgumentException(t.Locked
+                ? Texts.T("err.clip.trackLocked", "La pista «{0}» está bloqueada: desbloqueala para mover, recortar o borrar sus tomas.", t.Name)
+                : Texts.T("err.clip.locked", "Ese clip está bloqueado: desbloquealo para moverlo, recortarlo o borrarlo."));
+    }
+
+    /// <summary>Locks or unlocks a clip.</summary>
+    public static void SetLocked(Project p, string id, bool locked) => Find(p, id).Clip.Locked = locked;
+
+    /// <summary>Writes a clip's new values; a locked one refuses a new place or a new trim (its other values change).</summary>
     public static void Replace(Project p, Clip value)
     {
         var (track, clip) = Find(p, value.Id);
+        if (value.AtSec != clip.AtSec || value.TrimStartSec != clip.TrimStartSec || value.TrimEndSec != clip.TrimEndSec) Unlocked(track, clip);
         track.Clips[track.Clips.IndexOf(clip)] = Copy(value);
     }
 
@@ -136,8 +168,11 @@ public static class ClipEditing
         var to = p.Tracks.Find(t => t.Id == targetId) ?? throw new ArgumentException(Texts.T("err.clip.trackNotFound", "No encontré esa pista."));
         if (from == to) return to.Id;
         if (to.IsMidi) throw new ArgumentException(Texts.T("err.midi.noAudio", "Las tomas no van en una pista MIDI: elegí una pista de audio."));
+        Unlocked(from, clip);
+        if (to.Locked) throw new ArgumentException(Texts.T("err.clip.trackLocked", "La pista «{0}» está bloqueada: desbloqueala para mover, recortar o borrar sus tomas.", to.Name));
         Clip? other = swapId == null ? null : to.Clips.Find(c => c.Id == swapId)
             ?? throw new ArgumentException(Texts.T("err.clip.swapNotFound", "No encontré el clip para intercambiar."));
+        if (other != null) Unlocked(to, other);
         int index = from.Clips.IndexOf(clip);
         from.Clips.RemoveAt(index);
         if (other != null)
@@ -153,6 +188,7 @@ public static class ClipEditing
     public static void RemoveClip(Project p, string id)
     {
         var (track, clip) = Find(p, id);
+        Unlocked(track, clip);
         Remember(p, track, clip);
         track.Clips.Remove(clip);
         if (track.Clips.Count == 0) track.Name = FreeTrackName(p, p.Tracks.IndexOf(track) + 1);
@@ -209,6 +245,8 @@ public static class ClipEditing
     public static void RemoveTrack(Project p, string id)
     {
         if (p.Tracks.Find(t => t.Id == id) is not { } track) return;
+        if (HasLock(track))
+            throw new ArgumentException(Texts.T("err.track.locked", "«{0}» tiene tomas bloqueadas: desbloquealas para sacar la pista.", track.Name));
         foreach (var c in track.Clips) Remember(p, track, c);
         int index = p.Tracks.IndexOf(track);
         p.Tracks.Remove(track);
@@ -227,21 +265,24 @@ public static class ClipEditing
 
     public static void ToStart(Project p, string id, double? durationSec = null)
     {
-        var (_, clip) = Find(p, id);
+        var (track, clip) = Find(p, id);
+        Unlocked(track, clip);
         clip.AtSec = ToSample(clip.AtSec - Window(clip, p.FindMedia(clip.MediaId), durationSec).Anchor);
     }
 
     /// <summary>Puts a clip's start (its anchor, where the take begins) on the nearest line of the grid.</summary>
     public static void AlignToGrid(Project p, string id, double grid, double? durationSec = null)
     {
-        var (_, clip) = Find(p, id);
+        var (track, clip) = Find(p, id);
+        Unlocked(track, clip);
         double anchor = Window(clip, p.FindMedia(clip.MediaId), durationSec).Anchor;
         clip.AtSec = ToSample(clip.AtSec + Snap(anchor, grid, false) - anchor);
     }
 
     public static void FixCut(Project p, string id, double? durationSec = null)
     {
-        var (_, clip) = Find(p, id);
+        var (track, clip) = Find(p, id);
+        Unlocked(track, clip);
         var w = Window(clip, p.FindMedia(clip.MediaId), durationSec);
         clip.TrimStartSec = ToSample(w.TrimStart + w.Cut);
     }
@@ -255,6 +296,7 @@ public static class ClipEditing
     public static string Split(Project p, string id, double atSec, double? durationSec = null)
     {
         var (track, left) = Find(p, id);
+        Unlocked(track, left);
         var w = Window(left, p.FindMedia(left.MediaId), durationSec);
         if (atSec < w.Start + ClipEnvelope.MinClipSec || atSec > w.End - ClipEnvelope.MinClipSec)
             throw new ArgumentException(Texts.T("err.clip.splitEdge", "El cabezal tiene que estar adentro del clip, a más de 0,1 s de los bordes."));
@@ -286,7 +328,7 @@ public static class ClipEditing
         foreach (var clip in track.Clips.ToList())
         {
             var w = Window(clip, p.FindMedia(clip.MediaId), lengthOf?.Invoke(clip));
-            if (endSec <= w.Start || startSec >= w.End) continue;
+            if (endSec <= w.Start || startSec >= w.End || IsLocked(track, clip)) continue;
             changed++;
             bool keepLeft = startSec - w.Start >= ClipEnvelope.MinClipSec;
             bool keepRight = w.End - endSec >= ClipEnvelope.MinClipSec;
@@ -322,13 +364,15 @@ public static class ClipEditing
     /// others stay, so a range over some tracks shifts them against the rest (as in any DAW). When it covers every
     /// track the song itself got shorter, so the markers follow (<see cref="ProjectMarkers.CloseGap"/>); the A–B
     /// range stays, since it is transport state outside undo. Returns how many clips changed (cut, removed or moved).
+    /// A track with a locked clip from the range on stays as it is (closing the gap would move that clip).
     /// </summary>
     public static int DeleteRangeClosing(Project p, IEnumerable<string> trackIds, double startSec, double endSec, Func<Clip, double?>? lengthOf = null)
     {
         if (!(endSec > startSec)) return 0;
         double len = endSec - startSec;
         int changed = 0;
-        var ids = trackIds.Distinct().ToList();
+        bool Holds(Track t) => t.Clips.Any(c => IsLocked(t, c) && Window(c, p.FindMedia(c.MediaId), lengthOf?.Invoke(c)).End > startSec);
+        var ids = trackIds.Distinct().Where(id => p.Tracks.Find(t => t.Id == id) is { } t && !Holds(t)).ToList();
         if (p.Tracks.All(t => ids.Contains(t.Id))) ProjectMarkers.CloseGap(p, startSec, endSec);
         foreach (string id in ids)
         {
@@ -447,7 +491,8 @@ public static class ClipEditing
 
     public static void Reset(Project p, string id)
     {
-        var (_, c) = Find(p, id);
+        var (track, c) = Find(p, id);
+        Unlocked(track, c);
         c.TrimStartSec = c.TrimEndSec = c.FadeInSec = c.FadeOutSec = c.VideoFadeInSec = c.VideoFadeOutSec = c.GainDb = 0;
         c.GainCurve = [];
     }

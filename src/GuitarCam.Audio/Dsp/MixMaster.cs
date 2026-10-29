@@ -39,6 +39,8 @@ public static class MixMaster
     /// <summary>
     /// Renders and masters the mix. <paramref name="contentSec"/> is where the project ends (last clip or take);
     /// <paramref name="maxTailSec"/> = 0 cuts there like before. <paramref name="targetLufs"/> = null keeps the mix's level.
+    /// With a <paramref name="range"/> the content is its B (<paramref name="contentSec"/> is ignored): the clips and notes
+    /// stop there, the tails ring after it, and the result starts at its A; the loudness is measured on that stretch.
     /// </summary>
     public static MasteredMix Render(
         IReadOnlyList<MixTrackSpec> tracks,
@@ -48,11 +50,18 @@ public static class MixMaster
         double maxTailSec = MaxTailSec,
         double? targetLufs = null,
         Action<double>? onProgress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ExportRange? range = null)
     {
         double tail = Math.Clamp(double.IsFinite(maxTailSec) ? maxTailSec : 0, 0, MaxTailSec);
+        if (range is { } rg) contentSec = rg.EndSec;
         var (preL, preR) = MixRenderer.Render(tracks, bus, contentSec + tail, sampleRate,
-            onProgress == null ? null : f => onProgress(f * MixShare), ct, limit: false);
+            onProgress == null ? null : f => onProgress(f * MixShare), ct, limit: false, stopSec: range?.EndSec ?? double.PositiveInfinity);
+        if (range is { } from)
+        {
+            (preL, preR) = ExportRange.From(preL, preR, from.StartSec, sampleRate);
+            contentSec -= from.StartSec;
+        }
         int content = Math.Min(preL.Length, Math.Max(1, (int)Math.Ceiling(contentSec * sampleRate)));
         var (end, cut) = TailEnd(preL, preR, content, sampleRate);
 

@@ -29,6 +29,8 @@ static class Program
                 "lufs" => DspCommands.Lufs(a),
                 "masterizar" => DspCommands.Master(a),
                 "afinar" => DspCommands.Tune(a),
+                "tempo" => TempoChecks.Run(a),
+                "extraer-midi" => ToMidiChecks.Run(a),
                 "transponer" => TransposeCommands.Run(a),
                 "looks" => VideoCommands.Looks(a),
                 "leer-video" => VideoCommands.ReadVideo(a),
@@ -81,7 +83,7 @@ static class Program
               exportar  [carpeta-proyecto] [--salida nombre] [--carpeta destino] [--calidad alta|estandar|borrador]
                         [--reemplazar] [--prueba] [--audio wav|mp3] [--stems]
                         [--destino project|reels|youtube|ig-square|ig-portrait] [--volumen como-esta|youtube|…]
-                        [--lufs -14] [--cola 8]
+                        [--lufs -14] [--cola 8] [--rango 12-45|1:05-1:30|loop]
                         [--codificador auto|cpu|nvenc|amf|qsv] [--resolucion 720|1080|1440|2160] [--bitrate 20]
                                            exporta el proyecto a MP4 (o la mezcla en WAV / MP3) con mezcla offline y FFmpeg;
                                            --stems deja además un WAV por pista en "<nombre> - stems";
@@ -89,7 +91,8 @@ static class Program
                                            Instagram 1:1 y 4:5); el volumen es el Destino del master del proyecto
                                            (--volumen lo cambia para esta exportación; --lufs lleva la mezcla a ese
                                            volumen integrado); --cola deja sonar reverb y delay hasta N s después
-                                           del último clip (8 por defecto, 0 = corta ahí). Muestra los LUFS del resultado;
+                                           del último clip (8 por defecto, 0 = corta ahí); --rango exporta solo ese tramo
+                                           (loop = el A–B del proyecto), con su cola después de B. Muestra los LUFS del resultado;
                                            --codificador elige quién codifica el video (auto = la placa NVIDIA, AMD o
                                            Intel si hay, si no el procesador); --resolucion y --bitrate (Mbps) son
                                            el "Avanzado" del diálogo: el lado corto del cuadro y el bitrate del video
@@ -113,6 +116,16 @@ static class Program
               afinar    archivo.wav [--en segundos] [--umbral -50]
                                            la nota que oye el afinador en ese momento del archivo; --umbral es
                                            la sensibilidad de la ventana (dB, de -70 = muy sensible a -30)
+              tempo     archivo [--desde s] [--hasta s]
+                                           los BPM del archivo (o de ese tramo), su primer golpe y qué tan seguro
+                                           está, como "Detectar tempo" en un clip (el doble y la mitad también valen)
+              extraer-midi archivo [--melodia] [--desde s] [--hasta s] [--inicio 0.5] [--nota 0.3]
+                        [--min-ms 128] [--midi notas.mid] [--bpm 120]
+                                           las notas del archivo (o de ese tramo), como "Extraer MIDI" en un clip
+                                           (Basic Pitch); --melodia deja una nota a la vez; --inicio y --nota son
+                                           qué tan seguro tiene que estar de que una nota empieza y sigue sonando
+                                           (más bajo = más notas); --midi las guarda en un .mid
+              extraer-midi --comprobar     solo las comprobaciones del extractor (las de comprobar-dsp)
               transponer archivo.wav [--semitonos 2] [--salida x_+2st.wav]
                                            cambia el tono sin cambiar el largo (de -12 a +12, admite fracciones = cents),
                                            como el Transponer de la pista: vocoder de fase PVDR + remuestreo sinc
@@ -165,6 +178,10 @@ static class Program
               proyecto editar carpeta borrar-rango pista[,pista…] desde --hasta fin [--cerrar]   saca ese tramo de los clips de
                         esas pistas; queda el hueco, o con --cerrar lo de después se corre y lo tapa
               proyecto editar carpeta al-frente clip   lo pone arriba en su pista: donde se pisan, es el que se ve
+              proyecto mezcla carpeta [ab|copiar|olvidar]   el A | B del mixer: pasar a la otra mezcla, copiar esta sobre la
+                                           otra u olvidarla (sin nada, dice cuál suena)
+              proyecto editar carpeta bloquear|desbloquear clip|pista   un clip (o toda la pista) bloqueado no se mueve, no se
+                                           recorta ni se borra, y una toma nueva no lo pisa
               proyecto editar carpeta transicion clip corte|fundido|negro [--segundos 0.5]   la transición que entra a ese clip desde
                                            el que termina donde empieza: funde la imagen y el sonido, centrada en la unión
               proyecto transiciones carpeta   lista dónde se tocan los clips de cada pista y qué transición tiene cada unión
@@ -185,6 +202,8 @@ static class Program
               proyecto duracion carpeta           cuánto dura el tema y si entra en cada red (historias, X, Reels, TikTok)
               proyecto verificar-marcadores verifica orden, nombres, saltos, deshacer y guardado de marcadores y del rango A–B
               proyecto verificar-paquete   empaqueta un proyecto con una toma de afuera y lo desempaqueta: lo que suena, el respaldo y un ZIP tramposo
+              proyecto verificar-bloqueo   la regla del bloqueo: un clip o una pista bloqueados no se mueven, recortan ni borran, y grabar no los pisa
+              proyecto verificar-ab        el A/B de la mezcla: ida y vuelta, mute y solo quietos, pistas y buses nuevos, deshacer
               proyecto editar carpeta ganancia clip dB | curva clip "seg:dB,..."   volumen del clip y su curva (seg desde el inicio de la toma)
               proyecto verificar-tomas     verifica a qué pista va una toma nueva, su nombre y su canal
               proyecto importar-audio carpeta archivo [--en segundos] [--pista id]   copia un audio de afuera a media/ y lo pone en una pista
@@ -222,6 +241,11 @@ static class Program
               midi quitar carpeta --clip id    saca el clip MIDI
               midi cuantizar carpeta --clip id [--grilla 1/4|1/8|1/16|1/32|1/8T]
                                            mueve el comienzo de sus notas a la grilla de la canción (el largo queda)
+              midi velocidad carpeta --clip id [--rango 100]
+                                           escala las velocidades alrededor de su promedio (50 las acerca, 0 las
+                                           empareja, 150 les da más dinámica)
+              midi humanizar carpeta --clip id [--cantidad 10] [--semilla n]
+                                           mueve cada velocidad al azar hasta ± cantidad
               midi entradas                los teclados y controladores MIDI que ve Windows, con sus ajustes de
                                            Configuración → MIDI (también los que están desconectados)
               midi escuchar [--entrada nombre] [--segundos 10]
@@ -231,7 +255,7 @@ static class Program
                                            el instrumento VST3 que toca la pista (de vst escanear); --quitar vuelve al
                                            tono de prueba. gclab mezclar lo renderiza con el plugin
               midi comprobar               verifica el sonido de las notas (bloques, release, exportación, tempo) y el
-                                           teclado (suena como la nota escrita, pedal, tomas, cuantizar)
+                                           teclado (suena como la nota escrita, pedal, tomas, cuantizar, velocidad)
                                            (gclab mezclar carpeta renderiza el proyecto con sus pistas MIDI)
               vst escanear [--todo] [--carpeta X] [--archivo X]
                                            busca los plugins VST3 en las carpetas de vst carpetas (los guarda en

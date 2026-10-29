@@ -60,8 +60,9 @@ public static class AudioExporter
         {
             Report(AudioExportStage.Mix, 0);
             double content = Math.Max(1.0, MixRenderer.MixDurationSec(job.MixTracks, job.SampleRate));
+            var range = ExportRange.Fit(job.Range, content);
             var mix = await Task.Run(() => MixMaster.Render(job.MixTracks, job.MixBus, content, job.SampleRate, job.TailSec,
-                job.TargetLufs, f => Report(AudioExportStage.Mix, f), ct), ct).ConfigureAwait(false);
+                job.TargetLufs, f => Report(AudioExportStage.Mix, f), ct, range), ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             var (mixL, mixR, duration) = (mix.Left, mix.Right, mix.DurationSec);
 
@@ -110,6 +111,7 @@ public static class AudioExporter
     /// keep the mix's level: the loudness gain of a social preset is for the finished mix only. 32-bit float, so a stem louder than 0 dBFS (no
     /// limiter) never clips. They go to "&lt;name&gt; - stems" next to the export ("(2)", "(3)"… when it exists and
     /// is not being overwritten); each file is written as a hidden .part and renamed. Returns the folder and the count.
+    /// With the job's <see cref="ExportJobSpec.Range"/> they cover that stretch, like the export.
     /// </summary>
     public static async Task<(string Folder, int Count)> ExportStemsAsync(ExportJobSpec job, string exportFullPath,
         Action<double>? onProgress = null, CancellationToken ct = default, double? durationSec = null)
@@ -123,7 +125,10 @@ public static class AudioExporter
         for (int k = 2; Directory.Exists(folder) && !job.Overwrite; k++) folder = Path.Combine(parent, $"{baseName} ({k})");
         Directory.CreateDirectory(folder);
 
-        double duration = durationSec ?? Math.Max(1.0, MixRenderer.MixDurationSec(job.MixTracks, job.SampleRate));
+        double song = Math.Max(1.0, MixRenderer.MixDurationSec(job.MixTracks, job.SampleRate));
+        var range = ExportRange.Fit(job.Range, Math.Max(song, job.Range?.EndSec ?? 0));
+        double from = range?.StartSec ?? 0, stop = range?.EndSec ?? double.PositiveInfinity;
+        double duration = durationSec ?? (range is { } rg ? rg.LengthSec + job.TailSec : song);
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (int s = 0; s < audible.Count; s++)
         {
@@ -135,8 +140,12 @@ public static class AudioExporter
             try
             {
                 int at = s;
-                var (l, r) = await Task.Run(() => MixRenderer.Render(job.MixTracks, job.MixBus, duration, job.SampleRate,
-                    f => onProgress?.Invoke((at + f * 0.95) / audible.Count), ct, only: idx), ct).ConfigureAwait(false);
+                var (l, r) = await Task.Run(() =>
+                {
+                    var (fl, fr) = MixRenderer.Render(job.MixTracks, job.MixBus, from + duration, job.SampleRate,
+                        f => onProgress?.Invoke((at + f * 0.95) / audible.Count), ct, only: idx, stopSec: stop);
+                    return ExportRange.From(fl, fr, from, job.SampleRate);
+                }, ct).ConfigureAwait(false);
                 await Task.Run(() => Mp4Exporter.WriteFloatStereoWav(part, l, r, job.SampleRate), ct).ConfigureAwait(false);
                 try
                 {

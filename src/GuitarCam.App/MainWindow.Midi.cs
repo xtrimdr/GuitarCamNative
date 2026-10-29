@@ -43,8 +43,8 @@ public partial class MainWindow
     {
         var header = new Border
         {
-            Background = Palette.Panel, BorderBrush = Palette.Line, BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(12, 0),
-            Height = 40, Child = BuildPianoHeader(),
+            Background = Palette.Panel, BorderBrush = Palette.Line, BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(12, 6),
+            MinHeight = 40, Child = BuildPianoHeader(),
         };
         DockPanel.SetDock(header, Dock.Top);
         pianoHost.Children.Add(header);
@@ -60,6 +60,7 @@ public partial class MainWindow
         pianoRoll.NoteAuditioned += (pitch, velocity) =>
             Audition(store != null && MidiEditing.TryFind(store.Project, pianoClipId) != null ? MidiEditing.Find(store.Project, pianoClipId!).Track.Id : null, pitch, velocity);
         pianoRoll.SeekRequested += engine.Seek;
+        pianoRoll.ScrubChanged += Scrub;
         pianoRoll.ClipPicked += clipId =>
         {
             if (store == null || MidiEditing.TryFind(store.Project, clipId) == null) return;
@@ -97,11 +98,12 @@ public partial class MainWindow
             OpenInPiano(made);
         };
         Timeline.MidiClipContextRequested += ShowMidiClipMenu;
+        Timeline.ExtractMidiRequested += ExtractMidiDropped;
     }
 
     Control BuildPianoHeader()
     {
-        var row = new DockPanel();
+        var row = new ToolbarPanel { VerticalAlignment = VerticalAlignment.Center };
         var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         title.Children.Add(new TextBlock { Classes = { "icon" }, Text = "", FontSize = 15, Foreground = Palette.Accent, VerticalAlignment = VerticalAlignment.Center });
         title.Children.Add(new TextBlock { Text = Loc.T("piano.title"), FontSize = 13.5, FontWeight = FontWeight.SemiBold, Foreground = Palette.Fg, VerticalAlignment = VerticalAlignment.Center });
@@ -121,7 +123,6 @@ public partial class MainWindow
         ToolTip.SetTip(pianoOpenButton, Loc.T("vst.openWindow.tip"));
         title.Children.Add(pianoInstrumentButton);
         title.Children.Add(pianoOpenButton);
-        DockPanel.SetDock(title, Dock.Left);
 
         // the magnet: its own steps, remembered apart from the timeline's (notes want finer ones than takes)
         string saved = AppConfig.Get("pianoSnap") ?? "1/16";
@@ -154,10 +155,186 @@ public partial class MainWindow
         var help = new TextBlock { Classes = { "icon" }, Text = "", FontSize = 14, Foreground = Palette.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
         ToolTip.SetTip(help, Loc.T("piano.help"));
         snapRow.Children.Add(help);
-        DockPanel.SetDock(snapRow, Dock.Right);
-        row.Children.Add(snapRow);
+        // groups that don't fit next to the title go down a row instead of drawing over it
         row.Children.Add(title);
+        row.Children.Add(BuildPianoVelocityTools());
+        row.Children.Add(snapRow);
         return row;
+    }
+
+    /// <summary>The velocity lane's step choices (0 = free) in its menu; any other comes from the box.</summary>
+    static readonly int[] VelSteps = [0, 4, 8, 10, 16, 32];
+
+    /// <summary>
+    /// The velocity lane's tools in the header (asked by the user): show or hide it, pencil or line, and the vertical
+    /// step (a box for any value and a menu with the common ones), all remembered in config.json.
+    /// </summary>
+    Control BuildPianoVelocityTools()
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        var show = new ToggleButton { Classes = { "chip" }, Content = Loc.T("piano.vel.show"), Height = 28, MinHeight = 28, Padding = new Thickness(10, 0), FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+        ToolTip.SetTip(show, Loc.T("piano.vel.show.tip"));
+        var tools = new StackPanel { Orientation = Orientation.Horizontal };
+        var toolButtons = new List<ToggleButton>();
+        foreach (var (tool, key) in new[] { (PianoRollView.VelTool.Pencil, "pencil"), (PianoRollView.VelTool.Line, "line") })
+        {
+            var b = new ToggleButton { Classes = { "seg" }, Content = Loc.T($"piano.vel.{key}"), FontSize = 12 };
+            ToolTip.SetTip(b, Loc.T($"piano.vel.{key}.tip"));
+            b.Click += (_, _) =>
+            {
+                pianoRoll.VelocityTool = tool;
+                foreach (var o in toolButtons) o.IsChecked = o == b;
+                SaveViewPref("pianoVelTool", key);
+            };
+            toolButtons.Add(b);
+            tools.Children.Add(b);
+        }
+        var toolSeg = new Border { Classes = { "seg" }, Child = tools, VerticalAlignment = VerticalAlignment.Center };
+        var stepBox = new TextBox
+        {
+            Classes = { "field", "mono" }, Width = 52, Height = 28, MinHeight = 28, FontSize = 12, Padding = new Thickness(6, 0),
+            VerticalContentAlignment = VerticalAlignment.Center, HorizontalContentAlignment = HorizontalAlignment.Right,
+        };
+        ToolTip.SetTip(stepBox, Loc.T("piano.vel.step.tip"));
+        var stepMenu = new Button { Classes = { "chip" }, Content = "\u25BE", Height = 28, MinHeight = 28, Width = 28, Padding = new Thickness(0), FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+        ToolTip.SetTip(stepMenu, Loc.T("piano.vel.step.menu"));
+        Action<bool>? showLane = null;
+        var stepLabel = new TextBlock { Text = Loc.T("piano.vel.step"), Classes = { "label" }, VerticalAlignment = VerticalAlignment.Center };
+
+        void ShowStep() => stepBox.Text = pianoRoll.VelocityStep > 1 ? pianoRoll.VelocityStep.ToString() : Loc.T("piano.snap.off");
+        void SetStep(int v)
+        {
+            pianoRoll.VelocityStep = v;
+            ShowStep();
+            SaveViewPref("pianoVelStep", pianoRoll.VelocityStep.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        void ApplyBox()
+        {
+            string t = stepBox.Text?.Trim() ?? "";
+            if (int.TryParse(t, out int v) && v >= 0 && v <= 127) SetStep(v);
+            else if (t.Length == 0 || t == Loc.T("piano.snap.off")) SetStep(0);
+            else ShowStep();
+        }
+        stepBox.KeyDown += (_, e) =>
+        {
+            if (e.Key == Avalonia.Input.Key.Enter) { ApplyBox(); pianoRoll.Focus(); e.Handled = true; }
+            else if (e.Key == Avalonia.Input.Key.Escape) { ShowStep(); pianoRoll.Focus(); e.Handled = true; }
+        };
+        stepBox.LostFocus += (_, _) => ApplyBox();
+        stepMenu.Click += (_, _) =>
+        {
+            var refresh = new List<Action>();
+            var list = new List<object>();
+            foreach (int v in VelSteps)
+                list.Add(MenuCheck(v == 0 ? Loc.T("piano.snap.off") : v.ToString(), () => pianoRoll.VelocityStep == v || v == 0 && pianoRoll.VelocityStep <= 1, () => SetStep(v), refresh));
+            var menu = Popup(list, 140);
+            menu.Placement = PlacementMode.BottomEdgeAlignedLeft;
+            OpenAnchoredMenu(menu, stepMenu);
+        };
+
+        void ShowLane(bool on)
+        {
+            showLane?.Invoke(on);
+            pianoRoll.VelocityShown = on;
+            show.IsChecked = on;
+            toolSeg.IsEnabled = stepBox.IsEnabled = stepMenu.IsEnabled = on;
+            stepLabel.Opacity = on ? 1 : 0.35;
+        }
+        show.Click += (_, _) =>
+        {
+            ShowLane(show.IsChecked == true);
+            SaveViewPref("pianoVelShown", show.IsChecked == true ? "1" : "0");
+        };
+
+        ShowLane(AppConfig.Get("pianoVelShown") != "0");
+        var savedTool = AppConfig.Get("pianoVelTool") == "line" ? PianoRollView.VelTool.Line : PianoRollView.VelTool.Pencil;
+        pianoRoll.VelocityTool = savedTool;
+        toolButtons[(int)savedTool].IsChecked = true;
+        pianoRoll.VelocityStep = int.TryParse(AppConfig.Get("pianoVelStep"), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int step) ? step : 0;
+        ShowStep();
+
+        row.Children.Add(show);
+        row.Children.Add(toolSeg);
+        row.Children.Add(stepLabel);
+        row.Children.Add(stepBox);
+        row.Children.Add(stepMenu);
+        var adjust = new Button { Classes = { "chip" }, Content = Loc.T("piano.vel.adjust"), Height = 28, MinHeight = 28, Padding = new Thickness(10, 0), FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+        ToolTip.SetTip(adjust, Loc.T("piano.vel.adjust.tip"));
+        adjust.Click += (_, _) => ShowVelocityAdjust(adjust);
+        row.Children.Add(adjust);
+        showLane += on => adjust.IsEnabled = on;
+        adjust.IsEnabled = pianoRoll.VelocityShown;
+        return row;
+    }
+
+    /// <summary>
+    /// The velocity tools' card (asked by the user): Escalar (around the average, in %) and Humanizar (± at random),
+    /// each applied with its button as one undo step, on the selected notes or the whole clip. Both values are remembered.
+    /// </summary>
+    void ShowVelocityAdjust(Control anchor)
+    {
+        static TextBox Box(string text) => new()
+        {
+            Classes = { "field", "mono" }, Text = text, Width = 64, Height = 28, MinHeight = 28, FontSize = 12, Padding = new Thickness(6, 0),
+            VerticalContentAlignment = VerticalAlignment.Center, HorizontalContentAlignment = HorizontalAlignment.Right,
+        };
+        static Button Apply() => new() { Classes = { "btn", "sm", "primary" }, Content = Loc.T("piano.vel.apply"), VerticalAlignment = VerticalAlignment.Center };
+        var scaleBox = Box(AppConfig.Get("pianoVelScale") ?? "50");
+        var humBox = Box(AppConfig.Get("pianoVelHumanize") ?? "10");
+        var scaleOk = Apply();
+        var humOk = Apply();
+        var target = new TextBlock { FontSize = 11, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap, MaxWidth = 260 };
+        void ShowTarget() => target.Text = pianoRoll.ToolTargets == 0 ? Loc.T("piano.vel.none") : Loc.T("piano.vel.target", pianoRoll.ToolTargets);
+        ShowTarget();
+
+        Control Row(string label, string unit, TextBox box, Button ok, string hint)
+        {
+            var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            line.Children.Add(new TextBlock { Text = label, Width = 80, FontSize = 12, Foreground = Palette.Fg, VerticalAlignment = VerticalAlignment.Center });
+            line.Children.Add(box);
+            line.Children.Add(new TextBlock { Text = unit, Classes = { "dim", "mono" }, Width = 16, VerticalAlignment = VerticalAlignment.Center });
+            line.Children.Add(ok);
+            var block = new StackPanel { Spacing = 4 };
+            block.Children.Add(line);
+            block.Children.Add(new TextBlock { Text = hint, FontSize = 11, Foreground = Palette.Faint, TextWrapping = TextWrapping.Wrap, MaxWidth = 260 });
+            return block;
+        }
+        var body = new StackPanel { Spacing = 10 };
+        body.Children.Add(new TextBlock { Classes = { "label" }, Text = Loc.T("piano.vel.adjust.title").ToUpperInvariant() });
+        body.Children.Add(Row(Loc.T("piano.vel.scale"), "%", scaleBox, scaleOk, Loc.T("piano.vel.scale.hint")));
+        body.Children.Add(Row(Loc.T("piano.vel.humanize"), "±", humBox, humOk, Loc.T("piano.vel.humanize.hint")));
+        body.Children.Add(target);
+        var card = new Border
+        {
+            Padding = new Thickness(12, 10), Background = Palette.Raised, BorderBrush = Palette.Line, BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8), Child = body,
+        };
+        var flyout = new Flyout { Content = card, FlyoutPresenterClasses = { "bare" }, Placement = PlacementMode.BottomEdgeAlignedRight };
+
+        // the result shows in the card, which stays open to apply again (Ctrl+Z undoes each one)
+        void Done(int changed)
+        {
+            if (changed < 0) return;
+            target.Text = changed == 0 ? Loc.T("piano.vel.same") : Loc.T("piano.vel.changed", changed);
+        }
+        void DoScale()
+        {
+            if (!double.TryParse(scaleBox.Text?.Trim().TrimEnd('%'), out double pct) || pct < 0 || pct > 400) { scaleBox.Text = "50"; return; }
+            SaveViewPref("pianoVelScale", scaleBox.Text!.Trim().TrimEnd('%'));
+            Done(pianoRoll.ScaleVelocity(pct));
+        }
+        void DoHumanize()
+        {
+            if (!int.TryParse(humBox.Text?.Trim().TrimStart('±'), out int amount) || amount < 0 || amount > 127) { humBox.Text = "10"; return; }
+            SaveViewPref("pianoVelHumanize", amount.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Done(pianoRoll.HumanizeVelocity(amount));
+        }
+        scaleOk.Click += (_, _) => DoScale();
+        humOk.Click += (_, _) => DoHumanize();
+        scaleBox.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) { DoScale(); e.Handled = true; } };
+        humBox.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) { DoHumanize(); e.Handled = true; } };
+        flyout.Opened += (_, _) => { scaleBox.Focus(); scaleBox.SelectAll(); };
+        flyout.ShowAt(anchor);
     }
 
     readonly Button pianoGridButton = new() { Classes = { "chip" }, Height = 28, MinHeight = 28, Padding = new Thickness(10, 0), FontSize = 12, VerticalAlignment = VerticalAlignment.Center };

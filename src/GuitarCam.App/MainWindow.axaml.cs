@@ -129,6 +129,7 @@ public partial class MainWindow : Window
         InitTransport();
         InitMarkers();
         InitTools();
+        InitLocks();
         InitPreview();
         InitMode();
         InitImport();

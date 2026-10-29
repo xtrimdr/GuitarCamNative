@@ -31,7 +31,7 @@ porque con ellos se recuerda qué secciones están plegadas. El idioma se elige 
 ## Colores (tokens)
 
 Definidos **dos veces y tienen que coincidir**: `App.axaml` (XAML) y `Controls/Palette.cs` (lo que se dibuja). El
-selector de tema (`UiTheme.cs`: 16 acentos, 9 fondos oscuros) cambia en vivo los pinceles de superficie y acento, así
+selector de tema (`UiTheme.cs`: 17 acentos, ordenados por tono, 9 fondos oscuros) cambia en vivo los pinceles de superficie y acento, así
 que usá siempre el pincel (`Palette.Accent`, `{StaticResource Accent}`), nunca un color escrito a mano, y leé
 `Palette.AccentColor` y compañía al dibujar, sin guardarlo. Variantes del acento en XAML: `AccentFg` (texto sobre
 acento), `AccentHover`, `AccentTint`, `Accent25/40/50/70`. Valores del tema por defecto:
@@ -131,6 +131,7 @@ Para un control nuevo, primero reutilizá estas. Los controles Fluent (sliders, 
 | `TextBox.field`, `Button.btn` (`.sm`, `.primary`, `.outline`, `.danger`), `Button.act` (`.danger`) | campos y botones de diálogos y listas: botón de fila 28×28, confirmación roja |
 | `Button.chip.purge` | "Borrar no usadas": contorno tenue que se pone rojo con el hover |
 | `TextBlock.label` / `.dim` / `.mono` / `.icon` | etiqueta / secundario / números / ícono |
+| `ToolbarPanel` (código) | barra de herramientas que **nunca se superpone** (pedido del usuario): el primer grupo a la izquierda, los demás a la derecha, y los que no entran bajan a otra fila. Toda barra nueva con varios grupos va así, nunca un `DockPanel` que los pise |
 
 ## Atajos
 

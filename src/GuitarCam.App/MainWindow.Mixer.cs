@@ -273,11 +273,14 @@ public partial class MainWindow
             clear.Children.Add(b);
         }
 
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), Margin = new Thickness(12, 0) };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto,Auto"), Margin = new Thickness(12, 0) };
         grid.Children.Add(new ScrollViewer { Content = row, HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled });
         Grid.SetColumn(clear, 1); grid.Children.Add(clear);
+        // the mix's A | B (MainWindow.MixCompare.cs)
+        var compare = BuildMixCompare();
+        Grid.SetColumn(compare, 2); grid.Children.Add(compare);
         var segBox = new Border { Classes = { "seg" }, Child = seg, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
-        Grid.SetColumn(segBox, 2); grid.Children.Add(segBox);
+        Grid.SetColumn(segBox, 3); grid.Children.Add(segBox);
         return new Border { Height = 40, Background = Palette.Panel, BorderBrush = Palette.Line, BorderThickness = new Thickness(0, 0, 0, 1), Child = grid };
     }
 

@@ -22,6 +22,7 @@ namespace GuitarCam.App.Dialogs;
 /// What the setup step chose. <c>Target</c> is the social preset (<see cref="ExportTargets"/>) and <c>TargetLufs</c>
 /// the loudness the mix is mastered to (the preset's, or −14 for "Exportar audio" with the box ticked; null = as it is).
 /// <c>Resolution</c> and <c>BitrateMbps</c> are "Avanzado": the frame's short side and the video bitrate (null = the quality's).
+/// <c>Range</c> is the "Tramo": the loop A–B, or null for the whole song.
 /// </summary>
 public sealed record ExportOptions(
     string? OutDir,
@@ -31,7 +32,8 @@ public sealed record ExportOptions(
     string Target = ExportTargets.Project,
     double? TargetLufs = null,
     int Resolution = Mp4Exporter.DefaultResolution,
-    double? BitrateMbps = null);
+    double? BitrateMbps = null,
+    ExportRange? Range = null);
 
 public sealed record ExportSummary(
     int Width,
@@ -75,6 +77,8 @@ public sealed partial class ExportDialog : UserControl
     ProjectStore? currentStore;
     IReadOnlyList<LiveTrack>? currentLiveTracks;
     ExportSummary summary = new(1920, 1080, "16:9", 0, 1);
+    /// <summary>"Tramo": just the loop A–B (when the project has one) instead of the whole song.</summary>
+    bool rangeLoop;
     /// <summary>"Exportar audio" of a solo audio project, or an audio file opened from Historial.</summary>
     bool audio;
     AudioFormat audioFormat = AudioFormat.Wav;
@@ -184,6 +188,8 @@ public sealed partial class ExportDialog : UserControl
         QualityBorradorBtn.Click += (_, _) => SetQuality(ExportQuality.Borrador);
         FormatWavBtn.Click += (_, _) => SetAudioFormat(AudioFormat.Wav);
         FormatMp3Btn.Click += (_, _) => SetAudioFormat(AudioFormat.Mp3);
+        RangeAllBtn.Click += (_, _) => SetRange(false);
+        RangeLoopBtn.Click += (_, _) => SetRange(true);
         foreach (var t in ExportTargets.All)
         {
             var b = new Button
@@ -366,6 +372,7 @@ public sealed partial class ExportDialog : UserControl
         if (initial == null) audioFormat = AudioExporter.ParseFormat(p?.Settings.Export.AudioFormat);
         if (initial == null) StemsCheck.IsChecked = p?.Settings.Export.Stems == true;
         target = ExportTargets.Get(initial?.Target ?? p?.Settings.Export.Target).Id;
+        rangeLoop = initial?.Range != null;
 
         SetFileNameInput(initial?.FileName ?? defaultName);
         folder = initial != null ? initial.OutDir : savedFolder;
@@ -447,6 +454,22 @@ public sealed partial class ExportDialog : UserControl
         quality = q;
         RenderSetupState();
     }
+
+    void SetRange(bool loop)
+    {
+        rangeLoop = loop;
+        RenderSetupState();
+    }
+
+    /// <summary>The project's loop A–B as an export range; null when it has none.</summary>
+    ExportRange? LoopRange() =>
+        currentStore != null && ProjectMarkers.Loop(currentStore.Project.Settings) is { } l ? new ExportRange(l.Start, l.End) : null;
+
+    /// <summary>The "Tramo" chosen: the loop, fitted inside the song, or null for all of it.</summary>
+    ExportRange? ChosenRange() => rangeLoop ? ExportRange.Fit(LoopRange(), summary.DurationSec) : null;
+
+    /// <summary>How long the export will be (without the effect tail): the stretch, or the whole song.</summary>
+    double ExportSec => ChosenRange()?.LengthSec ?? summary.DurationSec;
 
     void SetTarget(string id)
     {
@@ -543,8 +566,18 @@ public sealed partial class ExportDialog : UserControl
         var (outW, outH) = Mp4Exporter.ExportSize(aspect, resolution);
         int tracksWithClips = currentStore?.Project.Tracks.Count(t => t.HasContent) ?? 0;
         HeaderSubtitle.Text = audio
-            ? Loc.T("exp.sub.audio", Loc.T(tracksWithClips == 1 ? "tracks.one" : "tracks.many", tracksWithClips), Mp4Exporter.FormatTime(summary.DurationSec))
-            : $"{outW}×{outH} · {aspect} · {summary.Takes} {takesWord} · {Mp4Exporter.FormatTime(summary.DurationSec)}";
+            ? Loc.T("exp.sub.audio", Loc.T(tracksWithClips == 1 ? "tracks.one" : "tracks.many", tracksWithClips), Mp4Exporter.FormatTime(ExportSec))
+            : $"{outW}×{outH} · {aspect} · {summary.Takes} {takesWord} · {Mp4Exporter.FormatTime(ExportSec)}";
+        var loop = LoopRange();
+        var fitted = ExportRange.Fit(loop, summary.DurationSec);
+        RangePanel.IsVisible = loop != null;
+        if (fitted == null) rangeLoop = false;
+        RangeLoopBtn.IsEnabled = fitted != null;
+        SetActiveSegment(RangeAllBtn, !rangeLoop);
+        SetActiveSegment(RangeLoopBtn, rangeLoop);
+        RangeDescText.Text = fitted is { } fr
+            ? Loc.T(rangeLoop ? "exp.range.loop.desc" : "exp.range.all.desc", Mp4Exporter.FormatTime(fr.StartSec), Mp4Exporter.FormatTime(fr.EndSec), Mp4Exporter.FormatTime(fr.LengthSec))
+            : Loc.T("exp.range.loop.short");
         ExtText.Text = Ext;
         FileNameBox.Watermark = Loc.T(audio ? "exp.mySong" : "exp.myVideo");
         QualityLabel.Text = Loc.T(audio ? "exp.format" : "exp.quality");
@@ -578,8 +611,8 @@ public sealed partial class ExportDialog : UserControl
         SetActiveSegment(FormatMp3Btn, audioFormat == AudioFormat.Mp3);
 
         var qSpec = Mp4Exporter.GetQualitySpec(quality);
-        double estBytes = audio ? AudioExporter.EstimateBytes(audioFormat, summary.DurationSec)
-            : Mp4Exporter.EstimateBytes(quality, outW, outH, summary.DurationSec, bitrateMbps);
+        double estBytes = audio ? AudioExporter.EstimateBytes(audioFormat, ExportSec)
+            : Mp4Exporter.EstimateBytes(quality, outW, outH, ExportSec, bitrateMbps);
         EstBytesText.Text = $"≈ {Mp4Exporter.FormatBytes(estBytes)}";
         QualityDescText.Text = !audio ? qSpec.Title
             : audioFormat == AudioFormat.Mp3 ? Loc.T("exp.mp3.note")
@@ -657,7 +690,7 @@ public sealed partial class ExportDialog : UserControl
         if (fileName.Trim().Length == 0) return;
 
         double? lufs = MasterLoudness.Get(currentStore.Project.Settings.Master.Target).Lufs;
-        var opts = new ExportOptions(folder, check.FileName, check.Exists, quality, target, lufs, resolution, bitrateMbps);
+        var opts = new ExportOptions(folder, check.FileName, check.Exists, quality, target, lufs, resolution, bitrateMbps, ChosenRange());
         await RunExportJob(opts);
     }
 
@@ -1338,6 +1371,7 @@ public sealed partial class ExportDialog : UserControl
             MixTracks = mixTracks,
             MixBus = mixBus,
             SampleRate = sampleRate,
+            Range = options.Range,
         };
     }
 

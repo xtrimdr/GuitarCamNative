@@ -84,6 +84,12 @@ public partial class MainWindow
     {
         if (RecordingBusy || store == null || store.ReadOnly) return;
         var lit = RecordTargets().Concat(MidiRecordTargets()).Select(x => x.Id).ToList();
+        // a take would replace what the track has: a locked one isn't armed (a new take goes to a new track instead)
+        if (!lit.Contains(t.Track.Id) && !t.Track.IsMidi && ClipEditing.HasLock(t.Track) && t.Track.Clips.Count > 0)
+        {
+            Toast(Loc.T("lock.arm", t.Track.Name), action: t.Track.Locked ? (Loc.T("lock.unlock"), () => _ = SetTrackLocked(t.Track.Id, false)) : null);
+            return;
+        }
         if (!lit.Remove(t.Track.Id)) lit.Add(t.Track.Id);
         armedIds = lit;
         ShowArm();

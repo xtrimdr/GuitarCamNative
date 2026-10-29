@@ -55,6 +55,9 @@ More details in [Requirements](#requirements).
 
 - A multitrack **timeline**: clips you can move, trim, split and duplicate, fades, clip gain with its own **volume
   curve**, range delete, unlimited undo and redo, and import of outside audio (WAV, MP3, FLAC, OGG, M4A, AIFF).
+  **Detect tempo** on any clip (right-click) and set the project to those BPM. **Extract MIDI**: the notes of an
+  audio clip (chords or melody) go to a MIDI track, from the right-click or by dragging the clip onto a MIDI track
+  (Spotify's Basic Pitch, on the CPU).
 - **Folders** that fold and group tracks; Ctrl+click / Shift+click marks several tracks to move them together. Each
   track gets its own **color** (24, in rainbow order), an **instrument icon** (guitars, bass, drums, synths, strings,
   winds, percussion…), its own height and Vida, Comp, Reverb and Delay knobs in its header.
@@ -72,6 +75,8 @@ More details in [Requirements](#requirements).
   buses (before or after the fader); the buses go to the master. A bus has volume, pan and effects, so it works for a reverb, a delay or to process
   a group. Folders only group. Strips are reordered by dragging them in the mixer (the timeline follows), sit on the
   left or the right, and named separators keep big projects tidy.
+- **A | B** on the mixer bar: two mixes of the same takes (channels, sends and buses) to flip between while it plays;
+  B starts as a copy of A, and right-click copies one over the other or forgets the other.
 - Professional-grade audio: starting, stopping, jumping and dragging the playhead all fade, with no clicks or dropouts.
 
 ### Build the video
@@ -88,6 +93,8 @@ More details in [Requirements](#requirements).
 - Easy or custom: pick the destination and quality, and if you want, the resolution (720p to 4K) and bitrate under **Advanced**.
 - The video is encoded on the **video card** (NVIDIA, AMD or Intel) when there is one, the takes are processed in
   parallel and the mix uses every core; if the card fails, it carries on with the processor.
+- **Just the loop A–B** ("Range" in the dialog) to cut a short clip out of the song, with reverb and delay ringing
+  out after B.
 - In **Audio only** mode, 24-bit WAV or 320 kbps MP3; optionally each track in its own WAV too (stems). A master
   **LUFS** meter sits in the transport bar.
 
@@ -173,6 +180,8 @@ several tracks; right-click: delete it, delete it and close the gap, loop it), *
 there, on the grid), **Erase** (removes the clips it touches), **Listen** (hold the button on a clip to hear that
 track alone from there), **Zoom** (click zooms in, Alt+click out, a drag shows that stretch) and **Hand** (drag to
 move the view). Where two clips of a track overlap, right-click → **Bring to front** picks which one shows.
+**Lock clip** or **Lock track** (right-click) pins a take that came out right: it can't be moved, trimmed or deleted
+and recording won't replace it; volume, fades and framing still change.
 
 ## How it is built
 

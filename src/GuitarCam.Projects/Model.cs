@@ -96,6 +96,8 @@ public sealed class ProjectSettings
     /// project brings "Reverb" and "Delay" (<see cref="ProjectBuses.Defaults"/>).
     /// </summary>
     public List<Bus> Buses { get; set; } = ProjectBuses.Defaults();
+    /// <summary>Native only: the mix's A/B (<see cref="MixCompare"/>); null = one mix, nothing to compare.</summary>
+    public MixCompareState? Compare { get; set; }
 
     // version 2's fixed reverb and delay and its extra returns, read only to turn them into buses (never written)
     [JsonPropertyName("reverb")] public ReverbSettings? OldReverb { get; set; }
@@ -155,6 +157,7 @@ public sealed class ProjectSettings
         Buses ??= [];
         Buses.RemoveAll(x => x == null);
         foreach (var x in Buses) x.Normalize();
+        Compare?.Normalize();
         if (LoopStartSec is not { } a || LoopEndSec is not { } b || !double.IsFinite(a) || !double.IsFinite(b)
             || a < 0 || b - a < ProjectMarkers.MinLoopSec)
             LoopStartSec = LoopEndSec = null;
@@ -460,6 +463,12 @@ public sealed class Track
     public string? Icon { get; set; }
     /// <summary>The <see cref="Folder"/> the track is in; null = at the root. Native only.</summary>
     public string? FolderId { get; set; }
+    /// <summary>
+    /// Its takes can't be moved, trimmed, split, deleted or replaced by a new take (<see cref="ClipEditing.IsLocked"/>);
+    /// volume, fades and framing still change. Native only.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Locked { get; set; }
     /// <summary>The mixer side its strip sits on (<see cref="MixerSides"/>); null = the left. A track in a folder goes with it. Native only.</summary>
     public string? MixerSide { get; set; }
     /// <summary>Its own lane height as a multiple of the height every track shares (the timeline's slider), so the slider
@@ -1020,6 +1029,9 @@ public sealed class Clip
     public double? SyncMs { get; set; }
     /// <summary>Optional camera latency; null inherits the recording's camera latency.</summary>
     public double? VideoOffsetMs { get; set; }
+    /// <summary>Its place and length are fixed, like every clip of a locked track (<see cref="ClipEditing.IsLocked"/>). Native only.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Locked { get; set; }
 
     public double EffectiveSyncMs(Media? media) => SyncMs ?? media?.SyncMs ?? 0;
     public double EffectiveVideoOffsetMs(Media? media) => VideoOffsetMs ?? media?.VideoOffsetMs ?? 80;

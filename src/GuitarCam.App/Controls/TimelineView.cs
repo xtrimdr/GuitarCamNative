@@ -72,6 +72,10 @@ public sealed partial class TimelineView : Control
     public Func<LiveTrack, string, (bool On, double Level)>? SendState { get; set; }
     /// <summary>How far a track's transpose is being made (0 to 1), null when it plays what it should; set by the window.</summary>
     public Func<LiveTrack, float?>? TransposeProgress { get; set; }
+    /// <summary>How far "Detectar tempo" is on a clip (0 to 1), or null when it isn't listening to it.</summary>
+    public Func<LiveClip, float?>? TempoProgress { get; set; }
+    /// <summary>How far "Extraer MIDI" is on a clip (0..1), null when it isn't taking notes out of it.</summary>
+    public Func<LiveClip, float?>? ToMidiProgress { get; set; }
     /// <summary>"-12" to "+12", made once so a header with a transposed track allocates nothing per frame.</summary>
     static readonly string[] TransposeTags = [.. Enumerable.Range(-12, 25).Select(v => $"{v:+0;-0;0}")];
     /// <summary>"0" to "100", the knobs' readouts, made once so drawing allocates nothing.</summary>
@@ -279,6 +283,10 @@ public sealed partial class TimelineView : Control
     /// <summary>A track's trash can was clicked: the window asks there before removing it.</summary>
     public event Action<string, Point>? RemoveTrackRequested;
     public event Action<LiveTrack, LiveClip?, Point>? ClipContextRequested;
+    /// <summary>A take's clip dropped on a MIDI track: the window takes its notes out there (the clip stays put).</summary>
+    public event Action<LiveClip, LiveTrack>? ExtractMidiRequested;
+    /// <summary>A locked clip was grabbed to move or trim it (<see cref="ClipEditing.IsLocked"/>): the window says why nothing happens.</summary>
+    public event Action<LiveTrack, LiveClip>? LockedTouched;
     /// <summary>The chip on a join between two clips was clicked: the track, the clip coming in and where (native only).</summary>
     public event Action<LiveTrack, LiveClip, Point>? TransitionRequested;
     public event Action<Point>? NewTrackRequested;
@@ -508,7 +516,7 @@ public sealed partial class TimelineView : Control
         carriedPreview.Clear();
         foreach (var t in tracks)
             foreach (var c in t.Clips)
-                if (c != grabbed && boxed.Contains(c.Clip.Id)) carriedAlong.Add((c, ClipEditing.Copy(c.Clip)));
+                if (c != grabbed && boxed.Contains(c.Clip.Id) && !ClipEditing.IsLocked(t.Track, c.Clip)) carriedAlong.Add((c, ClipEditing.Copy(c.Clip)));
         StartMidiCarry();
     }
 
@@ -1211,7 +1219,9 @@ public sealed partial class TimelineView : Control
     /// </summary>
     void DrawGhost(DrawingContext ctx, double W, double H)
     {
-        var w = Window(dragged!, preview);
+        // over a MIDI track it shows where the notes will land: under the take, where it is now
+        bool toMidi = tracks[overIndex].Track.IsMidi;
+        var w = Window(dragged!, toMidi ? original : preview);
         double y = LaneY(overIndex);
         ctx.FillRectangle(Palette.Alpha(Palette.AccentColor, 0.06), new Rect(HeaderW, y, Math.Max(0, W - HeaderW), LaneH(overIndex)));
         double x0 = X(w.Start), x1 = X(w.End);
@@ -1220,7 +1230,8 @@ public sealed partial class TimelineView : Control
         {
             var dashed = new Pen(Palette.Accent, 1.5, new DashStyle([4, 3], 0));
             ctx.DrawRectangle(Palette.Alpha(Palette.AccentColor, 0.18), dashed, box, 5, 5);
-            var label = Palette.Text($"{tracks[overIndex].Track.Name} · {w.Start:0.00} s", 11, Palette.Accent, Palette.UiBold);
+            var label = Palette.Text(toMidi ? Loc.T("toMidi.drop", tracks[overIndex].Track.Name) : $"{tracks[overIndex].Track.Name} · {w.Start:0.00} s",
+                11, Palette.Accent, Palette.UiBold);
             double lx = Math.Clamp(box.X + 8, HeaderW + 8, Math.Max(HeaderW + 8, W - label.Width - 8));
             ctx.DrawRectangle(Palette.Alpha(Palette.AppColor, 0.75), null, new Rect(lx - 4, box.Y + 3, label.Width + 8, label.Height + 2), 3, 3);
             ctx.DrawText(label, new Point(lx, box.Y + 4));
@@ -1717,7 +1728,9 @@ public sealed partial class TimelineView : Control
                 var wave = silent ? Palette.Faint : tint != null ? Palette.Alpha(color, sel || thumbs ? 1 : 0.8)
                     : thumbs && !sel ? Palette.Alpha(Colors.White, 0.85) : sel ? Palette.Accent : Palette.Alpha(Palette.DimColor, 0.8);
                 ctx.DrawGeometry(null, Palette.Pen(wave, 1), geo);
-                if (TransposeProgress?.Invoke(t) is { } progress) DrawTransposing(ctx, clip, Math.Max(x0, HeaderW), progress);
+                if (TransposeProgress?.Invoke(t) is { } progress) DrawWorking(ctx, clip, Math.Max(x0, HeaderW), progress, TransposingTexts, null);
+                else if (TempoProgress?.Invoke(c) is { } listened) DrawWorking(ctx, clip, Math.Max(x0, HeaderW), listened, TempoTexts, TempoGlyph);
+                else if (ToMidiProgress?.Invoke(c) is { } heard) DrawWorking(ctx, clip, Math.Max(x0, HeaderW), heard, ToMidiTexts, ToMidiGlyph);
             }
             var f = ClipEnvelope.FitFades(model.FadeInSec, model.FadeOutSec, w.End - w.Start);
             void Fade(double a, double b, double edge)
@@ -1737,7 +1750,9 @@ public sealed partial class TimelineView : Control
             if (f.FadeOut > 0) Fade(x1 - f.FadeOut * pps, x1, x1);
             bool editable = sel && Selected >= 0 && Selected < tracks.Count && tracks[Selected] == t && CurveEditable(Selected, c);
             if (!c.Offline && (editable || model.GainDb != 0 || model.GainCurve.Count > 0)) DrawCurve(ctx, c, model, w, clip, editable);
-            if (sel || clip.Contains(lastPointer)) DrawEdgeHandles(ctx, c, clip, x0 + f.FadeIn * pps, x1 - f.FadeOut * pps);
+            bool locked = ClipEditing.IsLocked(t.Track, c.Clip);
+            if (sel || clip.Contains(lastPointer)) DrawEdgeHandles(ctx, c, clip, x0 + f.FadeIn * pps, x1 - f.FadeOut * pps, locked);
+            if (locked && clip.Width > 24) DrawClipLock(ctx, clip, !c.Offline && MediaBadge(clip) != null);
             if (!c.Offline && MediaBadge(clip) is { } badge) DrawMediaBadge(ctx, badge, c.VideoPath != null);
             if (w.AnchorCut > 0.0005)
             {
@@ -1756,21 +1771,27 @@ public sealed partial class TimelineView : Control
     }
 
     /// <summary>
-    /// A clip whose transpose is being made (asked by the user: you couldn't tell whether it worked): the wave dims,
-    /// a bar fills along its bottom and a label says how far it is. It keeps sounding as before meanwhile.
+    /// A clip whose transpose is being made (asked by the user: you couldn't tell whether it worked), or whose tempo is
+    /// being detected: the wave dims, a bar fills along its bottom and a label (<paramref name="texts"/>, by percent)
+    /// says how far it is, after <paramref name="glyph"/> (a Fluent icon; null = the transpose's). It keeps sounding meanwhile.
     /// </summary>
-    void DrawTransposing(DrawingContext ctx, Rect clip, double left, float progress)
+    void DrawWorking(DrawingContext ctx, Rect clip, double left, float progress, string[] texts, string? glyph)
     {
         ctx.FillRectangle(Palette.Alpha(Colors.Black, 0.45), clip);
         var track = new Rect(clip.X, clip.Bottom - 4, clip.Width, 4);
         ctx.FillRectangle(Palette.Alpha(Colors.White, 0.08), track);
         ctx.FillRectangle(Palette.Accent, new Rect(track.X, track.Y, track.Width * Math.Clamp(progress, 0, 1), track.Height));
         int pct = Math.Clamp((int)(progress * 100), 0, 100);
-        var label = Palette.Text(TransposingTexts[pct], 11, Palette.Fg, Palette.Ui);
+        var label = Palette.Text(texts[pct], 11, Palette.Fg, Palette.Ui);
         var pill = new Rect(left + 6, clip.Y + 6, label.Width + 30, 20);
         if (pill.Right > clip.Right - 4) return; // a short clip keeps only the bar
         ctx.DrawRectangle(Palette.Alpha(Colors.Black, 0.7), Palette.Pen(Palette.Alpha(Palette.AccentColor, 0.5)), pill, 4, 4);
-        FxIcon.Draw(ctx, FxIcon.Transpose, new Rect(pill.X + 7, pill.Center.Y - 6, 12, 12), Palette.Accent);
+        if (glyph == null) FxIcon.Draw(ctx, FxIcon.Transpose, new Rect(pill.X + 7, pill.Center.Y - 6, 12, 12), Palette.Accent);
+        else
+        {
+            var icon = Palette.Text(glyph, 12, Palette.Accent, Icons);
+            ctx.DrawText(icon, new Point(pill.X + 7, pill.Center.Y - icon.Height / 2));
+        }
         ctx.DrawText(label, new Point(pill.X + 24, pill.Center.Y - label.Height / 2));
     }
 
@@ -1915,14 +1936,20 @@ public sealed partial class TimelineView : Control
 
     /// <summary>"Transponiendo… 0%" to "100%", and the knob's bare "0%" to "100%", made once (nothing is built per frame).</summary>
     static readonly string[] TransposingTexts = [.. Enumerable.Range(0, 101).Select(p => Loc.T("tl.transposing", p))],
-        PercentTexts = [.. Enumerable.Range(0, 101).Select(p => $"{p}%")];
+        PercentTexts = [.. Enumerable.Range(0, 101).Select(p => $"{p}%")],
+        TempoTexts = [.. Enumerable.Range(0, 101).Select(p => Loc.T("tl.tempo", p))],
+        ToMidiTexts = [.. Enumerable.Range(0, 101).Select(p => Loc.T("tl.toMidi", p))];
+    /// <summary>The music note (Fluent's MusicNote) "Extraer MIDI" uses in the clip menu and while it listens.</summary>
+    public const string ToMidiGlyph = "";
+    /// <summary>The metronome-ish note "Detectar tempo" uses in the clip menu.</summary>
+    public const string TempoGlyph = "";
 
     /// <summary>
     /// The clip's edge handles (native only): on each side a small tab split at the clip's middle. The top one sits
     /// where the fade ends and drags the fade; the bottom one sits on the edge and trims. The one under the pointer
     /// (or being dragged) lights up, so the two gestures never look alike.
     /// </summary>
-    void DrawEdgeHandles(DrawingContext ctx, LiveClip c, Rect clip, double fadeInX, double fadeOutX)
+    void DrawEdgeHandles(DrawingContext ctx, LiveClip c, Rect clip, double fadeInX, double fadeOutX, bool locked)
     {
         double mid = clip.Center.Y, quarter = clip.Height / 4;
         var lit = dragged == c ? dragMode : gesture == null && clip.Contains(lastPointer) ? HitHandle(c, lastPointer) : ClipEditMode.Move;
@@ -1940,8 +1967,19 @@ public sealed partial class TimelineView : Control
         }
         Tick(Math.Max(clip.Left + 5, fadeInX), mid - quarter, ClipEditMode.FadeIn, Palette.AccentColor);
         Tick(Math.Min(clip.Right - 5, fadeOutX), mid - quarter, ClipEditMode.FadeOut, Palette.AccentColor);
+        // a locked clip keeps its length: no trim tabs
+        if (locked) return;
         Tick(clip.Left + 5, mid + quarter, ClipEditMode.TrimStart, Palette.FgColor);
         Tick(clip.Right - 5, mid + quarter, ClipEditMode.TrimEnd, Palette.FgColor);
+    }
+
+    /// <summary>A small padlock in a locked clip's top right corner, on a dark tab so it reads over the frames.</summary>
+    static void DrawClipLock(DrawingContext ctx, Rect clip, bool besideBadge)
+    {
+        // left of the media badge when there is one
+        var tab = new Rect(Math.Round(clip.Right - (besideBadge ? 52 : 22)) + 0.5, Math.Round(clip.Top + 4) + 0.5, 17, 16);
+        ctx.DrawRectangle(Palette.Alpha(Palette.AppColor, 0.75), null, tab, 4, 4);
+        ctx.DrawText("\uE72E", 10, Palette.Dim, new Point(tab.X + 3.5, tab.Y + 3), Icons);
     }
 
     /// <summary>
@@ -2157,6 +2195,13 @@ public sealed partial class TimelineView : Control
         double nameX = 58 + ind + NameShift(i);
         bool chip = isArmed && !Recording && InputLabel != null;
         double nameW = NameW(i);
+        // a locked track says so with a padlock after its name, which gives it the room
+        if (t.Track.Locked && editingNameId != t.Track.Id && !RecordingInto(i))
+        {
+            nameW = Math.Max(0, nameW - 16);
+            double shownW = Math.Min(Palette.Text(t.Track.Name, 12.5, Palette.Fg, Palette.UiBold).Width, nameW);
+            ctx.DrawText("\uE72E", 11, Palette.Faint, new Point(nameX + shownW + 5, y + 13), Icons);
+        }
         if (RecordingInto(i))
         {
             ctx.DrawText(Loc.T("timeline.recording"), 13, Palette.Rec, new Point(nameX, y + 11), Palette.Ui, nameW);
@@ -2583,6 +2628,13 @@ public sealed partial class TimelineView : Control
                 return;
             }
             dragMode = HitHandle(clip, p);
+            // a locked clip is selected but neither moved nor trimmed; its fades still drag
+            if (ClipEditing.IsLocked(tracks[i].Track, clip.Clip) && dragMode is ClipEditMode.Move or ClipEditMode.TrimStart or ClipEditMode.TrimEnd)
+            {
+                SelectClip(i, clip.Clip.Id);
+                LockedTouched?.Invoke(tracks[i], clip);
+                return;
+            }
             // with Ctrl, a click (released without moving) adds the clip to the selection or takes it out
             toggleBase = (modifiers & KeyModifiers.Control) != 0 && e.ClickCount == 1 ? SelectionSeed() : null;
             // a boxed clip grabbed by its body carries the other boxed ones; its edges trim it alone
@@ -2874,7 +2926,8 @@ public sealed partial class TimelineView : Control
                 overIndex = dragMode == ClipEditMode.Move && lane >= 0 && lane < tracks.Count ? lane : fromIndex;
                 // Ctrl over another track swaps with the clip under the pointer, as in the web (the time stays); without
                 // it the clip lands on that track at the time under the pointer, shown by a ghost (native only).
-                swapping = overIndex != fromIndex && (modifiers & KeyModifiers.Control) != 0;
+                // a take dropped on a MIDI track gives its notes there ("Extraer MIDI"): nothing to swap with
+                swapping = overIndex != fromIndex && (modifiers & KeyModifiers.Control) != 0 && !tracks[overIndex].Track.IsMidi;
                 swapId = swapping ? ClipAt(overIndex, lastPointer.X)?.Clip.Id : null;
                 stuckTo = null;
                 if (swapping) preview = ClipEditing.Copy(original);
@@ -2896,6 +2949,7 @@ public sealed partial class TimelineView : Control
         var value = preview;
         int from = fromIndex, to = overIndex;
         string? target = kind == "clip" && to >= 0 && to != from ? tracks[to].Track.Id : null;
+        var extractTo = target != null && tracks[to].Track.IsMidi && dragged != null ? (Clip: dragged, Track: tracks[to]) : default;
         string? swap = swapId;
         bool changed = moved;
         var landed = drop;
@@ -2930,6 +2984,7 @@ public sealed partial class TimelineView : Control
             else SelectClip(from, grabbedId);
         }
         else if (together != null) ClipsMoved?.Invoke(together, midiMoves);
+        else if (extractTo.Clip != null) ExtractMidiRequested?.Invoke(extractTo.Clip, extractTo.Track);
         else if (kind == "clip" && changed && value != null) ClipEditCommitted?.Invoke(value, target, swap);
         if (kind == "curve" && changed && value != null) ClipEditCommitted?.Invoke(value, null, null);
         if (kind == "midi") ReleaseMidi(midi);
@@ -3027,6 +3082,7 @@ public sealed partial class TimelineView : Control
             else if (lastPointer.X >= HeaderW && ClipAt(i, lastPointer.X) is { } clip)
             {
                 var mode = HitHandle(clip, lastPointer);
+                if (mode is ClipEditMode.TrimStart or ClipEditMode.TrimEnd && ClipEditing.IsLocked(tracks[i].Track, clip.Clip)) mode = ClipEditMode.Move;
                 cursor = mode switch
                 {
                     ClipEditMode.Move when CurvePointAt(i, clip, lastPointer) >= 0 => StandardCursorType.SizeAll,

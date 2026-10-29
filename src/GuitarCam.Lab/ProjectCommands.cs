@@ -18,6 +18,8 @@ static class ProjectCommands
         if (sub == "verificar-carpetas") return FolderChecks();
         if (sub == "verificar-marcadores") return MarkerChecks();
         if (sub == "verificar-paquete") return PackageChecks.Run();
+        if (sub == "verificar-bloqueo") return LockChecks.Run();
+        if (sub == "verificar-ab") return MixCompareChecks.Run();
         string? dir = a.Positional.Skip(1).FirstOrDefault();
         if (dir == null) throw new ArgumentException("Falta la carpeta del proyecto.");
         dir = Path.GetFullPath(dir);
@@ -41,6 +43,7 @@ static class ProjectCommands
             "marcadores" => Markers(dir, a),
             "repetir" => Loop(dir, a),
             "duracion" => Length(dir),
+            "mezcla" => MixAb(dir, a.Positional.ElementAtOrDefault(2) ?? ""),
             "plantillas-de-pista" => ListPresets(),
             "cortar" => Crash(dir, a.Double("segundos", 3), a.Flag("camara")),
             "toma" => RecordTake(dir, a.Double("segundos", 3), a.Get("pista"), a.Flag("camara")),
@@ -99,6 +102,26 @@ static class ProjectCommands
         var track = AudioImport.AddClip(store.Project, imported, a.Double("en", 0), a.Get("pista"));
         store.Save();
         Console.WriteLine($"{track.Id} · {imported.Name} · {imported.DurationSec:0.00} s · {imported.SampleRate} Hz · {imported.Channels} canal(es) · {imported.RelativePath}");
+        return 0;
+    }
+
+    /// <summary>proyecto mezcla carpeta ab|copiar|olvidar: the mixer's A | B (<see cref="MixCompare"/>).</summary>
+    static int MixAb(string dir, string op)
+    {
+        using var store = ProjectStore.Open(dir);
+        var p = store.Project;
+        if (op != "" && store.ReadOnly) throw new IOException(store.ReadOnlyReason);
+        switch (op)
+        {
+            case "": break;
+            case "ab": MixCompare.Switch(p); break;
+            case "copiar": MixCompare.CopyToOther(p); break;
+            case "olvidar": MixCompare.Forget(p); break;
+            default: throw new ArgumentException("mezcla: ab (pasa a la otra) | copiar (esta sobre la otra) | olvidar (deja una sola)");
+        }
+        if (op != "") store.Save();
+        string on = MixCompare.Active(p).ToUpperInvariant();
+        Console.WriteLine(MixCompare.HasOther(p) ? $"Suena la mezcla {on}; la {(on == "A" ? "B" : "A")} está guardada." : $"Una sola mezcla ({on}).");
         return 0;
     }
 
@@ -221,12 +244,17 @@ static class ProjectCommands
             case "al-frente":
                 Console.WriteLine(ClipEditing.BringToFront(p, id) ? "El clip quedó al frente." : "Ya estaba al frente.");
                 break;
+            case "bloquear" or "desbloquear":
+                // a track's id locks the whole track; a clip's, that clip
+                if (p.Tracks.Find(t => t.Id == id) is { } lockTrack) lockTrack.Locked = op == "bloquear";
+                else ClipEditing.SetLocked(p, id, op == "bloquear");
+                break;
             default:
                 var mode = op switch
                 {
                     "mover" => ClipEditMode.Move, "recortar-inicio" => ClipEditMode.TrimStart,
                     "recortar-final" => ClipEditMode.TrimEnd, "fade-in" => ClipEditMode.FadeIn, "fade-out" => ClipEditMode.FadeOut,
-                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar clip[,clip…]; pegar clip[,clip…] segundos [--pista id]; a-pista|inicio|alinear|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar; nueva-carpeta [nombre] --pistas id,id; a-carpeta pista[,pista…] carpeta|raiz [--en n]; sacar-de-carpeta pista; mover-carpeta carpeta n; quitar-carpeta carpeta [--con-pistas]; carpeta id [--nombre --plegar --ocultar]; nuevo-separador [nombre] [--en n --visible]; lado id izquierda|derecha; transponer pista semitonos; guardar-plantilla pista [nombre]; usar-plantilla id|nombre; borrar-rango pista[,pista…] desde --hasta fin [--cerrar]; al-frente clip; transicion clip corte|fundido|negro [--segundos 0.5]"),
+                    _ => throw new ArgumentException("editar: mover|recortar-inicio|recortar-final|fade-in|fade-out clip delta-segundos; dividir clip segundos; ganancia clip dB; curva clip seg:dB,seg:dB; duplicar clip[,clip…]; pegar clip[,clip…] segundos [--pista id]; a-pista|inicio|alinear|fijar-corte|restaurar|quitar-clip|quitar-pista|nueva-pista|agregar-toma|reordenar; nueva-carpeta [nombre] --pistas id,id; a-carpeta pista[,pista…] carpeta|raiz [--en n]; sacar-de-carpeta pista; mover-carpeta carpeta n; quitar-carpeta carpeta [--con-pistas]; carpeta id [--nombre --plegar --ocultar]; nuevo-separador [nombre] [--en n --visible]; lado id izquierda|derecha; transponer pista semitonos; guardar-plantilla pista [nombre]; usar-plantilla id|nombre; borrar-rango pista[,pista…] desde --hasta fin [--cerrar]; al-frente clip; transicion clip corte|fundido|negro [--segundos 0.5]; bloquear|desbloquear clip|pista"),
                 };
                 var (_, clip) = ClipEditing.Find(p, id);
                 double dx = double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);

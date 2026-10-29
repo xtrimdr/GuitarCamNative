@@ -197,6 +197,18 @@
             </Panel>
           </StackPanel>
 
+          <!-- Tramo (native only): the whole song or just the loop A–B; only shown when the project has a loop -->
+          <StackPanel x:Name="RangePanel" Spacing="6" IsVisible="False">
+            <TextBlock Text="{loc:T exp.range}" FontSize="11" FontWeight="Medium" Foreground="{StaticResource Dim}" />
+            <Border Classes="seg" HorizontalAlignment="Left">
+              <StackPanel Orientation="Horizontal" Spacing="2">
+                <Button x:Name="RangeAllBtn" Classes="seg on" Content="{loc:T exp.range.all}" ToolTip.Tip="{loc:T exp.range.all.tip}" />
+                <Button x:Name="RangeLoopBtn" Classes="seg" Content="{loc:T exp.range.loop}" ToolTip.Tip="{loc:T exp.range.loop.tip}" />
+              </StackPanel>
+            </Border>
+            <TextBlock x:Name="RangeDescText" Classes="mono" FontSize="11" Foreground="{StaticResource Faint}" TextWrapping="Wrap" />
+          </StackPanel>
+
           <!-- Destino (native only): a social preset swaps the frame and masters the mix to its loudness;
                "Proyecto" is the default and leaves both as they are -->
           <StackPanel x:Name="TargetPanel" Spacing="6">

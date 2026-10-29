@@ -55,7 +55,9 @@ Más detalles en [Requisitos](#requisitos).
 
 - **Timeline** con varias pistas: clips que se mueven, recortan, dividen y duplican, fades, ganancia por clip con su
   **curva de volumen**, rango de borrado, deshacer y rehacer ilimitados, e importación de audio de afuera (WAV, MP3,
-  FLAC, OGG, M4A, AIFF).
+  FLAC, OGG, M4A, AIFF). **Detectar tempo** en cualquier clip (clic derecho) y poner el proyecto a esos BPM.
+  **Extraer MIDI**: las notas de un clip de audio (acordes o melodía) pasan a una pista MIDI, con el clic derecho o
+  arrastrando el clip a una pista MIDI (Basic Pitch de Spotify, en la CPU).
 - **Carpetas** que se pliegan y agrupan pistas; varias pistas se marcan con Ctrl+clic / Shift+clic y se mueven juntas.
   Cada pista tiene su **color** (24, en orden de arco iris) y un **ícono de instrumento** (guitarras, bajo, batería,
   synths, cuerdas, vientos, percusión…), su propio alto y sus knobs de Vida, Comp, Reverb, Delay y Tono en el
@@ -86,6 +88,8 @@ Más detalles en [Requisitos](#requisitos).
   delay o para procesar un grupo (un compresor para todas las guitarras). Las carpetas solo agrupan. Las tiras se
   ordenan arrastrándolas en el mixer (el timeline las sigue), van a la izquierda o a la derecha, y hay separadores con
   nombre para ordenar proyectos grandes.
+- **A | B** en la barra del mixer: dos mezclas de las mismas tomas (canales, envíos y buses) para ir y venir mientras
+  suena; la B arranca como copia de la A y el clic derecho copia una sobre la otra u olvida la otra.
 - Audio de nivel profesional: arrancar, parar, saltar y arrastrar el cabezal llevan su fundido, sin clics ni cortes.
 
 ### Armar el video
@@ -103,6 +107,8 @@ Más detalles en [Requisitos](#requisitos).
 - Fácil o a medida: elegís destino y calidad, y si querés, en **Avanzado** la resolución (720p a 4K) y el bitrate.
 - El video se codifica con la **placa de video** (NVIDIA, AMD o Intel) si hay una, las tomas se procesan en paralelo
   y la mezcla usa todos los núcleos; si la placa falla, sigue sola con el procesador.
+- **Solo el loop A–B** ("Tramo" en el diálogo) para sacar un clip corto del tema, con la reverb y el delay sonando
+  hasta apagarse después de B.
 - En el modo **Solo audio**, WAV de 24 bits o MP3 de 320 kbps; si querés, además cada pista en su WAV (stems).
   Medidor de **LUFS** del master en la barra de transporte.
 ### Y además
@@ -138,6 +144,9 @@ planeado y lo que falta está en [PENDIENTES.md](PENDIENTES.md).
   y el SDK de VST3 de Steinberg (licencia MIT) en `lib\vst3sdk`, que baja `tools\get-vst3sdk.ps1` (unos 21 MB, fuera de
   git). Con eso, `dotnet build` también compila `gcvsthost.exe` (`src\GuitarCam.VstHost`, C++) y lo copia junto al exe;
   sin eso la app compila igual y las pistas MIDI suenan con el tono de prueba.
+- Para **Extraer MIDI**: el modelo de Basic Pitch (Spotify, Apache 2.0, ~230 KB) en `lib\basic-pitch`, que baja
+  `tools\get-basic-pitch.ps1` (fuera de git). El build lo copia a `basic-pitch\` junto al exe; sin él, "Extraer MIDI"
+  queda deshabilitado y lo dice. Corre con ONNX Runtime (NuGet).
 
 ## Compilar y ejecutar
 
@@ -204,7 +213,8 @@ Las herramientas del timeline están en el centro de la barra del proyecto: **Se
 (un clic corta el clip ahí, en la grilla), **Borrar** (saca los clips que toca), **Escuchar** (mantené apretado sobre
 un clip para oír esa pista sola desde ahí), **Zoom** (clic acerca, Alt+clic aleja, arrastrar muestra ese tramo) y
 **Mano** (arrastrar mueve la vista). Donde dos clips de una pista se pisan, el clic derecho → **Traer al frente**
-elige cuál se ve.
+elige cuál se ve. **Bloquear clip** o **Bloquear pista** (clic derecho) deja una toma que ya quedó bien fija: no se
+mueve, no se recorta, no se borra y grabar no la pisa; el volumen, los fades y el encuadre se siguen tocando.
 
 Cada pista o carpeta puede tener su propio alto: arrastrá el borde de abajo de su encabezado (doble clic en el borde
 la vuelve al alto general). El botón ↺ al pie de los encabezados iguala todas.
@@ -265,6 +275,8 @@ la consola, sin abrir la ventana.
 | `masterizar archivo.wav [--cuanto 0.35] [--banda-graves\|--banda-medios\|--banda-agudos 0..1] [--corte] [--barro] [--graves] [--presencia] [--aire] [--inclinacion] [--cinta] [--ancho] [--graves-mono] [--recorte] [--empuje] [--techo] [--release] [--sin-limitador] [--volumen youtube\|instagram\|tiktok\|spotify\|apple] [--pua 0..1] [--look natural\|glue\|bright\|warm\|front\|pick [--cuanto-look 1]] [--sugerime]` | el mastering de la ventana sobre un WAV: cuánto comprime cada banda (y la Púa), cuánto recortan el soft clip (Auto incluido) y el limitador y los LUFS de entrada y salida; `--volumen` es el Destino del master (mide el archivo y usa esa ganancia en vez del Empuje), `--look` pone un look, `--sugerime` muestra qué oye y qué propone, y masteriza con eso |
 | `midi ver\|pista\|clip\|nota\|acordes\|quitar carpeta` | pistas MIDI, sus clips y sus notas (`clip --pista n --en 0 --compases 4`, `nota --clip id --altura C4 --pulso 0 --largo 1 --vel 100`, `acordes --clip id` escribe Do, Sol, Lam, Fa); `mezclar carpeta` las renderiza |
 | `midi cuantizar carpeta --clip id [--grilla 1/16]` | mueve el comienzo de las notas a la grilla de la canción (1/4, 1/8, 1/16, 1/32, 1/8T) |
+| `midi velocidad carpeta --clip id [--rango 100]` | escala las velocidades alrededor de su promedio (50 las acerca, 0 las empareja, 150 da más dinámica) |
+| `midi humanizar carpeta --clip id [--cantidad 10] [--semilla n]` | mueve cada velocidad al azar hasta ± cantidad |
 | `midi entradas` | los teclados y controladores MIDI que ve Windows, con sus ajustes de Configuración → MIDI |
 | `midi escuchar [--entrada nombre] [--segundos 10]` | abre las entradas como la ventana e imprime lo que llega y lo que toma el motor (canal y curva de velocidad aplicados) |
 | `midi instrumento carpeta [--pista n] --plugin "nombre" \| --quitar` | el instrumento VST3 que toca la pista; `mezclar carpeta` lo renderiza con el plugin, como la exportación |
@@ -275,6 +287,8 @@ la consola, sin abrir la ventana.
 | `transponer archivo.wav [--semitonos 2] [--salida x.wav]` | cambia el tono sin cambiar el largo, como el Transponer de la pista (de −12 a +12, admite cents) |
 | `proyecto editar carpeta transponer pista semitonos` | el Transponer de esa pista; deja sus tomas transpuestas en `cache/` |
 | `lufs archivo` / `afinar archivo [--en segundos] [--umbral -50]` | volumen integrado de un archivo / la nota que oye el afinador en ese momento, con la sensibilidad de la ventana (dB) |
+| `tempo archivo [--desde s] [--hasta s]` | los BPM de un archivo (o de ese tramo), su primer golpe y qué tan seguro está, como "Detectar tempo" en el clic derecho de un clip |
+| `extraer-midi archivo [--melodia] [--desde s] [--hasta s] [--inicio 0.5] [--nota 0.3] [--min-ms 70] [--midi x.mid] [--bpm 120] [--verdad notas.json] [--callado]` | las notas de un archivo, como "Extraer MIDI" en un clip; `--midi` las guarda en un .mid y `--verdad` las puntúa contra notas conocidas (`[[inicio s, largo s, nota], …]`); `--comprobar` corre solo sus comprobaciones |
 | `nitidez [video\|imagen] [--en 1] [--nitidez 60] [--claridad 60] [--resplandor 0] [--look hdr\|dreamy] [--intensidad 100] [--alto 1080] [--ancho-preview 640] [--carpeta dir]` | compara Nitidez, Claridad y Resplandor (y lo que suman los looks HDR y Soñado) de la exportación (FFmpeg) con los de la preview sobre el mismo cuadro, a tamaño de exportación y al ancho que muestra la preview; mide cuánto cuestan por cuadro y deja PNG para mirarlas |
 | `leer-video archivo [--cpu] [--saltos 20] [--cuadro 12.5 --salida x.bmp] [--comparar]` | mide el decodificador de la preview (FFmpeg dentro de la app): abrir, leer seguido, saltar y memoria por cuadro; `--comparar` lo mide contra ffmpeg.exe (tiempo por salto y diferencia de imagen) |
 | `camara [listar]` | las cámaras que ve FFmpeg y sus formatos |
@@ -283,12 +297,17 @@ la consola, sin abrir la ventana.
 | `exportar [proyecto] [--calidad alta\|estandar\|borrador] [--salida nombre]` | exporta el MP4 |
 | `exportar proyecto --audio wav\|mp3` | exporta solo la mezcla |
 | `exportar proyecto … --stems` | además, un WAV por pista en `<nombre> - stems` |
+| `exportar proyecto … --rango 12-45\|1:05-1:30\|loop` | solo ese tramo (`loop` = el A–B del proyecto), con la cola de efectos después de B |
 | `exportar proyecto … --codificador auto\|cpu\|nvenc\|amf\|qsv` | quién codifica el video (auto = la placa de video si hay) |
 | `exportar proyecto … --resolucion 720\|1080\|1440\|2160 --bitrate 20` | el "Avanzado" del diálogo: lado corto del cuadro y bitrate del video en Mbps |
 | `exportar proyecto … --destino reels\|youtube\|ig-square\|ig-portrait [--volumen como-esta\|youtube\|…] [--lufs -14] [--cola 8]` | con el cuadro de esa red; el volumen es el Destino del master del proyecto (`--volumen` lo cambia para esta exportación, `--lufs` lleva la mezcla a ese volumen integrado), `--cola` deja sonar reverb y delay hasta N s después del último clip (0 = corta). Muestra los LUFS del resultado |
 | `proyecto abrir\|clips\|versiones\|volver carpeta` | abre un proyecto, lista pistas y clips, y recorre el historial |
 | `proyecto toma\|cortar carpeta [--camara]` | graba un tono como la ventana / lo corta sin cerrar, para probar la recuperación |
 | `proyecto editar carpeta mover\|recortar-inicio\|recortar-final\|fade-in\|fade-out clip delta` | edita un clip como en el timeline (más: `a-pista`, `dividir`, `duplicar` (varios ids con comas), `pegar`, `ganancia`, `curva`, `quitar-clip`, `nueva-pista`…) |
+| `proyecto mezcla carpeta [ab\|copiar\|olvidar]` | el A \| B del mixer: pasa a la otra mezcla, copia esta sobre la otra u olvida la otra |
+| `proyecto verificar-ab` | comprueba el A/B de la mezcla |
+| `proyecto editar carpeta bloquear\|desbloquear clip\|pista` | fija un clip (o toda la pista): no se mueve, no se recorta, no se borra y grabar no lo pisa |
+| `proyecto verificar-bloqueo` | comprueba la regla del bloqueo |
 | `proyecto editar carpeta transicion clip corte\|fundido\|negro [--segundos 0.5]`, `proyecto transiciones carpeta` | la transición que entra a ese clip (imagen y sonido) y la lista de uniones de cada pista |
 | `proyecto editar carpeta nueva-carpeta\|a-carpeta\|sacar-de-carpeta\|mover-carpeta\|quitar-carpeta\|carpeta …` | carpetas de pistas: agrupar, mover adentro y afuera, renombrar y plegar |
 | `proyecto editar carpeta nuevo-separador [nombre] [--en n] [--visible] \| lado id izquierda\|derecha` | separadores con nombre (nacen ocultos en el timeline salvo `--visible`; `carpeta id --ocultar` lo alterna) y de qué lado del mixer va cada tira |

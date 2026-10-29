@@ -298,6 +298,48 @@ public static class MidiEditing
         return moved;
     }
 
+    /// <summary>
+    /// Scales the velocities around their average (asked by the user): 100% leaves them, under it they get closer
+    /// (0% = all on the average, an even take), over it further apart (more dynamics). Only <paramref name="which"/>
+    /// (null = all), kept in 1..127. Returns how many changed.
+    /// </summary>
+    public static int ScaleVelocity(IList<MidiNote> notes, double percent, IReadOnlyCollection<MidiNote>? which = null)
+    {
+        var set = notes.Where(n => which == null || which.Contains(n)).ToList();
+        if (set.Count == 0) return 0;
+        double mean = set.Average(n => n.Velocity), k = Math.Max(0, percent) / 100;
+        int changed = 0;
+        foreach (var n in set)
+        {
+            int v = Math.Clamp((int)Math.Round(mean + (n.Velocity - mean) * k), 1, 127);
+            if (v == n.Velocity) continue;
+            n.Velocity = v;
+            changed++;
+        }
+        return changed;
+    }
+
+    /// <summary>
+    /// Humanizes the velocities (asked by the user): each note moves at random up to <paramref name="amount"/> up or
+    /// down, kept in 1..127, so a written part does not sound like a machine. Only <paramref name="which"/> (null = all).
+    /// Returns how many changed.
+    /// </summary>
+    public static int HumanizeVelocity(IList<MidiNote> notes, int amount, Random random, IReadOnlyCollection<MidiNote>? which = null)
+    {
+        amount = Math.Clamp(amount, 0, 127);
+        if (amount == 0) return 0;
+        int changed = 0;
+        foreach (var n in notes)
+        {
+            if (which != null && !which.Contains(n)) continue;
+            int v = Math.Clamp(n.Velocity + random.Next(-amount, amount + 1), 1, 127);
+            if (v == n.Velocity) continue;
+            n.Velocity = v;
+            changed++;
+        }
+        return changed;
+    }
+
     /// <summary>Quantizes every note of a clip (<see cref="Quantize(IList{MidiNote}, double, double, double, IReadOnlyCollection{MidiNote}?)"/>).</summary>
     public static int Quantize(Project p, string clipId, double gridBeats)
     {
@@ -336,6 +378,51 @@ public static class MidiEditing
         clip.Normalize();
         (t.MidiClips ??= []).Add(clip);
         return clip;
+    }
+
+    /// <summary>
+    /// A clip made from the notes taken out of a take's clip (<see cref="AudioToMidi"/>, "Extraer MIDI"): it covers the
+    /// same stretch of the timeline (<paramref name="fromSec"/>..<paramref name="toSec"/>) and its notes, in seconds
+    /// from <paramref name="fromSec"/>, land where they were heard. It goes on <paramref name="trackId"/>, a MIDI track,
+    /// or (null) on a new one right under <paramref name="belowTrackId"/>, in its folder, named
+    /// <paramref name="name"/>. With <paramref name="gridBeats"/> &gt; 0 the notes are quantized to it. Returns the
+    /// track and the clip.
+    /// </summary>
+    public static (string TrackId, MidiClip Clip) AddExtracted(Project p, string? trackId, string belowTrackId, double fromSec, double toSec,
+        IReadOnlyList<AudioToMidi.Note> notes, string? name = null, double gridBeats = 0)
+    {
+        var below = p.Tracks.Find(x => x.Id == belowTrackId) ?? throw new ArgumentException(Texts.T("err.midi.trackNotFound", "No encontré esa pista."));
+        Track t;
+        if (trackId != null)
+        {
+            t = p.Tracks.Find(x => x.Id == trackId) ?? throw new ArgumentException(Texts.T("err.midi.trackNotFound", "No encontré esa pista."));
+            if (!t.IsMidi) throw new ArgumentException(Texts.T("err.midi.notMidi", "Esa pista no es MIDI: los clips MIDI van en una pista MIDI."));
+        }
+        else
+        {
+            string made = AddTrack(p);
+            t = p.Tracks.Find(x => x.Id == made)!;
+            if (!string.IsNullOrWhiteSpace(name) && p.Tracks.All(x => x.Name != name)) t.Name = name;
+            var seq = TrackFolders.Sequence(p);
+            seq.Remove(t);
+            TrackFolders.Move(p, t.Id, seq.IndexOf(below) + 1, below.FolderId);
+        }
+        double bpm = Math.Max(1, p.Settings.Bpm);
+        var clip = new MidiClip { AtSec = ClipEditing.ToSample(Math.Max(0, fromSec)) };
+        double shift = fromSec - clip.AtSec;
+        clip.LengthBeats = Math.Max(toSec - clip.AtSec, notes.Select(n => n.EndSec + shift).DefaultIfEmpty(0).Max()) / 60 * bpm;
+        foreach (var n in notes)
+            clip.Notes.Add(new MidiNote
+            {
+                Pitch = n.Pitch,
+                Beat = Math.Max(0, n.StartSec + shift) / 60 * bpm,
+                Beats = Math.Max(MidiNote.MinBeats, (n.EndSec - n.StartSec) / 60 * bpm),
+                Velocity = n.Velocity,
+            });
+        if (gridBeats > 0) Quantize(clip.Notes, clip.AtSec, bpm, gridBeats);
+        clip.Normalize();
+        (t.MidiClips ??= []).Add(clip);
+        return (t.Id, clip);
     }
 
     /// <summary>The end of the last MIDI clip of the project, in seconds (0 without any).</summary>

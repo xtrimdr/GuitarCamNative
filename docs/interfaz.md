@@ -14,8 +14,9 @@ Todo lo que se describe acá lo decidió el usuario: no lo cambies sin preguntar
 
 Al abrir la app, mientras se arma la ventana principal: ícono grande, nombre, frase, versión con el commit
 ("PRUEBA" en una copia de prueba) y una franja del acento que corre por el borde de abajo (animación de composición:
-sigue moviéndose aunque el hilo de la UI esté ocupado). Toma los colores del tema, dura al menos 0,9 s y se va con un
-fundido cuando la ventana principal ya se abrió. Excepción a "sin gradientes": el brillo del acento detrás del ícono.
+sigue moviéndose aunque el hilo de la UI esté ocupado). Toma los colores del tema, dura al menos 3 s (pedido del usuario), queda
+encima de la ventana principal mientras esta carga detrás y se va con un fundido. Excepción a "sin gradientes": el brillo del acento detrás del ícono y la franja
+(`BrandArt`, compartido con "Acerca de").
 
 ## Estructura
 
@@ -63,7 +64,8 @@ Ese es el diseño **Clásico**. Para el **Vertical**, ver el apartado que sigue.
 - Es la de la app (`ExtendClientAreaToDecorationsHint`): arrastrable, doble clic maximiza, los botones del sistema
   quedan a la derecha (margen 150). `TransparencyLevelHint="None"` no se toca: con transparencia, píxeles oscuros
   del video dejan ver lo que hay detrás.
-- El logo es el ícono de la app y abre "Acerca de" (`Dialogs/AboutDialog`).
+- El logo es el ícono de la app y abre "Acerca de" (`Dialogs/AboutDialog`), con el mismo encabezado que el splash
+  (`BrandArt`: logo grande, brillo y línea del acento del tema, versión en la esquina).
   Ahí dice si hay una versión nueva: 5 s después de abrir, `MainWindow.Updates.cs` le pregunta a GitHub por la última
   release (`UpdateCheck`, en `GuitarCam.Projects`; sin cuenta ni datos del usuario, y si falla no avisa nada). Una
   versión nueva sale en un toast con "Descargar" solo la primera vez (`config.json` "updateNotified"); después, solo
@@ -260,6 +262,20 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
   (`ClipEditing.ToSample`: el milisegundo eran 96 px al zoom máximo). Para volver a ponerlo en sincro, el clic derecho
   tiene **"Alinear a la grilla"**: lleva el comienzo de la toma a la línea más cercana con la subdivisión del imán
   (`ClipEditing.AlignToGrid`; deshabilitada con el imán apagado). Sobre un clip marcado, alinea o quita todos los marcados.
+- **Detectar tempo** (clic derecho en un clip de audio, pedido del usuario): escucha lo que suena del clip (lo recortado
+  no cuenta) en segundo plano con `TempoDetector` (el clip muestra la barra y "Escuchando el tempo… N%", como al
+  transponer; de a un clip por vez) y abre un menú en el mismo lugar con los BPM, qué tan seguro está y
+  "Poner el proyecto a N BPM", al doble o a la mitad (es el mismo pulso: no distingue 87 de 174) o dejarlo. El tempo
+  no tiene deshacer, así que el toast que lo confirma trae "Volver a N" (`MainWindow.TempoDetect.cs`). Menos de 3 s,
+  silencio o sin pulso claro: un toast lo dice.
+- **Extraer MIDI** (clic derecho en un clip de audio → Acordes / Melodía, pedido del usuario, como Studio Pro): saca las
+  notas de lo que suena del clip (lo recortado no cuenta; transpuesto si la pista lo está) con `AudioToMidi` (Basic
+  Pitch) en segundo plano, de a un clip por vez (la barra y "Sacando las notas… N%" sobre el clip), y las pone en un
+  clip MIDI del mismo tramo en una pista MIDI nueva justo debajo, en su carpeta ("Nombre (MIDI)"). Arrastrar el clip a
+  una pista MIDI hace lo mismo en esa pista, con el modo elegido la última vez (`toMidiMode` en `config.json`): el clip
+  de audio no se mueve y el fantasma dice "Extraer MIDI a …" donde caerán las notas. Es un paso de deshacer y el toast
+  trae "Ver notas" (abre el piano roll). Sin notas claras o sin el modelo, un toast lo dice (`MainWindow.ToMidi.cs`,
+  `TimelineView.ExtractMidiRequested`).
 - **Selección de varios clips** (pedido del usuario): arrastrar en la parte vacía de las pistas (o debajo de la
   última) dibuja un rectángulo que marca cada clip que toca, tomas y clips MIDI; con Ctrl suma a lo marcado (`boxed`,
   `UpdateBox`). **Ctrl+clic** en un clip lo suma o lo saca (en una toma, al soltar sin mover: Ctrl+arrastrar sigue
@@ -282,6 +298,15 @@ hover y se pliega con un clic en cualquier parte fuera de sus botones.
 - **Clips que se pisan**: se ve el último de la pista. El clic derecho → "Traer al frente" (`ClipEditing.BringToFront`,
   prendido solo si otro lo tapa) lo pasa al final: arriba en el timeline, en la vista previa y en la exportación. El
   sonido no cambia: los dos suenan.
+- **Bloquear** (`MainWindow.Locks.cs`): "Bloquear clip" en el menú del clip y "Bloquear pista" en el de la pista (no
+  en las MIDI, por ahora). La regla es una sola, `ClipEditing.IsLocked` (`Clip.Locked` o `Track.Locked`), y la usa
+  gclab: lo bloqueado no cambia de lugar, de largo ni de pista, no se divide ni se borra (`Replace`, `Split`,
+  `RemoveClip`… lo rechazan); borrar un tramo lo saltea y "cerrar el hueco" deja quieta su pista. El volumen, los
+  fades, la curva y el encuadre sí se tocan. En el timeline un clip bloqueado lleva un candadito arriba a la derecha
+  (a la izquierda del ícono de audio/video) y no muestra las pestañas de recorte; agarrarlo lo elige pero no lo mueve.
+  Una pista bloqueada lleva el candado después del nombre. No se puede armar una pista con tomas bloqueadas, y una toma
+  que igual caiga sobre ella va a una pista nueva (`TakeRecording.AddTake`). Cada negativa avisa con un toast que trae
+  "Desbloquear" (uno cada 2 s como mucho).
 - **Transiciones** (pedido del usuario: simples de usar; después, que también fundan el audio, porque el corte pelado
   era brusco; `MainWindow.Transitions.cs`, `TimelineView.DrawJoins`): donde un clip termina y otro empieza en una pista
   (a menos de 2 cuadros, `ClipTransitions.JoinSec`), un chip cuadrado de 20 px va centrado en la unión a media
@@ -478,6 +503,14 @@ salida, mute/solo y Transponer quedan. Un paso de deshacer; los compresores se v
   switch de dos botones a la izquierda que es el mismo modo que el de la regla del timeline (`SetRulerMode`).
 - Las ediciones de canal pasan por `EditTrack`, las de las carpetas por `FolderEdit` y las de los buses por `BusEdit`
   (`BusesEdit` para agregar y quitar). Los desplegables son `SelectButton`, no `ComboBox`.
+- **A | B** (`MainWindow.MixCompare.cs`, `MixCompare`): segmentado en la barra del mixer, entre los M/S de limpiar y el
+  ancho de tiras. La mezcla que suena es la del proyecto; la otra espera en `ProjectSettings.Compare` (solo ajustes:
+  el canal de cada pista, salida y envíos de las carpetas, y volumen, paneo, slots, salida y envíos de los buses, por
+  id). El primer clic en la otra letra la arma como copia de esta. Nunca agrega ni saca pistas, carpetas ni buses, y
+  no toca mute, solo, nombres, lados ni el master (Mastering es su propia etapa). Se aplica como Deshacer aplica un
+  canal (`ApplyChannel`, `ApplyRouting`), sin recargar nada y con los mismos ids de slot, así los efectos no pierden su
+  estado; cada cambio es un paso de deshacer (`UndoManager` guarda `Compare`). Clic derecho: "Copiar A en B" y
+  "Olvidar la mezcla B".
 - Sus medidores usan el degradé verde → amarillo → rojo (`Palette.Meter*`), distinto del `StereoMeter`.
 - **Medidores completos** (`Controls/MixerMeter.cs`, en todas las tiras: pistas, carpetas, buses y master, compactas
   y amplias): dos barras, izquierda y derecha (5 px cada una, 7 en el master, con 1 px entre medio); una pista mono
@@ -636,11 +669,25 @@ Logic o Studio One). Etapas siguientes en PENDIENTES: sampler, después VST3.
   filas de las negras más oscuras, una línea en cada Do), el cabezal de acento y, abajo, la franja **VEL** con una barra por nota
   (se arrastra para cambiarla; si la nota está elegida, cambian con ella todas las elegidas que empiezan en esa vertical,
   un acorde de una vez). La franja se agranda o achica desde la barrita que la separa de la grilla (40 px como mínimo,
-  la grilla conserva 60; doble clic vuelve a 64; `pianoVelHeight` en config.json), pedidos del usuario. Gestos como FL: clic en vacío escribe una nota con el largo y la velocidad de la
+  la grilla conserva 60; doble clic vuelve a 64; `pianoVelHeight` en config.json), pedidos del usuario. A la izquierda
+  lleva su escala (127, 100, 64, 32, las que entran) y, mientras arrastrás, el valor al lado del puntero. En la cabecera
+  (pedidos del usuario): "Velocidad" la muestra u oculta (`pianoVelShown`), Lápiz / Línea (`pianoVelTool`: el lápiz
+  pinta cada barra que cruza, la línea deja una rampa recta; las dos solo tocan las elegidas si hay) y Paso
+  (`pianoVelStep`: una caja para cualquier valor y ▾ con los comunes; los valores van a múltiplos o a 127, Alt libre).
+  El clic derecho en la franja pinta 100 (`MidiNote.DefaultVelocity`). "Ajustar" abre una tarjeta con Escalar (% alrededor
+  del promedio: menos de 100 empareja, más da dinámica) y Humanizar (± al azar), cada uno con su Aplicar (un paso de
+  deshacer, sobre las elegidas o todo el clip; `MidiEditing.ScaleVelocity` / `HumanizeVelocity`, valores en
+  `pianoVelScale` / `pianoVelHumanize`). Gestos como FL: clic en vacío escribe una nota con el largo y la velocidad de la
   última tocada (y se arrastra), arrastrar una nota la mueve (con las elegidas; Alt, libre), su borde derecho la
-  alarga, clic derecho borra (arrastrando, varias), Ctrl+arrastrar en vacío elige con un rectángulo, Ctrl+clic suma o
-  saca. Teclas con el foco en el piano roll: Supr borra las elegidas (nunca el clip), Ctrl+A todas, ↑ ↓ un semitono
-  (Shift: una octava), Esc. La ruedita con los mismos modificadores que el timeline (zoom, costados, alto de las filas).
+  alarga, Shift+arrastrar una nota copia las elegidas y las suelta donde soltás (con el imán), clic derecho borra
+  (arrastrando, varias; en un lugar vacío también deselecciona), Ctrl+arrastrar en vacío elige con un rectángulo,
+  Ctrl+clic suma o saca. La regla mueve el cabezal; sostenido, hace scrub en vivo como la del timeline (pausa mientras
+  arrastrás, `ScrubChanged`, y corre la vista en los bordes). Teclas con el foco en el piano roll: Supr borra las
+  elegidas (nunca el clip), Ctrl+A todas, ↑ ↓ (o Shift+↑ ↓) un semitono, Ctrl+↑ ↓ una octava, Shift+← → un paso
+  del imán (sin salir del clip), Esc, y los atajos copiar / cortar /
+  pegar / duplicar del timeline con las notas (pedidos del usuario): Ctrl+V pega en el cabezal si está dentro del clip
+  (con el imán) o donde estaban, D duplica justo después de las elegidas (en pasos del imán); todo queda dentro del
+  clip que se edita (lo que empezaría después de su final no se copia). El portapapeles de notas sirve entre clips. La ruedita con los mismos modificadores que el timeline (zoom, costados, alto de las filas).
   Cada gesto que cambia algo es un paso de deshacer (`NotesCommitted` → `MidiEditing.SetNotes` por `EditTimeline`).
 - **Instrumento VST3** (`MainWindow.Vst.cs`, `Track.Instrument`, `PluginRef`): clic derecho en la pista →
   "Instrumento: …", y lo mismo en la cabecera del piano roll: un chip con el nombre (▾ abre la lista; "(cargando…)"
@@ -717,6 +764,13 @@ Logic o Studio One). Etapas siguientes en PENDIENTES: sampler, después VST3.
 
 ## Exportar
 
+- **Tramo** (MP4 y audio): fila arriba de Destino (`RangePanel`), visible solo si el proyecto tiene un loop A–B:
+  "Todo el tema" (viene elegido, no suma pasos) o "Loop A–B" (`ExportOptions.Range`, `ExportJobSpec.Range`). La
+  mezcla se renderiza desde 0 igual (lo que suena de antes de A, como una reverb, sigue sonando), las tomas y notas se
+  apagan en B (20 ms) y la cola de efectos suena después; el resultado arranca en A con un fundido de 10 ms
+  (`ExportRange`, `MixMaster.Render`). El video lleva solo las tomas que se ven en el tramo, recortadas y corridas a
+  0:00 (`ExportRange.Takes`); un panel sin toma en el tramo no aparece. El subtítulo y el tamaño estimado usan el largo
+  del tramo. No se recuerda: cada exportación arranca en "Todo el tema".
 - **Stems**: la casilla del diálogo de exportar (MP4 o audio) deja además "<nombre> - stems" con un WAV float por
   pista que suena, cada una sola con sus envíos y sin el limitador (`AudioExporter.ExportStemsAsync`). Duran lo mismo
   que la exportación, cola incluida, y no llevan la ganancia de loudness.

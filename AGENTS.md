@@ -50,7 +50,7 @@ src/
   GuitarCam.App        la ventana (Avalonia 11.3). Depende de Audio y Projects.
   GuitarCam.Lab        gclab.exe: consola para probar audio, DSP y proyectos sin la ventana.
   GuitarCam.VstHost    gcvsthost.exe (C++, SDK de VST3): abre un plugin en su propio proceso. Lo compila el build de Audio.
-tools/                 probar.ps1 (compila, comprueba y abre una copia de prueba), make-icon.ps1 (ícono), make-shortcut.ps1 (acceso directo), make-track-icons.py (íconos de pista), get-vst3sdk.ps1 (baja el SDK de VST3)
+tools/                 probar.ps1 (compila, comprueba y abre una copia de prueba), make-icon.ps1 (ícono), make-shortcut.ps1 (acceso directo), make-track-icons.py (íconos de pista), get-vst3sdk.ps1 (baja el SDK de VST3), get-basic-pitch.ps1 (baja el modelo de Extraer MIDI)
 ```
 
 - Las dependencias van **hacia abajo**: App → Projects → Audio. `Audio` y `Projects` no referencian Avalonia; todo lo
@@ -61,7 +61,9 @@ tools/                 probar.ps1 (compila, comprueba y abre una copia de prueba
   salvo la preview: la decodifica FFmpeg dentro del proceso (`NativeVideoSource`, FFmpeg.AutoGen con los DLL de FFmpeg 9
   en `lib\ffmpeg`, fuera de git; ver el README).
 - Sin MVVM ni bindings: code-behind con controles con nombre. No metas un framework sin que el usuario lo pida.
-- Sin dependencias nuevas de NuGet sin preguntar. Hoy: Avalonia 11.3, NAudio 2.2, FFmpeg.AutoGen 9.0. Fuera de NuGet, el
+- Sin dependencias nuevas de NuGet sin preguntar. Hoy: Avalonia 11.3, NAudio 2.2, FFmpeg.AutoGen 9.0 y ONNX Runtime
+  (para Extraer MIDI; con el modelo de Basic Pitch de Spotify, Apache 2.0, `lib\basic-pitch`,
+  `tools\get-basic-pitch.ps1`: decisión del usuario). Fuera de NuGet, el
   SDK de VST3 de Steinberg (MIT, `lib\vst3sdk`, `tools\get-vst3sdk.ps1`) para `gcvsthost.exe` (decisión del usuario).
 - **Plugins VST3** (`GuitarCam.Audio/Vst`): cada instancia corre en su `gcvsthost.exe` (decisión del usuario: un plugin
   que se cuelga no tira abajo la grabación). Hablan por memoria compartida (`shared.h` ↔ `VstBridge`, los offsets tienen

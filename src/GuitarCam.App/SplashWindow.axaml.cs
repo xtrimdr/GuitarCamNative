@@ -1,13 +1,8 @@
 using System.Numerics;
-using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Media;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform;
 using Avalonia.Rendering.Composition;
 using Avalonia.Rendering.Composition.Animations;
 using Avalonia.Threading;
-using GuitarCam.App.Controls;
 using GuitarCam.App.Dialogs;
 
 namespace GuitarCam.App;
@@ -15,13 +10,16 @@ namespace GuitarCam.App;
 /// <summary>
 /// The window shown while <see cref="MainWindow"/> is being built: the icon, the name, the version (with the
 /// commit, and "PRUEBA" in a test copy) and a sliding bar. The bar is a composition animation, so it keeps moving
-/// on the render thread while the UI thread is busy building the main window. Colors come from the theme, so it
-/// follows the accent the user picked.
+/// on the render thread while the UI thread is busy building the main window. Colors come from the theme (<see cref="BrandArt"/>),
+/// so it follows the accent the user picked.
 /// </summary>
 public sealed partial class SplashWindow : Window
 {
-    /// <summary>Shortest time it stays up, so a fast start does not just flash it.</summary>
-    static readonly TimeSpan MinShown = TimeSpan.FromMilliseconds(900);
+    /// <summary>
+    /// Shortest time it stays up (asked by the user: the app loads so fast it could not be seen). It stays on top of
+    /// the main window meanwhile, so the audio and the project load behind it instead of making the start slower.
+    /// </summary>
+    static readonly TimeSpan MinShown = TimeSpan.FromSeconds(3);
 
     /// <summary>Matches the card's opacity transition in the XAML.</summary>
     const int FadeMs = 220;
@@ -34,7 +32,7 @@ public sealed partial class SplashWindow : Window
     public SplashWindow()
     {
         InitializeComponent();
-        Logo.Source = LoadLogo();
+        Logo.Source = BrandArt.Logo;
         VersionText.Text = Loc.T("about.version", AboutDialog.AppVersion());
         if (TestBuild.Label != null)
         {
@@ -42,17 +40,8 @@ public sealed partial class SplashWindow : Window
             TestText.Text = Loc.T("splash.test");
         }
 
-        var accent = Palette.AccentColor;
-        Glow.Fill = new RadialGradientBrush
-        {
-            GradientStops = [new(Color.FromArgb(0x30, accent.R, accent.G, accent.B), 0), new(Color.FromArgb(0, accent.R, accent.G, accent.B), 1)],
-        };
-        Stripe.Background = new LinearGradientBrush
-        {
-            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-            EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
-            GradientStops = [new(Color.FromArgb(0, accent.R, accent.G, accent.B), 0), new(accent, 0.5), new(Color.FromArgb(0, accent.R, accent.G, accent.B), 1)],
-        };
+        Glow.Fill = BrandArt.Glow();
+        Stripe.Background = BrandArt.Line();
 
         Opened += (_, _) =>
         {
@@ -81,30 +70,5 @@ public sealed partial class SplashWindow : Window
         Card.Opacity = 0;
         await Task.Delay(FadeMs);
         Close();
-    }
-
-    /// <summary>The largest frame of the app icon (the .ico's 256 px one is a PNG), so the logo stays sharp.</summary>
-    static Bitmap? LoadLogo()
-    {
-        try
-        {
-            using var s = AssetLoader.Open(new Uri("avares://GuitarCam/Assets/GuitarCam.ico"));
-            using var ms = new MemoryStream();
-            s.CopyTo(ms);
-            var d = ms.GetBuffer();
-            int count = BitConverter.ToUInt16(d, 4), best = -1, bestSize = 0;
-            for (int i = 0; i < count; i++)
-            {
-                int e = 6 + i * 16, size = d[e] == 0 ? 256 : d[e];
-                if (size > bestSize) { bestSize = size; best = e; }
-            }
-            if (best < 0) return null;
-            int len = BitConverter.ToInt32(d, best + 8), off = BitConverter.ToInt32(d, best + 12);
-            return new Bitmap(new MemoryStream(d, off, len));
-        }
-        catch (Exception) // a bad frame must never stop the app from starting
-        {
-            return new Bitmap(AssetLoader.Open(new Uri("avares://GuitarCam/Assets/GuitarCam-64.png")));
-        }
     }
 }

@@ -75,7 +75,7 @@ Etapas (cada una sirve sola):
   probarla (2026-10-28):
   - [x] Varios clips MIDI a la vez, el piano roll después de Timeline y su grilla (hechos, ver [HECHO.md](HECHO.md)).
   - [ ] Le falta: que los clips MIDI entren en las herramientas (dividir, borrar, escuchar) y en el rango; que la nota
-    que suena al tocar el piano roll pase por la cadena de la pista; copiar y pegar notas dentro del piano roll.
+    que suena al tocar el piano roll pase por la cadena de la pista.
   - [ ] Más cosas en el piano roll (pedido del usuario, 2026-10-28, "bends y eso"): pitch bend y otras curvas por clip
     (modulación, sustain, expresión), dibujadas en carriles como la franja de velocidad. Con el tono de prueba se
     pueden oír los bends; lo demás tiene sentido con el sampler y los VST3, que las reciben como eventos MIDI.
@@ -133,6 +133,33 @@ Etapas (cada una sirve sola):
   preview de afuera usa el mismo decodificador.
 - [ ] **Etapa 4 (si hace falta): arrastrar y soltar** como CapCut, con guías para soltar y diseños propios guardados.
 
+#### 8. Editor de afinación tipo Melodyne (pedido 2026-10-28)
+Sobre la toma, no en vivo, y solo monofónico (voz, punteo, bajo; un rasgueo no se separa nota por nota). Es un editor
+opcional que se abre desde el clip, como el piano roll: no suma pasos a "grabo, mezclo y exporto". Base que ya hay:
+`PitchShifter` (no cambia el largo, los ataques quedan en su lugar), `TransposeCache` (render en segundo plano a
+`cache/`, el media no se toca) y el YIN de `PitchTap`. Cada etapa se ejercita desde `gclab`.
+- [ ] **Etapa 1: detectar notas.** YIN sobre toda la toma → curva de pitch → "gotas" (una por nota) dibujadas sobre el
+  audio, tipo piano roll. Sin corregir todavía: sirve para ver si la detección anda con tomas reales.
+- [ ] **Etapa 2: corregir.** `PitchShifter` con una relación de tono por cuadro (hoy una sola para toda la toma).
+  Arrastrar una gota a otra nota y "afinar al centro" con un porcentaje. La versión afinada se cachea igual que una transpuesta.
+- [ ] **Etapa 3: expresión.** Modulación/vibrato (escalar lo que la curva se aleja del centro: 0 % plano, >100 %
+  exagerado), transición entre notas (0 = efecto "T-Pain") y deriva (aplanar desafinaciones lentas sin tocar el vibrato).
+  Por nota y para una selección de varias a la vez.
+- [ ] **Etapa 4: curvas a mano** (pedido del usuario, 2026-10-28: "completo completo"). La curva de pitch se edita
+  directamente: lápiz para dibujarla, línea recta entre dos puntos, puntos de control con curvas suaves entre ellos y
+  borrar lo dibujado para volver a la detectada. Snap opcional a la escala. Vibrato agregado a mano (profundidad,
+  velocidad y entrada gradual) donde no lo había.
+- [ ] **Etapa 5: formante.** Separar la envolvente espectral (cepstro) y volver a aplicarla después de mover el tono, así
+  la voz no suena a ardilla al subirla más de 2 o 3 semitonos. Moverla sola (voz más grave o más finita), por nota y
+  con su propia curva dibujable.
+- [ ] **Etapa 6: el resto de la parafernalia.** Curva de volumen por nota (y su lápiz), cortar y unir notas (tijera,
+  pegamento), corregir la detección a mano (nota mal leída, octava equivocada), sibilantes y respiraciones que no se
+  afinan, comparar con el original (A/B) y todo con deshacer. Mover notas en el tiempo y estirarlas: decidirlo antes,
+  porque en una toma con cámara desfasa lo que se canta de lo que se ve.
+- [ ] **Etapa 7: autotune automático.** Elegir escala y tonalidad y que corrija sola, con la velocidad de la etapa 3.
+  El resultado son curvas comunes, así se retoca a mano después.
+- [ ] (Para después, si hace falta) Autotune en vivo mientras se graba: otro algoritmo, de baja latencia y peor sonido.
+
 ### Sugerencias (para decidir)
 
 _Ideas que surgieron charlando. Todas apuntan al video._
@@ -170,12 +197,6 @@ de video y normalización ya están anotados arriba; el análisis amplía su alc
   la toma anterior solo dentro del tramo y conservar la sincronía de cámara.
 - [ ] **Fundidos cruzados de audio**: unir clips o correcciones con un fundido breve ajustable, igual en
   reproducción y exportación; distinguirlo de las transiciones visuales.
-- [ ] **Exportar un rango**: solo el tramo A–B (o entre marcadores), con su cola de efectos como la exportación
-  completa.
-- [ ] **Bloquear edición de pistas o clips**: proteger contra mover, recortar, borrar y reemplazar al
-  grabar, con deshacer y una regla compartida por ventana y `gclab`.
-- [ ] **Comparar mezclas A/B**: guardar estados de canales y buses para comparar sonidos dentro del
-  proyecto, sin duplicar los medios.
 - [ ] **Rescatar audio recién tocado**: investigar un búfer opcional y preasignado para recuperar una
   idea sin haber apretado Grabar. Adaptación propia: la grabación retrospectiva del manual es MIDI.
 - [ ] **Congelar pistas al incorporar VST**: render temporal reversible para reducir DSP, conservando

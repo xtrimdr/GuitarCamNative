@@ -77,19 +77,22 @@ public sealed class ThemePicker : Panel
 
     static void Pick(UiTheme.Settings t) => UiTheme.Apply(t);
 
-    static Button Swatch(Control content, string tip)
+    static Button Swatch(Control content, string tip, double margin = 4)
     {
-        var b = new Button { Classes = { "swatch" }, Content = content, Margin = new Thickness(4), HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        var b = new Button { Classes = { "swatch" }, Content = content, Margin = new Thickness(margin), HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch };
         ToolTip.SetTip(b, tip);
         Avalonia.Automation.AutomationProperties.SetName(b, tip);
         return b;
     }
 
-    /// <summary>The ring-2 ring-fg ring-offset-2 of the selected swatch: a 2 px outline 2 px away.</summary>
+    /// <summary>
+    /// The ring-2 ring-fg ring-offset-2 of the selected swatch: a 2 px outline 2 px away. It takes the swatch's
+    /// margin (its button gets none) instead of hanging outside it, as the button's presenter clips its content.
+    /// </summary>
     static Border Ring(bool on, Control inner) => new()
     {
         BorderBrush = on ? Palette.Fg : Brushes.Transparent, BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(10),
-        Padding = new Thickness(2), Margin = new Thickness(-4), Child = inner,
+        Padding = new Thickness(2), Child = inner,
     };
 
     void Build()
@@ -101,7 +104,7 @@ public sealed class ThemePicker : Panel
             bool on = current.Accent == hex;
             var fill = new Border { Height = 32, CornerRadius = new CornerRadius(6), Background = new SolidColorBrush(Color.Parse(hex)) };
             if (on) fill.Child = new TextBlock { Classes = { "icon" }, Text = "", FontSize = 14, Foreground = new SolidColorBrush(Color.FromArgb(0xb3, 0, 0, 0)), HorizontalAlignment = HorizontalAlignment.Center };
-            var b = Swatch(Ring(on, fill), Loc.Or("theme.accent." + name, name));
+            var b = Swatch(Ring(on, fill), Loc.Or("theme.accent." + name, name), 0);
             string pick = hex;
             b.Click += (_, _) => Pick(UiTheme.Current with { Accent = pick });
             accents.Children.Add(b);
@@ -118,7 +121,7 @@ public sealed class ThemePicker : Panel
                 }
                 : new SolidColorBrush(Color.Parse(current.Accent)),
         };
-        var choose = Swatch(Ring(!preset, custom), Loc.T("theme.custom"));
+        var choose = Swatch(Ring(!preset, custom), Loc.T("theme.custom"), 0);
         choose.Click += (_, _) =>
         {
             if (ColorDialog.Show(TopLevel.GetTopLevel(this), Color.Parse(UiTheme.Current.Accent)) is { } c)

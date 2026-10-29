@@ -71,8 +71,10 @@ public partial class MainWindow
         ToolBox.SizeChanged += (_, _) => PlaceTools();
 
         Timeline.SplitAtRequested += async (track, clip, at) => await SplitAt(track, clip, at);
-        Timeline.ClipsErased += async ids =>
+        Timeline.ClipsErased += async erased =>
         {
+            var ids = WithoutLocked(erased);
+            if (ids.Count == 0) return;
             string? trackId = sel?.Track.Id;
             await EditTimeline(p =>
             {
@@ -114,6 +116,7 @@ public partial class MainWindow
     /// <summary>Dividir: cuts the clip at the clicked time and selects the right piece.</summary>
     async Task SplitAt(LiveTrack track, LiveClip clip, double at)
     {
+        if (RefuseLocked(track, clip)) return;
         if (at <= clip.ClipStartSec + ClipEnvelope.MinClipSec || at >= clip.ClipEndSec - ClipEnvelope.MinClipSec)
         {
             Status(Loc.T("split.edge"));

@@ -7,8 +7,9 @@ using GuitarCam.Projects;
 namespace GuitarCam.App.Dialogs;
 
 /// <summary>
-/// "Acerca de", opened from the logo in the title bar. Native only (the web app has none), so it borrows
-/// SettingsDialog's frame: dimmed overlay, Escape or a click outside closes it. Shows the name, the version
+/// "Acerca de", opened from the logo in the title bar. Borrows SettingsDialog's frame (dimmed overlay, Escape or
+/// a click outside closes it) with the splash's hero on top (<see cref="BrandArt"/>, asked by the user, in the
+/// theme's accent). Shows the name, the version
 /// (with the build's commit when the SDK embedded it) and what the app is built on, and opens the
 /// program's settings folder.
 /// </summary>
@@ -37,6 +38,12 @@ public sealed partial class AboutDialog : UserControl
         };
         SetUpdate(UpdateCheck.Enabled ? UpdateState.Looking : UpdateState.Off);
         VersionText.Text = Loc.T("about.version", AppVersion());
+        Logo.Source = BrandArt.Logo;
+        if (TestBuild.Label != null)
+        {
+            TestChip.IsVisible = true;
+            TestText.Text = Loc.T("splash.test");
+        }
         AudioText.Text = $"ASIO · NAudio {Short(typeof(NAudio.Wave.WaveFormat).Assembly)}";
         UiText.Text = $"Avalonia {Short(typeof(Avalonia.Application).Assembly)} · .NET {Environment.Version.ToString(3)}";
     }
@@ -82,6 +89,9 @@ public sealed partial class AboutDialog : UserControl
 
     public void Show()
     {
+        // rebuilt each time: the theme may have changed the accent since the last time
+        Glow.Fill = BrandArt.Glow();
+        AccentLine.Background = BrandArt.Line();
         IsVisible = true;
         Focus();
     }

@@ -635,9 +635,12 @@ static class DspCommands
         allOk &= TransposeCommands.Check();
         allOk &= InsertCommands.Check();
         allOk &= GateChecks.Check();
+        allOk &= RangeChecks.Check();
         allOk &= BusCommands.Check();
         allOk &= MeterChecks.Check();
         allOk &= MidiCommands.Check();
+        allOk &= TempoChecks.Check();
+        allOk &= ToMidiChecks.Check();
 
         Console.WriteLine();
         Console.WriteLine(allOk
@@ -822,6 +825,30 @@ static class DspCommands
         return r;
     }
 
+    /// <summary>--rango: "loop" (the project's A–B), or "a-b" in seconds or m:ss; null when not given.</summary>
+    static ExportRange? ParseRange(string? s, Project p)
+    {
+        if (s == null) return null;
+        if (s.Trim().Equals("loop", StringComparison.OrdinalIgnoreCase))
+            return ProjectMarkers.Loop(p.Settings) is { } loop ? new ExportRange(loop.Start, loop.End)
+                : throw new ArgumentException("--rango loop: el proyecto no tiene un loop A–B.");
+        var parts = s.Split('-', 2);
+        if (parts.Length == 2 && Seconds(parts[0]) is { } a && Seconds(parts[1]) is { } b && b > a) return new ExportRange(a, b);
+        throw new ArgumentException($"--rango: \"{s}\" no se entiende. Probá 12-45, 1:05-1:30 o loop.");
+
+        static double? Seconds(string t)
+        {
+            var mm = t.Trim().Split(':');
+            double sec = 0;
+            foreach (var part in mm)
+            {
+                if (!double.TryParse(part, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) || v < 0) return null;
+                sec = sec * 60 + v;
+            }
+            return sec;
+        }
+    }
+
     static string Loudness(ExportResult r) =>
         (double.IsFinite(r.Lufs) ? $"Mezcla: {r.Lufs:0.0} LUFS integrado" : "Mezcla: silencio (no llega a -70 LUFS)")
         + (r.TailSec > 0 ? $", {r.TailSec:0.0} s de cola de efectos" : ", sin cola");
@@ -964,8 +991,11 @@ static class DspCommands
                 // --resolucion 720|1080|1440|2160 (4k) and --bitrate Mbps: the dialog's "Avanzado" (default: the project's)
                 Resolution = ParseResolution(a.Get("resolucion")) ?? p.Settings.Export.Resolution,
                 BitrateMbps = a.Get("bitrate") != null ? Mp4Exporter.NormalizeBitrate(a.Double("bitrate", 0)) : p.Settings.Export.BitrateMbps,
+                // --rango 12-45 | 1:05-1:30 | loop: just that stretch, like the window's "Tramo"
+                Range = ParseRange(a.Get("rango"), p),
             };
             Console.WriteLine($"Destino: {target.Label} ({job.AspectRatio}){(targetLufs is { } tl ? $", mezcla a {tl:0.0} LUFS" : "")}, cola hasta {tailSec:0.0} s");
+            if (job.Range is { } rg) Console.WriteLine($"Tramo: {Mp4Exporter.FormatTime(rg.StartSec)} a {Mp4Exporter.FormatTime(rg.EndSec)}");
 
             int lastPct = -1;
             // --audio wav|mp3, or a project in solo audio: the mix as an audio file, like the window's "Exportar audio"

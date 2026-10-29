@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
 using GuitarCam.Projects;
 
 namespace GuitarCam.App.Controls;
@@ -12,13 +13,24 @@ namespace GuitarCam.App.Controls;
 /// with each note's velocity as a bar in the lane at the bottom. Drawn by hand like the timeline.
 /// <para>
 /// Mouse, as in FL: a click on an empty cell writes a note there with the length of the last one touched (and drags
-/// it), a note's body moves it (with the others selected; Alt, free in time), its right edge resizes it, the right button
-/// erases what it touches, Ctrl+drag on empty space selects with a box, a key of the keyboard plays its note and the
-/// ruler moves the playhead. The keys (Supr, Ctrl+A, arrows) come from the window (<see cref="HandleKey"/>).
+/// it), a note's body moves it (with the others selected; Alt, free in time; Shift, a copy of them, dropped where it is
+/// let go), its right edge resizes it, the right button erases what it touches (on an empty spot it also drops the
+/// selection), Ctrl+drag on empty space selects with a box, a key of the keyboard plays its note and the ruler moves the
+/// playhead (held, it scrubs like the timeline's). The keys (Supr, Ctrl+A, arrows, copy / cut / paste / duplicate)
+/// come from the window (<see cref="HandleKey"/>).
+/// </para>
+/// <para>
+/// Copies, pastes and duplicates stay inside the clip being edited (asked by the user): a copy that would start past
+/// its end is left out. Paste goes to the playhead when it is inside the clip (on the magnet), else back where the
+/// notes were copied from.
 /// </para>
 /// <para>
 /// The velocity lane grows or shrinks from the bar above it (double click: back to its height), and dragging a bar of
-/// a selected note sets every selected note that starts there, a chord at once (both asked by the user).
+/// a selected note sets every selected note that starts there, a chord at once (both asked by the user). It can be
+/// hidden (<see cref="VelocityShown"/>), has a scale of values on the left, and its values go to steps of
+/// <see cref="VelocityStep"/> (Alt: free). Its tools (<see cref="VelocityTool"/>, asked by the user): the pencil paints
+/// every bar the drag sweeps, the line sets the bars under it as a ramp (both only on the selected notes when there are
+/// some), and the right button paints back <see cref="MidiNote.DefaultVelocity"/>.
 /// </para>
 /// <para>
 /// The grid's lines follow the magnet or go their own way (<see cref="GridMode"/>, asked by the user, like the
@@ -43,6 +55,11 @@ public sealed class PianoRollView : Control
     public enum Frame { Keep, Clip, Reveal, Track }
 
     const double KeyW = 56, RulerH = 24, VelGap = 8;
+    /// <summary>Marks of the velocity lane's scale (the default, 100, among them); a label is skipped when it would touch the last.</summary>
+    static readonly int[] VelMarks = [127, 100, 64, 32];
+    /// <summary>Px between the scale's labels.</summary>
+    const double VelLabelGap = 11;
+    static readonly string[] VelNames = [.. Enumerable.Range(0, 128).Select(v => v.ToString())];
     /// <summary>The velocity lane's height range and default; the grid always keeps <see cref="MinGridH"/>.</summary>
     public const double MinVelH = 40, DefaultVelH = 64;
     const double MinGridH = 60;
@@ -50,6 +67,10 @@ public sealed class PianoRollView : Control
     const double MinRowH = 7, MaxRowH = 28, DefaultRowH = 14;
     /// <summary>Zoom range in px per beat.</summary>
     const double MinBeatW = 6, MaxBeatW = 480;
+    /// <summary>Px from the ruler's ends where a scrub scrolls the view.</summary>
+    const double EdgeScroll = 16;
+    /// <summary>Px the pointer moves on the ruler before a click becomes a scrub.</summary>
+    const double ScrubSlop = 3;
     /// <summary>Px from a note's right end that grab it to resize it.</summary>
     const double EdgeGrab = 6;
     /// <summary>Lines closer than this are not drawn; Auto picks the finest step at least <see cref="AutoGridPx"/> apart.</summary>
@@ -100,12 +121,31 @@ public sealed class PianoRollView : Control
     public event Action<int, int>? NoteAuditioned;
     /// <summary>A click on the ruler: the timeline time to move the playhead to.</summary>
     public event Action<double>? SeekRequested;
+    /// <summary>A drag on the ruler started (true) or ended (false): the window holds playback meanwhile, as the timeline's.</summary>
+    public event Action<bool>? ScrubChanged;
     /// <summary>The right button on the ruler: the grid's menu.</summary>
     public event Action? GridMenuRequested;
     /// <summary>The velocity lane was resized (its new height), for the window to remember.</summary>
     public event Action<double>? VelocityHeightChanged;
     /// <summary>A click inside another clip of the track: the window shows that one (<see cref="SetClip"/>) before the click goes on.</summary>
     public event Action<string>? ClipPicked;
+
+    /// <summary>How a drag in the velocity lane edits: painting bar by bar, or a straight line (a ramp).</summary>
+    public enum VelTool { Pencil, Line }
+
+    bool velShown = true;
+    /// <summary>The velocity lane is shown (the window's toggle; hidden, the grid takes its place).</summary>
+    public bool VelocityShown
+    {
+        get => velShown;
+        set { if (velShown == value) return; velShown = value; CancelGesture(); ClampScroll(); InvalidateVisual(); }
+    }
+
+    int velStep;
+    /// <summary>The velocity lane's steps (0 or 1 = free): values go to multiples of it, or 127.</summary>
+    public int VelocityStep { get => velStep; set { velStep = Math.Clamp(value, 0, 127); InvalidateVisual(); } }
+
+    public VelTool VelocityTool { get; set; }
 
     /// <summary>The velocity lane's height (the window restores it from config.json).</summary>
     public double VelocityHeight
@@ -115,7 +155,8 @@ public sealed class PianoRollView : Control
     }
 
     /// <summary>The lane as drawn: never so tall that the grid gets under <see cref="MinGridH"/>.</summary>
-    double VelH => Math.Max(MinVelH, Math.Min(velH, Bounds.Height - RulerH - VelGap - MinGridH));
+    double VelH => velShown ? Math.Max(MinVelH, Math.Min(velH, Bounds.Height - RulerH - VelGap - MinGridH)) : 0;
+    double Gap => velShown ? VelGap : 0;
 
     public string? ClipId => clipId;
 
@@ -123,6 +164,20 @@ public sealed class PianoRollView : Control
     {
         Focusable = true;
         ClipToBounds = true;
+        // a scrub held against the ruler's ends keeps the view (and the playhead) going that way, as the timeline's
+        edgeScroll = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Input, (_, _) =>
+        {
+            if (gesture != "scrub") return;
+            double old = scrollX;
+            if (lastPointer.X > Bounds.Width - EdgeScroll) scrollX += Math.Max(2, (lastPointer.X - Bounds.Width + EdgeScroll) / 2);
+            else if (lastPointer.X < KeyW + EdgeScroll) scrollX -= Math.Max(2, (KeyW + EdgeScroll - lastPointer.X) / 2);
+            ClampScroll();
+            if (old == scrollX) return;
+            if (scrubHeld) Scrub();
+            InvalidateVisual();
+        });
+        edgeScroll.Stop();
+        DetachedFromVisualTree += (_, _) => edgeScroll.Stop();
     }
 
     /// <summary>
@@ -173,9 +228,12 @@ public sealed class PianoRollView : Control
 
     // --- geometry ---------------------------------------------------------------------------------
 
-    double GridBottom => Math.Max(RulerH, Bounds.Height - VelH - VelGap);
+    double GridBottom => Math.Max(RulerH, Bounds.Height - VelH - Gap);
     /// <summary>On the bar between the grid and the velocity lane, which resizes the lane.</summary>
-    bool OnVelSplit(Point p) => p.Y >= GridBottom - 2 && p.Y <= GridBottom + VelGap + 2;
+    bool OnVelSplit(Point p) => velShown && p.Y >= GridBottom - 2 && p.Y <= GridBottom + VelGap + 2;
+    /// <summary>The velocity lane's bars: the height of a full one, and the y of a value.</summary>
+    double VelLaneH => Bounds.Height - GridBottom - VelGap - 6;
+    double VelY(int v) => Bounds.Height - 3 - VelLaneH * v / 127.0;
     /// <summary>Where the clip starts, in beats from the timeline's start (the view's own coordinate).</summary>
     double Origin => clipAtSec * bpm / 60;
     static double StartBeat(MidiClip c, double bpm) => c.AtSec * bpm / 60;
@@ -320,7 +378,7 @@ public sealed class PianoRollView : Control
             DrawPlayhead(ctx, RulerH, gb);
         }
 
-        DrawVelocity(ctx, gb + VelGap, W, H);
+        if (velShown) DrawVelocity(ctx, gb + VelGap, W, H);
         DrawKeys(ctx, gb);
         DrawRuler(ctx, W);
         ctx.FillRectangle(Palette.Panel, new Rect(0, 0, KeyW, RulerH));
@@ -510,8 +568,32 @@ public sealed class PianoRollView : Control
         bool hot = gesture == "velsize" || gesture == null && OnVelSplit(lastPointer);
         ctx.DrawRectangle(hot ? Palette.Accent : Palette.Faint, null, new Rect(W / 2 - 16, top - VelGap / 2 - 1.5, 32, 3), 1.5, 1.5);
         ctx.DrawText(Loc.T("piano.velocity"), 10, Palette.Faint, new Point(6, top + 4), Palette.UiBold);
-        using var clip = ctx.PushClip(new Rect(KeyW, top, Math.Max(0, W - KeyW), Math.Max(0, H - top)));
         double h = H - top - 6;
+        // the scale: a label for each mark that has room, right against the lane
+        double lastLabel = double.NegativeInfinity;
+        foreach (int v in VelMarks)
+        {
+            double y = VelY(v);
+            if (y - lastLabel < VelLabelGap) continue;
+            var t = Palette.Text(VelNames[v], 9.5, v == MidiNote.DefaultVelocity ? Palette.Dim : Palette.Faint, Palette.Mono);
+            ctx.DrawText(t, new Point(KeyW - 5 - t.Width, Math.Min(H - t.Height, y - t.Height / 2)));
+            lastLabel = y;
+        }
+        using var clip = ctx.PushClip(new Rect(KeyW, top, Math.Max(0, W - KeyW), Math.Max(0, H - top)));
+        if (velStep > 1 && h * velStep / 127.0 >= MinGridPx)
+        {
+            var step = Palette.Pen(Palette.Alpha(Palette.LineColor, 0.35));
+            for (int v = velStep; v < 127; v += velStep)
+            {
+                double y = Math.Round(VelY(v)) + 0.5;
+                ctx.DrawLine(step, new Point(KeyW, y), new Point(W, y));
+            }
+        }
+        foreach (int v in VelMarks)
+        {
+            double y = Math.Round(VelY(v)) + 0.5;
+            ctx.DrawLine(Palette.Pen(Palette.Alpha(Palette.LineColor, v == MidiNote.DefaultVelocity ? 1 : 0.7)), new Point(KeyW, y), new Point(W, y));
+        }
         // the other clips' velocities, faint (they are edited once their clip is picked)
         var faint = Palette.Alpha(color, 0.25);
         foreach (var c in others)
@@ -535,6 +617,16 @@ public sealed class PianoRollView : Control
             ctx.FillRectangle(brush, new Rect(Math.Round(x), H - 3 - bh, 3, bh));
             ctx.FillRectangle(brush, new Rect(Math.Round(x) - 2, H - 3 - bh, 7, 2));
         }
+        if (gesture == "velline" && moved)
+            ctx.DrawLine(Palette.Pen(Palette.Fg, 1.5), new Point(down.X, VelY(VelAt(down.Y))), new Point(lastPointer.X, VelY(VelAt(lastPointer.Y))));
+        // the value being set, by the pointer
+        if (gesture is "velocity" or "velline" or "velreset" && shownVel >= 0)
+        {
+            var t = Palette.Text(VelNames[shownVel], 11, Palette.Fg, Palette.Mono);
+            double tx = Math.Min(W - t.Width - 4, lastPointer.X + 10), ty = Math.Clamp(VelY(shownVel) - t.Height - 2, top, Math.Max(top, H - t.Height));
+            ctx.FillRectangle(Palette.Alpha(Palette.AppColor, 0.75), new Rect(tx - 3, ty, t.Width + 6, t.Height));
+            ctx.DrawText(t, new Point(tx, ty));
+        }
     }
 
     // --- gestures ---------------------------------------------------------------------------------
@@ -549,9 +641,18 @@ public sealed class PianoRollView : Control
     MidiNote? velNote;
     /// <summary>The notes a velocity drag sets: the bar grabbed, or every selected note starting where it does.</summary>
     readonly List<MidiNote> velGroup = [];
+    /// <summary>Every note's velocity when a line began: the line is redrawn from them on each move.</summary>
+    readonly Dictionary<MidiNote, int> velBase = [];
+    /// <summary>Where the last paint stroke reached (its sweep runs from there), and the value shown by the pointer (-1 none).</summary>
+    double velPaintX;
+    int shownVel = -1;
     double velFrom;
     int heardPitch = -1;
     double downScrollX, downScrollY;
+    readonly DispatcherTimer edgeScroll;
+    bool scrubHeld;
+    /// <summary>The notes copied (Ctrl+C / Ctrl+X), shared by every clip so they paste into another one too.</summary>
+    static readonly List<MidiNote> clipboard = [];
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
@@ -575,6 +676,13 @@ public sealed class PianoRollView : Control
         }
         if (props.IsRightButtonPressed)
         {
+            if (velShown && p.Y > GridBottom + VelGap && p.X >= KeyW)
+            {
+                StartVelocity(p);
+                Start("velreset", e);
+                VelPaint(MidiNote.DefaultVelocity);
+                return;
+            }
             if (p.Y < RulerH && p.X >= KeyW)
             {
                 GridMenuRequested?.Invoke();
@@ -583,6 +691,11 @@ public sealed class PianoRollView : Control
             }
             if (p.Y >= RulerH && p.Y < GridBottom && p.X >= KeyW)
             {
+                if (NoteAt(p) == null && selected.Count > 0)
+                {
+                    selected.Clear();
+                    InvalidateVisual();
+                }
                 Start("erase", e);
                 EraseAt(p);
             }
@@ -591,7 +704,13 @@ public sealed class PianoRollView : Control
         if (!props.IsLeftButtonPressed) return;
         if (p.Y < RulerH)
         {
-            if (p.X >= KeyW) SeekRequested?.Invoke(SnapA(BeatA(p.X)) * 60 / bpm);
+            if (p.X >= KeyW)
+            {
+                // the click is one jump, on press; a real drag holds playback and follows the pointer (ScrubChanged)
+                Scrub();
+                Start("scrub", e);
+                edgeScroll.Start();
+            }
             e.Handled = true;
             return;
         }
@@ -612,17 +731,19 @@ public sealed class PianoRollView : Control
         }
         if (p.Y > GridBottom)
         {
-            velNote = VelocityNoteAt(p.X);
-            if (velNote == null) return;
-            velGroup.Clear();
-            if (selected.Contains(velNote))
+            StartVelocity(p);
+            if (VelocityTool == VelTool.Line)
             {
-                foreach (var n in selected)
-                    if (Math.Abs(n.Beat - velNote.Beat) < 1e-9) velGroup.Add(n);
+                velBase.Clear();
+                foreach (var n in notes) velBase[n] = n.Velocity;
+                velGroup.Clear();
+                Start("velline", e);
+                shownVel = VelAt(p.Y);
+                InvalidateVisual();
+                return;
             }
-            else velGroup.Add(velNote);
             Start("velocity", e);
-            SetVelocity(p);
+            VelPaint(VelAt(p.Y));
             return;
         }
         if (p.X < KeyW)
@@ -674,8 +795,57 @@ public sealed class PianoRollView : Control
         foreach (var n in selected) from[n] = (n.Pitch, n.Beat, n.Beats);
         heardPitch = hit.Pitch;
         NoteAuditioned?.Invoke(hit.Pitch, hit.Velocity);
-        Start(OnEdge(hit, p) && !changed ? "resize" : "move", e);
+        bool copy = (modifiers & KeyModifiers.Shift) != 0 && !changed;
+        Start(copy ? "copy" : OnEdge(hit, p) && !changed ? "resize" : "move", e);
         InvalidateVisual();
+    }
+
+    void Scrub() => SeekRequested?.Invoke(SnapA(BeatA(lastPointer.X)) * 60 / bpm);
+
+    /// <summary>
+    /// The Shift drag's first move: copies of the selected notes take their place in the drag (and the selection), the
+    /// originals stay where they were.
+    /// </summary>
+    void StartCopy()
+    {
+        var originals = from.ToList();
+        from.Clear();
+        selected.Clear();
+        foreach (var (n, f) in originals)
+        {
+            var c = n.Copy();
+            notes.Add(c);
+            selected.Add(c);
+            from[c] = f;
+            if (n == held) held = c;
+        }
+        changed = true;
+    }
+
+    /// <summary>Takes out of the clip the given notes that start past its end (a copy only lands inside it).</summary>
+    void DropOutside(IEnumerable<MidiNote> added)
+    {
+        foreach (var n in added.Where(n => n.Beat >= clipBeats - 1e-9).ToList())
+        {
+            notes.Remove(n);
+            selected.Remove(n);
+        }
+    }
+
+    /// <summary>
+    /// Adds copies of <paramref name="source"/> moved <paramref name="offset"/> beats, inside the clip, as the new
+    /// selection, and commits; false when none of them fits.
+    /// </summary>
+    bool AddCopies(IEnumerable<MidiNote> source, double offset)
+    {
+        var added = source.Select(n => { var c = n.Copy(); c.Beat = n.Beat + offset; return c; })
+            .Where(c => c.Beat >= 0 && c.Beat < clipBeats - 1e-9).ToList();
+        if (added.Count == 0) return false;
+        selected.Clear();
+        notes.AddRange(added);
+        selected.UnionWith(added);
+        Commit();
+        return true;
     }
 
     void Start(string kind, PointerPressedEventArgs e)
@@ -701,9 +871,23 @@ public sealed class PianoRollView : Control
                 ClampScroll();
                 break;
             case "move": DragMove(); break;
+            case "copy":
+                if (!changed) StartCopy();
+                DragMove();
+                break;
+            case "scrub":
+                if (!scrubHeld && Math.Abs(lastPointer.X - down.X) >= ScrubSlop)
+                {
+                    scrubHeld = true;
+                    ScrubChanged?.Invoke(true);
+                }
+                if (scrubHeld) Scrub();
+                break;
             case "resize": DragResize(); break;
             case "erase": EraseAt(lastPointer); break;
-            case "velocity": SetVelocity(lastPointer); break;
+            case "velocity": VelPaint(VelAt(lastPointer.Y)); break;
+            case "velreset": VelPaint(MidiNote.DefaultVelocity); break;
+            case "velline": VelLine(); break;
             case "velsize":
                 velH = Math.Clamp(velFrom - (lastPointer.Y - down.Y), MinVelH, Math.Max(MinVelH, Bounds.Height - RulerH - VelGap - MinGridH));
                 ClampScroll();
@@ -771,15 +955,79 @@ public sealed class PianoRollView : Control
         return best;
     }
 
-    void SetVelocity(Point p)
+    /// <summary>A press in the velocity lane: the bar under it and the notes it sets (<see cref="velGroup"/>).</summary>
+    void StartVelocity(Point p)
     {
+        velNote = VelocityNoteAt(p.X);
+        velGroup.Clear();
+        velPaintX = p.X;
         if (velNote == null) return;
-        double top = GridBottom + VelGap, h = Bounds.Height - top - 6;
-        int v = Math.Clamp((int)Math.Round((Bounds.Height - 3 - p.Y) / h * 127), 1, 127);
-        if (velGroup.All(n => n.Velocity == v)) return;
-        foreach (var n in velGroup) n.Velocity = v;
-        lastVelocity = v;
+        if (selected.Contains(velNote))
+        {
+            foreach (var n in selected)
+                if (Math.Abs(n.Beat - velNote.Beat) < 1e-9) velGroup.Add(n);
+        }
+        else velGroup.Add(velNote);
+    }
+
+    /// <summary>The value at a y of the lane, to <see cref="VelocityStep"/> (or 127) unless Alt is held.</summary>
+    int VelAt(double y) => SnapVel(Math.Clamp((int)Math.Round((Bounds.Height - 3 - y) / VelLaneH * 127), 1, 127));
+
+    int SnapVel(int v)
+    {
+        if (velStep <= 1 || (modifiers & KeyModifiers.Alt) != 0) return v;
+        int q = (int)Math.Round(v / (double)velStep) * velStep;
+        if (127 - v < Math.Abs(v - q)) q = 127;
+        return Math.Clamp(q, 1, 127);
+    }
+
+    /// <summary>The notes a sweep of the lane edits: the selected ones if there are some, else all.</summary>
+    IEnumerable<MidiNote> VelTargets => selected.Count > 0 ? selected : notes;
+
+    /// <summary>
+    /// The pencil (and the right button's reset): the bar pressed (its chord, if selected) and every bar swept since the
+    /// last move take the value. The other notes on the pressed bar's beat stay as they were, as before.
+    /// </summary>
+    void VelPaint(int v)
+    {
+        shownVel = v;
+        double a = Math.Min(velPaintX, lastPointer.X) - 2, b = Math.Max(velPaintX, lastPointer.X) + 2;
+        velPaintX = lastPointer.X;
+        bool any = false;
+        foreach (var n in velGroup) any |= SetVel(n, v);
+        foreach (var n in VelTargets)
+        {
+            double x = X(n.Beat) + 1.5;
+            if (x < a || x > b || velNote != null && !velGroup.Contains(n) && Math.Abs(n.Beat - velNote.Beat) < 1e-9) continue;
+            any |= SetVel(n, v);
+        }
+        if (any && gesture != "velreset") lastVelocity = v;
+        InvalidateVisual();
+    }
+
+    bool SetVel(MidiNote n, int v)
+    {
+        if (n.Velocity == v) return false;
+        n.Velocity = v;
         changed = true;
+        return true;
+    }
+
+    /// <summary>The line: from where it was pressed to the pointer, the bars between them on the ramp, the rest as they were.</summary>
+    void VelLine()
+    {
+        int v0 = VelAt(down.Y), v1 = VelAt(lastPointer.Y);
+        shownVel = v1;
+        foreach (var (n, v) in velBase) n.Velocity = v;
+        double x0 = down.X, x1 = lastPointer.X, lo = Math.Min(x0, x1) - 2, hi = Math.Max(x0, x1) + 2;
+        foreach (var n in VelTargets)
+        {
+            double x = X(n.Beat) + 1.5;
+            if (x < lo || x > hi) continue;
+            double t = Math.Abs(x1 - x0) < 1 ? 1 : Math.Clamp((x - x0) / (x1 - x0), 0, 1);
+            n.Velocity = SnapVel(Math.Clamp((int)Math.Round(v0 + (v1 - v0) * t), 1, 127));
+        }
+        changed = velBase.Any(kv => kv.Key.Velocity != kv.Value);
     }
 
     Rect BoxRect() => new(new Point(Math.Min(down.X, lastPointer.X), Math.Min(down.Y, lastPointer.Y)),
@@ -795,9 +1043,9 @@ public sealed class PianoRollView : Control
             var box = BoxRect();
             foreach (var n in notes) if (box.Intersects(NoteRect(n))) selected.Add(n);
         }
-        bool commit = changed, resized = gesture == "velsize" && moved;
+        bool resized = gesture == "velsize" && moved;
         EndGesture(e.Pointer);
-        if (commit) Commit();
+        if (changed) Commit();
         if (resized) VelocityHeightChanged?.Invoke(velH);
     }
 
@@ -805,30 +1053,50 @@ public sealed class PianoRollView : Control
     {
         base.OnPointerCaptureLost(e);
         if (gesture == null) return;
-        bool commit = changed;
         EndGesture(null);
-        if (commit) Commit();
+        if (changed) Commit();
     }
 
     void EndGesture(IPointer? pointer)
     {
+        if (gesture == "copy" && changed)
+        {
+            DropOutside([.. selected]);
+            // every copy fell past the clip's end: nothing was added
+            if (selected.Count == 0) changed = false;
+        }
+        EndScrub();
         gesture = null;
         held = null;
         velNote = null;
         velGroup.Clear();
+        velBase.Clear();
+        shownVel = -1;
         heardPitch = -1;
         from.Clear();
         pointer?.Capture(null);
         InvalidateVisual();
     }
 
+    void EndScrub()
+    {
+        edgeScroll.Stop();
+        if (!scrubHeld) return;
+        scrubHeld = false;
+        ScrubChanged?.Invoke(false);
+    }
+
     /// <summary>Drops a gesture in flight without committing it (another clip or an undo replaces the notes anyway).</summary>
     public void CancelGesture()
     {
         if (gesture == null) return;
+        EndScrub();
         gesture = null;
         held = null;
         velNote = null;
+        velGroup.Clear();
+        velBase.Clear();
+        shownVel = -1;
         heardPitch = -1;
         from.Clear();
         changed = false;
@@ -848,6 +1116,36 @@ public sealed class PianoRollView : Control
         if (moved > 0) Commit();
         return moved;
     }
+
+    /// <summary>
+    /// Scales the selected notes' velocities (all of them with none selected) around their average, as one edit
+    /// (<see cref="MidiEditing.ScaleVelocity"/>). Returns how many changed; -1 with no clip.
+    /// </summary>
+    public int ScaleVelocity(double percent)
+    {
+        if (clipId == null) return -1;
+        CancelGesture();
+        int n = MidiEditing.ScaleVelocity(notes, percent, selected.Count > 0 ? selected : null);
+        if (n > 0) Commit();
+        InvalidateVisual();
+        return n;
+    }
+
+    static readonly Random humanize = new();
+
+    /// <summary>Humanizes the selected notes' velocities (all with none selected), as one edit; -1 with no clip.</summary>
+    public int HumanizeVelocity(int amount)
+    {
+        if (clipId == null) return -1;
+        CancelGesture();
+        int n = MidiEditing.HumanizeVelocity(notes, amount, humanize, selected.Count > 0 ? selected : null);
+        if (n > 0) Commit();
+        InvalidateVisual();
+        return n;
+    }
+
+    /// <summary>The notes the velocity tools change: the selected ones, or every note of the clip.</summary>
+    public int ToolTargets => selected.Count > 0 ? selected.Count : notes.Count;
 
     void Commit()
     {
@@ -915,12 +1213,45 @@ public sealed class PianoRollView : Control
 
     /// <summary>
     /// The piano roll's keys while it has the focus: Supr / Retroceso erase the selected notes, Ctrl+A selects them all,
-    /// ↑ ↓ move them a semitone (Shift: an octave), Esc drops the selection. True when it used the key.
+    /// ↑ ↓ move them a semitone (Shift: an octave), Esc drops the selection, and the timeline's copy, cut, paste and
+    /// duplicate (<see cref="Shortcuts"/>) do it with the notes. True when it used the key.
     /// </summary>
     public bool HandleKey(KeyEventArgs e)
     {
         if (clipId == null || !IsKeyboardFocusWithin) return false;
         bool ctrl = (e.KeyModifiers & KeyModifiers.Control) != 0;
+        // used even with nothing to do: let through, they would copy or duplicate the timeline's selection
+        switch (gesture == null ? Shortcuts.Find(e) : null)
+        {
+            case "copy" or "cut":
+                if (selected.Count == 0) return true;
+                clipboard.Clear();
+                clipboard.AddRange(selected.OrderBy(n => n.Beat).Select(n => n.Copy()));
+                if (Shortcuts.Find(e) == "cut")
+                {
+                    notes.RemoveAll(selected.Contains);
+                    selected.Clear();
+                    Commit();
+                }
+                return true;
+            case "paste":
+            {
+                if (clipboard.Count == 0) return true;
+                double first = clipboard.Min(n => n.Beat), play = playheadSec * bpm / 60 - Origin;
+                double at = playheadSec >= 0 && play >= 0 && play < clipBeats ? Snap(play, floor: true) : first;
+                AddCopies(clipboard, at - first);
+                return true;
+            }
+            case "duplicate":
+            {
+                if (selected.Count == 0) return true;
+                // right after the selection, a whole number of magnet steps on, as the timeline's duplicate
+                double start = selected.Min(n => n.Beat), span = selected.Max(n => n.Beat + n.Beats) - start;
+                double step = snapBeats > 0 ? Math.Max(snapBeats, Math.Ceiling(span / snapBeats - 1e-9) * snapBeats) : span;
+                AddCopies([.. selected], step);
+                return true;
+            }
+        }
         switch (e.Key)
         {
             case Key.Delete or Key.Back:
@@ -935,8 +1266,18 @@ public sealed class PianoRollView : Control
                 selected.UnionWith(notes);
                 InvalidateVisual();
                 return true;
+            case Key.Left or Key.Right when (e.KeyModifiers & KeyModifiers.Shift) != 0 && !ctrl:
+            {
+                if (selected.Count == 0) return true;
+                // a magnet step (a 1/16 when free), never out of the clip
+                double db = (e.Key == Key.Right ? 1 : -1) * (snapBeats > 0 ? snapBeats : 0.25);
+                if (selected.Any(n => n.Beat + db < -1e-9 || n.Beat + db >= clipBeats - 1e-9)) return true;
+                foreach (var n in selected) n.Beat = Math.Max(0, n.Beat + db);
+                Commit();
+                return true;
+            }
             case Key.Up or Key.Down when selected.Count > 0:
-                int step = (e.Key == Key.Up ? 1 : -1) * ((e.KeyModifiers & KeyModifiers.Shift) != 0 ? 12 : 1);
+                int step = (e.Key == Key.Up ? 1 : -1) * (ctrl ? 12 : 1);
                 if (selected.Any(n => n.Pitch + step is < MidiNote.MinPitch or > MidiNote.MaxPitch)) return true;
                 foreach (var n in selected) n.Pitch += step;
                 if (selected.Count == 1) NoteAuditioned?.Invoke(selected.First().Pitch, selected.First().Velocity);
@@ -945,9 +1286,8 @@ public sealed class PianoRollView : Control
             case Key.Escape when gesture != null:
             {
                 // what the gesture did stays, as if it had been released
-                bool commit = changed;
                 EndGesture(null);
-                if (commit) Commit();
+                if (changed) Commit();
                 return true;
             }
             case Key.Escape when selected.Count > 0:
